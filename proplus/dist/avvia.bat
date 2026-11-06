@@ -23,14 +23,22 @@ set "JAVA_EXE="
 set "JAVA_SRC="
 set "JAVA_VER="
 
+rem Solo per i test CI: PROPLUS_TEST_NOLAUNCH=1 salta le pause, il riavvio del
+rem lanciatore e l'avvio di Java. Senza la variabile nulla cambia per l'utente.
+set "NOLAUNCH="
+if "%PROPLUS_TEST_NOLAUNCH%"=="1" set "NOLAUNCH=1"
+
 rem --- 0) Aggiornamento automatico -------------------------------------------
-rem aggiorna.ps1 ricava da solo la propria cartella ($PSScriptRoot): non serve
-rem passargliela. Esce con 10 se gli script di avvio sono cambiati e vanno
-rem applicati con un riavvio (vedi sotto); in ogni altro caso esce con 0.
+rem La cartella di installazione viene passata ESPLICITAMENTE: in Windows
+rem PowerShell 5.1 il default $PSScriptRoot di aggiorna.ps1 puo' risultare vuoto
+rem con -File. La variabile HERE finisce con "\" che, davanti alla virgoletta
+rem di chiusura, la rovinerebbe: per questo si aggiunge ".". Esce con 10 se gli script di
+rem avvio sono cambiati e vanno applicati con un riavvio (vedi sotto); in ogni
+rem altro caso esce con 0.
 if exist "%HERE%aggiorna.ps1" (
   where powershell.exe >nul 2>&1
   if !ERRORLEVEL! EQU 0 (
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%HERE%aggiorna.ps1"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%HERE%aggiorna.ps1" -InstallDir "%HERE%."
     set "UPD=!ERRORLEVEL!"
   ) else (
     echo   [avviso] PowerShell non trovato: salto il controllo aggiornamenti.
@@ -45,6 +53,10 @@ rem avvia.bat e aggiorna.ps1 sono "in uso" mentre girano: aggiorna.ps1 ha messo
 rem le versioni nuove in *.new. Un piccolo script temporaneo attende la chiusura
 rem di questa finestra, sostituisce i file e rilancia avvia.bat. Cosi' avvia.bat
 rem non si corrompe durante l'aggiornamento di se stesso.
+if "!UPD!"=="10" if defined NOLAUNCH (
+  echo [test] aggiornamento del lanciatore richiesto: riavvio saltato.
+  exit /b 10
+)
 if "!UPD!"=="10" (
   set "SWAP=%TEMP%\triplea-proplus-swap-%RANDOM%%RANDOM%.cmd"
   (
@@ -90,8 +102,14 @@ if not exist "!JAR!" (
   echo          !HERE!
   echo          Scompatta tutto lo zip nella stessa cartella e riprova.
   echo.
-  pause
+  if not defined NOLAUNCH pause
   exit /b 1
+)
+
+if defined NOLAUNCH (
+  echo.
+  echo [test] PROPLUS_TEST_NOLAUNCH=1: Java non avviato.
+  exit /b 0
 )
 
 echo.
@@ -131,7 +149,7 @@ if not defined JAVA_EXE (
   echo  Soluzioni: installa TripleA ufficiale ^(include Java^), oppure installa
   echo  Java %MIN_JAVA% da https://adoptium.net e riavvia questo file.
   echo.
-  pause
+  if not defined NOLAUNCH pause
   exit /b 1
 )
 
@@ -156,7 +174,7 @@ if not "!EXITCODE!"=="0" (
   echo [ATTENZIONE] TripleA Pro+ si e' chiuso con codice di errore !EXITCODE!.
   echo Copia il testo qui sopra se vuoi segnalare il problema.
   echo.
-  pause
+  if not defined NOLAUNCH pause
 )
 exit /b !EXITCODE!
 

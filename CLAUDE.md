@@ -167,6 +167,17 @@ resta **LF** (letto da `avvia.bat` con `for /f`, che altrimenti lascerebbe un CR
   temporaneo in `%TEMP%` che attende la chiusura, applica i `*.new` e rilancia `avvia.bat`.
 - Prima adozione: la build step-0 non ha `aggiorna.ps1`, quindi il primo passaggio richiede UN
   download manuale dello zip aggiornato; da lì in avanti è automatico.
+- Invocazione: `avvia.bat` chiama `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  "%HERE%aggiorna.ps1" -InstallDir "%HERE%."` (il `.` evita che il `\` finale di `%HERE%` rompa la
+  virgoletta). `aggiorna.ps1` ha comunque il fallback `Split-Path -Parent
+  $MyInvocation.MyCommand.Path` e un `trap` di livello superiore: ogni errore imprevisto ⇒ avviso
+  giallo + `exit 0`, mai un errore rosso.
+- Hook solo-test (mai impostati per l'utente): `PROPLUS_TEST_NOLAUNCH=1` (avvia.bat salta pause,
+  riavvio del lanciatore e Java), `PROPLUS_TEST_APIBASE` (aggiorna.ps1 usa quel server se `-ApiBase`
+  non è passato).
+- **Lezione (bug 0bis-fix): testare sempre l'invocazione reale** (stesso eseguibile, stessi
+  argomenti, working directory diversa, percorsi con spazi), non solo la logica con parametri
+  comodi. Scenari 7-9 di `proplus/ci/test-aggiorna.ps1`.
 
 Fatti verificati per avvia.bat / LEGGIMI:
 - Installer ufficiale = install4j (`game-headed/build.install4j`), JRE Adoptium 25 incluso nella
@@ -216,6 +227,22 @@ Fatti verificati per avvia.bat / LEGGIMI:
     proprietà/variabile Pro+ in `getUserRootFolder()` per salvataggi/autosave, più una
     `PreferencesFactory` su file per le impostazioni, tenendo `mapFolderOverride` sulla cartella
     condivisa. Fuori dallo scope dello step 0bis.
+
+### Step 0bis-fix — aggiorna.ps1 falliva al primo comando (2026-11-06)
+- Bug in produzione (PC di Matteo, doppio click su `avvia.bat`): `aggiorna.ps1 : Cannot bind argument
+  to parameter 'Path' because it is an empty string` (`ParameterArgumentValidationErrorEmptyString
+  NotAllowed`). Il default `$InstallDir = $PSScriptRoot` risultava vuoto in Windows PowerShell 5.1
+  con `-File` senza `-InstallDir`; `Join-Path` falliva prima di ogni try/catch ⇒ update mai partito,
+  `version.txt` mai scritto (avvia.bat proseguiva con la build locale per via dell'exit code ≠ 10).
+- Perché la CI non l'ha visto: gli scenari 1-5 passavano sempre `-InstallDir` esplicito.
+- Fix: `-InstallDir "%HERE%."` in avvia.bat; fallback `$MyInvocation.MyCommand.Path` /
+  `$PSCommandPath` + `GetFullPath` in aggiorna.ps1; `trap` globale (avviso giallo + exit 0).
+- Test nuovi (windows-latest): 7) `powershell.exe -File` senza `-InstallDir` da altra working dir;
+  8) end-to-end `cmd.exe /c avvia.bat` su installazione vecchia senza `version.txt` contro il mock;
+  9) come 7 e 8 in un percorso con spazi e parentesi (`...\con spazi\TripleA Pro+ (1)`). Copie di
+  avvia.bat/aggiorna.ps1 nei test ora in CRLF come nello zip.
+- Effetto per chi ha la build buggata: il suo `aggiorna.ps1` vecchio non può aggiornarsi da solo ⇒
+  serve UN download manuale dello zip nuovo.
 
 ### Step 1 — identità "Pro+" (2026-11-06)
 - Nuovo tipo giocatore "Pro+ (AI)" = `ProPlusAi extends ProAi`, zero cambi di logica (vedi "Dove

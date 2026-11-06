@@ -34,8 +34,47 @@ param(
   [int]$TimeoutSec = 20
 )
 
+# Rete di sicurezza di livello superiore: QUALSIASI errore non gestito (anche
+# fuori dai try/catch puntuali sotto) diventa un avviso giallo e l'uscita con 0,
+# cosi' avvia.bat avvia comunque la build locale e l'utente non vede mai un
+# errore rosso di PowerShell. Usa solo Write-Host: le funzioni Write-* sotto
+# potrebbero non essere ancora definite quando scatta.
+trap {
+  try {
+    Write-Host ("  [avviso] errore imprevisto nel controllo aggiornamenti: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+    Write-Host "  [avviso] Avvio la build gia' presente in questa cartella." -ForegroundColor Yellow
+  } catch { }
+  exit 0
+}
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Cartella di installazione. In Windows PowerShell 5.1 il default
+# "$InstallDir = $PSScriptRoot" puo' risultare VUOTO quando lo script e' avviato
+# da avvia.bat con "powershell.exe -File" (bug in produzione: Join-Path falliva
+# con "Cannot bind argument to parameter 'Path' because it is an empty string").
+# Doppia sicurezza: avvia.bat passa -InstallDir esplicitamente e, se manca, la
+# ricaviamo dal percorso dello script.
+if ([string]::IsNullOrWhiteSpace($InstallDir) -and $MyInvocation.MyCommand.Path) {
+  $InstallDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
+if ([string]::IsNullOrWhiteSpace($InstallDir) -and $PSCommandPath) {
+  $InstallDir = Split-Path -Parent $PSCommandPath
+}
+if ([string]::IsNullOrWhiteSpace($InstallDir)) {
+  Write-Host "  [avviso] cartella di installazione non determinabile: salto il controllo aggiornamenti." -ForegroundColor Yellow
+  exit 0
+}
+# Normalizza (es. "C:\TripleA Pro+\." passato da avvia.bat -> "C:\TripleA Pro+").
+$InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
+
+# Solo per i test CI (job powershell-tests): punta l'updater al server finto
+# quando lo script e' lanciato da avvia.bat senza parametri. Mai impostata per
+# l'utente; un -ApiBase esplicito ha la precedenza.
+if (-not $PSBoundParameters.ContainsKey('ApiBase') -and -not [string]::IsNullOrWhiteSpace($env:PROPLUS_TEST_APIBASE)) {
+  $ApiBase = $env:PROPLUS_TEST_APIBASE
+}
 
 # TLS 1.2 per Windows PowerShell 5.1 (altrimenti la GitHub API rifiuta).
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
@@ -77,7 +116,7 @@ function Short-Commit {
 }
 
 # SHA256 via .NET (non dipende dal cmdlet Get-FileHash, che su alcuni ambienti
-# Windows PowerShell non è disponibile nel contesto di esecuzione).
+# Windows PowerShell non e' disponibile nel contesto di esecuzione).
 function Get-Sha256Hex {
   param([string]$Path)
   $sha = [System.Security.Cryptography.SHA256]::Create()
