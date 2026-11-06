@@ -6,8 +6,9 @@ Commit          : @COMMIT@  (branch proplus)
 Data build      : @DATE@
 Sorgente        : https://github.com/@REPO@/tree/@COMMIT@
 
-STATO ATTUALE (step 0)
-----------------------
+
+STATO ATTUALE (step 0bis)
+-------------------------
 Questa build e' il codice ORIGINALE di TripleA, senza modifiche al gioco o
 all'AI. E' compilata dal ramo principale (main) di triplea-game/triplea al
 momento della build: puo' quindi contenere alcune correzioni piu' recenti
@@ -19,9 +20,14 @@ invariata.
 CONTENUTO DELLO ZIP
 -------------------
   TripleA-ProPlus.jar   il gioco completo (tutte le dipendenze incluse)
-  avvia.bat             avvia il gioco su Windows
+  avvia.bat             avvia il gioco su Windows (e aggiorna la build)
+  aggiorna.ps1          script di aggiornamento usato da avvia.bat
+  build-info.txt        versione/commit/data di questa build (non modificare)
   LEGGIMI.txt           questo file
   .triplea-root         file marcatore vuoto richiesto dal motore (non toccarlo)
+
+Dopo il primo avvio comparira' anche version.txt: lo crea avvia.bat per
+ricordare quale build e' installata. Non va modificato a mano.
 
 
 INSTALLAZIONE
@@ -30,6 +36,34 @@ INSTALLAZIONE
    (NON dentro C:\Program Files\TripleA).
 2. Fai doppio clic su avvia.bat.
 
+
+AGGIORNAMENTO AUTOMATICO  (novita')
+-----------------------------------
+A ogni avvio, avvia.bat controlla da solo se su GitHub c'e' una build Pro+
+piu' recente (release "proplus-latest" del fork). Se c'e':
+  - la scarica in una cartella temporanea e ne verifica l'integrita';
+  - sostituisce il gioco e i file di supporto in questa cartella;
+  - poi avvia la nuova build.
+Non devi scaricare nulla a mano: ti basta rilanciare avvia.bat.
+
+All'avvio viene mostrata la "Versione in uso" (commit + data della build):
+e' quella che devi citare nei report quando segnali qualcosa.
+
+Se il PC e' offline o GitHub non risponde (anche per limite di richieste),
+avvia.bat NON si blocca: mostra un avviso e parte con la build gia' presente.
+
+NOTA IMPORTANTE (prima adozione): questa funzione esiste solo DA questa build
+in poi. Se stai ancora usando la primissima build (step 0, senza aggiorna.ps1),
+scarica UNA volta a mano lo zip aggiornato dalla release "proplus-latest";
+da li' in avanti l'aggiornamento sara' automatico.
+
+Serve la PowerShell di Windows (gia' inclusa in Windows, niente da
+installare). Lo script usa la GitHub API in forma anonima: nessun
+account, token o password.
+
+
+RICERCA DI JAVA
+---------------
 avvia.bat cerca Java 25 (o superiore) in quest'ordine:
   1. il Java incluso nell'installazione ufficiale di TripleA, cioe' la
      cartella "jre" dentro la cartella di installazione, di solito:
@@ -42,8 +76,8 @@ Stampa quale Java usa e la versione, poi avvia il gioco con le stesse
 opzioni JVM del launcher ufficiale (-Xss1250K).
 Se non trova Java, mostra un messaggio e resta aperto.
 
-avvia.bat legge soltanto: NON modifica e NON sovrascrive nulla
-nell'installazione ufficiale di TripleA.
+avvia.bat e aggiorna.ps1 LEGGONO soltanto l'installazione ufficiale di
+TripleA: NON la modificano e NON la sovrascrivono.
 
 
 DATI CONDIVISI CON L'INSTALLAZIONE UFFICIALE  (importante)
@@ -61,7 +95,11 @@ indipendentemente da dove si trova il jar:
       HKEY_CURRENT_USER\Software\JavaSoft\Prefs\games\strategy\triplea\...
     (opzioni di gioco, cartelle, impostazioni del log della ProAi, suoni)
 
-Conseguenze:
+Questi dati NON stanno nella cartella C:\TripleA-ProPlus e NON vengono mai
+toccati dall'aggiornamento automatico: l'aggiornamento sostituisce solo il
+jar e i file di supporto elencati sopra.
+
+Conseguenze (come nello step 0):
   + Non serve riscaricare la mappa: Pro+ vede le stesse mappe installate.
   + I salvataggi sono visibili da entrambe le versioni.
   - Le impostazioni cambiate in una versione valgono anche per l'altra.
@@ -74,10 +112,16 @@ Conseguenze:
   - Aggiornare/cancellare una mappa da una versione la aggiorna/cancella
     anche per l'altra.
 
-Compatibilita' salvataggi: oggi (step 0) il codice e' quello originale,
-quindi i salvataggi tra questa build e la 2026-11.x ufficiale sono
-compatibili nei due sensi. In futuro, una partita salvata con giocatori
-"Pro+" potrebbe non aprirsi nella versione ufficiale: verra' indicato qui.
+Isolamento dati Pro+: valutato in questo step, ma NON applicato. Separare
+salvataggi/autosave e impostazioni lasciando le mappe condivise non e'
+possibile senza modificare il codice del gioco (vedi il report dello step
+0bis in CLAUDE.md per i dettagli tecnici). Per ora valgono le avvertenze
+qui sopra sugli autosave.
+
+Compatibilita' salvataggi: oggi il codice e' quello originale, quindi i
+salvataggi tra questa build e la 2026-11.x ufficiale sono compatibili nei
+due sensi. In futuro, una partita salvata con giocatori "Pro+" potrebbe non
+aprirsi nella versione ufficiale: verra' indicato qui.
 
 
 DISINSTALLAZIONE

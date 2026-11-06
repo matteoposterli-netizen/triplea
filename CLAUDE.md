@@ -120,15 +120,38 @@ test analogo che carichi `ww2eur40_2nd_edition.xml` (va reperita la mappa: non �
 ## Release Pro+ (GitHub Action)
 
 `.github/workflows/proplus-release.yml` — su push a `proplus` (o manuale):
+0. job `powershell-tests` (runner **windows-latest**, gate del job `build`): esegue
+   `proplus/ci/test-aggiorna.ps1`, che testa la logica di `aggiorna.ps1` con un server HTTP
+   locale (`System.Net.HttpListener`) che simula la GitHub API + download (nessuna rete reale);
 1. test: `:game-core:test :ai:test :game-headed:test` (smoke-testing escluso: scarica salvataggi
    esterni ed è lento; `./verify` escluso: include PMD/spotless/check custom non necessari qui);
 2. scrive la versione (`set-game-headed-build-number`), `:game-headed:shadowJar`;
-3. zip `TripleA-ProPlus.zip` = `TripleA-ProPlus.jar` + `avvia.bat` + `LEGGIMI.txt` +
-   `.triplea-root` (marcatore vuoto cercato da `ClientFileSystemHelper.getRootFolder()`);
+3. zip `TripleA-ProPlus.zip` = `TripleA-ProPlus.jar` + `avvia.bat` + `aggiorna.ps1` +
+   `build-info.txt` + `LEGGIMI.txt` + `.triplea-root` (marcatore vuoto cercato da
+   `ClientFileSystemHelper.getRootFolder()`);
 4. sposta il tag `proplus-latest` sul commit e sostituisce l'asset nella release (prerelease).
 
-Sorgenti dei file dello zip: `proplus/dist/avvia.bat`, `proplus/dist/LEGGIMI.txt` (placeholder
-`@VERSION@ @COMMIT@ @DATE@ @REPO@` sostituiti in CI).
+Sorgenti dei file dello zip: `proplus/dist/{avvia.bat,aggiorna.ps1,LEGGIMI.txt,build-info.txt}`.
+Placeholder `@VERSION@ @COMMIT@ @DATE@ @REPO@` sostituiti in CI in `LEGGIMI.txt` e
+`build-info.txt`. CRLF applicato a `avvia.bat`, `aggiorna.ps1`, `LEGGIMI.txt`; `build-info.txt`
+resta **LF** (letto da `avvia.bat` con `for /f`, che altrimenti lascerebbe un CR nei valori).
+
+### Aggiornamento automatico (step 0bis)
+
+- `avvia.bat` è un lanciatore sottile: a ogni avvio chiama `aggiorna.ps1` (Windows PowerShell
+  5.1, nessun tool esterno), poi mostra la versione in uso (commit + data da `build-info.txt`)
+  e avvia il jar con `-Xss1250K`.
+- `aggiorna.ps1` interroga in **anonimo** `GET /repos/<repo>/releases/tags/proplus-latest`,
+  confronta `asset.updated_at`/`id` con `version.txt` (stato locale, non nello zip). Primo avvio
+  senza `version.txt`: confronto per commit (regex sul body della release vs `build-info.txt`).
+  Se serve: scarica in `%TEMP%`, verifica (dimensione + zip valido + presenza jar), sostituisce
+  **solo** i file noti (jar via file `.tmp` + `Move-Item` atomico), riscrive `version.txt`.
+  Qualsiasi errore di rete/API/zip ⇒ avviso + `exit 0` (fallback alla build locale).
+- Self-update del lanciatore: `aggiorna.ps1` non sovrascrive a caldo `avvia.bat`/`aggiorna.ps1`
+  (in uso); se cambiano li mette in `*.new` ed esce con **10**. `avvia.bat` genera uno script
+  temporaneo in `%TEMP%` che attende la chiusura, applica i `*.new` e rilancia `avvia.bat`.
+- Prima adozione: la build step-0 non ha `aggiorna.ps1`, quindi il primo passaggio richiede UN
+  download manuale dello zip aggiornato; da lì in avanti è automatico.
 
 Fatti verificati per avvia.bat / LEGGIMI:
 - Installer ufficiale = install4j (`game-headed/build.install4j`), JRE Adoptium 25 incluso nella
@@ -149,3 +172,32 @@ Fatti verificati per avvia.bat / LEGGIMI:
   baseline, non l'installazione ufficiale.
 - Aggiunti: questa sezione di CLAUDE.md, `proplus/dist/avvia.bat`, `proplus/dist/LEGGIMI.txt`,
   `.github/workflows/proplus-release.yml`. Nessuna modifica a codice di gioco/AI.
+
+### Step 0bis — aggiornamento automatico + isolamento dati (2026-11-06)
+- Aggiunti/modificati: `proplus/dist/aggiorna.ps1` (nuovo), `proplus/dist/build-info.txt` (nuovo,
+  template), `proplus/ci/test-aggiorna.ps1` (nuovo, test CI), `proplus/dist/avvia.bat` (ora
+  lanciatore sottile con auto-update + display versione), `proplus/dist/LEGGIMI.txt`,
+  `.github/workflows/proplus-release.yml` (zip con aggiorna.ps1/build-info.txt + job
+  `powershell-tests` su windows-latest che fa da gate). Nessuna modifica a codice di gioco/AI.
+- Meccanismo di update e self-update: vedi sezione "Aggiornamento automatico (step 0bis)" sopra.
+- **Punto 7 — isolamento dati Pro+: NON applicato (richiederebbe modifiche al codice).** Fatti:
+  - Cartella utente (salvataggi + autosave + `optionCache` + mappe di default): deriva da
+    `ClientFileSystemHelper.getUserRootFolder()` = `{user.home}/Documents/triplea` (o
+    `{user.home}/triplea`). Dipende solo dalla proprietà JVM standard `user.home`; non esiste una
+    proprietà dedicata per la cartella utente.
+  - Impostazioni: `Preferences.userNodeForPackage(ClientSetting.class)` ⇒ su Windows registro
+    HKCU `...\JavaSoft\Prefs\...`. **Non** dipende da `user.home`; non c'è switch JVM supportato
+    per spostarle su file senza una `PreferencesFactory` custom (= codice / jar extra).
+  - Cartella mappe e cartella salvataggi sono `ClientSetting` (`mapFolderOverride`,
+    `saveGamesFolderPath`), valori nel registro; modificabili solo da GUI, non da proprietà di
+    sistema (`triplea.map.folder` in `tools/util/ToolArguments` serve solo ai tool di map-making,
+    non al client).
+  - Conseguenza: l'unica leva senza codice è `-Duser.home=<cartella Pro+>`, ma sposta TUTTA la
+    cartella utente (inclusa `downloadedMaps` ⇒ costringerebbe a riscaricare le mappe, contro il
+    requisito "mappe condivise") e **non** isola comunque le impostazioni (registro). Quindi
+    l'obiettivo "autosave+preferenze isolati, mappe condivise" non è raggiungibile a norma del
+    vincolo "niente modifiche al codice di gioco". `avvia.bat` lasciato invariato su questo punto.
+  - Opzione futura (SE si potesse toccare il codice o aggiungere un piccolo helper): leggere una
+    proprietà/variabile Pro+ in `getUserRootFolder()` per salvataggi/autosave, più una
+    `PreferencesFactory` su file per le impostazioni, tenendo `mapFolderOverride` sulla cartella
+    condivisa. Fuori dallo scope dello step 0bis.

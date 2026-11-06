@@ -12,8 +12,26 @@ concurrency:
   group: proplus-release
   cancel-in-progress: false
 jobs:
+  # Tests the PowerShell auto-update logic (aggiorna.ps1) on a real Windows
+  # runner: version comparison, offline fallback, download + zip validation,
+  # launcher self-update staging, and a short real launch of the jar.
+  powershell-tests:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Run aggiorna.ps1 tests
+        shell: pwsh
+        run: ./proplus/ci/test-aggiorna.ps1
+
   build:
     runs-on: ubuntu-latest
+    needs: powershell-tests
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -43,19 +61,27 @@ jobs:
           set -euo pipefail
           jar=$(ls game-app/game-headed/build/libs/game-headed-*.jar | grep -v -- '-plain' | head -n1)
           echo "Using jar: $jar"
+          build_date=$(date -u +'%Y-%m-%d %H:%M UTC')
           mkdir -p build/proplus/TripleA-ProPlus
           cd build/proplus/TripleA-ProPlus
           cp "$GITHUB_WORKSPACE/$jar" TripleA-ProPlus.jar
           cp "$GITHUB_WORKSPACE/game-app/game-headed/.triplea-root" .triplea-root
           cp "$GITHUB_WORKSPACE/proplus/dist/avvia.bat" avvia.bat
-          sed -e "s|@VERSION@|${build_version}|g" \
-              -e "s|@COMMIT@|${GITHUB_SHA}|g" \
-              -e "s|@DATE@|$(date -u +'%Y-%m-%d %H:%M UTC')|g" \
-              -e "s|@REPO@|${GITHUB_REPOSITORY}|g" \
-              "$GITHUB_WORKSPACE/proplus/dist/LEGGIMI.txt" > LEGGIMI.txt
-          # Windows line endings for the files the user opens
-          sed -i 's/\r\?$/\r/' avvia.bat LEGGIMI.txt
-          zip -9 -r ../TripleA-ProPlus.zip TripleA-ProPlus.jar avvia.bat LEGGIMI.txt .triplea-root
+          cp "$GITHUB_WORKSPACE/proplus/dist/aggiorna.ps1" aggiorna.ps1
+          # LEGGIMI.txt e build-info.txt: sostituisci i segnaposto della build.
+          for tmpl in LEGGIMI.txt build-info.txt; do
+            sed -e "s|@VERSION@|${build_version}|g" \
+                -e "s|@COMMIT@|${GITHUB_SHA}|g" \
+                -e "s|@DATE@|${build_date}|g" \
+                -e "s|@REPO@|${GITHUB_REPOSITORY}|g" \
+                "$GITHUB_WORKSPACE/proplus/dist/${tmpl}" > "${tmpl}"
+          done
+          # Windows line endings for the text files the user/launcher reads.
+          # build-info.txt is left with LF: avvia.bat parses it with `for /f`,
+          # which would otherwise keep a trailing CR on each value.
+          sed -i 's/\r\?$/\r/' avvia.bat aggiorna.ps1 LEGGIMI.txt
+          zip -9 -r ../TripleA-ProPlus.zip \
+            TripleA-ProPlus.jar avvia.bat aggiorna.ps1 LEGGIMI.txt build-info.txt .triplea-root
           unzip -l ../TripleA-ProPlus.zip
       - name: Publish release proplus-latest
         env:

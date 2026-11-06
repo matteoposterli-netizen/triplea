@@ -1,12 +1,17 @@
 @echo off
 rem ============================================================================
-rem  TripleA Pro+ - avvio su Windows
-rem  Cerca Java in quest'ordine:
-rem    1) JRE incluso nell'installazione ufficiale di TripleA (cartella "jre")
-rem    2) %JAVA_HOME%
-rem    3) java nel PATH
-rem  Serve Java 25 o superiore. Questo script legge soltanto: non modifica
-rem  ne' sovrascrive l'installazione ufficiale di TripleA.
+rem  TripleA Pro+ - avvio su Windows (lanciatore sottile)
+rem
+rem  1) Delega l'aggiornamento automatico ad aggiorna.ps1 (PowerShell di
+rem     Windows, nessun tool esterno da installare). Se c'e' una build piu'
+rem     recente nella release "proplus-latest" del fork, viene scaricata e
+rem     applicata; se rete/API non rispondono si avvia la build locale.
+rem  2) Mostra la versione in uso (commit + data della build).
+rem  3) Cerca Java 25+ (JRE di TripleA, JAVA_HOME, PATH) e avvia il gioco.
+rem
+rem  Questo script LEGGE soltanto l'installazione ufficiale di TripleA: non la
+rem  modifica ne' la sovrascrive. I dati utente (salvataggi, mappe,
+rem  impostazioni) NON stanno in questa cartella e non vengono toccati.
 rem ============================================================================
 setlocal EnableExtensions EnableDelayedExpansion
 title TripleA Pro+
@@ -18,6 +23,67 @@ set "JAVA_EXE="
 set "JAVA_SRC="
 set "JAVA_VER="
 
+rem --- 0) Aggiornamento automatico -------------------------------------------
+rem aggiorna.ps1 ricava da solo la propria cartella ($PSScriptRoot): non serve
+rem passargliela. Esce con 10 se gli script di avvio sono cambiati e vanno
+rem applicati con un riavvio (vedi sotto); in ogni altro caso esce con 0.
+if exist "%HERE%aggiorna.ps1" (
+  where powershell.exe >nul 2>&1
+  if !ERRORLEVEL! EQU 0 (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%HERE%aggiorna.ps1"
+    set "UPD=!ERRORLEVEL!"
+  ) else (
+    echo   [avviso] PowerShell non trovato: salto il controllo aggiornamenti.
+    set "UPD=0"
+  )
+) else (
+  set "UPD=0"
+)
+
+rem --- 0b) Se gli script di avvio sono stati aggiornati, applicali e riavvia --
+rem avvia.bat e aggiorna.ps1 sono "in uso" mentre girano: aggiorna.ps1 ha messo
+rem le versioni nuove in *.new. Un piccolo script temporaneo attende la chiusura
+rem di questa finestra, sostituisce i file e rilancia avvia.bat. Cosi' avvia.bat
+rem non si corrompe durante l'aggiornamento di se stesso.
+if "!UPD!"=="10" (
+  set "SWAP=%TEMP%\triplea-proplus-swap-%RANDOM%%RANDOM%.cmd"
+  (
+    echo @echo off
+    echo ping -n 3 127.0.0.1 ^>nul
+    echo if exist "%HERE%avvia.bat.new" move /y "%HERE%avvia.bat.new" "%HERE%avvia.bat" ^>nul 2^>^&1
+    echo if exist "%HERE%aggiorna.ps1.new" move /y "%HERE%aggiorna.ps1.new" "%HERE%aggiorna.ps1" ^>nul 2^>^&1
+    echo start "" "%HERE%avvia.bat"
+    echo del "%%~f0" ^>nul 2^>^&1
+  ) > "!SWAP!"
+  echo.
+  echo Applico l'aggiornamento del lanciatore e riavvio...
+  start "" cmd /c "!SWAP!"
+  exit /b 0
+)
+
+rem --- 0c) Versione in uso ----------------------------------------------------
+set "BUILD_COMMIT="
+set "BUILD_DATE="
+if exist "%HERE%build-info.txt" (
+  for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%HERE%build-info.txt") do (
+    if /i "%%A"=="commit" set "BUILD_COMMIT=%%B"
+    if /i "%%A"=="date" set "BUILD_DATE=%%B"
+  )
+)
+set "BUILD_COMMIT_SHORT=sconosciuto"
+if defined BUILD_COMMIT (
+  set "BUILD_COMMIT_SHORT=!BUILD_COMMIT:~0,7!"
+  rem Build di sviluppo non passata dalla Action: placeholder non sostituito.
+  if "!BUILD_COMMIT:~0,1!"=="@" set "BUILD_COMMIT_SHORT=sconosciuto"
+)
+if not defined BUILD_DATE set "BUILD_DATE=sconosciuta"
+if "!BUILD_DATE:~0,1!"=="@" set "BUILD_DATE=sconosciuta"
+
+echo.
+echo ----------------------------------------------------------------------------
+echo  Versione in uso : commit !BUILD_COMMIT_SHORT!   (build del !BUILD_DATE!)
+echo ----------------------------------------------------------------------------
+
 if not exist "!JAR!" (
   echo.
   echo [ERRORE] Non trovo TripleA-ProPlus.jar in questa cartella:
@@ -28,6 +94,7 @@ if not exist "!JAR!" (
   exit /b 1
 )
 
+echo.
 echo Ricerca di Java %MIN_JAVA%+ in corso...
 echo.
 

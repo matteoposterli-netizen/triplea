@@ -1,0 +1,7 @@
+# Informazioni sulla build Pro+ (generate dalla GitHub Action, non modificare).
+# I segnaposto @...@ vengono sostituiti in fase di build; in una build locale
+# restano come sono e avvia.bat mostra "sconosciuto".
+version=@VERSION@
+commit=@COMMIT@
+date=@DATE@
+repo=@REPO@
