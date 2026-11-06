@@ -39,6 +39,10 @@ $ErrorActionPreference = 'Stop'
 
 # TLS 1.2 per Windows PowerShell 5.1 (altrimenti la GitHub API rifiuta).
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+# Connessione diretta: evita i ritardi/timeout dell'auto-discovery del proxy
+# (WPAD) su reti senza proxy. Un'eventuale rete con proxy obbligatorio ricadra'
+# comunque nel fallback alla build locale.
+try { [System.Net.WebRequest]::DefaultWebProxy = $null } catch {}
 
 $EXIT_OK = 0            # tutto a posto (aggiornato o gia' aggiornato o fallback offline)
 $EXIT_RELAUNCH = 10     # i file di avvio sono cambiati: avvia.bat deve riavviarsi
@@ -70,6 +74,17 @@ function Short-Commit {
   if ([string]::IsNullOrWhiteSpace($sha)) { return 'sconosciuto' }
   if ($sha.Length -gt 7) { return $sha.Substring(0, 7) }
   return $sha
+}
+
+# SHA256 via .NET (non dipende dal cmdlet Get-FileHash, che su alcuni ambienti
+# Windows PowerShell non è disponibile nel contesto di esecuzione).
+function Get-Sha256Hex {
+  param([string]$Path)
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    return ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '')
+  } finally { $sha.Dispose() }
 }
 
 $buildInfo    = Read-KeyValueFile $buildInfoPath
@@ -226,8 +241,8 @@ try {
     $src = Join-Path $extractDir $name
     $dst = Join-Path $InstallDir $name
     if (Test-Path -LiteralPath $src) {
-      $srcHash = (Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash
-      $dstHash = if (Test-Path -LiteralPath $dst) { (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash } else { '' }
+      $srcHash = Get-Sha256Hex $src
+      $dstHash = if (Test-Path -LiteralPath $dst) { Get-Sha256Hex $dst } else { '' }
       if ($srcHash -ne $dstHash) {
         Copy-Item -LiteralPath $src -Destination "$dst.new" -Force
         $relaunch = $true

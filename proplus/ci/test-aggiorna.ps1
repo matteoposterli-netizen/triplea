@@ -167,7 +167,7 @@ function Invoke-Aggiorna {
   param([string]$Dir, [string]$ApiBase)
   $psArgs = @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $aggiornaPs1,
-    '-InstallDir', $Dir, '-Repo', 'octo/test', '-ApiBase', $ApiBase, '-TimeoutSec', '8'
+    '-InstallDir', $Dir, '-Repo', 'octo/test', '-ApiBase', $ApiBase, '-TimeoutSec', '30'
   )
   $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $psArgs -Wait -PassThru -NoNewWindow
   return $p.ExitCode
