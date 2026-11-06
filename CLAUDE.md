@@ -402,6 +402,13 @@ naturale è `ProData`, senza toccare `ProCombatMoveAi`/`ProNonCombatMoveAi`/`Pro
 - Log: `[Pro+] Germans round 3, alliance Axis, risk 3 Equilibrato, attack win% desired 80 / minimum
   60 (normal dice)` alla prima fase Pro+ del turno (log AI).
 
+#### Prestazioni (misurate in sandbox, 4 core, 1 sola partita per configurazione)
+Europe 1940 2nd Ed. (XML reale), tutte le nazioni stessa AI, round 1-2, `ServerGame.runNextStep`
+come `AiGameTest` (benchmark temporaneo, non committato):
+Hard 90.6 s · Pro+ Prudente 95.4 s · Equilibrato 87.5 s · Spericolato 70.9 s (Germania: 36.9 / 39.2 /
+34.9 / 26.6 s). Il costo extra di Pro+ (lettura proprietà + valore VC) è trascurabile; le differenze
+sono dovute a dadi diversi e piani diversi (un solo campione, varianza alta: ±5% è rumore).
+
 #### Note ambiente (sandbox Claude)
 - JDK 25: i download Adoptium/GitHub releases sono bloccati dal proxy; funziona
   `apt-get install openjdk-25-jdk-headless` (Ubuntu 24.04, 25.0.4).
