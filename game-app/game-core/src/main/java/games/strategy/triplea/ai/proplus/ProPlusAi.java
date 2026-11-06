@@ -7,6 +7,7 @@ import games.strategy.triplea.ai.pro.ProAi;
 import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.logging.ProLogUi;
 import games.strategy.triplea.ai.pro.logging.ProLogger;
+import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
@@ -30,6 +31,7 @@ public class ProPlusAi extends ProAi {
 
   public ProPlusAi(final String name, final String playerLabel) {
     super(name, playerLabel, new ProData(false, new ProPlusTuning()));
+    DiaryRecorder.attach(this);
   }
 
   @Override

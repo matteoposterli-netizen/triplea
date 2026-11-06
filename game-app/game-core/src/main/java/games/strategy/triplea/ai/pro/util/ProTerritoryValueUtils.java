@@ -57,7 +57,7 @@ public final class ProTerritoryValueUtils {
    * taking one counts toward ending the game; 0 outside Hard Beta or with no such condition. A
    * {@link ProTuning} may change both conditions and the value.
    */
-  static double victoryCityValue(final ProData proData, final Territory t) {
+  public static double victoryCityValue(final ProData proData, final Territory t) {
     final ProTuning tuning = proData.getTuning();
     if (!tuning.valuesVictoryCities(proData.isBeta())) {
       return 0;

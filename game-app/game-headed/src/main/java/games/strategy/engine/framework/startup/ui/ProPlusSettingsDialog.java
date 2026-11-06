@@ -5,16 +5,25 @@ import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.RiskLevel;
+import games.strategy.triplea.ai.proplus.diario.DiarySettings;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Desktop;
+import java.awt.FlowLayout;
 import java.awt.Font;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Hashtable;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -29,6 +38,7 @@ import lombok.Getter;
  */
 final class ProPlusSettingsDialog {
   static final String BUTTON_LABEL = "Impostazioni Pro+";
+  static final String OPEN_DIARY_LABEL = "Apri cartella diario";
 
   private ProPlusSettingsDialog() {}
 
@@ -49,6 +59,8 @@ final class ProPlusSettingsDialog {
   /** The dialog content: sliders initialized from the game, written back by {@link #apply}. */
   static final class Form {
     private final Map<String, JSlider> sliders = new LinkedHashMap<>();
+    private final JCheckBox diaryCheckBox =
+        new JCheckBox("Scrivi il diario delle decisioni dell'AI", DiarySettings.isEnabled());
     @Getter private final JPanel panel = new JPanel();
 
     Form(final GameState data) {
@@ -68,6 +80,7 @@ final class ProPlusSettingsDialog {
         riskPanel.add(new JLabel("Nessuna alleanza trovata nella mappa."));
       }
       panel.add(riskPanel);
+      panel.add(diaryPanel());
       // Step 3 ("Fantasia"): its slider goes in this panel; hidden until then.
       final JPanel fantasyPanel = new JPanel();
       fantasyPanel.setVisible(false);
@@ -83,13 +96,59 @@ final class ProPlusSettingsDialog {
       return sliders;
     }
 
+    JCheckBox getDiaryCheckBox() {
+      return diaryCheckBox;
+    }
+
+    private JPanel diaryPanel() {
+      final JPanel diary = new JPanel();
+      diary.setLayout(new BoxLayout(diary, BoxLayout.Y_AXIS));
+      diary.setBorder(BorderFactory.createTitledBorder("Diario delle decisioni"));
+      diary.add(diaryCheckBox);
+      final JButton open = new JButton(OPEN_DIARY_LABEL);
+      open.addActionListener(e -> openDiaryFolder(panel));
+      final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 4));
+      row.add(open);
+      diary.add(row);
+      diary.add(
+          new JLabel(
+              "<html>Per ogni turno di Pro+ e Hard: acquisti, attacchi fatti e scartati"
+                  + " (con win% e motivo),<br>obiettivi ed esito reale delle battaglie."
+                  + " Cartella \"diario\" accanto al gioco, ultime "
+                  + DiarySettings.MAX_GAMES
+                  + " partite.</html>"));
+      return diary;
+    }
+
     void apply(final GameProperties props) {
+      DiarySettings.setEnabled(diaryCheckBox.isSelected());
       sliders.forEach(
           (alliance, slider) ->
               ProPlusSettings.setRiskLevel(
                   props,
                   alliance,
                   RiskLevel.fromLevel(slider.getValue()).orElse(RiskLevel.DEFAULT)));
+    }
+  }
+
+  private static void openDiaryFolder(final Component parent) {
+    final Optional<Path> folder = DiarySettings.folder();
+    try {
+      if (folder.isEmpty()) {
+        throw new IOException("cartella non trovata");
+      }
+      Files.createDirectories(folder.get());
+      Desktop.getDesktop().open(folder.get().toFile());
+    } catch (final IOException | RuntimeException e) {
+      JOptionPane.showMessageDialog(
+          parent,
+          "Non riesco ad aprire la cartella del diario"
+              + folder.map(f -> ":\n" + f).orElse("")
+              + "\n("
+              + e.getMessage()
+              + ")",
+          OPEN_DIARY_LABEL,
+          JOptionPane.WARNING_MESSAGE);
     }
   }
 

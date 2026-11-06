@@ -85,6 +85,8 @@ public class ProCombatMoveAi {
     data = proData.getData();
     player = proData.getPlayer();
     territoryManager = new ProTerritoryManager(calc, proData);
+    final ProDecisionRecorder recorder = proData.getRecorder();
+    recorder.combatPlanStart(proData);
 
     // Determine whether capital is threatened, and I should be in a defensive stance
     isDefensive =
@@ -100,6 +102,8 @@ public class ProCombatMoveAi {
     // Remove territories that aren't worth attacking and prioritize the remaining ones
     final List<ProTerritory> attackOptions =
         territoryManager.removeTerritoriesThatCantBeConquered();
+    recorder.attackCandidates(
+        proData, territoryManager.getAttackOptions().getTerritoryMap().values(), attackOptions);
     final List<Territory> clearedTerritories = new ArrayList<>();
     for (final ProTerritory patd : attackOptions) {
       clearedTerritories.add(patd.getTerritory());
@@ -108,10 +112,12 @@ public class ProCombatMoveAi {
     determineTerritoriesThatCanBeHeld(attackOptions, clearedTerritories);
     prioritizeAttackOptions(player, attackOptions);
     removeTerritoriesThatArentWorthAttacking(attackOptions);
+    recorder.attackStage(proData, "priority", attackOptions);
 
     // Determine which territories to attack
     final List<ProTerritory> removedBySelection = new ArrayList<>();
     determineTerritoriesToAttack(attackOptions, removedBySelection);
+    recorder.attackStage(proData, "selection", attackOptions);
 
     // Determine which territories can be held and remove any that aren't worth attacking
     refreshEnemyAttackOptions(attackOptions);
@@ -124,6 +130,7 @@ public class ProCombatMoveAi {
     determineUnitsToAttackWith(attackOptions, alreadyMovedUnits);
     reAddRemovedAmphibAttacks(
         attackOptions, beforeWorthCheck, removedBySelection, alreadyMovedUnits);
+    recorder.attackStage(proData, "units", attackOptions);
 
     // Get all transport final territories
     ProMoveUtils.calculateAmphibRoutes(
@@ -140,6 +147,7 @@ public class ProCombatMoveAi {
       removeAttacksUntilCapitalCanBeHeld(
           attackOptions, proData.getPurchaseOptions().getLandOptions());
     }
+    recorder.attackStage(proData, "capital", attackOptions);
 
     // Check if any subs in contested territory that's not being attacked
     checkContestedSeaTerritories();
@@ -165,6 +173,7 @@ public class ProCombatMoveAi {
     // Log results
     ProLogger.info("Logging results");
     logAttackMoves(attackOptions);
+    recorder.attackPlan(proData, territoryManager.getAttackOptions().getTerritoryMap());
 
     final Map<Territory, ProTerritory> result =
         territoryManager.getAttackOptions().getTerritoryMap();
@@ -352,6 +361,9 @@ public class ProCombatMoveAi {
           || (isDefensive
               && attackValue <= 8
               && data.getMap().getDistance(proData.getMyCapital(), t) <= 3)) {
+        proData
+            .getRecorder()
+            .attackDropped(proData, patd, attackValue <= 0 ? "negative_value" : "defensive_stance");
         ProLogger.debug(
             "Removing territory that has a negative attack value: "
                 + t.getName()
@@ -413,6 +425,9 @@ public class ProCombatMoveAi {
           for (int i = numToAttack; i < prioritizedTerritories.size(); i++) {
             if (prioritizedTerritories.get(i).isNeedAmphibUnits()) {
               amphibTerritoriesToRemove.add(prioritizedTerritories.get(i));
+              proData
+                  .getRecorder()
+                  .attackDropped(proData, prioritizedTerritories.get(i), "no_transports_left");
               ProLogger.debug(
                   "Removing amphib territory since already used all transports: "
                       + prioritizedTerritories.get(i).getTerritory().getName());
@@ -429,6 +444,10 @@ public class ProCombatMoveAi {
           break;
         }
       } else {
+        proData
+            .getRecorder()
+            .attackDropped(
+                proData, prioritizedTerritories.get(numToAttack - 1), "not_enough_units");
         ProLogger.debug(
             "Removing territory: "
                 + prioritizedTerritories.get(numToAttack - 1).getTerritory().getName());
@@ -944,6 +963,7 @@ public class ProCombatMoveAi {
           && enemyAttackOptions.getMax(t) != null
           && t.isWater()
           && !t.anyUnitsMatch(Matches.enemyUnit(player))) {
+        proData.getRecorder().attackDropped(proData, patd, "convoy_cant_hold");
         ProLogger.debug(
             "Removing convoy zone that can't be held: "
                 + t.getName()
@@ -963,6 +983,7 @@ public class ProCombatMoveAi {
 
           // Remove neutral territories that can't be held and don't have overwhelming attack
           // strength
+          proData.getRecorder().attackDropped(proData, patd, "neutral_cant_hold");
           ProLogger.debug(
               "Removing neutral territory that can't be held: "
                   + t.getName()
@@ -977,6 +998,7 @@ public class ProCombatMoveAi {
         } else if (patd.isNeedAmphibUnits() && patd.getValue() < 2) {
 
           // Remove amphib territories that aren't worth attacking
+          proData.getRecorder().attackDropped(proData, patd, "amphib_low_value");
           ProLogger.debug(
               "Removing low value amphib territory that can't be held: "
                   + t.getName()
@@ -1021,6 +1043,7 @@ public class ProCombatMoveAi {
                 .findAny()
                 .orElse(null);
         if (attackFromTerritoryWithEnemyNeighbors != null) {
+          proData.getRecorder().attackDropped(proData, patd, "neutral_exposes_attackers");
           ProLogger.debug(
               "Removing neutral territory that has attackers that are adjacent to enemies: "
                   + t.getName()
@@ -1644,6 +1667,7 @@ public class ProCombatMoveAi {
         break;
       }
 
+      proData.getRecorder().attackDropped(proData, territoryToRemove, "units_not_worth");
       prioritizedTerritories.remove(territoryToRemove);
       ProLogger.debug("Removing " + territoryToRemove.getTerritory().getName());
     }
@@ -2793,6 +2817,7 @@ public class ProCombatMoveAi {
         }
         if (maxTerritory != null) {
           final ProTerritory patdMax = attackMap.get(maxTerritory);
+          proData.getRecorder().attackDropped(proData, patdMax, "capital_defense");
           prioritizedTerritories.remove(patdMax);
           patdMax.getUnits().clear();
           patdMax.getAmphibAttackMap().clear();

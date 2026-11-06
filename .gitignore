@@ -9,6 +9,8 @@
 
 .docs/
 game-app/game-headed/triplea*.log
+# Pro+ decision diary written by ./gradlew :game-headed:run
+game-app/game-headed/diario/
 game-app/smoke-testing/src/test/resources/save-games/
 
 gradle/build-logic/.kotlin/errors/**

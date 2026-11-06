@@ -7,13 +7,15 @@ Data build      : @DATE@
 Sorgente        : https://github.com/@REPO@/tree/@COMMIT@
 
 
-STATO ATTUALE (step 2)
-----------------------
+STATO ATTUALE (step 2bis)
+-------------------------
 Nella scelta dei giocatori c'e' il tipo "Pro+ (AI)": e' l'AI "Hard (AI)"
 con due differenze:
   - valuta le victory city (le considera piu' preziose da prendere/tenere);
   - attacca secondo la "Propensione al rischio" scelta per la sua alleanza.
 "Hard (AI)" e "Hard Beta (AI)" restano identiche all'originale.
+Novita' dello step 2bis: il DIARIO DELLE DECISIONI (vedi sotto) racconta
+in italiano cosa ha deciso l'AI in ogni turno e perche'.
 Il codice di base e' il ramo principale (main) di triplea-game/triplea al
 momento della build: puo' contenere correzioni piu' recenti della versione
 ufficiale installata (es. 2026-11.16.15870).
@@ -32,7 +34,8 @@ IMPOSTAZIONI PRO+ (propensione al rischio)
      3 Equilibrato  80% (minimo 60%)   <- predefinito
      4 Audace       72% (minimo 52%)
      5 Spericolato  65% (minimo 45%)
-   Con Low Luck i valori salgono di 5 punti (massimo 95%).
+   Con Low Luck i valori salgono di 5 punti (massimo 95%); Prudente resta
+   uguale a Hard anche con Low Luck (95%, minimo 75%).
    Riguarda solo gli ATTACCHI: difesa, acquisti e ritirate restano come Hard.
 4. I valori vengono salvati DENTRO la partita: ricaricando il salvataggio
    ritrovi gli stessi livelli (puoi cambiarli di nuovo dal pulsante prima di
@@ -40,6 +43,54 @@ IMPOSTAZIONI PRO+ (propensione al rischio)
 5. Nel log dell'AI (menu Debug > Show Logs, con "Enable AI Logging"
    attivo) all'inizio di ogni turno di una nazione Pro+ compare una riga
    "[Pro+] ... risk ..." con alleanza, livello e soglie in uso.
+6. Nello stesso pannello: casella "Scrivi il diario delle decisioni
+   dell'AI" (attiva di serie) e pulsante "Apri cartella diario".
+
+
+DIARIO DELLE DECISIONI  (novita' step 2bis)
+------------------------------------------
+Dove: nella cartella "diario" accanto al gioco, per esempio
+  C:\TripleA-ProPlus\diario\
+Ogni partita ha la sua sottocartella con data, ora e nome della mappa, ad es.
+  2026-11-06_21-15-03_World_War_II_Europe_1940_2nd_Edition\
+(anche caricare un salvataggio crea una cartella nuova). Restano le ultime
+20 partite, le piu' vecchie vengono cancellate da sole. L'aggiornamento
+automatico non tocca mai questa cartella.
+
+Vale per le nazioni "Pro+ (AI)" e anche "Hard (AI)" / "Hard Beta (AI)",
+cosi' puoi confrontarle. Non cambia nessuna decisione dell'AI: osserva
+soltanto. Se il diario ha un problema si ferma da solo, la partita continua.
+
+Dentro ci sono due file:
+  diario.txt       da leggere (si apre con il Blocco note). Per ogni round
+                   e nazione:
+                   - acquisti e motivo (difesa, fronte, flotta, PU avanzati);
+                   - attacchi eseguiti: vittoria stimata (win%), soglia del
+                     rischio, valore del territorio e quota victory city (VC),
+                     unita' attaccanti e difensori;
+                   - attacchi scartati e perche' (es. "win% max 41% < soglia
+                     minima 60%", "unita' insufficienti");
+                   - obiettivi principali del turno e cosa e' cambiato
+                     rispetto al turno precedente;
+                   - sezione NEUTRALI: neutrali attaccati, scartati (e
+                     perche') o mai considerati;
+                   - esito reale di ogni battaglia accanto alla stima
+                     (es. "stimata 86% -> SCONFITTA"), per capire se l'AI ha
+                     sbagliato la stima o la scelta;
+                   - tempo impiegato dall'AI.
+  decisioni.jsonl  gli stessi dati in forma tecnica (una riga per evento),
+                   per l'analisi automatica. Non serve leggerlo.
+
+QUANDO L'AI SBAGLIA, cosa mandare:
+  1. Salva subito la partita (menu File > Save) con un nome chiaro.
+  2. Annota round e nazione dell'errore e cosa ti aspettavi.
+  3. Manda: la cartella della partita dentro "diario" (zippala intera),
+     il salvataggio .tsvg (in Documenti\triplea\savedGames) e la
+     "Versione in uso" mostrata da avvia.bat.
+  In mancanza del salvataggio manuale vanno bene gli automatici in
+  Documenti\triplea\savedGames\autoSave (autosave_round_odd.tsvg e
+  autosave_round_even.tsvg = inizio degli ultimi due round): mandali
+  subito, vengono sovrascritti a ogni round.
 
 
 CONTENUTO DELLO ZIP
@@ -53,6 +104,8 @@ CONTENUTO DELLO ZIP
 
 Dopo il primo avvio comparira' anche version.txt: lo crea avvia.bat per
 ricordare quale build e' installata. Non va modificato a mano.
+Dopo la prima partita con l'AI comparira' anche la cartella "diario"
+(vedi DIARIO DELLE DECISIONI).
 
 
 INSTALLAZIONE
@@ -151,5 +204,6 @@ le nazioni "Pro+ (AI)" li' compaiono come Human e vanno rimesse su
 
 DISINSTALLAZIONE
 ----------------
-Cancella la cartella C:\TripleA-ProPlus. Mappe, salvataggi e impostazioni
-restano (sono quelli condivisi con la versione ufficiale).
+Cancella la cartella C:\TripleA-ProPlus (diario compreso). Mappe,
+salvataggi e impostazioni restano (sono quelli condivisi con la versione
+ufficiale).

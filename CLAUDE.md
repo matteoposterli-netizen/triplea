@@ -94,6 +94,13 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   riga per fase) e poi chiama `super`. Condivide il `LazyBattleCalculator` statico di `ProAi`.
 - `ai/pro/ProTuning.java` (step 2) — interfaccia dei numeri modificabili; `ProTuning.DEFAULT` =
   valori originali (Hard/Hard Beta). Letta da `ProData` (`getTuning()`).
+- `ai/pro/ProDecisionRecorder.java` (step 2bis) — osservatore delle decisioni (metodi no-op di
+  default, `ProDecisionRecorder.NONE` in ogni `ProData`, `ProData.setRecorder`). Agganci di sola
+  registrazione in `AbstractProAi` (inizio/fine fase), `ProCombatMoveAi` (candidati, scarti con
+  motivo, stadi, piano finale), `ProPurchaseAi` (unità comprate dopo ogni passo).
+- `ai/proplus/diario/` (step 2bis) — diario delle decisioni: `DiaryRecorder` (implementazione,
+  per AI), `GameDiary` (cartella e file della partita), `DiarySettings` (cartella, on/off),
+  `Italian` (testi), `AttackRecord`. Vedi "Diario delle decisioni".
 - `ai/proplus/ProPlusTuning.java` — tuning Pro+: soglie di attacco dal livello di rischio, victory
   city valutate. `RiskLevel.java` — i 5 livelli. `ProPlusSettings.java` — alleanze configurabili e
   lettura/scrittura dei livelli nelle proprietà della partita.
@@ -202,6 +209,69 @@ Fatti verificati per avvia.bat / LEGGIMI:
 - Dati utente condivisi con l'installazione ufficiale: `%USERPROFILE%\Documents\triplea` (o
   `%USERPROFILE%\triplea`) con `downloadedMaps`, `savedGames`, `savedGames\autoSave`;
   impostazioni in Java Preferences (registro HKCU\Software\JavaSoft\Prefs\games\strategy\...).
+
+## Diario delle decisioni (dallo step 2bis)
+
+Cartella `diario` accanto al jar (`ClientFileSystemHelper.getRootFolder()` = cartella con
+`.triplea-root`, cioè `C:\...\TripleA-ProPlus\diario\`), una sottocartella per partita
+`AAAA-MM-GG_hh-mm-ss_<nome mappa>` (anche caricare un salvataggio apre una cartella nuova). Tenute
+le ultime 20 (`DiarySettings.MAX_GAMES`); si cancellano solo cartelle con quel formato di nome.
+`aggiorna.ps1` tocca solo i file noti (jar, LEGGIMI, build-info, .triplea-root, *.new) e la sua
+cartella temporanea in `%TEMP%`: la cartella `diario` non viene mai toccata (verificato sul codice,
+nessuna modifica necessaria). On/off: casella in "Impostazioni Pro+" (Java Preferences, default on);
+pulsante "Apri cartella diario" (`Desktop.open`). Sistema `proplus.diario.dir` = cartella alternativa
+(test, benchmark). Bot headless: niente diario (salvo proprietà impostata).
+
+Ciclo di un turno (perché i dati arrivano in quest'ordine): nella fase **acquisti** la Pro AI simula il
+turno su una copia della partita: pianifica gli attacchi (`doCombatMove` in simulazione: è QUESTO il
+piano poi eseguito) e poi compra. Nella fase **combattimento** il piano viene eseguito
+(`doMove(storedCombatMoveMap)`); se non c'era un piano salvato, viene fatto lì. A fine
+combattimento il diario guarda il tabellone reale (battaglie pendenti nel `BattleTracker`, unità
+presenti) per sapere cosa è stato davvero eseguito; a inizio **movimento** (dopo le battaglie)
+registra l'esito reale. Piani fatti in altre simulazioni (bid di Hard Beta, secondi piani nella
+stessa fase acquisti) sono ignorati.
+
+`diario.txt` (UTF-8, CRLF), per turno e nazione:
+`Round N - <Nazione> (<alleanza>, <tipo AI>, rischio <livello>: soglie D/M) - <PU>` poi:
+- Acquisti: totale, PU spesi, e per passo di `ProPurchaseAi` le unità aggiunte (motivo = passo:
+  difesa territori minacciati, unità di terra per i territori prioritari, flotta, PU avanzati...;
+  "upgrade" mostra anche le unità tolte con segno -).
+- Attacchi eseguiti: win% stimata con le unità assegnate, soglia desiderata, win% massima, priorità
+  (= `ProTerritory.getValue()`, il punteggio d'ordinamento), valore strategico
+  (`findTerritoryAttackValue`: 3·produzione·(fabbrica+1) + 3·VC, meno costo per i neutrali) con la
+  quota VC, attaccanti e difensori (senza infrastrutture).
+- Attacchi pianificati ma non eseguiti (mossa rifiutata dal motore).
+- Bombardamenti strategici.
+- Attacchi scartati con motivo: `below_minimum` (win% max < soglia minima), `negative_value`,
+  `defensive_stance`, `convoy_cant_hold`, `neutral_cant_hold`, `amphib_low_value`,
+  `neutral_exposes_attackers`, `no_transports_left`, `not_enough_units`, `units_not_worth`,
+  `capital_defense`, `stage_*` (scartato senza motivo puntuale in quello stadio), `final_checks`.
+  Testi in `diario/Italian.REASONS`.
+- Obiettivi principali (top 5 per priorità, quota VC, stato) e confronto top 10 con il turno
+  precedente della stessa nazione (entrati/usciti con priorità prima/ora o motivo).
+- NEUTRALI: neutrali tra i candidati (attaccati/scartati e perché) + neutrali con unità confinanti con
+  terre della nazione mai considerati. "Neutrale" = `ProUtils.isNeutralLand` oppure proprietario
+  fuori dalle alleanze principali (Europe 1940: Neutral_True/Axis/Allies).
+- Esito reale: stimata → VITTORIA/SCONFITTA/RITIRATA/NON RIUSCITO, attaccanti e difensori prima/dopo,
+  TUV swing stimato vs reale, totale "vinte X, attese Y (somma win%)".
+- Tempo AI per fase e "di cui diario" (costo del diario misurato nel diario stesso).
+
+`decisioni.jsonl`: una riga JSON per evento, campi comuni `round`, `nazione` (nome XML), `ai`,
+`fase` (purchase/combat/noncombat/place), `evento`: `inizio_partita`, `inizio_turno` (alleanza,
+rischio, soglie, low_luck, pu), `acquisto` (passo, motivo, unita), `acquisti_totale`, `attacco`
+(territorio, proprietario, neutrale, mare, stato eseguito/non_eseguito/scartato/candidato,
+motivo_codice, win_stimata, win_max, soglie, priorita, valore{totale, produzione, victory_city,
+neutrale}, tuv_swing_stimato, anfibio, logoramento, tenibile, unita_attaccanti, difensori),
+`obiettivi` (top 10, entrati, usciti), `neutrali_non_considerati`, `esito_battaglia` (win_stimata,
+esito, vinta, attaccanti/difensori prima/dopo, tuv_swing_stimato/reale), `fine_turno` (ms per fase,
+ms_diario), `errore_diario`.
+
+Debug con un salvataggio: Matteo manda la cartella della partita del diario + un `.tsvg` dello stesso
+momento (salvataggio manuale, oppure `savedGames\autoSave\autosave_round_odd/even.tsvg` = inizio
+dell'ultimo round dispari/pari, `autosaveBefore<Delegate>`/`autosaveAfter<Delegate>`). Il diario dice
+round, nazione e piano; caricando il `.tsvg` (stesso round) si ricrea la situazione e con il log AI
+(Debug > Show Logs) si ripete la scelta. Le win% sono simulazioni: rigiocando cambiano di qualche
+punto (dadi della simulazione non fissati).
 
 ## Log degli step
 
@@ -377,8 +447,8 @@ naturale è `ProData`, senza toccare `ProCombatMoveAi`/`ProNonCombatMoveAi`/`Pro
   Pro+ quindi la attiva anche con `Triggered Victory` = true (`ProPlusTuning.hasVictoryCityWinCondition`).
   Non è attiva nessun'altra parte della Beta (`isBeta()` resta false).
 - Rischio: `RiskLevel` 1 Prudente 90/65 · 2 Cauto 85/62 · 3 Equilibrato 80/60 (default) · 4 Audace
-  72/52 · 5 Spericolato 65/45; Low Luck +5 su entrambi, max 95 (⇒ Prudente LL = 95/70, mentre Hard LL
-  = 95/75: Prudente coincide con Hard solo a dadi normali).
+  72/52 · 5 Spericolato 65/45; Low Luck +5 su entrambi, max 95, tranne Prudente che con Low Luck
+  usa le soglie di Hard 95/75 (corretto nello step 2bis: prima era 95/70).
   - "desiderata" = `attackWinPercentage`: win% che il combat move cerca di raggiungere assegnando
     unità (aggiunge unità finché l'attacco è sotto), soglia per `currentlyWins`, per aggiungere
     anfibi/strafing alleato, per togliere bombardieri/navi bloccanti da un attacco, controllo scramble.
@@ -413,3 +483,25 @@ sono dovute a dadi diversi e piani diversi (un solo campione, varianza alta: ±5
 - JDK 25: i download Adoptium/GitHub releases sono bloccati dal proxy; funziona
   `apt-get install openjdk-25-jdk-headless` (Ubuntu 24.04, 25.0.4).
 - Maven Central restituisce spesso 429: ripetere il comando Gradle (script con retry).
+
+
+### Step 2bis — diario delle decisioni (2026-11-06)
+
+- Correzione preliminare: `RiskLevel.PRUDENTE` con Low Luck = 95/75 (= Hard), gli altri +5 (max 95).
+  `RiskLevelTest.prudenteEqualsHardAlsoWithLowLuck` confronta con `ProTuning.DEFAULT`.
+- Diario attivo per **Pro+, Hard e Hard Beta** (costo basso, vedi prestazioni): `DiaryRecorder.attach`
+  in `ProPlusAi` (costruttore), `PlayerTypes.PRO_AI` e `HeadedPlayerTypes` (Hard Beta). `ProAi` e
+  `FastAi` non sono toccate; una `ProAi` creata altrove (test) non ha diario.
+- Agganci nelle classi Pro (solo righe di registrazione, nessuna logica cambiata):
+  `ProData` (campo `recorder`), `AbstractProAi` (phaseStart/phaseEnd in purchase/move/place),
+  `ProCombatMoveAi` (14 righe), `ProPurchaseAi` (10 righe), `ProTerritoryValueUtils.victoryCityValue`
+  reso `public` (letto dal diario per la quota VC).
+- Neutralità: `HardNeutralityGoldenTest` invariato e verde; `ai.pro.DiaryNeutralityTest` esegue la
+  vera pianificazione d'attacco + acquisto Pro+ (Global 1940, Germania, dadi a seed fisso) sullo
+  stesso `GameData` tre volte: off, off, on ⇒ mosse e acquisti identici (off/off prova che il
+  confronto è significativo). Il move/purchase delegate sono mock che registrano soltanto.
+- Fatto verificato leggendo il codice (importante per lo step 3): la **priorità** con cui il combat
+  move ordina i bersagli (`prioritizeAttackOptions`) usa produzione + obiettivi nazionali, capitale,
+  TUV swing; **non** usa il valore victory city. Il valore VC di Pro+ entra in
+  `ProTerritoryValueUtils.findTerritoryValues` (valori usati da movimento non di combattimento,
+  difesa e piazzamento) e nel valore dei vicini dei neutrali. Il diario mostra entrambi i numeri.

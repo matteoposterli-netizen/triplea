@@ -465,8 +465,12 @@ class ProPurchaseAi {
         purchaseOptions.getLandZeroMoveOptions(),
         purchaseOptions.getAirOptions(),
         true);
+    proData.getRecorder().purchaseStep(proData, "defend_land", purchaseTerritories, Map.of());
     if (proData.isBeta()) {
       purchaseCapitalDefenceIfCooked(purchaseTerritories, purchaseOptions);
+      proData
+          .getRecorder()
+          .purchaseStep(proData, "capital_emergency", purchaseTerritories, Map.of());
     }
 
     // Find strategic value for each territory
@@ -493,7 +497,9 @@ class ProPurchaseAi {
         prioritizeLandTerritories(purchaseTerritories);
     purchaseAaUnits(
         purchaseTerritories, prioritizedLandTerritories, purchaseOptions.getAaOptions());
+    proData.getRecorder().purchaseStep(proData, "aa", purchaseTerritories, Map.of());
     purchaseLandUnits(purchaseTerritories, prioritizedLandTerritories, purchaseOptions);
+    proData.getRecorder().purchaseStep(proData, "land", purchaseTerritories, Map.of());
 
     // Prioritize sea territories that need defended and purchase additional defenders
     final List<ProPlaceTerritory> needToDefendSeaTerritories =
@@ -505,6 +511,7 @@ class ProPurchaseAi {
         List.of(),
         purchaseOptions.getAirOptions(),
         false);
+    proData.getRecorder().purchaseStep(proData, "defend_sea", purchaseTerritories, Map.of());
 
     // Determine whether to purchase new land factory
     final Map<Territory, ProPurchaseTerritory> factoryPurchaseTerritories = new HashMap<>();
@@ -514,19 +521,35 @@ class ProPurchaseAi {
         prioritizedLandTerritories,
         purchaseOptions,
         false);
+    proData
+        .getRecorder()
+        .purchaseStep(proData, "factory", purchaseTerritories, factoryPurchaseTerritories);
 
     // Prioritize sea place options and purchase units
     final List<ProPlaceTerritory> prioritizedSeaTerritories =
         prioritizeSeaTerritories(purchaseTerritories);
     final boolean shouldSaveUpForAFleet =
         purchaseSeaAndAmphibUnits(purchaseTerritories, prioritizedSeaTerritories, purchaseOptions);
+    proData
+        .getRecorder()
+        .purchaseStep(
+            proData,
+            shouldSaveUpForAFleet ? "sea_saving_for_fleet" : "sea",
+            purchaseTerritories,
+            factoryPurchaseTerritories);
 
     // Try to use any remaining PUs on high value units, except if we need to save up for a fleet.
     if (!shouldSaveUpForAFleet) {
       purchaseUnitsWithRemainingProduction(
           purchaseTerritories, purchaseOptions.getLandOptions(), purchaseOptions.getAirOptions());
+      proData
+          .getRecorder()
+          .purchaseStep(proData, "remaining", purchaseTerritories, factoryPurchaseTerritories);
 
       upgradeUnitsWithRemainingPUs(purchaseTerritories, purchaseOptions);
+      proData
+          .getRecorder()
+          .purchaseStep(proData, "upgrade", purchaseTerritories, factoryPurchaseTerritories);
 
       // Try to purchase land/sea factory with extra PUs
       purchaseFactory(
@@ -535,6 +558,9 @@ class ProPurchaseAi {
           prioritizedLandTerritories,
           purchaseOptions,
           true);
+      proData
+          .getRecorder()
+          .purchaseStep(proData, "factory_extra", purchaseTerritories, factoryPurchaseTerritories);
     }
 
     // Add factory purchase territory to list
@@ -549,6 +575,7 @@ class ProPurchaseAi {
     if (error != null) {
       ProLogger.warn("Purchase error: " + error);
     }
+    proData.getRecorder().purchaseStep(proData, "done", purchaseTerritories, Map.of());
 
     territoryManager = null;
     return purchaseTerritories;

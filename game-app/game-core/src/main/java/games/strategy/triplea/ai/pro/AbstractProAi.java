@@ -148,6 +148,8 @@ public abstract class AbstractProAi extends AbstractAi {
       final GamePlayer player) {
     final Instant start = Instant.now();
     ProLogUi.notifyStartOfRound(data.getSequence().getRound(), player.getName());
+    final String phase = nonCombat ? "noncombat" : "combat";
+    proData.getRecorder().phaseStart(data, player, phase);
     initializeData();
     prepareData(data);
     boolean didCombatMove = false;
@@ -174,6 +176,7 @@ public abstract class AbstractProAi extends AbstractAi {
     }
 
     Duration delta = Duration.between(start, Instant.now());
+    proData.getRecorder().phaseEnd(data, player, phase, delta.toMillis());
     ProLogger.info(
         String.format(
             "%s move (didCombatMove=%s  didNonCombatMove=%s) time=%s",
@@ -189,6 +192,7 @@ public abstract class AbstractProAi extends AbstractAi {
       final GamePlayer player) {
     final long start = System.currentTimeMillis();
     ProLogUi.notifyStartOfRound(data.getSequence().getRound(), player.getName());
+    proData.getRecorder().phaseStart(data, player, purchaseForBid ? "bid" : "purchase");
     initializeData();
     if (pusToSpend <= 0) {
       return;
@@ -298,6 +302,10 @@ public abstract class AbstractProAi extends AbstractAi {
         }
       }
     }
+    proData
+        .getRecorder()
+        .phaseEnd(
+            data, player, purchaseForBid ? "bid" : "purchase", System.currentTimeMillis() - start);
     ProLogger.info(player.getName() + " time for purchase=" + (System.currentTimeMillis() - start));
   }
 
@@ -334,9 +342,11 @@ public abstract class AbstractProAi extends AbstractAi {
       final GamePlayer player) {
     final long start = System.currentTimeMillis();
     ProLogUi.notifyStartOfRound(data.getSequence().getRound(), player.getName());
+    proData.getRecorder().phaseStart(data, player, "place");
     initializeData();
     purchaseAi.place(storedPurchaseTerritories, placeDelegate);
     storedPurchaseTerritories = null;
+    proData.getRecorder().phaseEnd(data, player, "place", System.currentTimeMillis() - start);
     ProLogger.info(player.getName() + " time for place=" + (System.currentTimeMillis() - start));
   }
 

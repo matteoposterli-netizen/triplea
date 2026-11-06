@@ -2,6 +2,7 @@ package games.strategy.triplea.ai.proplus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import games.strategy.triplea.ai.pro.ProTuning;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -9,7 +10,7 @@ class RiskLevelTest {
 
   @ParameterizedTest
   @CsvSource({
-    "1, PRUDENTE, Prudente, 90, 65, 95, 70",
+    "1, PRUDENTE, Prudente, 90, 65, 95, 75",
     "2, CAUTO, Cauto, 85, 62, 90, 67",
     "3, EQUILIBRATO, Equilibrato, 80, 60, 85, 65",
     "4, AUDACE, Audace, 72, 52, 77, 57",
@@ -44,5 +45,16 @@ class RiskLevelTest {
     assertThat(RiskLevel.DEFAULT).isEqualTo(RiskLevel.EQUILIBRATO);
     assertThat(RiskLevel.PRUDENTE.desiredWinPercentage(false)).isEqualTo(90);
     assertThat(RiskLevel.PRUDENTE.minimumWinPercentage(false)).isEqualTo(65);
+  }
+
+  @org.junit.jupiter.api.Test
+  void prudenteEqualsHardAlsoWithLowLuck() {
+    final ProTuning hard = ProTuning.DEFAULT;
+    assertThat(RiskLevel.PRUDENTE.desiredWinPercentage(true)).isEqualTo(hard.winPercentage(true));
+    assertThat(RiskLevel.PRUDENTE.minimumWinPercentage(true))
+        .isEqualTo(hard.minWinPercentage(true));
+    assertThat(RiskLevel.PRUDENTE.desiredWinPercentage(false)).isEqualTo(hard.winPercentage(false));
+    assertThat(RiskLevel.PRUDENTE.minimumWinPercentage(false))
+        .isEqualTo(hard.minWinPercentage(false));
   }
 }

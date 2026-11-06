@@ -7,6 +7,7 @@ import games.strategy.engine.player.Player;
 import games.strategy.triplea.TripleAPlayer;
 import games.strategy.triplea.ai.pro.ProAi;
 import games.strategy.triplea.ai.proplus.ProPlusAi;
+import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
 import games.strategy.triplea.settings.ClientSetting;
 import java.util.Collection;
 import java.util.List;
@@ -77,7 +78,7 @@ public class HeadedPlayerTypes {
     return new PlayerTypes.Type(PLAYER_TYPE_PRO_AI_BETA_LABEL) {
       @Override
       public Player newPlayerWithName(String name) {
-        return new ProAi(name, getLabel(), true);
+        return DiaryRecorder.attachedTo(new ProAi(name, getLabel(), true));
       }
     };
   }

@@ -10,11 +10,17 @@ import lombok.Getter;
  * <p>{@code desired} is the win% the combat move tries to reach when it assigns units to an attack
  * (Pro AI "winPercentage"); {@code minimum} is the win% below which an attack is dropped (Pro AI
  * "minWinPercentage"). Values are for normal dice; Low Luck adds {@link #LOW_LUCK_BONUS} to both,
- * capped at {@link #LOW_LUCK_CAP}. {@link #PRUDENTE} equals "Hard (AI)".
+ * capped at {@link #LOW_LUCK_CAP}. {@link #PRUDENTE} equals "Hard (AI)" with both dice types: with
+ * Low Luck it uses Hard's own 95/75 instead of the +5 rule.
  */
 @Getter
 public enum RiskLevel {
-  PRUDENTE(1, "Prudente", 90, 65),
+  PRUDENTE(1, "Prudente", 90, 65) {
+    @Override
+    public double minimumWinPercentage(final boolean lowLuck) {
+      return lowLuck ? HARD_LOW_LUCK_MINIMUM : super.minimumWinPercentage(false);
+    }
+  },
   CAUTO(2, "Cauto", 85, 62),
   EQUILIBRATO(3, "Equilibrato", 80, 60),
   AUDACE(4, "Audace", 72, 52),
@@ -23,6 +29,9 @@ public enum RiskLevel {
   public static final RiskLevel DEFAULT = EQUILIBRATO;
   static final double LOW_LUCK_BONUS = 5;
   static final double LOW_LUCK_CAP = 95;
+
+  /** "Hard (AI)" minimum win% with Low Luck (ProTuning.DEFAULT). */
+  static final double HARD_LOW_LUCK_MINIMUM = 75;
 
   private final int level;
   private final String label;

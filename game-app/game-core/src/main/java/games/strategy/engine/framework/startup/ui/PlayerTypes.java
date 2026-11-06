@@ -4,6 +4,7 @@ import games.strategy.engine.framework.I18nEngineFramework;
 import games.strategy.engine.player.Player;
 import games.strategy.triplea.ai.fast.FastAi;
 import games.strategy.triplea.ai.pro.ProAi;
+import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
 import games.strategy.triplea.ai.weak.WeakAi;
 import java.util.Collection;
 import java.util.List;
@@ -35,7 +36,7 @@ public class PlayerTypes {
       new Type(I18nEngineFramework.get().getText("startup.PlayerTypes.PLAYER_TYPE_AI_HARD_LABEL")) {
         @Override
         public Player newPlayerWithName(final String name) {
-          return new ProAi(name, getLabel());
+          return DiaryRecorder.attachedTo(new ProAi(name, getLabel()));
         }
       };
   public static final String PLAYER_TYPE_DEFAULT_LABEL =

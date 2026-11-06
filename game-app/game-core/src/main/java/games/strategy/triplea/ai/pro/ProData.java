@@ -56,6 +56,9 @@ public final class ProData {
   private final Set<Unit> unitsToBeConsumed = new HashSet<>();
   private double minCostPerHitPoint = Double.MAX_VALUE;
 
+  /** Decision diary observer; {@link ProDecisionRecorder#NONE} unless a diary is attached. */
+  private ProDecisionRecorder recorder = ProDecisionRecorder.NONE;
+
   private AbstractProAi proAi;
   private GameData data;
   private GamePlayer player;
@@ -76,6 +79,10 @@ public final class ProData {
     minWinPercentage = tuning.minWinPercentage(true);
     attackWinPercentage = winPercentage;
     attackMinWinPercentage = minWinPercentage;
+  }
+
+  public void setRecorder(final ProDecisionRecorder recorder) {
+    this.recorder = recorder;
   }
 
   public void initialize(final AbstractProAi proAi) {
