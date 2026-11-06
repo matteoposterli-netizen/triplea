@@ -37,6 +37,10 @@ function Check {
 $work = Join-Path ([IO.Path]::GetTempPath()) ("proplus-tests-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 
+# Warm-up: paga una volta sola il costo di avvio del sottosistema Start-Job,
+# cosi' il primo mock server (scenario 1) e' pronto senza ritardi di cold-start.
+try { Start-Job -ScriptBlock { Start-Sleep -Milliseconds 50 } | Wait-Job | Remove-Job -Force } catch { }
+
 # --- helper -----------------------------------------------------------------
 
 function New-Install {
@@ -93,7 +97,7 @@ function New-ReleaseZip {
 $serverScript = {
   param($Port, $Json, $ZipPath, $MaxSeconds)
   $listener = New-Object System.Net.HttpListener
-  $listener.Prefixes.Add("http://localhost:$Port/")
+  $listener.Prefixes.Add("http://127.0.0.1:$Port/")
   $listener.Start()
   $deadline = (Get-Date).AddSeconds($MaxSeconds)
   try {
@@ -128,7 +132,7 @@ function Start-MockServer {
   for ($i = 0; $i -lt 50 -and -not $ready; $i++) {
     Start-Sleep -Milliseconds 200
     try {
-      $r = Invoke-WebRequest -Uri "http://localhost:$Port/ping" -TimeoutSec 3 -UseBasicParsing
+      $r = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/ping" -TimeoutSec 3 -UseBasicParsing
       if ($r.StatusCode -eq 200) { $ready = $true }
     } catch { }
   }
@@ -156,7 +160,7 @@ function New-ReleaseJson {
         id                   = $AssetId
         updated_at           = $UpdatedAt
         size                 = $Size
-        browser_download_url = "http://localhost:$Port/download/TripleA-ProPlus.zip"
+        browser_download_url = "http://127.0.0.1:$Port/download/TripleA-ProPlus.zip"
       }
     )
   }
@@ -185,7 +189,7 @@ try {
   $port = Get-Port
   $json = New-ReleaseJson -Port $port -UpdatedAt '2026-02-02T12:00:00Z' -AssetId 2000 -Commit 'bbbbbbb1111' -Size $size
   $job  = Start-MockServer -Port $port -Json $json -ZipPath $zip
-  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://localhost:$port"
+  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://127.0.0.1:$port"
   Stop-MockServer $job
   Check ($code -eq 0) "esce con 0 (ricevuto $code)"
   Check ((Read-Text (Join-Path $dir 'TripleA-ProPlus.jar')).Trim() -eq 'JAR-NEW') "il jar e' stato sostituito con la nuova build"
@@ -202,7 +206,7 @@ try {
   $port = Get-Port
   $json = New-ReleaseJson -Port $port -UpdatedAt '2026-03-03T09:00:00Z' -AssetId 1000 -Commit 'ccccccc2222' -Size $size
   $job  = Start-MockServer -Port $port -Json $json -ZipPath $zip
-  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://localhost:$port"
+  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://127.0.0.1:$port"
   Stop-MockServer $job
   Check ($code -eq 0) "esce con 0 (ricevuto $code)"
   Check ((Read-Text (Join-Path $dir 'TripleA-ProPlus.jar')).Trim() -eq 'JAR-KEEP') "nessun download: il jar locale resta invariato"
@@ -213,7 +217,7 @@ Write-Host "`n== Scenario 3: offline / API irraggiungibile =="
 try {
   $dir  = New-Install -Name 's3' -Commit 'ddddddd3333' -JarText 'JAR-OFFLINE' -UpdatedAt '2026-01-01T00:00:00Z'
   $port = Get-Port   # nessun server in ascolto su questa porta
-  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://localhost:$port"
+  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://127.0.0.1:$port"
   Check ($code -eq 0) "esce comunque con 0 in assenza di rete (ricevuto $code)"
   Check ((Read-Text (Join-Path $dir 'TripleA-ProPlus.jar')).Trim() -eq 'JAR-OFFLINE') "la build locale resta disponibile e intatta"
 } catch { $script:fail++; Write-Host "  [FAIL] eccezione: $($_.Exception.Message)" -ForegroundColor Red }
@@ -228,7 +232,7 @@ try {
   $port = Get-Port
   $json = New-ReleaseJson -Port $port -UpdatedAt '2026-05-05T05:00:00Z' -AssetId 3000 -Commit 'fffffff5555' -Size $size
   $job  = Start-MockServer -Port $port -Json $json -ZipPath $bad
-  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://localhost:$port"
+  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://127.0.0.1:$port"
   Stop-MockServer $job
   Check ($code -eq 0) "esce con 0 e non si blocca su uno zip corrotto (ricevuto $code)"
   Check ((Read-Text (Join-Path $dir 'TripleA-ProPlus.jar')).Trim() -eq 'JAR-GOOD') "il jar locale non viene toccato da uno zip non valido"
@@ -244,7 +248,7 @@ try {
   $port = Get-Port
   $json = New-ReleaseJson -Port $port -UpdatedAt '2026-06-06T06:00:00Z' -AssetId 4000 -Commit 'bbbbbbb1111' -Size $size
   $job  = Start-MockServer -Port $port -Json $json -ZipPath $zip
-  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://localhost:$port"
+  $code = Invoke-Aggiorna -Dir $dir -ApiBase "http://127.0.0.1:$port"
   Stop-MockServer $job
   Check ($code -eq 10) "esce con 10 per richiedere il riavvio (ricevuto $code)"
   Check (Test-Path (Join-Path $dir 'avvia.bat.new')) "avvia.bat.new e' stato messo da parte per il riavvio"
