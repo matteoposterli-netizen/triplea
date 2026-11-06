@@ -86,14 +86,21 @@ function New-ReleaseZip {
   return (Get-Item $Path).Length
 }
 
+# Il server usa GetContextAsync().Wait(ms) con una deadline invece di GetContext()
+# (che blocca in modo non interrompibile): cosi' il job resta interrompibile da
+# Stop-Job e si auto-termina comunque dopo MaxSeconds. Evita il blocco noto di
+# Stop-Job su un job fermo dentro una chiamata .NET bloccante.
 $serverScript = {
-  param($Port, $Json, $ZipPath)
+  param($Port, $Json, $ZipPath, $MaxSeconds)
   $listener = New-Object System.Net.HttpListener
   $listener.Prefixes.Add("http://localhost:$Port/")
   $listener.Start()
+  $deadline = (Get-Date).AddSeconds($MaxSeconds)
   try {
-    while ($listener.IsListening) {
-      $ctx = $listener.GetContext()
+    while ((Get-Date) -lt $deadline) {
+      $task = $listener.GetContextAsync()
+      if (-not $task.Wait(500)) { continue }
+      $ctx = $task.Result
       $res = $ctx.Response
       try {
         $path = $ctx.Request.Url.AbsolutePath
@@ -110,12 +117,12 @@ $serverScript = {
         $res.OutputStream.Write($bytes, 0, $bytes.Length)
       } catch { } finally { $res.OutputStream.Close() }
     }
-  } finally { $listener.Stop() }
+  } finally { try { $listener.Stop() } catch { } }
 }
 
 function Start-MockServer {
   param([int]$Port, [string]$Json, [string]$ZipPath)
-  $job = Start-Job -ScriptBlock $serverScript -ArgumentList $Port, $Json, $ZipPath
+  $job = Start-Job -ScriptBlock $serverScript -ArgumentList $Port, $Json, $ZipPath, 60
   # Attendi che il server risponda prima di procedere.
   $ready = $false
   for ($i = 0; $i -lt 50 -and -not $ready; $i++) {
