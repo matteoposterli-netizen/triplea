@@ -19,6 +19,11 @@
     8. End-to-end avvia.bat via cmd.exe    -> installazione "vecchia" senza version.txt:
                                               scarica, aggiorna, scrive version.txt
     9. Percorso con spazi e parentesi      -> come 7 e 8 in "...\con spazi\TripleA Pro+ (1)"
+   10. Jar gia' presente + nuova build     -> aggiornamento "di routine" (version.txt gia'
+                                              presente) con powershell.exe 5.1 come avvia.bat;
+                                              variante con il jar vecchio tenuto aperto da un
+                                              altro processo (antivirus/indicizzatore): il
+                                              jar va comunque sostituito, nessun jar.tmp residuo
 
   Gli scenari 7-9 riproducono l'uso reale (bug in produzione: con -File e senza
   -InstallDir il default $PSScriptRoot risultava vuoto in Windows PowerShell 5.1).
@@ -241,20 +246,31 @@ function Check-RealUpdate {
   Check ((Read-Text (Join-Path $Dir 'TripleA-ProPlus.jar')).Trim() -eq 'JAR-NEW') "$What : jar sostituito con la nuova build"
   Check ((Read-Text (Join-Path $Dir 'version.txt')) -match 'updated_at=2026-07-07T07:00:00Z') "$What : version.txt scritto nella cartella di installazione"
   Check (-not (Test-Path (Join-Path $Result.WorkDir 'version.txt'))) "$What : nulla scritto nella working directory"
+  Check (-not (Test-Path (Join-Path $Dir 'TripleA-ProPlus.jar.tmp'))) "$What : nessun TripleA-ProPlus.jar.tmp residuo"
   Check (-not (Test-Path (Join-Path $Dir 'avvia.bat.new')) -and -not (Test-Path (Join-Path $Dir 'aggiorna.ps1.new'))) "$What : nessun .new (lanciatore invariato)"
 }
 
 # Installazione "vecchia" come quella di Matteo (commit diverso, niente version.txt)
 # + release finta piu' recente; esegue $Runner e verifica l'aggiornamento.
 function Test-RealScenario {
-  param([string]$Name, [string]$Label, [scriptblock]$Runner, [string]$What)
-  $dir  = New-Install -Name $Name -Commit 'aaaaaaa0000' -JarText 'JAR-OLD' -UpdatedAt $null
+  param([string]$Name, [string]$Label, [scriptblock]$Runner, [string]$What,
+        [string]$LocalUpdatedAt = $null, [switch]$HoldJar)
+  $dir  = New-Install -Name $Name -Commit 'aaaaaaa0000' -JarText 'JAR-OLD' -UpdatedAt $LocalUpdatedAt
   $zip  = Join-Path $work "$Label.zip"
   $size = New-ReleaseZip -Path $zip -Commit 'bbbbbbb1111' -JarText 'JAR-NEW'
   $port = Get-Port
   $json = New-ReleaseJson -Port $port -UpdatedAt '2026-07-07T07:00:00Z' -AssetId 5000 -Commit 'bbbbbbb1111' -Size $size
   $job  = Start-MockServer -Port $port -Json $json -ZipPath $zip
-  try { $r = & $Runner $dir "http://127.0.0.1:$port" $Label } finally { Stop-MockServer $job }
+  # HoldJar: un altro processo (qui il test stesso) tiene aperto il jar vecchio con
+  # condivisione Read/Write/Delete, come fanno antivirus e indicizzatori di Windows.
+  # In quel caso la cancellazione del jar resta "in sospeso" e il nome resta occupato.
+  $hold = $null
+  if ($HoldJar) {
+    $hold = [IO.File]::Open((Join-Path $dir 'TripleA-ProPlus.jar'), [IO.FileMode]::Open, [IO.FileAccess]::Read,
+      ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+  }
+  try { $r = & $Runner $dir "http://127.0.0.1:$port" $Label }
+  finally { if ($hold) { $hold.Dispose() }; Stop-MockServer $job }
   Check-RealUpdate -Result $r -Dir $dir -What $What
   return $r
 }
@@ -404,6 +420,26 @@ try {
     param($d, $api, $l) Invoke-AvviaBat -Dir $d -ApiBase $api -Label $l
   }
   Check ($r.Out -match 'Versione in uso : commit bbbbbbb') "spazi, avvia.bat : mostra la nuova versione in uso"
+} catch { $script:fail++; Write-Host "  [FAIL] eccezione: $($_.Exception.Message)" -ForegroundColor Red }
+
+# --- Scenario 10: jar gia' presente + nuova build (aggiornamento di routine) ---
+Write-Host "`n== Scenario 10: jar gia' presente + nuova build, powershell.exe 5.1 come avvia.bat =="
+try {
+  $psMajor = (& powershell.exe -NoProfile -Command '$PSVersionTable.PSVersion.Major' | Out-String).Trim()
+  Check ($psMajor -eq '5') "powershell.exe e' Windows PowerShell 5.x (ricevuto '$psMajor')"
+  Test-RealScenario -Name 's10a' -Label 's10a' -What 'jar presente' -LocalUpdatedAt '2026-01-01T00:00:00Z' -Runner {
+    param($d, $api, $l) Invoke-AggiornaReal -Dir $d -ApiBase $api -Label $l
+  } | Out-Null
+} catch { $script:fail++; Write-Host "  [FAIL] eccezione: $($_.Exception.Message)" -ForegroundColor Red }
+try {
+  Test-RealScenario -Name 's10b' -Label 's10b' -What 'jar presente e aperto da altro processo' -LocalUpdatedAt '2026-01-01T00:00:00Z' -HoldJar -Runner {
+    param($d, $api, $l) Invoke-AggiornaReal -Dir $d -ApiBase $api -Label $l
+  } | Out-Null
+} catch { $script:fail++; Write-Host "  [FAIL] eccezione: $($_.Exception.Message)" -ForegroundColor Red }
+try {
+  Test-RealScenario -Name 's10c' -Label 's10c' -What 'avvia.bat, jar presente e aperto' -LocalUpdatedAt '2026-01-01T00:00:00Z' -HoldJar -Runner {
+    param($d, $api, $l) Invoke-AvviaBat -Dir $d -ApiBase $api -Label $l
+  } | Out-Null
 } catch { $script:fail++; Write-Host "  [FAIL] eccezione: $($_.Exception.Message)" -ForegroundColor Red }
 
 # --- esito ------------------------------------------------------------------
