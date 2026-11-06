@@ -5,10 +5,9 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.Route;
 import games.strategy.engine.data.Territory;
-import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.engine.data.util.BreadthFirstSearch;
-import games.strategy.triplea.Properties;
 import games.strategy.triplea.ai.pro.ProData;
+import games.strategy.triplea.ai.pro.ProTuning;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
 import java.util.ArrayList;
@@ -55,20 +54,19 @@ public final class ProTerritoryValueUtils {
 
   /**
    * What a victory city is worth in PUs when a victory-city win condition is on, so holding or
-   * taking one counts toward ending the game; 0 outside Hard Beta or with no such condition.
+   * taking one counts toward ending the game; 0 outside Hard Beta or with no such condition. A
+   * {@link ProTuning} may change both conditions and the value.
    */
   static double victoryCityValue(final ProData proData, final Territory t) {
-    if (!proData.isBeta()) {
+    final ProTuning tuning = proData.getTuning();
+    if (!tuning.valuesVictoryCities(proData.isBeta())) {
       return 0;
     }
-    final GameProperties props = t.getData().getProperties();
-    if (!Properties.getTotalVictory(props)
-        && !Properties.getHonorableSurrender(props)
-        && !Properties.getProjectionOfPower(props)) {
+    if (!tuning.hasVictoryCityWinCondition(t.getData().getProperties())) {
       return 0;
     }
     return TerritoryAttachment.get(t).map(TerritoryAttachment::getVictoryCity).orElse(0)
-        * ProCasualtyUtils.VICTORY_CITY_VALUE;
+        * tuning.victoryCityValue();
   }
 
   /** Returns the value of each territory in {@code territoriesToCheck}. */

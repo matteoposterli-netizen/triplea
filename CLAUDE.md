@@ -88,9 +88,16 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
 ### Dove vive Pro+ (dallo step 1)
 
 - `game-core/.../triplea/ai/proplus/ProPlusAi.java` — `ProPlusAi extends ProAi` (beta=false),
-  etichetta `ProPlusAi.PLAYER_LABEL = "Pro+ (AI)"`. Oggi sovrascrive solo `purchase`/`move`/`place`
-  per scrivere nel log AI una riga `[Pro+] <nazione> <fase>` e poi chiama `super`: logica identica
-  a "Hard (AI)". Condivide il `LazyBattleCalculator` statico di `ProAi`.
+  etichetta `ProPlusAi.PLAYER_LABEL = "Pro+ (AI)"`. Costruita con `new ProData(false, new
+  ProPlusTuning())` (costruttore protetto `ProAi(name, label, proData)`). Sovrascrive solo
+  `purchase`/`move`/`place` per il log `[Pro+]` (riga di inizio turno con alleanza/rischio/soglie +
+  riga per fase) e poi chiama `super`. Condivide il `LazyBattleCalculator` statico di `ProAi`.
+- `ai/pro/ProTuning.java` (step 2) — interfaccia dei numeri modificabili; `ProTuning.DEFAULT` =
+  valori originali (Hard/Hard Beta). Letta da `ProData` (`getTuning()`).
+- `ai/proplus/ProPlusTuning.java` — tuning Pro+: soglie di attacco dal livello di rischio, victory
+  city valutate. `RiskLevel.java` — i 5 livelli. `ProPlusSettings.java` — alleanze configurabili e
+  lettura/scrittura dei livelli nelle proprietà della partita.
+- UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
   quindi il bot headless non la offre.
@@ -299,7 +306,7 @@ l'etichetta tra i tipi disponibili.
 - c) Save ufficiale → build Pro+: stesso formato/stesse classi (nessuna classe serializzata
   toccata) ⇒ OK; le etichette ufficiali ("Hard (AI)", ecc.) esistono anche nella build Pro+.
 
-#### Piano punto 4 — come Pro+ sovrascriverà soglie e valori (SOLO analisi, non fatto)
+#### Piano punto 4 — come Pro+ sovrascriverà soglie e valori (analisi; realizzato nello step 2)
 Fatto chiave: tutte le funzioni Pro ricevono già l'oggetto `ProData` (anche le simulazioni di
 acquisto, che riusano lo stesso `ProData` via `initializeSimulation`). Quindi il punto di aggancio
 naturale è `ProData`, senza toccare `ProCombatMoveAi`/`ProNonCombatMoveAi`/`ProPurchaseAi`.
@@ -333,3 +340,69 @@ naturale è `ProData`, senza toccare `ProCombatMoveAi`/`ProNonCombatMoveAi`/`Pro
   Alternativa scartata: togliere `final` da `ProData` e sottoclassarlo — più invasivo (Lombok
   `@Getter` sui campi, semantica meno chiara).
 
+
+### Step 2 — Pro+ diversa da Hard: ProTuning + "Propensione al rischio" (2026-11-06)
+
+#### A) Refactoring neutro (classi Pro: solo struttura)
+- Nuova `ai/pro/ProTuning` (default = valori originali: win% 95/75 Low Luck, 90/65 dadi normali;
+  victory city valutate solo con `beta` e solo con Total Victory/Honorable Surrender/Projection of
+  Power; valore VC 5).
+- `ProData`: campo `tuning`, costruttore `ProData(beta, tuning)` (i vecchi usano `DEFAULT`); nuovi
+  getter `getAttackWinPercentage()`/`getAttackMinWinPercentage()` = per default identici a
+  `getWinPercentage()`/`getMinWinPercentage()`. Replicato anche il comportamento originale "prima di
+  initialize valgono 95/75, con Low Luck i campi non vengono riscritti".
+- `ProAi`: costruttore `protected ProAi(name, label, ProData)`.
+- Punti d'uso passati alle soglie "di attacco" (solo pianificazione degli attacchi):
+  `ProCombatMoveAi` (tutti tranne `canHoldAgainstCounterAttack`, che valuta la tenuta contro il
+  contrattacco nemico = difesa), `ProTerritoryManager.removeTerritoriesThatCantBeConquered`
+  (scarto bersagli; usato anche da `ProPoliticsAi` per le dichiarazioni di guerra),
+  `ProTerritory.setBattleResult` (flag `currentlyWins`, letto solo dal combat move).
+  Restano sulle soglie generali (= Hard anche per Pro+): `ProNonCombatMoveAi` (difesa),
+  `ProPurchaseAi`, `ProScrambleAi`, `ProTransportUtils`, `ProSeaBlockerUtils`, `ProBidPlanner`,
+  `ProOddsCalculator` (ramo solo-Beta). `ProRetreatAi` non usa le soglie (decide sul valore
+  TUV-swing + valore territorio × win%).
+- `ProTerritoryValueUtils.victoryCityValue` legge `tuning.valuesVictoryCities(beta)`,
+  `tuning.hasVictoryCityWinCondition(props)`, `tuning.victoryCityValue()`.
+- Prova di neutralità: `ProTuningTest` (default = valori originali, Hard/Hard Beta usano DEFAULT) +
+  `HardNeutralityGoldenTest`: ripete la vera pianificazione degli attacchi tedeschi del round 1 su
+  Global 1940 (simulazioni di battaglia reali con dadi a seed fisso, `SeededBattleCalculator` in
+  test, unità ordinate in modo stabile perché gli id sono UUID casuali) e la confronta con
+  `src/test/resources/proplus/hard-golden-global1940-germans.txt`, **generato sul codice prima del
+  refactoring** (riprodotto identico in 3 esecuzioni). Tutti i test `ai.*` preesistenti invariati.
+
+#### B) Tuning Pro+
+- Victory city: formula di Hard Beta (`3 × victoryCity × 5` nel valore d'attacco, e nei valori di
+  difesa/vicinato dove la Beta già la usa). **Attenzione**: con la condizione della Beta la formula
+  vale 0 su Europe 1940 e Global 1940 (vittoria con "Triggered Victory", Honorable Surrender false).
+  Pro+ quindi la attiva anche con `Triggered Victory` = true (`ProPlusTuning.hasVictoryCityWinCondition`).
+  Non è attiva nessun'altra parte della Beta (`isBeta()` resta false).
+- Rischio: `RiskLevel` 1 Prudente 90/65 · 2 Cauto 85/62 · 3 Equilibrato 80/60 (default) · 4 Audace
+  72/52 · 5 Spericolato 65/45; Low Luck +5 su entrambi, max 95 (⇒ Prudente LL = 95/70, mentre Hard LL
+  = 95/75: Prudente coincide con Hard solo a dadi normali).
+  - "desiderata" = `attackWinPercentage`: win% che il combat move cerca di raggiungere assegnando
+    unità (aggiunge unità finché l'attacco è sotto), soglia per `currentlyWins`, per aggiungere
+    anfibi/strafing alleato, per togliere bombardieri/navi bloccanti da un attacco, controllo scramble.
+  - "minima" = `attackMinWinPercentage`: sotto questa win% (con tutte le unità possibili) il bersaglio
+    è scartato; con dadi normali scarta anche se non resta un'unità di terra (Hard non-Beta).
+- Calibrare: modificare i numeri in `RiskLevel` (e il test `RiskLevelTest`). Per vedere l'effetto sui
+  bersagli: `ProPlusTuningTest` scrive `game-core/build/proplus/proplus-<livello>.txt` da confrontare
+  con il golden di Hard. Esempio (Global 1940, Germania round 1): Spericolato aggiunge "93 Sea Zone"
+  (maxWin 53%) ai bersagli che Hard scarta; Prudente = stessi bersagli di Hard.
+
+#### C) Pannello + persistenza
+- Pulsante "Impostazioni Pro+" accanto a "Resource Modifiers" in `SetupPanel.layoutPlayerComponents`
+  (schermata locale, PBEM, PBF; **non** nella schermata host di rete `ServerSetupPanel`). Apre un
+  `JOptionPane` con un cursore per alleanza (`ProPlusSettings.configurableAlliances`: alleanze con
+  almeno un giocatore non `optional`, altrimenti tutte quelle con giocatori visibili; Europe 1940 ⇒
+  Allies, Axis). Pannello nascosto riservato al futuro cursore "Fantasia".
+- Persistenza **nella partita**: proprietà costanti `GameProperties` `"Pro+ risk: <alleanza>"` =
+  `Integer` 1..5. Solo tipi JDK ⇒ il salvataggio si apre nella TripleA ufficiale (che ignora le
+  chiavi). Lette da `ProPlusTuning` a ogni `ProData.initialize` (ogni fase e simulazione).
+  Test: `ProPlusSettingsTest.levelsSurviveSaveAndLoad`.
+- Log: `[Pro+] Germans round 3, alliance Axis, risk 3 Equilibrato, attack win% desired 80 / minimum
+  60 (normal dice)` alla prima fase Pro+ del turno (log AI).
+
+#### Note ambiente (sandbox Claude)
+- JDK 25: i download Adoptium/GitHub releases sono bloccati dal proxy; funziona
+  `apt-get install openjdk-25-jdk-headless` (Ubuntu 24.04, 25.0.4).
+- Maven Central restituisce spesso 429: ripetere il comando Gradle (script con retry).

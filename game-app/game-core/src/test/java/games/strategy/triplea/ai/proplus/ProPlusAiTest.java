@@ -27,6 +27,20 @@ class ProPlusAiTest {
     assertThat(ai.isAi()).isTrue();
     assertThat(ai.getPlayerLabel()).isEqualTo("Pro+ (AI)");
     assertThat(ai.getProData().isBeta()).as("Pro+ must not switch on Hard Beta").isFalse();
+    assertThat(ai.getProData().getTuning()).isInstanceOf(ProPlusTuning.class);
+  }
+
+  @Test
+  void turnStartLineShowsAllianceRiskAndThresholds() {
+    final GameData data = TestMapGameData.GLOBAL1940.getGameData();
+    ProPlusSettings.setRiskLevel(data.getProperties(), "Axis", RiskLevel.AUDACE);
+
+    assertThat(ProPlusAi.turnStartLine(data, data.getPlayerList().getPlayerId("Germans")))
+        .isEqualTo(
+            "[Pro+] Germans round 1, alliance Axis, risk 4 Audace,"
+                + " attack win% desired 72 / minimum 52 (normal dice)");
+    assertThat(ProPlusAi.turnStartLine(data, data.getPlayerList().getPlayerId("British")))
+        .contains("alliance Allies, risk 3 Equilibrato, attack win% desired 80 / minimum 60");
   }
 
   @Test

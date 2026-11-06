@@ -30,10 +30,21 @@ public final class ProData {
   /** Turns on behavior still under evaluation; only the "Hard Beta" AI sets it. */
   private final boolean beta;
 
+  /** Numbers a Pro AI variant may change; {@link ProTuning#DEFAULT} for Hard and Hard Beta. */
+  private final ProTuning tuning;
+
   // Default values
   private boolean isSimulation = false;
-  private double winPercentage = 95;
-  private double minWinPercentage = 75;
+  private double winPercentage;
+  private double minWinPercentage;
+
+  /**
+   * Win% thresholds the combat move plans attacks with. Equal to {@link #winPercentage} and {@link
+   * #minWinPercentage} unless {@link #tuning} changes them.
+   */
+  private double attackWinPercentage;
+
+  private double attackMinWinPercentage;
   private @Nullable Territory myCapital = null;
   private List<Territory> myUnitTerritories = new ArrayList<>();
   private Map<Unit, Territory> unitTerritoryMap = new HashMap<>();
@@ -54,7 +65,17 @@ public final class ProData {
   }
 
   public ProData(final boolean beta) {
+    this(beta, ProTuning.DEFAULT);
+  }
+
+  public ProData(final boolean beta, final ProTuning tuning) {
     this.beta = beta;
+    this.tuning = tuning;
+    // Low Luck values until initialized, as before the tuning existed
+    winPercentage = tuning.winPercentage(true);
+    minWinPercentage = tuning.minWinPercentage(true);
+    attackWinPercentage = winPercentage;
+    attackMinWinPercentage = minWinPercentage;
   }
 
   public void initialize(final AbstractProAi proAi) {
@@ -93,9 +114,11 @@ public final class ProData {
     this.isSimulation = isSimulation;
 
     if (!Properties.getLowLuck(data.getProperties())) {
-      winPercentage = 90;
-      minWinPercentage = 65;
+      winPercentage = tuning.winPercentage(false);
+      minWinPercentage = tuning.minWinPercentage(false);
     }
+    attackWinPercentage = tuning.attackWinPercentage(data, player, winPercentage);
+    attackMinWinPercentage = tuning.attackMinWinPercentage(data, player, minWinPercentage);
     myCapital =
         TerritoryAttachment.getFirstOwnedCapitalOrFirstUnownedCapital(player, data.getMap())
             .orElse(null);

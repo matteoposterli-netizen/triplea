@@ -1,0 +1,154 @@
+win%=90.0 minWin%=65.0
+attack 106 Sea Zone maxWin%=100.00 swing=12.73
+attack 109 Sea Zone maxWin%=100.00 swing=12.98
+attack 110 Sea Zone maxWin%=100.00 swing=39.98
+attack 111 Sea Zone maxWin%=100.00 swing=35.73
+attack 91 Sea Zone maxWin%=89.90 swing=8.61
+attack France maxWin%=100.00 swing=33.52
+attack Greece maxWin%=100.00 swing=-1.65
+attack Normandy Bordeaux maxWin%=100.00 swing=5.31
+attack Southern France maxWin%=100.00 swing=4.67
+attack Tunisia maxWin%=98.99 swing=-1.48
+attack Yugoslavia maxWin%=100.00 swing=9.92
+value Afghanistan -6.000
+value Alaska 6.000
+value Albania 3.000
+value Alberta Saskatchewan Manitoba 3.000
+value Algeria 3.000
+value Amur 3.000
+value Anglo Egyptian Sudan 3.000
+value Anhwe 3.000
+value Archangel 3.000
+value Baltic States 3.000
+value Belarus 3.000
+value Belgian Congo 3.000
+value Borneo 12.000
+value Brazil 6.000
+value British Columbia 3.000
+value Bryansk 3.000
+value Bulgaria 3.000
+value Burma 3.000
+value Buryatia 3.000
+value Buyant-Uhaa -3.000
+value Caucasus 6.000
+value Celebes 9.000
+value Central America 3.000
+value Central United States 36.000
+value Chahar 3.000
+value Chile 3.000
+value Denmark 6.000
+value Dzavhan -1.500
+value Eastern Poland 3.000
+value Eastern United States 60.000
+value Egypt 6.000
+value Ethiopia 3.000
+value Evenkiyskiy 3.000
+value Finland 6.000
+value Formosa 3.000
+value France 24.000
+value French Central Africa 3.000
+value French Equatorial Africa 3.000
+value French Indo China 6.000
+value French Madagascar 3.000
+value French West Africa 3.000
+value Germany 15.000
+value Gold Coast 3.000
+value Greater Southern Germany 12.000
+value Greece 6.000
+value Hawaiian Islands 3.000
+value Holland Belgium 9.000
+value Hopei 3.000
+value Hunan 3.000
+value India 18.000
+value Iraq 6.000
+value Iwo Jima 3.000
+value Japan 24.000
+value Java 12.000
+value Jehol 3.000
+value Kansu 3.000
+value Karelia 3.000
+value Kazakhstan 3.000
+value Kenya 3.000
+value Kiangsi 3.000
+value Kiangsu 9.000
+value Korea 9.000
+value Kwangsi 3.000
+value Kwangtung 9.000
+value Kweichow 3.000
+value Libya 3.000
+value Malaya 9.000
+value Manchuria 9.000
+value Mexico 6.000
+value Morocco 3.000
+value New Brunswick Nova Scotia 3.000
+value New South Wales 12.000
+value New Zealand 6.000
+value Nigeria 3.000
+value Normandy Bordeaux 12.000
+value Northern Italy 12.000
+value Northern Territory 3.000
+value Norway 9.000
+value Novgorod 6.000
+value Novosibirsk 3.000
+value Okinawa 3.000
+value Olgiy -3.000
+value Ontario 6.000
+value Persia 6.000
+value Philippines 6.000
+value Poland 6.000
+value Quebec 12.000
+value Queensland 6.000
+value Rhodesia 3.000
+value Romania 9.000
+value Rostov 6.000
+value Russia 9.000
+value Sakha 3.000
+value Samara 3.000
+value Saudi Arabia 3.000
+value Scotland 6.000
+value Shan State 3.000
+value Shantung 6.000
+value Shensi 3.000
+value Siam 3.000
+value Siberia 3.000
+value Sikang 3.000
+value Slovakia Hungary 9.000
+value Smolensk 3.000
+value South Australia 3.000
+value South West Africa 3.000
+value Southeast Mexico 3.000
+value Southern France 18.000
+value Southern Italy 9.000
+value Soviet Far East 3.000
+value Spain -3.000
+value Suiyuyan 3.000
+value Sumatra 12.000
+value Switzerland -3.000
+value Syria 3.000
+value Szechwan 3.000
+value Tambov 3.000
+value Tanganyika Territory 3.000
+value Timguska 3.000
+value Trans-Jordan 3.000
+value Tsinghai 3.000
+value Tunisia 3.000
+value Turkey -6.000
+value Ukraine 6.000
+value Ulaanbaatar -1.500
+value Union of South Africa 12.000
+value United Kingdom 36.000
+value Urals 3.000
+value Venezuela 3.000
+value Victoria 3.000
+value Volgograd 6.000
+value Vologda 3.000
+value West India 6.000
+value West Indies 3.000
+value Western Australia 3.000
+value Western Germany 15.000
+value Western Ukraine 6.000
+value Western United States 30.000
+value Yakut S.S.R. 3.000
+value Yenisey 3.000
+value Yugoslavia 6.000
+value Yunnan 3.000

@@ -7,14 +7,39 @@ Data build      : @DATE@
 Sorgente        : https://github.com/@REPO@/tree/@COMMIT@
 
 
-STATO ATTUALE (step 0bis)
--------------------------
-Questa build e' il codice ORIGINALE di TripleA, senza modifiche al gioco o
-all'AI. E' compilata dal ramo principale (main) di triplea-game/triplea al
-momento della build: puo' quindi contenere alcune correzioni piu' recenti
-della versione ufficiale installata (es. 2026-11.16.15870). Le future
-modifiche "Pro+" saranno in una AI separata; l'AI "Hard" originale resta
-invariata.
+STATO ATTUALE (step 2)
+----------------------
+Nella scelta dei giocatori c'e' il tipo "Pro+ (AI)": e' l'AI "Hard (AI)"
+con due differenze:
+  - valuta le victory city (le considera piu' preziose da prendere/tenere);
+  - attacca secondo la "Propensione al rischio" scelta per la sua alleanza.
+"Hard (AI)" e "Hard Beta (AI)" restano identiche all'originale.
+Il codice di base e' il ramo principale (main) di triplea-game/triplea al
+momento della build: puo' contenere correzioni piu' recenti della versione
+ufficiale installata (es. 2026-11.16.15870).
+
+
+IMPOSTAZIONI PRO+ (propensione al rischio)
+------------------------------------------
+1. Nella schermata di scelta dei giocatori metti "Pro+ (AI)" sulle nazioni
+   che vuoi.
+2. Premi il pulsante "Impostazioni Pro+" (in alto, accanto a "Resource
+   Modifiers").
+3. Per ogni alleanza della mappa (in Europe 1940: Allies e Axis) scegli il
+   livello con il cursore e premi OK:
+     1 Prudente     attacca solo se vince almeno il 90% (minimo 65%) = Hard
+     2 Cauto        85% (minimo 62%)
+     3 Equilibrato  80% (minimo 60%)   <- predefinito
+     4 Audace       72% (minimo 52%)
+     5 Spericolato  65% (minimo 45%)
+   Con Low Luck i valori salgono di 5 punti (massimo 95%).
+   Riguarda solo gli ATTACCHI: difesa, acquisti e ritirate restano come Hard.
+4. I valori vengono salvati DENTRO la partita: ricaricando il salvataggio
+   ritrovi gli stessi livelli (puoi cambiarli di nuovo dal pulsante prima di
+   ripartire).
+5. Nel log dell'AI (menu Debug > Show Logs, con "Enable AI Logging"
+   attivo) all'inizio di ogni turno di una nazione Pro+ compare una riga
+   "[Pro+] ... risk ..." con alleanza, livello e soglie in uso.
 
 
 CONTENUTO DELLO ZIP
@@ -118,10 +143,10 @@ possibile senza modificare il codice del gioco (vedi il report dello step
 0bis in CLAUDE.md per i dettagli tecnici). Per ora valgono le avvertenze
 qui sopra sugli autosave.
 
-Compatibilita' salvataggi: oggi il codice e' quello originale, quindi i
-salvataggi tra questa build e la 2026-11.x ufficiale sono compatibili nei
-due sensi. In futuro, una partita salvata con giocatori "Pro+" potrebbe non
-aprirsi nella versione ufficiale: verra' indicato qui.
+Compatibilita' salvataggi: una partita salvata con Pro+ si apre anche nella
+versione ufficiale (i livelli di rischio sono solo dati in piu', ignorati);
+le nazioni "Pro+ (AI)" li' compaiono come Human e vanno rimesse su
+"Hard (AI)" a mano. I salvataggi della versione ufficiale si aprono in Pro+.
 
 
 DISINSTALLAZIONE

@@ -5,6 +5,7 @@ import games.strategy.engine.data.GameState;
 import games.strategy.engine.framework.I18nEngineFramework;
 import games.strategy.engine.framework.I18nResourceBundle;
 import games.strategy.engine.framework.startup.mc.HeadedPlayerTypes;
+import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -14,6 +15,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import javax.swing.Action;
+import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -169,8 +171,16 @@ public abstract class SetupPanel extends JPanel implements SetupModel {
             0,
             0));
     final JButton resourceModifiers = new JButton();
+    // Pro+: the "Impostazioni Pro+" button shares the cell of "Resource Modifiers"
+    final JPanel modifierButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    modifierButtons.add(resourceModifiers);
+    modifierButtons.add(Box.createHorizontalStrut(5));
+    modifierButtons.add(
+        new JButton(
+            SwingAction.of(
+                ProPlusSettingsDialog.BUTTON_LABEL, e -> ProPlusSettingsDialog.show(panel, data))));
     panel.add(
-        resourceModifiers,
+        modifierButtons,
         new GridBagConstraints(
             gridX,
             gridY - 1,

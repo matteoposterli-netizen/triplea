@@ -15,7 +15,12 @@ public class ProAi extends AbstractProAi {
   }
 
   public ProAi(final String name, final String playerLabel, final boolean beta) {
-    super(name, concurrentCalc, new ProData(beta), playerLabel);
+    this(name, playerLabel, new ProData(beta));
+  }
+
+  /** For Pro AI variants that bring their own {@link ProData} (eg: with a {@link ProTuning}). */
+  protected ProAi(final String name, final String playerLabel, final ProData proData) {
+    super(name, concurrentCalc, proData, playerLabel);
     // cuncurrentCalc is static so that it can be shared across all ProAi instances
     // at the end of a game, it needs to be cleared up
     GameShutdownRegistry.registerShutdownAction(() -> concurrentCalc.setGameData(null));
