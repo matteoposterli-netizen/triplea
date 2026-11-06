@@ -20,6 +20,7 @@ import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 import org.triplea.game.client.HeadedGameRunner;
 import org.triplea.java.timer.Timers;
+import org.triplea.proplus.ProPlusBranding;
 import org.triplea.swing.JFrameBuilder;
 
 /** Represents the outermost JFrame, maintains the reference to it and controls access. */
@@ -36,7 +37,7 @@ public class MainFrame {
       final GameSelectorModel gameSelectorModel) {
     mainJFrame =
         JFrameBuilder.builder()
-            .title("TripleA")
+            .title(ProPlusBranding.windowTitle())
             .iconImage(EngineImageLoader.loadFrameIcon())
             .windowClosedAction(HeadedGameRunner::exitGameIfNoWindowsVisible)
             .build();

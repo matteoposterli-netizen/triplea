@@ -3,6 +3,9 @@ package games.strategy.engine.framework.startup.mc;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import games.strategy.engine.framework.startup.ui.PlayerTypes;
+import games.strategy.engine.player.Player;
+import games.strategy.triplea.ai.pro.ProAi;
+import games.strategy.triplea.ai.proplus.ProPlusAi;
 import games.strategy.triplea.settings.ClientSetting;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -51,5 +54,28 @@ public class HeadedPlayerTypesTest {
     final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
 
     assertThat(playerTypes.getAvailablePlayerLabels()).contains("Hard Beta (AI)");
+  }
+
+  @Test
+  void proPlusAiIsSelectableWithoutBetaFeatures() {
+    ClientSetting.showBetaFeatures.setValue(false);
+
+    final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
+
+    assertThat(List.of(playerTypes.getAvailablePlayerLabels()))
+        .contains("Pro+ (AI)")
+        .containsSubsequence(PlayerTypes.PRO_AI.getLabel(), "Pro+ (AI)");
+  }
+
+  @Test
+  void proPlusAiIsInstantiable() {
+    final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
+
+    final Player player = playerTypes.fromLabel("Pro+ (AI)").newPlayerWithName("Germans");
+
+    assertThat(player).isInstanceOf(ProPlusAi.class).isInstanceOf(ProAi.class);
+    assertThat(player.getName()).isEqualTo("Germans");
+    assertThat(player.getPlayerLabel()).isEqualTo("Pro+ (AI)");
+    assertThat(player.isAi()).isTrue();
   }
 }

@@ -6,6 +6,7 @@ import games.strategy.engine.framework.startup.ui.PlayerTypes;
 import games.strategy.engine.player.Player;
 import games.strategy.triplea.TripleAPlayer;
 import games.strategy.triplea.ai.pro.ProAi;
+import games.strategy.triplea.ai.proplus.ProPlusAi;
 import games.strategy.triplea.settings.ClientSetting;
 import java.util.Collection;
 import java.util.List;
@@ -63,6 +64,15 @@ public class HeadedPlayerTypes {
     };
   }
 
+  /** Pro+ (fork AI); always visible, listed right after "Hard (AI)". */
+  public static final PlayerTypes.Type PRO_PLUS_AI =
+      new PlayerTypes.Type(ProPlusAi.PLAYER_LABEL) {
+        @Override
+        public Player newPlayerWithName(final String name) {
+          return new ProPlusAi(name, getLabel());
+        }
+      };
+
   private static PlayerTypes.Type getProAiBetaType() {
     return new PlayerTypes.Type(PLAYER_TYPE_PRO_AI_BETA_LABEL) {
       @Override
@@ -77,7 +87,7 @@ public class HeadedPlayerTypes {
             // The first item in this list will be the default when hosting
             List.of(HUMAN_PLAYER),
             PlayerTypes.getBuiltInPlayerTypes(),
-            List.of(getProAiBetaType(), CLIENT_PLAYER, DOES_NOTHING_PLAYER, getFlowFieldType()))
+            List.of(PRO_PLUS_AI, getProAiBetaType(), CLIENT_PLAYER, DOES_NOTHING_PLAYER, getFlowFieldType()))
         .flatMap(Collection::stream)
         .filter(HeadedPlayerTypes::filterBetaPlayerType)
         .collect(Collectors.toList());

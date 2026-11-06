@@ -156,6 +156,7 @@ import org.triplea.java.Interruptibles;
 import org.triplea.java.ThreadRunner;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
+import org.triplea.proplus.ProPlusBranding;
 import org.triplea.sound.SoundPath;
 import org.triplea.swing.CollapsiblePanel;
 import org.triplea.swing.EventThreadJOptionPane;
@@ -282,7 +283,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       final UiContext uiContext,
       @Nullable final Chat chat,
       final Runnable clientLeftGame) {
-    super("TripleA - " + game.getData().getGameName());
+    super(ProPlusBranding.windowTitle() + " - " + game.getData().getGameName());
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
     LookAndFeelSwingFrameListener.register(this);

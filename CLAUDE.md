@@ -83,8 +83,23 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
 - `game-headed/.../engine/framework/startup/mc/HeadedPlayerTypes.java`: lista mostrata nel client
   = Human + built-in + "Hard Beta (AI)" + client + "Does Nothing (AI)" + "FlowField (AI)".
   I tipi in `BETA_PLAYER_TYPE_LABELS` compaiono solo con l'impostazione "show beta features".
-- Il tipo è risolto per **etichetta** (`PlayerTypes.fromLabel`): un nuovo tipo "Pro+" va aggiunto
-  qui (probabile punto di aggancio per lo step successivo), con etichetta univoca.
+- Il tipo è risolto per **etichetta** (`PlayerTypes.fromLabel`).
+
+### Dove vive Pro+ (dallo step 1)
+
+- `game-core/.../triplea/ai/proplus/ProPlusAi.java` — `ProPlusAi extends ProAi` (beta=false),
+  etichetta `ProPlusAi.PLAYER_LABEL = "Pro+ (AI)"`. Oggi sovrascrive solo `purchase`/`move`/`place`
+  per scrivere nel log AI una riga `[Pro+] <nazione> <fase>` e poi chiama `super`: logica identica
+  a "Hard (AI)". Condivide il `LazyBattleCalculator` statico di `ProAi`.
+- Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
+  features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
+  quindi il bot headless non la offre.
+- Branding: `game-core/.../org/triplea/proplus/ProPlusBranding.java` — titolo
+  `"TripleA Pro+ <versione>"` usato da `MainFrame` (schermata iniziale) e `TripleAFrame`
+  (`"TripleA Pro+ <versione> - <nome partita>"`); riquadro info della schermata iniziale
+  (`GameSelectorPanel`, "Engine Version") mostra `<versione> (Pro+)`.
+- Test: `game-core/src/test/.../ai/proplus/ProPlusAiTest.java`, `HeadedPlayerTypesTest`
+  (registrazione + istanziazione).
 
 ## Build, test, avvio
 
@@ -201,3 +216,65 @@ Fatti verificati per avvia.bat / LEGGIMI:
     proprietà/variabile Pro+ in `getUserRootFolder()` per salvataggi/autosave, più una
     `PreferencesFactory` su file per le impostazioni, tenendo `mapFolderOverride` sulla cartella
     condivisa. Fuori dallo scope dello step 0bis.
+
+### Step 1 — identità "Pro+" (2026-11-06)
+- Nuovo tipo giocatore "Pro+ (AI)" = `ProPlusAi extends ProAi`, zero cambi di logica (vedi "Dove
+  vive Pro+"). Log AI: righe `[Pro+] <nazione> purchase|combat move|non-combat move|place` all'inizio
+  di ogni fase (il resto del log è quello della ProAi, che è statico e non sa quale AI lo chiama).
+- Titolo finestre "TripleA Pro+ <versione>" + "(Pro+)" nel riquadro info. Nessuna classe Pro
+  (`ai/pro/**`) modificata.
+- File toccati: nuovi `ProPlusAi`, `ProPlusBranding`, `ProPlusAiTest`; modificati
+  `HeadedPlayerTypes`, `MainFrame`, `TripleAFrame`, `GameSelectorPanel`, `HeadedPlayerTypesTest`.
+
+#### Salvataggi (verificato su codice + test `ProPlusAiTest.savegameKeepsProPlusPlayerType`)
+Nel salvataggio NON finisce nessuna classe AI: il tipo di giocatore è solo la stringa
+`GamePlayer.whoAmI` (es. `"AI:Pro+ (AI)"`), scritta da `ServerGame` (riga 679) all'avvio/caricamento.
+Al caricamento `SetupPanel`/`ServerSetupPanel` leggono `GamePlayer.currentPlayers()` e cercano
+l'etichetta tra i tipi disponibili.
+- a) Save Pro+ → build Pro+: l'etichetta esiste ⇒ "Pro+ (AI)" preselezionata. OK (test round-trip).
+- b) Save Pro+ → TripleA ufficiale: il file si apre (nessuna classe nuova serializzata). L'etichetta
+  non esiste ⇒ nessun errore, si ripiega: `PlayerSelectorRow.setDefaultPlayerType()` (partita
+  locale) / `ServerSetupPanel.determinePlayerType()` (host di rete) ⇒ "Hard (AI)" se la nazione ha
+  `defaultType="AI"` nell'XML (o nome che inizia con "Neutral"/"AI" in rete), "Does Nothing (AI)" se
+  `defaultType="DoesNothing"`, altrimenti **Human**. In pratica: le nazioni Pro+ si riaprono come
+  Human e vanno rimesse su "Hard (AI)" a mano (c'è il menu "Set all to"). Nessuna soluzione da
+  implementare: comportamento accettabile; se servisse, si potrebbe salvare nel `whoAmI` l'etichetta
+  "Hard (AI)" + un marcatore Pro+ altrove, ma tocca `ServerGame` (logica salvataggi) ⇒ non fatto.
+  Non verificato eseguendo l'exe ufficiale: il codice di caricamento coinvolto è identico a upstream.
+- c) Save ufficiale → build Pro+: stesso formato/stesse classi (nessuna classe serializzata
+  toccata) ⇒ OK; le etichette ufficiali ("Hard (AI)", ecc.) esistono anche nella build Pro+.
+
+#### Piano punto 4 — come Pro+ sovrascriverà soglie e valori (SOLO analisi, non fatto)
+Fatto chiave: tutte le funzioni Pro ricevono già l'oggetto `ProData` (anche le simulazioni di
+acquisto, che riusano lo stesso `ProData` via `initializeSimulation`). Quindi il punto di aggancio
+naturale è `ProData`, senza toccare `ProCombatMoveAi`/`ProNonCombatMoveAi`/`ProPurchaseAi`.
+- Soglie di rischio — `ai/pro/ProData.java`:
+  - righe 35-36: `winPercentage = 95`, `minWinPercentage = 75` (Low Luck);
+  - righe 95-98 (`hiddenInitialize`): con dadi normali diventano 90 / 65.
+  - Usate in `ProCombatMoveAi` (es. righe 471-473, 513, 693, 1290, 1657, 1926, 2039) e
+    `ProNonCombatMoveAi` (es. 689, 893-897, 938-942, 1029-1030, 1216, 2192, 2204, 2473).
+  - Altre soglie hard-coded da inventariare nello step 2: `AbstractProAi.AIR_DECIDES_THRESHOLD=50`
+    (riga 68), `ProCombatMoveAi` STRAFE_MARGIN/TRADE_COUNTER_WEIGHT (righe 56-64),
+    `ProCasualtyUtils` HOLD_CHANCE_* (righe 26-28), `ProOddsCalculator.BORDERLINE_CAPTURE_PERCENTAGE`.
+- Valore territori / victory city — `ai/pro/util/ProTerritoryValueUtils.java`:
+  - `findTerritoryAttackValue` righe 41-42: `3.0 * produzione * (factory+1)` e `3.0 * victoryCityValue`;
+  - `victoryCityValue` righe 60-72: **oggi vale 0 fuori da Hard Beta** (`!proData.isBeta()`), poi
+    `victoryCity * ProCasualtyUtils.VICTORY_CITY_VALUE` (=5, `ProCasualtyUtils.java:29`);
+  - `findEnemyCapitalsAndFactoriesValue` riga 276: fattore `* 32` (non riceve `ProData`).
+- Refactoring neutro proposto (step 2, comportamento ProAi invariato, verificabile con i test Pro):
+  1. Nuova interfaccia `ProTuning` in `ai/pro/` con metodi default che restituiscono ESATTAMENTE i
+     valori attuali (winPct 95/90, minWinPct 75/65, `valuesVictoryCities()` = beta,
+     `victoryCityValue()` = 5, moltiplicatori 3.0 / 32 ...).
+  2. `ProData`: campo `ProTuning tuning` + costruttore `ProData(boolean beta, ProTuning tuning)`;
+     i costruttori esistenti usano il default. `hiddenInitialize` legge le soglie da `tuning`
+     invece che dai letterali (righe 35-36, 95-98).
+  3. `ProAi`: costruttore `protected ProAi(String name, String label, ProData proData)` (oggi
+     `ProData` è creato dentro il costruttore, riga 18) così `ProPlusAi` passa il suo `ProData`.
+  4. `ProTerritoryValueUtils.victoryCityValue`: `!proData.isBeta()` → `!proData.getTuning()
+     .valuesVictoryCities()` e `VICTORY_CITY_VALUE` → `proData.getTuning().victoryCityValue()`;
+     aggiungere `proData` a `findEnemyCapitalsAndFactoriesValue` (package-private, firma libera).
+  5. `ProPlusTuning` (in `ai/proplus/`) sovrascrive solo ciò che serve.
+  `ProData` non è serializzato nei salvataggi (non è `GameDataComponent`) ⇒ nessun rischio save.
+  Alternativa scartata: togliere `final` da `ProData` e sottoclassarlo — più invasivo (Lombok
+  `@Getter` sui campi, semantica meno chiara).
+

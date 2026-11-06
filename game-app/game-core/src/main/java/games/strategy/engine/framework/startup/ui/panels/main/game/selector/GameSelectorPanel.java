@@ -32,7 +32,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import org.triplea.config.product.ProductVersionReader;
+import org.triplea.proplus.ProPlusBranding;
 import org.triplea.swing.DialogBuilder;
 import org.triplea.swing.JButtonBuilder;
 import org.triplea.swing.SwingAction;
@@ -104,7 +104,7 @@ public final class GameSelectorPanel extends JPanel implements Observer {
 
     add(new JLabel("Engine Version:"), buildGridCell(0, row, new Insets(0, 10, 3, 5)));
     add(
-        new JLabel(ProductVersionReader.getCurrentVersion().toString()),
+        new JLabel(ProPlusBranding.engineVersionLabel()),
         buildGridCell(1, row, new Insets(0, 0, 3, 0)));
     row++;
 
