@@ -160,7 +160,8 @@ resta **LF** (letto da `avvia.bat` con `for /f`, che altrimenti lascerebbe un CR
   confronta `asset.updated_at`/`id` con `version.txt` (stato locale, non nello zip). Primo avvio
   senza `version.txt`: confronto per commit (regex sul body della release vs `build-info.txt`).
   Se serve: scarica in `%TEMP%`, verifica (dimensione + zip valido + presenza jar), sostituisce
-  **solo** i file noti (jar via file `.tmp` + `Move-Item` atomico), riscrive `version.txt`.
+  **solo** i file noti (jar: copia in `.tmp`, poi `[IO.File]::Copy(tmp, jar, $true)` sopra il jar
+  esistente + controllo dimensione, `.tmp` rimosso), riscrive `version.txt`.
   Qualsiasi errore di rete/API/zip ⇒ avviso + `exit 0` (fallback alla build locale).
 - Self-update del lanciatore: `aggiorna.ps1` non sovrascrive a caldo `avvia.bat`/`aggiorna.ps1`
   (in uso); se cambiano li mette in `*.new` ed esce con **10**. `avvia.bat` genera uno script
@@ -175,9 +176,17 @@ resta **LF** (letto da `avvia.bat` con `for /f`, che altrimenti lascerebbe un CR
 - Hook solo-test (mai impostati per l'utente): `PROPLUS_TEST_NOLAUNCH=1` (avvia.bat salta pause,
   riavvio del lanciatore e Java), `PROPLUS_TEST_APIBASE` (aggiorna.ps1 usa quel server se `-ApiBase`
   non è passato).
-- **Lezione (bug 0bis-fix): testare sempre l'invocazione reale** (stesso eseguibile, stessi
+- **Lezione 1 (bug 0bis-fix): testare sempre l'invocazione reale** (stesso eseguibile, stessi
   argomenti, working directory diversa, percorsi con spazi), non solo la logica con parametri
   comodi. Scenari 7-9 di `proplus/ci/test-aggiorna.ps1`.
+- **Lezione 2 (bug 0bis-fix2): mai sostituire un file esistente per rinomina** (`Move-Item -Force`,
+  `Rename-Item`, `move /y`) in Windows PowerShell 5.1 / cmd: se un altro processo (antivirus,
+  indicizzatore) tiene aperto il file con condivisione Delete, la cancellazione resta "in sospeso",
+  il nome resta occupato e la rinomina fallisce con "Cannot create a file when that file already
+  exists". Usare copia con sovrascrittura (`[IO.File]::Copy(src, dst, $true)`, `copy /y`) + rimozione
+  della sorgente. Non usare `[IO.File]::Replace(src, dst, $null)`: PowerShell converte `$null` in
+  `""` ⇒ "The path is not of a legal form". Sul runner NTFS il problema NON si riproduce (la
+  cancellazione libera subito il nome): serve un volume FAT32 (scenario 11) o equivalente.
 
 Fatti verificati per avvia.bat / LEGGIMI:
 - Installer ufficiale = install4j (`game-headed/build.install4j`), JRE Adoptium 25 incluso nella
@@ -243,6 +252,25 @@ Fatti verificati per avvia.bat / LEGGIMI:
   avvia.bat/aggiorna.ps1 nei test ora in CRLF come nello zip.
 - Effetto per chi ha la build buggata: il suo `aggiorna.ps1` vecchio non può aggiornarsi da solo ⇒
   serve UN download manuale dello zip nuovo.
+
+### Step 0bis-fix2 — sostituzione del jar falliva (2026-11-06)
+- Bug segnalato dal PC di Matteo dopo 0bis-fix: `[avviso] errore durante l'aggiornamento (Cannot
+  create a file when that file already exists.)`; restava `TripleA-ProPlus.jar.tmp` accanto al jar
+  vecchio, `version.txt` non scritto. Causa: `Move-Item $jarTmp $jarPath -Force`.
+- Perché la CI non l'ha visto: gli scenari 1/7/8/9 avevano già il jar presente e passavano. Sul
+  runner (NTFS, Windows recente) la cancellazione di un file libera subito il nome (semantica
+  POSIX), anche se un altro processo lo tiene aperto: `Move-Item -Force` riesce sempre. Verificato:
+  lo scenario 10 (jar tenuto aperto con condivisione Read/Write/Delete) è passato anche sul codice
+  VECCHIO (run 42234434013). Riprodotto invece su un disco virtuale **FAT32** (scenario 11, creato
+  con diskpart): il vecchio `Move-Item -Force` fallisce con lo stesso identico messaggio del PC di
+  Matteo, il codice nuovo passa (run 42234810413). Sul PC reale la condizione equivalente è
+  probabilmente un file aperto da antivirus/sync/indicizzatore su un volume o filtro che non libera
+  subito il nome (FAT/exFAT, cartella sincronizzata, ecc.): non verificato quale.
+- Fix: `[IO.File]::Copy(tmp, jar, $true)` + rimozione `.tmp` (soluzione verificata da Matteo) +
+  controllo dimensione; rimozione di un `.tmp` residuo a ogni avvio; nello script di swap di
+  avvia.bat `move /y` → `copy /y` + `del`. Il jar non è più sostituito in modo atomico: se la copia
+  si interrompesse a metà il jar sarebbe rotto (il controllo dimensione lo segnala, l'avvio
+  successivo riscarica perché `version.txt` non è aggiornato).
 
 ### Step 1 — identità "Pro+" (2026-11-06)
 - Nuovo tipo giocatore "Pro+ (AI)" = `ProPlusAi extends ProAi`, zero cambi di logica (vedi "Dove
