@@ -126,6 +126,10 @@ function Get-Sha256Hex {
   } finally { $sha.Dispose() }
 }
 
+# Residuo delle versioni con Move-Item (bug 0bis-fix2): TripleA-ProPlus.jar.tmp
+# rimasto accanto al jar. Non serve a nulla: lo si rimuove.
+Remove-Item -LiteralPath "$jarPath.tmp" -Force -ErrorAction SilentlyContinue
+
 $buildInfo    = Read-KeyValueFile $buildInfoPath
 $localVersion = Read-KeyValueFile $versionPath
 
@@ -260,11 +264,24 @@ try {
   }
 
   # --- applica: sostituisci solo i file di programma noti --------------------
-  # Il jar viene scritto su file temporaneo e poi spostato (operazione atomica),
-  # cosi' non resta mai un jar a meta'.
+  # NON usare Move-Item -Force / rename sul jar esistente: in Windows PowerShell
+  # 5.1 fallisce con "Cannot create a file when that file already exists" quando
+  # il jar vecchio e' tenuto aperto da un altro processo (antivirus,
+  # indicizzatore): la cancellazione resta "in sospeso" e il nome resta occupato.
+  # Nemmeno [IO.File]::Replace(src, dst, $null): PowerShell passa "" come backup
+  # e .NET rifiuta il percorso. Si copia SOPRA il jar esistente (overwrite), che
+  # funziona anche in quel caso (verificato sul PC di Matteo), poi si controlla
+  # la dimensione.
   $jarTmp = "$jarPath.tmp"
-  Copy-Item -LiteralPath $newJar -Destination $jarTmp -Force
-  Move-Item -LiteralPath $jarTmp -Destination $jarPath -Force
+  try {
+    Copy-Item -LiteralPath $newJar -Destination $jarTmp -Force
+    [System.IO.File]::Copy($jarTmp, $jarPath, $true)
+  } finally {
+    Remove-Item -LiteralPath $jarTmp -Force -ErrorAction SilentlyContinue
+  }
+  if ((Get-Item -LiteralPath $jarPath).Length -ne (Get-Item -LiteralPath $newJar).Length) {
+    throw "il jar copiato non ha la dimensione attesa"
+  }
 
   foreach ($name in @('LEGGIMI.txt', 'build-info.txt', '.triplea-root')) {
     $src = Join-Path $extractDir $name

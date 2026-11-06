@@ -24,6 +24,11 @@
                                               variante con il jar vecchio tenuto aperto da un
                                               altro processo (antivirus/indicizzatore): il
                                               jar va comunque sostituito, nessun jar.tmp residuo
+   11. Come 10 su un volume FAT32          -> best effort (disco virtuale via diskpart; SKIP se
+                                              non creabile). Su NTFS recente la cancellazione
+                                              libera subito il nome anche con il file aperto,
+                                              quindi 10 non puo' riprodurre il bug del PC reale;
+                                              su FAT il nome resta occupato come li'.
 
   Gli scenari 7-9 riproducono l'uso reale (bug in produzione: con -File e senza
   -InstallDir il default $PSScriptRoot risultava vuoto in Windows PowerShell 5.1).
@@ -65,7 +70,7 @@ function Copy-Crlf {
 
 function New-Install {
   param([string]$Name, [string]$Commit, [string]$JarText, [string]$UpdatedAt)
-  $dir = Join-Path $work $Name
+  $dir = if ([IO.Path]::IsPathRooted($Name)) { $Name } else { Join-Path $work $Name }
   New-Item -ItemType Directory -Path $dir -Force | Out-Null
   Set-Content -LiteralPath (Join-Path $dir 'TripleA-ProPlus.jar') -Value $JarText -Encoding ASCII
   @(
@@ -441,6 +446,57 @@ try {
     param($d, $api, $l) Invoke-AvviaBat -Dir $d -ApiBase $api -Label $l
   } | Out-Null
 } catch { $script:fail++; Write-Host "  [FAIL] eccezione: $($_.Exception.Message)" -ForegroundColor Red }
+
+# --- Scenario 11: come 10 su volume FAT32 (best effort) ----------------------
+Write-Host "`n== Scenario 11: jar presente e aperto, su volume FAT32 (disco virtuale) =="
+$fatLetter = $null
+$vhd = Join-Path $work 'fat32.vhd'
+try {
+  $fatLetter = @('Z', 'Y', 'X', 'W', 'V', 'U') | Where-Object { -not (Test-Path "$($_):\") } | Select-Object -First 1
+  $dp = Join-Path $work 'diskpart-create.txt'
+  @(
+    "create vdisk file=`"$vhd`" maximum=128 type=expandable",
+    "select vdisk file=`"$vhd`"",
+    'attach vdisk',
+    'create partition primary',
+    'format fs=fat32 quick label=PROPLUS',
+    "assign letter=$fatLetter"
+  ) | Set-Content -LiteralPath $dp -Encoding ASCII
+  & diskpart.exe /s $dp | Out-Null
+  Start-Sleep -Seconds 2
+  if (-not $fatLetter -or -not (Test-Path "$($fatLetter):\")) { throw "volume FAT32 non disponibile" }
+  $fsType = (Get-Volume -DriveLetter $fatLetter).FileSystemType
+  Write-Host "  volume $($fatLetter): creato, file system $fsType"
+
+  # Diagnostica (non bloccante): il vecchio metodo Move-Item -Force in powershell.exe 5.1
+  # contro una destinazione tenuta aperta, sullo stesso volume.
+  $diag = "$($fatLetter):\diag"
+  New-Item -ItemType Directory -Path $diag -Force | Out-Null
+  'nuovo' | Set-Content -LiteralPath "$diag\a.tmp" -Encoding ASCII
+  'vecchio' | Set-Content -LiteralPath "$diag\a.jar" -Encoding ASCII
+  $h = [IO.File]::Open("$diag\a.jar", [IO.FileMode]::Open, [IO.FileAccess]::Read,
+    ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+  try {
+    $cmd = "try { Move-Item -LiteralPath '$diag\a.tmp' -Destination '$diag\a.jar' -Force -ErrorAction Stop; 'MOVE-OK' } catch { 'MOVE-FAIL: ' + `$_.Exception.Message }"
+    $moveResult = (& powershell.exe -NoProfile -Command $cmd | Out-String).Trim()
+  } finally { $h.Dispose() }
+  Write-Host "  [INFO] vecchio metodo (Move-Item -Force, destinazione aperta) su FAT32: $moveResult" -ForegroundColor Cyan
+
+  Test-RealScenario -Name "$($fatLetter):\s11a" -Label 's11a' -What 'FAT32, jar presente' -LocalUpdatedAt '2026-01-01T00:00:00Z' -Runner {
+    param($d, $api, $l) Invoke-AggiornaReal -Dir $d -ApiBase $api -Label $l
+  } | Out-Null
+  Test-RealScenario -Name "$($fatLetter):\s11b" -Label 's11b' -What 'FAT32, jar presente e aperto' -LocalUpdatedAt '2026-01-01T00:00:00Z' -HoldJar -Runner {
+    param($d, $api, $l) Invoke-AggiornaReal -Dir $d -ApiBase $api -Label $l
+  } | Out-Null
+} catch {
+  Write-Host "  [SKIP] scenario FAT32 non eseguito ($($_.Exception.Message))" -ForegroundColor Yellow
+} finally {
+  if (Test-Path $vhd) {
+    $dd = Join-Path $work 'diskpart-detach.txt'
+    @("select vdisk file=`"$vhd`"", 'detach vdisk') | Set-Content -LiteralPath $dd -Encoding ASCII
+    & diskpart.exe /s $dd | Out-Null
+  }
+}
 
 # --- esito ------------------------------------------------------------------
 Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue

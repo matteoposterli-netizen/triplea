@@ -53,6 +53,8 @@ rem avvia.bat e aggiorna.ps1 sono "in uso" mentre girano: aggiorna.ps1 ha messo
 rem le versioni nuove in *.new. Un piccolo script temporaneo attende la chiusura
 rem di questa finestra, sostituisce i file e rilancia avvia.bat. Cosi' avvia.bat
 rem non si corrompe durante l'aggiornamento di se stesso.
+rem Si usa "copy /y" + "del" e non "move /y": sostituire per rinomina un file
+rem esistente puo' fallire se un altro processo (antivirus) lo tiene aperto.
 if "!UPD!"=="10" if defined NOLAUNCH (
   echo [test] aggiornamento del lanciatore richiesto: riavvio saltato.
   exit /b 10
@@ -62,8 +64,8 @@ if "!UPD!"=="10" (
   (
     echo @echo off
     echo ping -n 3 127.0.0.1 ^>nul
-    echo if exist "%HERE%avvia.bat.new" move /y "%HERE%avvia.bat.new" "%HERE%avvia.bat" ^>nul 2^>^&1
-    echo if exist "%HERE%aggiorna.ps1.new" move /y "%HERE%aggiorna.ps1.new" "%HERE%aggiorna.ps1" ^>nul 2^>^&1
+    echo if exist "%HERE%avvia.bat.new" copy /y "%HERE%avvia.bat.new" "%HERE%avvia.bat" ^>nul 2^>^&1 ^&^& del "%HERE%avvia.bat.new" ^>nul 2^>^&1
+    echo if exist "%HERE%aggiorna.ps1.new" copy /y "%HERE%aggiorna.ps1.new" "%HERE%aggiorna.ps1" ^>nul 2^>^&1 ^&^& del "%HERE%aggiorna.ps1.new" ^>nul 2^>^&1
     echo start "" "%HERE%avvia.bat"
     echo del "%%~f0" ^>nul 2^>^&1
   ) > "!SWAP!"
