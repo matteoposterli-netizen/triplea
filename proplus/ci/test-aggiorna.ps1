@@ -180,6 +180,25 @@ function Invoke-Aggiorna {
 function Get-Port { return (Get-Random -Minimum 49200 -Maximum 64800) }
 function Read-Text { param([string]$Path) if (Test-Path $Path) { return (Get-Content -LiteralPath $Path -Raw) } else { return '' } }
 
+# --- Warm-up stack HTTP -----------------------------------------------------
+# Sul runner, il PRIMISSIMO Invoke-RestMethod via lo stack di Windows
+# PowerShell (HttpWebRequest) stalla ~30s una volta sola (inizializzazione una
+# tantum a livello di macchina: i child successivi vanno istantanei). Lo
+# assorbiamo qui con un child throwaway, cosi' lo scenario 1 non ne paga il
+# costo e non va in timeout.
+Write-Host "`n== Warm-up stack HTTP (una tantum) =="
+try {
+  $wport = Get-Port
+  $wjson = New-ReleaseJson -Port $wport -UpdatedAt 'x' -AssetId 0 -Commit '0000000' -Size 0
+  $wjob  = Start-MockServer -Port $wport -Json $wjson -ZipPath $avviaBat
+  Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+    '-NoProfile', '-Command',
+    "try { [Net.WebRequest]::DefaultWebProxy = `$null; Invoke-RestMethod -Uri 'http://127.0.0.1:$wport/ping' -TimeoutSec 45 -UseBasicParsing | Out-Null } catch { }"
+  ) -Wait -NoNewWindow | Out-Null
+  Stop-MockServer $wjob
+  Write-Host "  warm-up completato"
+} catch { Write-Host "  warm-up ignorato ($($_.Exception.Message))" }
+
 # --- Scenario 1: aggiornamento disponibile ----------------------------------
 Write-Host "`n== Scenario 1: aggiornamento disponibile =="
 try {
