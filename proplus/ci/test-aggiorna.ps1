@@ -37,10 +37,6 @@ function Check {
 $work = Join-Path ([IO.Path]::GetTempPath()) ("proplus-tests-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 
-# Warm-up: paga una volta sola il costo di avvio del sottosistema Start-Job,
-# cosi' il primo mock server (scenario 1) e' pronto senza ritardi di cold-start.
-try { Start-Job -ScriptBlock { Start-Sleep -Milliseconds 50 } | Wait-Job | Remove-Job -Force } catch { }
-
 # --- helper -----------------------------------------------------------------
 
 function New-Install {
@@ -90,10 +86,10 @@ function New-ReleaseZip {
   return (Get-Item $Path).Length
 }
 
-# Il server usa GetContextAsync().Wait(ms) con una deadline invece di GetContext()
-# (che blocca in modo non interrompibile): cosi' il job resta interrompibile da
-# Stop-Job e si auto-termina comunque dopo MaxSeconds. Evita il blocco noto di
-# Stop-Job su un job fermo dentro una chiamata .NET bloccante.
+# Un solo GetContextAsync pendente per iterazione, atteso via polling senza
+# abbandonarlo: cosi' nessuna richiesta viene consegnata a un accept abbandonato
+# (che non leggeremmo mai, lasciando il client in timeout). Il polling a 50ms
+# mantiene il job interrompibile da Stop-Job e la deadline lo auto-termina.
 $serverScript = {
   param($Port, $Json, $ZipPath, $MaxSeconds)
   $listener = New-Object System.Net.HttpListener
@@ -103,7 +99,8 @@ $serverScript = {
   try {
     while ((Get-Date) -lt $deadline) {
       $task = $listener.GetContextAsync()
-      if (-not $task.Wait(500)) { continue }
+      while (-not $task.IsCompleted -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 50 }
+      if (-not $task.IsCompleted) { break }
       $ctx = $task.Result
       $res = $ctx.Response
       try {
@@ -179,25 +176,6 @@ function Invoke-Aggiorna {
 
 function Get-Port { return (Get-Random -Minimum 49200 -Maximum 64800) }
 function Read-Text { param([string]$Path) if (Test-Path $Path) { return (Get-Content -LiteralPath $Path -Raw) } else { return '' } }
-
-# --- Warm-up stack HTTP -----------------------------------------------------
-# Sul runner, il PRIMISSIMO Invoke-RestMethod via lo stack di Windows
-# PowerShell (HttpWebRequest) stalla ~30s una volta sola (inizializzazione una
-# tantum a livello di macchina: i child successivi vanno istantanei). Lo
-# assorbiamo qui con un child throwaway, cosi' lo scenario 1 non ne paga il
-# costo e non va in timeout.
-Write-Host "`n== Warm-up stack HTTP (una tantum) =="
-try {
-  $wport = Get-Port
-  $wjson = New-ReleaseJson -Port $wport -UpdatedAt 'x' -AssetId 0 -Commit '0000000' -Size 0
-  $wjob  = Start-MockServer -Port $wport -Json $wjson -ZipPath $avviaBat
-  Start-Process -FilePath 'powershell.exe' -ArgumentList @(
-    '-NoProfile', '-Command',
-    "try { [Net.WebRequest]::DefaultWebProxy = `$null; Invoke-RestMethod -Uri 'http://127.0.0.1:$wport/ping' -TimeoutSec 45 -UseBasicParsing | Out-Null } catch { }"
-  ) -Wait -NoNewWindow | Out-Null
-  Stop-MockServer $wjob
-  Write-Host "  warm-up completato"
-} catch { Write-Host "  warm-up ignorato ($($_.Exception.Message))" }
 
 # --- Scenario 1: aggiornamento disponibile ----------------------------------
 Write-Host "`n== Scenario 1: aggiornamento disponibile =="
