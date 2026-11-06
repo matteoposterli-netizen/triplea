@@ -87,7 +87,12 @@ public class HeadedPlayerTypes {
             // The first item in this list will be the default when hosting
             List.of(HUMAN_PLAYER),
             PlayerTypes.getBuiltInPlayerTypes(),
-            List.of(PRO_PLUS_AI, getProAiBetaType(), CLIENT_PLAYER, DOES_NOTHING_PLAYER, getFlowFieldType()))
+            List.of(
+                PRO_PLUS_AI,
+                getProAiBetaType(),
+                CLIENT_PLAYER,
+                DOES_NOTHING_PLAYER,
+                getFlowFieldType()))
         .flatMap(Collection::stream)
         .filter(HeadedPlayerTypes::filterBetaPlayerType)
         .collect(Collectors.toList());
