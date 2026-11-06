@@ -1,0 +1,75 @@
+# Builds the playable Pro+ client on every push to 'proplus', runs tests, and publishes
+# TripleA-ProPlus.zip to the GitHub Release tagged 'proplus-latest' (asset replaced each run).
+name: ProPlus Release
+on:
+  push:
+    branches:
+      - proplus
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: proplus-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # full history: the build number in the release version is the commit count
+          fetch-depth: 0
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Run tests
+        # game-core holds the engine and ProAi; ai holds the extra AIs; game-headed the client.
+        run: ./gradlew --no-daemon :game-core:test :ai:test :game-headed:test
+      - name: Set release version
+        # Same step the official release uses: writes the version into product.properties
+        # (done after tests, which expect the placeholder version).
+        run: |
+          ./game-app/run/.build/set-game-headed-build-number
+          echo "build_version=$(./gradlew -q printReleaseVersion)" | tee -a "$GITHUB_ENV"
+      - name: Build client jar
+        run: ./gradlew --no-daemon :game-headed:shadowJar
+      - name: Package zip
+        run: |
+          set -euo pipefail
+          jar=$(ls game-app/game-headed/build/libs/game-headed-*.jar | grep -v -- '-plain' | head -n1)
+          echo "Using jar: $jar"
+          mkdir -p build/proplus/TripleA-ProPlus
+          cd build/proplus/TripleA-ProPlus
+          cp "$GITHUB_WORKSPACE/$jar" TripleA-ProPlus.jar
+          cp "$GITHUB_WORKSPACE/game-app/game-headed/.triplea-root" .triplea-root
+          cp "$GITHUB_WORKSPACE/proplus/dist/avvia.bat" avvia.bat
+          sed -e "s|@VERSION@|${build_version}|g" \
+              -e "s|@COMMIT@|${GITHUB_SHA}|g" \
+              -e "s|@DATE@|$(date -u +'%Y-%m-%d %H:%M UTC')|g" \
+              -e "s|@REPO@|${GITHUB_REPOSITORY}|g" \
+              "$GITHUB_WORKSPACE/proplus/dist/LEGGIMI.txt" > LEGGIMI.txt
+          # Windows line endings for the files the user opens
+          sed -i 's/\r\?$/\r/' avvia.bat LEGGIMI.txt
+          zip -9 -r ../TripleA-ProPlus.zip TripleA-ProPlus.jar avvia.bat LEGGIMI.txt .triplea-root
+          unzip -l ../TripleA-ProPlus.zip
+      - name: Publish release proplus-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=proplus-latest
+          git tag -f "$tag" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$tag"
+          notes="TripleA Pro+ build ${build_version} - commit ${GITHUB_SHA} (branch proplus)"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "TripleA Pro+ (latest)" --notes "$notes" --prerelease
+          else
+            gh release create "$tag" --title "TripleA Pro+ (latest)" --notes "$notes" \
+              --prerelease --verify-tag
+          fi
+          gh release upload "$tag" build/proplus/TripleA-ProPlus.zip --clobber

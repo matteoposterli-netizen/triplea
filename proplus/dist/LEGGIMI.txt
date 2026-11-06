@@ -1,0 +1,86 @@
+TripleA Pro+  -  build di prova
+==============================
+
+Versione motore : @VERSION@
+Commit          : @COMMIT@  (branch proplus)
+Data build      : @DATE@
+Sorgente        : https://github.com/@REPO@/tree/@COMMIT@
+
+STATO ATTUALE (step 0)
+----------------------
+Questa build e' il codice ORIGINALE di TripleA, senza modifiche al gioco o
+all'AI. E' compilata dal ramo principale (main) di triplea-game/triplea al
+momento della build: puo' quindi contenere alcune correzioni piu' recenti
+della versione ufficiale installata (es. 2026-11.16.15870). Le future
+modifiche "Pro+" saranno in una AI separata; l'AI "Hard" originale resta
+invariata.
+
+
+CONTENUTO DELLO ZIP
+-------------------
+  TripleA-ProPlus.jar   il gioco completo (tutte le dipendenze incluse)
+  avvia.bat             avvia il gioco su Windows
+  LEGGIMI.txt           questo file
+  .triplea-root         file marcatore vuoto richiesto dal motore (non toccarlo)
+
+
+INSTALLAZIONE
+-------------
+1. Scompatta lo zip in una cartella SEPARATA, per esempio C:\TripleA-ProPlus
+   (NON dentro C:\Program Files\TripleA).
+2. Fai doppio clic su avvia.bat.
+
+avvia.bat cerca Java 25 (o superiore) in quest'ordine:
+  1. il Java incluso nell'installazione ufficiale di TripleA, cioe' la
+     cartella "jre" dentro la cartella di installazione, di solito:
+       C:\Program Files\TripleA\jre\bin\java.exe
+     (controlla anche Program Files (x86), %LOCALAPPDATA%\Programs\TripleA
+      e il percorso registrato da Windows tra i programmi installati)
+  2. la variabile d'ambiente JAVA_HOME
+  3. il comando "java" nel PATH
+Stampa quale Java usa e la versione, poi avvia il gioco con le stesse
+opzioni JVM del launcher ufficiale (-Xss1250K).
+Se non trova Java, mostra un messaggio e resta aperto.
+
+avvia.bat legge soltanto: NON modifica e NON sovrascrive nulla
+nell'installazione ufficiale di TripleA.
+
+
+DATI CONDIVISI CON L'INSTALLAZIONE UFFICIALE  (importante)
+----------------------------------------------------------
+La cartella del programma e' separata, ma i DATI UTENTE sono gli stessi
+della versione ufficiale. Il motore li cerca sempre negli stessi posti,
+indipendentemente da dove si trova il jar:
+
+  * Cartella utente: %USERPROFILE%\Documents\triplea
+    (se non esiste: %USERPROFILE%\triplea). Contiene:
+      - downloadedMaps\        mappe scaricate (es. World War II Europe 1940)
+      - savedGames\            salvataggi
+      - savedGames\autoSave\   salvataggi automatici
+  * Impostazioni: registro di Windows, chiave utente
+      HKEY_CURRENT_USER\Software\JavaSoft\Prefs\games\strategy\triplea\...
+    (opzioni di gioco, cartelle, impostazioni del log della ProAi, suoni)
+
+Conseguenze:
+  + Non serve riscaricare la mappa: Pro+ vede le stesse mappe installate.
+  + I salvataggi sono visibili da entrambe le versioni.
+  - Le impostazioni cambiate in una versione valgono anche per l'altra.
+  - I salvataggi AUTOMATICI hanno lo stesso nome nelle due versioni: una
+    partita in Pro+ sovrascrive l'autosave della versione ufficiale (e
+    viceversa). Se un autosave ti serve, rinominalo o salva a mano con un
+    nome diverso.
+  - Non tenere aperte le due versioni contemporaneamente sulla stessa
+    partita.
+  - Aggiornare/cancellare una mappa da una versione la aggiorna/cancella
+    anche per l'altra.
+
+Compatibilita' salvataggi: oggi (step 0) il codice e' quello originale,
+quindi i salvataggi tra questa build e la 2026-11.x ufficiale sono
+compatibili nei due sensi. In futuro, una partita salvata con giocatori
+"Pro+" potrebbe non aprirsi nella versione ufficiale: verra' indicato qui.
+
+
+DISINSTALLAZIONE
+----------------
+Cancella la cartella C:\TripleA-ProPlus. Mappe, salvataggi e impostazioni
+restano (sono quelli condivisi con la versione ufficiale).
