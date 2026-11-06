@@ -56,4 +56,13 @@ public interface ProTuning {
   default double victoryCityValue() {
     return 5;
   }
+
+  /**
+   * Points a victory city adds to the score the combat move ranks its attack targets by, when
+   * victory cities are valued ({@link #valuesVictoryCities}, {@link #hasVictoryCityWinCondition}).
+   * 0 by default: Hard and Hard Beta rank targets without victory cities.
+   */
+  default double attackPriorityVictoryCityWeight() {
+    return 0;
+  }
 }

@@ -98,6 +98,7 @@ class DiaryNeutralityTest extends AbstractClientSettingTestCase {
         .contains("Attacchi scartati:")
         .contains("< soglia minima 60%")
         .contains("di cui VC")
+        .contains("(quota VC ")
         .contains("Obiettivi principali del turno")
         .contains("NEUTRALI:")
         .contains("Tempo AI:");

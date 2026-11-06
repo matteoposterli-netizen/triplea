@@ -290,14 +290,25 @@ public class ProCombatMoveAi {
               * (1 + isFactory)
               * (1 - 0.5 * isAmphib)
               * productionAndIsCapital.production;
-      double attackValue =
-          (tuvSwing + territoryValue)
-              * (1 + 4.0 * isCapital)
+      final double multiplier =
+          (1 + 4.0 * isCapital)
               * (1 + 2.0 * isNotNeutralAdjacentToMyCapital)
               * (1 - 0.9 * isNeutral);
+      // 0 unless the tuning weighs victory cities (Pro+): Hard computes exactly as before
+      final double victoryCityBonus =
+          ProTerritoryValueUtils.victoryCityAttackPriority(proData, t, patd.isCanHold());
+      double victoryCityPart = victoryCityBonus * multiplier;
+      double attackValue =
+          victoryCityBonus == 0
+              ? (tuvSwing + territoryValue)
+                  * (1 + 4.0 * isCapital)
+                  * (1 + 2.0 * isNotNeutralAdjacentToMyCapital)
+                  * (1 - 0.9 * isNeutral)
+              : (tuvSwing + territoryValue + victoryCityBonus) * multiplier;
 
       // Check if a negative value neutral territory should be attacked
       if (attackValue <= 0 && !patd.isNeedAmphibUnits() && ProUtils.isNeutralLand(t)) {
+        victoryCityPart = 0;
 
         // Determine enemy neighbor territory production value for neutral land territories
         double nearbyEnemyValue = 0;
@@ -357,9 +368,11 @@ public class ProCombatMoveAi {
 
       // Remove negative value territories
       patd.setValue(attackValue);
+      proData.getRecorder().attackPriority(proData, patd, victoryCityPart);
+      // a victory city doesn't overrule the defensive stance: checked without its part
       if (attackValue <= 0
           || (isDefensive
-              && attackValue <= 8
+              && attackValue - victoryCityPart <= 8
               && data.getMap().getDistance(proData.getMyCapital(), t) <= 3)) {
         proData
             .getRecorder()

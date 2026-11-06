@@ -38,6 +38,12 @@ public interface ProDecisionRecorder {
   /** The attack on {@code patd} is dropped for {@code reason} (a reason code). */
   default void attackDropped(ProData proData, ProTerritory patd, String reason) {}
 
+  /**
+   * The combat move ranked {@code patd} with priority {@code patd.getValue()}, of which {@code
+   * victoryCityPart} comes from its victory cities (0 unless the tuning weighs them).
+   */
+  default void attackPriority(ProData proData, ProTerritory patd, double victoryCityPart) {}
+
   /** The attacks still planned after the combat move step {@code stage}. */
   default void attackStage(ProData proData, String stage, Collection<ProTerritory> planned) {}
 

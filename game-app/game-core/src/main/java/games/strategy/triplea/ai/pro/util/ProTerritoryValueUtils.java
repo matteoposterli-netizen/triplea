@@ -29,6 +29,7 @@ import org.triplea.java.collections.CollectionUtils;
 @UtilityClass
 public final class ProTerritoryValueUtils {
   static final int MIN_FACTORY_CHECK_DISTANCE = 9;
+  static final double VICTORY_CITY_PRIORITY_CANT_HOLD_FACTOR = 0.25;
 
   /**
    * Returns the relative value of attacking the specified territory compared to other territories.
@@ -67,6 +68,23 @@ public final class ProTerritoryValueUtils {
     }
     return TerritoryAttachment.get(t).map(TerritoryAttachment::getVictoryCity).orElse(0)
         * tuning.victoryCityValue();
+  }
+
+  /**
+   * What a victory city target adds to the combat move's attack priority before the priority's
+   * multipliers: {@link ProTuning#attackPriorityVictoryCityWeight} per victory city, a quarter of
+   * it if the target can't be held (victory conditions count cities held for a whole round). 0 when
+   * victory cities are not valued, so always 0 with {@link ProTuning#DEFAULT}.
+   */
+  public static double victoryCityAttackPriority(
+      final ProData proData, final Territory t, final boolean canHold) {
+    final double weight = proData.getTuning().attackPriorityVictoryCityWeight();
+    if (weight == 0 || victoryCityValue(proData, t) == 0) {
+      return 0;
+    }
+    final int victoryCities =
+        TerritoryAttachment.get(t).map(TerritoryAttachment::getVictoryCity).orElse(0);
+    return weight * victoryCities * (canHold ? 1 : VICTORY_CITY_PRIORITY_CANT_HOLD_FACTOR);
   }
 
   /** Returns the value of each territory in {@code territoriesToCheck}. */

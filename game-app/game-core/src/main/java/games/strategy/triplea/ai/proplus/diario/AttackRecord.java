@@ -28,6 +28,9 @@ final class AttackRecord {
   /** The AI's ranking score of the target (Pro AI "attack value"), NaN before ranking. */
   double priority = Double.NaN;
 
+  /** Part of {@link #priority} from victory cities (0 unless the AI's tuning weighs them). */
+  double priorityVictoryCity;
+
   double value;
   double valueProduction;
   double valueVictoryCity;
@@ -64,5 +67,9 @@ final class AttackRecord {
 
   double victoryCityShare() {
     return value > 0 ? valueVictoryCity / value : 0;
+  }
+
+  double priorityVictoryCityShare() {
+    return priority > 0 ? priorityVictoryCity / priority : 0;
   }
 }

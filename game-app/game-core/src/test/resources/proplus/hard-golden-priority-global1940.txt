@@ -1,0 +1,44 @@
+== Germans
+priority France 289.884
+priority 110 Sea Zone 51.170
+priority 111 Sea Zone 41.875
+priority Southern France 22.417
+priority Normandy Bordeaux 16.688
+priority Yugoslavia 16.326
+priority 109 Sea Zone 13.021
+priority 106 Sea Zone 12.367
+priority 91 Sea Zone 7.515
+priority Tunisia 1.364
+priority Greece 0.760
+== Italians
+dropped Normandy Bordeaux negative_value
+priority 98 Sea Zone 42.568
+priority 93 Sea Zone 18.816
+priority Southern France 17.146
+priority Yugoslavia 14.874
+priority Malta 11.814
+priority Greece 11.542
+priority Alexandria 7.958
+priority Gibraltar 7.888
+priority Kenya 6.100
+priority Anglo Egyptian Sudan 5.030
+priority Tunisia 4.152
+priority Syria 3.773
+priority Algeria 3.409
+priority Morocco 3.061
+priority British Somaliland 0.100
+priority Crete 0.100
+priority Cyprus 0.100
+== British
+dropped Libya negative_value
+priority 96 Sea Zone 15.000
+priority Ethiopia 6.206
+priority 124 Sea Zone 6.000
+priority 108 Sea Zone 6.000
+priority 103 Sea Zone 6.000
+priority 118 Sea Zone 6.000
+priority Denmark 5.796
+priority Iraq 5.577
+priority 117 Sea Zone 4.465
+priority Tobruk 3.596
+priority Italian Somaliland 1.697

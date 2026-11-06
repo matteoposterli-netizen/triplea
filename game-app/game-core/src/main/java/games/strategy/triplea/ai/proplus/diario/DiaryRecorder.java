@@ -423,6 +423,21 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   }
 
   @Override
+  public void attackPriority(
+      final ProData proData, final ProTerritory patd, final double victoryCityPart) {
+    guard(
+        () -> {
+          if (ignorePlan) {
+            return;
+          }
+          final AttackRecord rec = record(proData, patd);
+          update(rec, patd);
+          rec.priority = patd.getValue();
+          rec.priorityVictoryCity = victoryCityPart;
+        });
+  }
+
+  @Override
   public void attackDropped(final ProData proData, final ProTerritory patd, final String reason) {
     guard(
         () -> {
@@ -863,7 +878,8 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   private static String valueText(final AttackRecord r) {
     final StringBuilder sb = new StringBuilder();
     if (!Double.isNaN(r.priority)) {
-      sb.append("priorita' ").append(Italian.number(r.priority)).append(", ");
+      sb.append("priorita' ").append(Italian.number(r.priority));
+      sb.append(" (quota VC ").append(Italian.number(r.priorityVictoryCity)).append("), ");
     }
     sb.append("valore ").append(Italian.number(r.value));
     sb.append(" (di cui VC ").append(Italian.number(r.valueVictoryCity));
@@ -903,11 +919,13 @@ public final class DiaryRecorder implements ProDecisionRecorder {
       sb.append(
           String.format(
               Locale.ROOT,
-              "    %d. %s%s: priorita' %s, valore %s, quota victory city %.0f%% -> %s%n",
+              "    %d. %s%s: priorita' %s (quota VC %s), valore %s, quota victory city %.0f%%"
+                  + " -> %s%n",
               i + 1,
               r.territory,
               owner(r),
               Italian.number(r.priority),
+              Italian.number(r.priorityVictoryCity),
               Italian.number(r.value),
               r.victoryCityShare() * 100,
               statusText(r)));
@@ -926,6 +944,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
               final JsonObject o = new JsonObject();
               o.addProperty("territorio", r.territory);
               o.addProperty("priorita", round1(r.priority));
+              o.addProperty("priorita_vc", round1(r.priorityVictoryCity));
               o.addProperty("valore", round1(r.value));
               o.addProperty("valore_vc", round1(r.valueVictoryCity));
               o.addProperty("stato", statusCode(r));
@@ -1097,6 +1116,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     json.addProperty("soglia_desiderata", r.desired);
     json.addProperty("soglia_minima", r.minimum);
     json.addProperty("priorita", round1(r.priority));
+    json.addProperty("priorita_vc", round1(r.priorityVictoryCity));
     final JsonObject value = new JsonObject();
     value.addProperty("totale", round1(r.value));
     value.addProperty("produzione", round1(r.valueProduction));

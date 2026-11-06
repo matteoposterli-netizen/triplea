@@ -102,7 +102,7 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   per AI), `GameDiary` (cartella e file della partita), `DiarySettings` (cartella, on/off),
   `Italian` (testi), `AttackRecord`. Vedi "Diario delle decisioni".
 - `ai/proplus/ProPlusTuning.java` — tuning Pro+: soglie di attacco dal livello di rischio, victory
-  city valutate. `RiskLevel.java` — i 5 livelli. `ProPlusSettings.java` — alleanze configurabili e
+  city valutate, peso VC nella priorità degli attacchi (step 2c). `RiskLevel.java` — i 5 livelli. `ProPlusSettings.java` — alleanze configurabili e
   lettura/scrittura dei livelli nelle proprietà della partita.
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
@@ -237,7 +237,8 @@ stessa fase acquisti) sono ignorati.
   difesa territori minacciati, unità di terra per i territori prioritari, flotta, PU avanzati...;
   "upgrade" mostra anche le unità tolte con segno -).
 - Attacchi eseguiti: win% stimata con le unità assegnate, soglia desiderata, win% massima, priorità
-  (= `ProTerritory.getValue()`, il punteggio d'ordinamento), valore strategico
+  (= `ProTerritory.getValue()`, il punteggio d'ordinamento) con la sua **quota VC** (step 2c; 0 per
+  Hard), valore strategico
   (`findTerritoryAttackValue`: 3·produzione·(fabbrica+1) + 3·VC, meno costo per i neutrali) con la
   quota VC, attaccanti e difensori (senza infrastrutture).
 - Attacchi pianificati ma non eseguiti (mossa rifiutata dal motore).
@@ -255,6 +256,8 @@ stessa fase acquisti) sono ignorati.
 - Esito reale: stimata → VITTORIA/SCONFITTA/RITIRATA/NON RIUSCITO, attaccanti e difensori prima/dopo,
   TUV swing stimato vs reale, totale "vinte X, attese Y (somma win%)".
 - Tempo AI per fase e "di cui diario" (costo del diario misurato nel diario stesso).
+
+Campo JSON `priorita_vc` (eventi `attacco` e `obiettivi.top`) = quota VC della priorità.
 
 `decisioni.jsonl`: una riga JSON per evento, campi comuni `round`, `nazione` (nome XML), `ai`,
 `fase` (purchase/combat/noncombat/place), `evento`: `inizio_partita`, `inizio_turno` (alleanza,
@@ -505,3 +508,77 @@ sono dovute a dadi diversi e piani diversi (un solo campione, varianza alta: ±5
   TUV swing; **non** usa il valore victory city. Il valore VC di Pro+ entra in
   `ProTerritoryValueUtils.findTerritoryValues` (valori usati da movimento non di combattimento,
   difesa e piazzamento) e nel valore dei vicini dei neutrali. Il diario mostra entrambi i numeri.
+  **Superato dallo step 2c** (la priorità ora usa le VC per Pro+).
+
+### Step 2c — victory city nella priorità degli attacchi di Pro+ (2026-11-06)
+
+#### Dove entrava il valore VC di Pro+ PRIMA dello step 2c (correzione del report dello step 2)
+Il report dello step 2 diceva "le VC valgono 3×5 punti in più nel valore di attacco": vero per la
+funzione `ProTerritoryValueUtils.findTerritoryAttackValue`, ma quella funzione **non ordina i
+bersagli**. È usata solo per i neutrali (valore dei territori nemici vicini a un neutrale a valore
+negativo, `ProCombatMoveAi.prioritizeAttackOptions`; valore dei neutrali vicini in `findLandValue`/
+`findWaterValue`) e dal diario. Quindi le VC non influenzavano la scelta degli attacchi. Mappa:
+- priorità bersagli (`ProCombatMoveAi.prioritizeAttackOptions`): **no** (produzione + obiettivi
+  nazionali, capitale, TUV swing). Dallo step 2c: sì, solo Pro+.
+- simulazione nella fase acquisti: è lo stesso `doCombatMove` con lo stesso `ProData`
+  (`AbstractProAi` righe 163/258) ⇒ stessa regola della priorità.
+- `findTerritoryValues` → `findLandValue`/`findWaterValue` (`ProTerritoryValueUtils` righe ~352 e
+  ~446): +5 per VC (`victoryCityValue`) nel valore dei territori **nemici vicini** di ogni territorio.
+  Usato da: non-combat (`ProNonCombatMoveAi` 138, 751, 1128: dove difendere/spostare unità),
+  acquisti/piazzamento (`ProPurchaseAi` 222, 485, 706, 1281, 1548, 2164: valore strategico dei
+  territori di piazzamento, nuove fabbriche), e nel combat move per decidere se un bersaglio "si può
+  tenere" (`determineTerritoriesThatCanBeHeld`, `ProCombatMoveAi` ~850). Effetto indiretto: rende
+  più preziose le zone vicine a VC nemiche, non il bersaglio VC stesso.
+- scelta delle perdite (tenere un'unità di terra per conquistare): `ProCasualtyUtils.captureValue`
+  conta già +5 per VC per **tutte** le AI (non dipende da `ProTuning`).
+- ritirata (`ProRetreatAi.captureValue`): **nessuna VC**, né per Hard né per Pro+ (non toccato).
+
+#### Modifica
+- `ProTuning.attackPriorityVictoryCityWeight()` (default **0** ⇒ Hard/Hard Beta identiche).
+- `ProTerritoryValueUtils.victoryCityAttackPriority(proData, t, canHold)` = peso × n° VC, ×0.25 se il
+  bersaglio non si può tenere (le condizioni di vittoria contano le VC tenute per un round intero);
+  0 se le VC non sono valutate (stesse condizioni di `victoryCityValue`).
+- `ProCombatMoveAi.prioritizeAttackOptions`: priorità = (TUV swing + valore produzione + bonus VC) ×
+  moltiplicatori (capitale ×5, vicino alla mia capitale ×3, neutrale ×0.1). Con bonus 0 si usa
+  l'espressione originale (stessi float). Il controllo "postura difensiva" (priorità ≤ 8 a ≤ 3 dalla
+  mia capitale ⇒ scarto) usa la priorità **senza** quota VC: una VC non scavalca la difesa. Il ritiro
+  di attacchi per tenere la capitale (`removeAttacksUntilCapitalCanBeHeld`) continua finché la
+  capitale regge; la quota VC cambia solo quale attacco viene tolto per primo (unità vicine alla
+  capitale / priorità).
+- Hook `ProDecisionRecorder.attackPriority(proData, patd, victoryCityPart)`; diario: "priorita' X
+  (quota VC Y)" in eseguiti/scartati/obiettivi, JSON `priorita_vc`.
+- `ProPlusTuning.ATTACK_PRIORITY_VICTORY_CITY_WEIGHT = 10`. Motivo: un bersaglio di terra tenibile di
+  produzione P vale 3·P (6·P se vuoto, ×2 con fabbrica) ⇒ 10 ≈ 3 PU di produzione: una VC supera un
+  non-VC di produzione/TUV simili (Europe 1940: Novgorod, Volgograd, Polonia, Egitto, Ontario sono
+  VC da 2 PU) ma non un bersaglio chiaramente più ricco (Western Germany 5 PU + fabbrica: 30) né una
+  capitale nemica (×5: ≥ 60). Da calibrare con le partite.
+
+#### Test
+- `ai.pro.HardPriorityGoldenTest` + `proplus/hard-golden-priority-global1940.txt`: classifica delle
+  priorità (territorio, valore, ordine) e scarti in classifica di Hard, Global 1940 round 1 per
+  Germania/Italia/Gran Bretagna, **generato sul codice prima dello step 2c** (3 esecuzioni identiche).
+  Mosse/acquisti non inclusi: con id unità UUID casuali cambiano tra due caricamenti della stessa
+  mappa anche a codice invariato (verificato); il confronto a piano completo resta
+  `DiaryNeutralityTest` (stessa `GameData`).
+- `ai.pro.VictoryCityPriorityTest`: Global 1940 Germania round 1, Yugoslavia resa VC; Hard la lascia
+  dietro Normandy Bordeaux, Pro+ (Prudente = soglie Hard) la mette davanti; France (capitale) resta
+  prima per entrambe. Valori del bonus: Hard 0, Pro+ 10 / 2.5.
+- `DiaryNeutralityTest` (on/off invariato, ora con il peso VC attivo) + controllo "(quota VC ".
+
+
+#### Prova Europe 1940 (sandbox, 3 round, tutte le nazioni Pro+ Equilibrato)
+Metodo: partita reale con Pro+ step 2c; a ogni turno, prima degli acquisti, il combat move è
+ripianificato due volte sulla stessa copia dello stato con dadi di simulazione fissi: peso 0 (=
+step 2bis) e peso 10 (= step 2c). Banco temporaneo (non committato, `EuropeVcBench` in
+smoke-testing con XML reale), 234 s. Differenze:
+- R1 Germania: France (capitale VC) prima in entrambi, priorità 337 di cui VC 50; piano uguale.
+- R1 Italia: Egypt (VC, non tenibile: +2.5) sale dal 3° al 2° posto; piano uguale (non attaccata).
+- R2 Russia: Poland (VC tedesca, non tenibile) sale dal 2° al 1° posto; piano uguale.
+- R2 Italia: Egypt dal 3° al 2°; **piano diverso**: con le VC aggiunge l'attacco ad Alexandria
+  (effetto indiretto dell'ordine sull'assegnazione delle unità), Egypt resta non attaccata.
+- R3 Germania: Poland (riconquista, tenibile, vicino alla capitale ⇒ VC 10×3 = 30 su 56.5) già
+  prima; Novgorod ed Egypt restano negative anche con la VC ⇒ scartate. Piano uguale.
+- Americani, Britannici: nessun bersaglio VC raggiungibile, nessun cambio.
+Giudizio: nei primi 3 round l'effetto è piccolo (1 piano cambiato su 15 turni). Motivo: le VC
+non capitali raggiungibili presto (Egypt, Poland, Novgorod) quasi sempre "non tenibili" ⇒ bonus
+2.5, e le capitali erano già prime. Leve per un effetto più forte: alzare il peso o il fattore 0.25.
