@@ -10,6 +10,7 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.ai.pro.AbstractProAi;
+import games.strategy.triplea.ai.pro.ProAttackWorth;
 import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.ProDecisionRecorder;
 import games.strategy.triplea.ai.pro.ProTuning;
@@ -65,6 +66,7 @@ import org.triplea.java.collections.IntegerMap;
 public final class DiaryRecorder implements ProDecisionRecorder {
   private static final int TOP_SHOWN = 5;
   private static final int TOP_COMPARED = 10;
+  private static final String UNITS_NOT_WORTH = "units_not_worth";
 
   private final AbstractProAi ai;
   private boolean broken;
@@ -76,6 +78,9 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   private boolean turnOpen;
   private long diaryNanos;
   private final Map<String, Long> phaseMillis = new LinkedHashMap<>();
+
+  /** Closes this recorder's open turn; handed to the diary (see {@link GameDiary#turnStarted}). */
+  private Runnable turnCloser = () -> {};
 
   // purchase
   private final Map<String, Integer> boughtSoFar = new TreeMap<>();
@@ -185,6 +190,9 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     if (!active) {
       return;
     }
+    final GameState turnData = data;
+    turnCloser = () -> guard(() -> closeTurn(turnData));
+    diary.turnStarted(turnCloser);
     pusAtStart = player.isNull() ? 0 : player.getResources().getQuantity("PUs");
     final boolean lowLuck = Properties.getLowLuck(data.getProperties());
     final String alliance = ProPlusSettings.allianceOf(data, player).orElse("-");
@@ -234,6 +242,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     if (!active || diary == null) {
       return;
     }
+    diary.turnEnded(turnCloser);
     writePurchases();
     if (!attacksWritten && !attacks.isEmpty()) {
       writeAttacks(data);
@@ -303,7 +312,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           if (delta.isEmpty()) {
             return;
           }
-          purchaseSteps.add(new String[] {step, Italian.units(delta)});
+          purchaseSteps.add(new String[] {step, Italian.unitChanges(delta)});
           final JsonObject json = event("acquisto");
           json.addProperty("passo", step);
           json.addProperty("motivo", Italian.purchaseStep(step));
@@ -447,9 +456,89 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           final AttackRecord rec = record(proData, patd);
           update(rec, patd);
           if (alive.remove(rec.territory) || !rec.isDropped()) {
-            rec.dropReason = reason;
+            rec.dropReason = UNITS_NOT_WORTH.equals(reason) ? notWorthReason(rec) : reason;
           }
         });
+  }
+
+  @Override
+  public void attackWorth(
+      final ProData proData,
+      final ProTerritory patd,
+      final ProAttackWorth worth,
+      @Nullable final String keptBy) {
+    guard(
+        () -> {
+          if (ignorePlan) {
+            return;
+          }
+          final AttackRecord rec = record(proData, patd);
+          AttackRecord.ProPlusInfo proPlus = null;
+          if (worth.hardDrops() && proData.getTuning() instanceof ProPlusTuning) {
+            final ProPlusTuning.UnworthAttackCheck check = ProPlusTuning.check(proData, worth);
+            final RiskLevel level = check.level();
+            proPlus =
+                new AttackRecord.ProPlusInfo(
+                    level.getLabel(),
+                    level.keepsAttacksNotWorthIt(),
+                    level.getCounterAttackWeight(),
+                    level.getValueTolerance(),
+                    check.riskValue(),
+                    check.desired(),
+                    check.objectiveTarget(),
+                    check.objectiveMinWin(),
+                    level.getObjectiveCostLimit());
+          }
+          rec.worth =
+              new AttackRecord.WorthInfo(
+                  worth.winPercentage(),
+                  worth.landUnitRemaining(),
+                  worth.capturesTooRarely(),
+                  worth.neutral(),
+                  worth.canHold(),
+                  worth.counterWinPercentage(),
+                  worth.tuvSwing(),
+                  worth.territoryValue(),
+                  worth.counterTuvSwing(),
+                  worth.attackValue(),
+                  worth.hardDrops(),
+                  keptBy,
+                  proPlus);
+        });
+  }
+
+  @Override
+  public void attackUnitsCleared(
+      final ProData proData,
+      final ProTerritory patd,
+      final String reason,
+      final double enemyTuvSwing,
+      final double attackValue) {
+    guard(
+        () -> {
+          if (ignorePlan) {
+            return;
+          }
+          final AttackRecord rec = record(proData, patd);
+          rec.clearedReason = reason;
+          rec.clearedEnemyTuvSwing = enemyTuvSwing;
+          rec.clearedAttackValue = attackValue;
+        });
+  }
+
+  /** The precise reason behind "units_not_worth", from the last check of the attack. */
+  private static String notWorthReason(final AttackRecord rec) {
+    final AttackRecord.WorthInfo w = rec.worth;
+    if (w == null) {
+      return UNITS_NOT_WORTH;
+    }
+    if (w.capturesTooRarely()) {
+      return w.win() < rec.minimum ? "units_win_rarely" : "units_no_land_unit";
+    }
+    if (w.neutral() && !w.canHold()) {
+      return "units_neutral_cant_hold";
+    }
+    return "units_negative_value";
   }
 
   @Override
@@ -514,7 +603,10 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           for (final String name : alive) {
             final AttackRecord rec = attacks.get(name);
             if (!rec.planned) {
-              rec.dropReason = "final_checks";
+              rec.dropReason =
+                  rec.clearedReason != null && !rec.clearedReason.startsWith("kept_")
+                      ? rec.clearedReason
+                      : "final_checks";
             }
           }
           alive.removeIf(name -> attacks.get(name).isDropped());
@@ -841,6 +933,13 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     sb.append(", max possibile ").append(Italian.percent(r.maxWin)).append(')');
     sb.append(", ").append(valueText(r));
     sb.append(tags(r));
+    if (r.worth != null && r.worth.keptBy() != null) {
+      sb.append("; ").append(keptText(r.worth));
+    }
+    if ("kept_transports_exposed".equals(r.clearedReason)) {
+      sb.append("; trasporti esposti ma tenuto da Pro+ (regola VC/obiettivo): ")
+          .append(transportsText(r));
+    }
     sb.append("; attaccanti: ").append(Italian.units(r.attackers));
     sb.append("; difensori: ").append(Italian.units(r.defenders));
     return sb.toString();
@@ -863,9 +962,152 @@ public final class DiaryRecorder implements ProDecisionRecorder {
         }
       }
       sb.append(" - ").append(Italian.reason(r.dropReason));
+      if (r.dropReason != null && r.dropReason.startsWith("units_") && r.worth != null) {
+        sb.append(": ").append(worthText(r, r.worth));
+      } else if ("transports_exposed".equals(r.dropReason)
+          && !Double.isNaN(r.clearedEnemyTuvSwing)) {
+        sb.append(": ").append(transportsText(r));
+      }
     }
     sb.append("; ").append(valueText(r)).append(tags(r));
     return sb.toString();
+  }
+
+  private static String transportsText(final AttackRecord r) {
+    return "TUV nemico atteso contro i trasporti 0.75 x "
+        + Italian.number(r.clearedEnemyTuvSwing)
+        + " = "
+        + Italian.number(0.75 * r.clearedEnemyTuvSwing)
+        + " contro valore sbarco "
+        + Italian.number(r.clearedAttackValue)
+        + " (TUV battaglia + produzione; victory city non contate), TUV perso atteso "
+        + Italian.number(
+            ProPlusTuning.exposedTransportsCost(r.clearedEnemyTuvSwing, r.clearedAttackValue));
+  }
+
+  /** The numbers of the last check "worth it with the units assigned", for a dropped attack. */
+  private static String worthText(final AttackRecord r, final AttackRecord.WorthInfo w) {
+    final StringBuilder sb = new StringBuilder();
+    switch (r.dropReason) {
+      case "units_win_rarely" ->
+          sb.append("win% ")
+              .append(Italian.percent(w.win()))
+              .append(" < minima ")
+              .append(Italian.percent(r.minimum));
+      case "units_no_land_unit" ->
+          sb.append("win% ")
+              .append(Italian.percent(w.win()))
+              .append(" ma in media sopravvivono solo aerei/navi");
+      case "units_neutral_cant_hold" -> sb.append(counterText(w));
+      default -> {
+        sb.append("valore ")
+            .append(signed(w.attackValue()))
+            .append(" = 1 + TUV battaglia ")
+            .append(signed(w.tuvSwing()))
+            .append(" + territorio ")
+            .append(Italian.number(w.territoryValue()))
+            .append(" x win ")
+            .append(Italian.percent(w.win()))
+            .append(" - 2/3 x contrattacco ")
+            .append(Italian.number(w.counterTuv()));
+        if (!w.canHold()) {
+          sb.append("; non tenibile: ").append(counterText(w));
+        }
+        sb.append("; TUV atteso (battaglia - contrattacco) ").append(signed(-w.expectedTuvCost()));
+        if (w.proPlus() != null) {
+          sb.append("; ").append(proPlusText(w, w.proPlus()));
+        }
+      }
+    }
+    return sb.toString();
+  }
+
+  private static String counterText(final AttackRecord.WorthInfo w) {
+    return Double.isNaN(w.counterWin())
+        ? "nessun contrattacco nemico possibile"
+        : "contrattacco nemico stimato vince "
+            + Italian.percent(w.counterWin())
+            + " (TUV nemico +"
+            + Italian.number(w.counterTuv())
+            + ")";
+  }
+
+  /** Why the Pro+ rules didn't keep an attack Hard drops for its value. */
+  private static String proPlusText(
+      final AttackRecord.WorthInfo w, final AttackRecord.ProPlusInfo p) {
+    final StringBuilder sb = new StringBuilder("Pro+ ").append(p.level()).append(": ");
+    if (!p.levelKeeps()) {
+      return sb.append("scarta come Hard").toString();
+    }
+    if (w.win() < p.desired()) {
+      return sb.append("win% ")
+          .append(Italian.percent(w.win()))
+          .append(" < desiderata ")
+          .append(Italian.percent(p.desired()))
+          .append(", nessuna tolleranza")
+          .toString();
+    }
+    sb.append("valore col peso contrattacco ")
+        .append(Italian.number(p.counterWeight()))
+        .append(" = ")
+        .append(signed(p.riskValue()))
+        .append(" < -")
+        .append(Italian.number(p.tolerance()))
+        .append(" (tolleranza)");
+    sb.append("; regola VC/obiettivo: ");
+    if (!p.objectiveTarget()) {
+      sb.append("non e' VC ne' obiettivo nazionale");
+    } else if (w.win() < p.objectiveMinWin()) {
+      sb.append("win% ")
+          .append(Italian.percent(w.win()))
+          .append(" < ")
+          .append(Italian.percent(p.objectiveMinWin()));
+    } else {
+      sb.append("TUV perso atteso ")
+          .append(Italian.number(w.expectedTuvCost()))
+          .append(" > limite ")
+          .append(Italian.number(p.costLimit()));
+    }
+    return sb.toString();
+  }
+
+  /** For an attack Pro+ keeps although Hard would drop it: which rule and its numbers. */
+  private static String keptText(final AttackRecord.WorthInfo w) {
+    final AttackRecord.ProPlusInfo p = w.proPlus();
+    final StringBuilder sb = new StringBuilder("tenuto da Pro+");
+    if (p != null) {
+      sb.append(' ').append(p.level());
+    }
+    sb.append(" (Hard lo scarterebbe: valore ").append(signed(w.attackValue()));
+    if (!w.canHold()) {
+      sb.append(", non tenibile: ").append(counterText(w));
+    }
+    sb.append(") - ");
+    if (ProPlusTuning.KEPT_BY_RISK.equals(w.keptBy()) && p != null) {
+      sb.append("tolleranza al rischio: valore col peso contrattacco ")
+          .append(Italian.number(p.counterWeight()))
+          .append(" = ")
+          .append(signed(p.riskValue()))
+          .append(" >= -")
+          .append(Italian.number(p.tolerance()));
+    } else if (ProPlusTuning.KEPT_BY_OBJECTIVE.equals(w.keptBy()) && p != null) {
+      sb.append("regola VC/obiettivo: win% ")
+          .append(Italian.percent(w.win()))
+          .append(" >= ")
+          .append(Italian.percent(p.objectiveMinWin()))
+          .append(", TUV perso atteso ")
+          .append(Italian.number(w.expectedTuvCost()))
+          .append(" <= ")
+          .append(Italian.number(p.costLimit()));
+    } else {
+      sb.append(w.keptBy());
+    }
+    return sb.toString();
+  }
+
+  private static String signed(final double value) {
+    final String n = Italian.number(value);
+    return value >= 0 && !n.startsWith("-") ? "+" + n : n;
   }
 
   private static String owner(final AttackRecord r) {
@@ -1133,6 +1375,45 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     json.add("difensori", counts(r.defenders));
     if (r.outcome != null) {
       json.addProperty("esito_immediato", r.outcome);
+    }
+    if (r.worth != null) {
+      json.add("controllo_finale", worthJson(r.worth));
+    }
+    if (r.clearedReason != null) {
+      json.addProperty("tolto_da", r.clearedReason);
+      json.addProperty("tuv_nemico_trasporti", round1(r.clearedEnemyTuvSwing));
+      json.addProperty("valore_sbarco", round1(r.clearedAttackValue));
+    }
+    return json;
+  }
+
+  private static JsonObject worthJson(final AttackRecord.WorthInfo w) {
+    final JsonObject json = new JsonObject();
+    json.addProperty("win", round1(w.win()));
+    json.addProperty("terra_superstite", w.landUnitRemaining());
+    json.addProperty("vince_troppo_di_rado", w.capturesTooRarely());
+    json.addProperty("tenibile", w.canHold());
+    json.addProperty("contrattacco_win", round1(w.counterWin()));
+    json.addProperty("contrattacco_tuv", round1(w.counterTuv()));
+    json.addProperty("tuv_battaglia", round1(w.tuvSwing()));
+    json.addProperty("valore_territorio", round1(w.territoryValue()));
+    json.addProperty("valore_attacco", round1(w.attackValue()));
+    json.addProperty("tuv_perso_atteso", round1(w.expectedTuvCost()));
+    json.addProperty("hard_scarta", w.hardDrops());
+    if (w.keptBy() != null) {
+      json.addProperty("tenuto_da", w.keptBy());
+    }
+    final AttackRecord.ProPlusInfo p = w.proPlus();
+    if (p != null) {
+      final JsonObject pp = new JsonObject();
+      pp.addProperty("livello", p.level());
+      pp.addProperty("peso_contrattacco", Math.round(p.counterWeight() * 100) / 100.0);
+      pp.addProperty("tolleranza", p.tolerance());
+      pp.addProperty("valore_rischio", round1(p.riskValue()));
+      pp.addProperty("obiettivo", p.objectiveTarget());
+      pp.addProperty("win_min_obiettivo", p.objectiveMinWin());
+      pp.addProperty("limite_tuv_obiettivo", p.costLimit());
+      json.add("pro_plus", pp);
     }
     return json;
   }

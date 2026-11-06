@@ -7,6 +7,7 @@ import games.strategy.triplea.ai.pro.data.ProPurchaseTerritory;
 import games.strategy.triplea.ai.pro.data.ProTerritory;
 import java.util.Collection;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /**
  * Observer of the Pro AI's decisions (the Pro+ decision diary). Every method is a no-op by default
@@ -43,6 +44,28 @@ public interface ProDecisionRecorder {
    * victoryCityPart} comes from its victory cities (0 unless the tuning weighs them).
    */
   default void attackPriority(ProData proData, ProTerritory patd, double victoryCityPart) {}
+
+  /**
+   * The combat move checked whether the attack on {@code patd} is worth it with the units assigned
+   * ({@code worth}); {@code keptBy} is the tuning's reason to keep an attack Hard would drop, null
+   * otherwise. Called for every planned attack each time the check runs.
+   */
+  default void attackWorth(
+      ProData proData, ProTerritory patd, ProAttackWorth worth, @Nullable String keptBy) {}
+
+  /**
+   * A late check of the combat move took every unit off the attack on {@code patd} (the territory
+   * stays in the list, so the attack just isn't made): {@code reason} is a code; for
+   * "transports_exposed", {@code enemyTuvSwing} is the TUV the enemy is expected to win against the
+   * transports and {@code attackValue} the attack's TUV swing plus production (dropped when 0.75 ×
+   * enemyTuvSwing is more), NaN otherwise.
+   */
+  default void attackUnitsCleared(
+      ProData proData,
+      ProTerritory patd,
+      String reason,
+      double enemyTuvSwing,
+      double attackValue) {}
 
   /** The attacks still planned after the combat move step {@code stage}. */
   default void attackStage(ProData proData, String stage, Collection<ProTerritory> planned) {}

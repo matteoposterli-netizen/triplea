@@ -62,6 +62,14 @@ public final class ProNationalObjectiveUtils {
     return values(player).getOrDefault(t, 0.0);
   }
 
+  /**
+   * As {@link #value}, also outside Hard Beta: what national objectives ride on {@code t} for
+   * {@code player}'s side (used by Pro+ through its tuning).
+   */
+  public static double stake(final GamePlayer player, final Territory t) {
+    return values(player).getOrDefault(t, 0.0);
+  }
+
   /** Stake per territory for {@code player}'s side; cached per board. */
   static synchronized Map<Territory, Double> values(final GamePlayer player) {
     final GameData data = player.getData();

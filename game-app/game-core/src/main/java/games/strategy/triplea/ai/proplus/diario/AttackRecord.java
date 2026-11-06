@@ -55,7 +55,56 @@ final class AttackRecord {
   final List<UnitInfo> defenderUnits = new ArrayList<>();
   @Nullable String outcome;
 
+  /** Late check that took every unit off the attack (reason code), null if none. */
+  @Nullable String clearedReason;
+
+  /** For "transports_exposed": TUV the enemy wins against the transports, and the attack value. */
+  double clearedEnemyTuvSwing = Double.NaN;
+
+  double clearedAttackValue = Double.NaN;
+
+  /** Last "worth it with the units assigned" check of the combat move; null if never reached. */
+  @Nullable WorthInfo worth;
+
   record UnitInfo(UUID id, String type, int tuv) {}
+
+  /**
+   * Copy of the combat move's last check (see {@code ProAttackWorth}).
+   *
+   * @param keptBy why the tuning kept an attack Hard drops (Pro+), null otherwise
+   * @param proPlus the Pro+ rules' numbers when Hard would drop the attack, null for Hard
+   */
+  record WorthInfo(
+      double win,
+      boolean landUnitRemaining,
+      boolean capturesTooRarely,
+      boolean neutral,
+      boolean canHold,
+      double counterWin,
+      double tuvSwing,
+      double territoryValue,
+      double counterTuv,
+      double attackValue,
+      boolean hardDrops,
+      @Nullable String keptBy,
+      @Nullable ProPlusInfo proPlus) {
+
+    double expectedTuvCost() {
+      return counterTuv - tuvSwing;
+    }
+  }
+
+  /** The Pro+ rules for an attack Hard drops as not worth it (see {@code ProPlusTuning}). */
+  record ProPlusInfo(
+      String level,
+      boolean levelKeeps,
+      double counterWeight,
+      double tolerance,
+      double riskValue,
+      double desired,
+      boolean objectiveTarget,
+      double objectiveMinWin,
+      double costLimit) {}
 
   AttackRecord(final String territory) {
     this.territory = territory;

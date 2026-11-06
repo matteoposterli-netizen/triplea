@@ -102,7 +102,10 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   per AI), `GameDiary` (cartella e file della partita), `DiarySettings` (cartella, on/off),
   `Italian` (testi), `AttackRecord`. Vedi "Diario delle decisioni".
 - `ai/proplus/ProPlusTuning.java` — tuning Pro+: soglie di attacco dal livello di rischio, victory
-  city valutate, peso VC nella priorità degli attacchi (step 2c). `RiskLevel.java` — i 5 livelli. `ProPlusSettings.java` — alleanze configurabili e
+  city valutate, peso VC nella priorità degli attacchi (step 2c), attacchi "che non convengono"
+  tenuti per rischio / regola VC-obiettivo (step 2d, `keepsAttackNotWorthIt`,
+  `keepsLandingWithExposedTransports`). `ai/pro/ProAttackWorth.java` (step 2d) — numeri del
+  controllo finale "conviene con le unità assegnate". `RiskLevel.java` — i 5 livelli. `ProPlusSettings.java` — alleanze configurabili e
   lettura/scrittura dei livelli nelle proprietà della partita.
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
@@ -245,9 +248,15 @@ stessa fase acquisti) sono ignorati.
 - Bombardamenti strategici.
 - Attacchi scartati con motivo: `below_minimum` (win% max < soglia minima), `negative_value`,
   `defensive_stance`, `convoy_cant_hold`, `neutral_cant_hold`, `amphib_low_value`,
-  `neutral_exposes_attackers`, `no_transports_left`, `not_enough_units`, `units_not_worth`,
-  `capital_defense`, `stage_*` (scartato senza motivo puntuale in quello stadio), `final_checks`.
-  Testi in `diario/Italian.REASONS`.
+  `neutral_exposes_attackers`, `no_transports_left`, `not_enough_units`, `capital_defense`,
+  `stage_*` (scartato senza motivo puntuale in quello stadio), `final_checks`.
+  Dallo step 2d `units_not_worth` è diviso in `units_win_rarely`, `units_no_land_unit`,
+  `units_neutral_cant_hold`, `units_negative_value` (con la formula e i numeri: TUV battaglia,
+  valore territorio × win%, 2/3 × contrattacco, win% del contrattacco, TUV atteso, e per Pro+ perché
+  le sue regole non lo tengono); dalle verifiche finali si distinguono `transports_exposed` (con i
+  numeri), `transports_scrambled`, `landing_unfought_zone`, `landing_blocked_by_subs`. Attacchi
+  tenuti da Pro+ che Hard scarterebbe: "tenuto da Pro+ ..." nella riga dell'attacco eseguito.
+  JSON: `controllo_finale` (e `pro_plus`), `tolto_da`. Testi in `diario/Italian.REASONS`.
 - Obiettivi principali (top 5 per priorità, quota VC, stato) e confronto top 10 con il turno
   precedente della stessa nazione (entrati/usciti con priorità prima/ora o motivo).
 - NEUTRALI: neutrali tra i candidati (attaccati/scartati e perché) + neutrali con unità confinanti con
@@ -582,3 +591,77 @@ smoke-testing con XML reale), 234 s. Differenze:
 Giudizio: nei primi 3 round l'effetto è piccolo (1 piano cambiato su 15 turni). Motivo: le VC
 non capitali raggiungibili presto (Egypt, Poland, Novgorod) quasi sempre "non tenibili" ⇒ bonus
 2.5, e le capitali erano già prime. Leve per un effetto più forte: alzare il peso o il fattore 0.25.
+
+### Step 2d — il filtro "con le unità assegnate non conviene" e il rischio (2026-11-06)
+
+#### Diagnosi
+Il messaggio `units_not_worth` viene da `ProCombatMoveAi.determineUnitsToAttackWith`, ciclo
+"Determine if all attacks are worth it" (dopo l'assegnazione delle unità). Per ogni attacco
+pianificato (strafing escluso) Hard lo scarta se vale UNA di queste condizioni (a ogni giro toglie
+l'ultimo in classifica che fallisce, poi riassegna le unità e ricontrolla):
+1. `capturesTooRarely`: win% < minima, oppure (dadi normali, non Beta) in media non sopravvive
+   un'unità di terra (`units_win_rarely` / `units_no_land_unit`). Solo questa usa il rischio.
+2. neutrale non tenibile (`units_neutral_cant_hold`).
+3. valore < 0 (`units_negative_value`): `1 + TUV battaglia + valore territorio × win% − 2/3 ×
+   TUV del contrattacco nemico`. Valore territorio = `(1 + terra − anfibio non tenibile + fabbrica
+   + tenibile×(…)) × produzione + capitale`: **non contiene le victory city** (il peso VC dello
+   step 2c entra solo nella priorità). Contrattacco: `canHoldAgainstCounterAttack` con le unità
+   superstiti senza aerei contro il massimo nemico.
+Il cursore di rischio non tocca la condizione 3, che è quella che scattava nei casi di Matteo.
+Numeri (banco Europe 1940, Asse Spericolato; R1 Germania è lo stato iniziale, uguale alla partita
+di Matteo):
+- Normandy Bordeaux R1: win 78% (Matteo 76%), TUV battaglia −4.8, territorio 6×0.78, contrattacco
+  vince 100% (TUV +5.4) ⇒ valore −2.6.
+- 110 Sea Zone R1: win 68% (Matteo 67%), TUV +7.7, contrattacco vince 100% (TUV +13.2) ⇒ −0.1.
+- Egypt Italia R1 (seed 1, come Matteo 77-79%): win 77%, anfibio non tenibile ⇒ territorio 2
+  (VC = 0), TUV +1.3, contrattacco vince 100% (TUV +8.8) ⇒ −2.1. R2: win 100%, TUV +0.1,
+  contrattacco +5.1 ⇒ −0.3. La priorità alta (13.1 con quota VC 10 per Matteo) non conta qui.
+Secondo filtro che ignora le VC: `removeTerritoriesWhereTransportsAreExposed` (sbarco tolto se
+0.75 × TUV nemico contro i trasporti > TUV battaglia + produzione); nel diario prima era
+"verifiche finali", ora `transports_exposed` con i numeri.
+
+#### Modifica (solo Pro+, Hard identica: default `Optional.empty()`)
+- `ProAttackWorth` (record con i numeri del controllo), `ProTuning.keepsAttackNotWorthIt`,
+  `ProTuning.keepsLandingWithExposedTransports`, hook diario `attackWorth`/`attackUnitsCleared`,
+  `ProNationalObjectiveUtils.stake` (obiettivi nazionali anche fuori Beta).
+- `ProPlusTuning`, mai a Prudente, mai neutrali, mai sotto la win% desiderata, solo per attacchi
+  che Hard scarta per la sola condizione 3:
+  - regola rischio: l'attacco prende qualcosa (territorio con valore > 0, o battaglia navale con TUV
+    > 0) e `1 + TUV + territorio × win% − peso × contrattacco ≥ −tolleranza`;
+  - regola VC/obiettivo: territorio nemico con VC, o con produzione e obiettivo nazionale in gioco;
+    win% ≥ max(75, desiderata); TUV perso atteso (contrattacco − TUV battaglia) ≤ limite. Vale anche
+    per i trasporti esposti (costo = 0.75 × TUV nemico − valore sbarco).
+- `RiskLevel` (peso contrattacco / tolleranza / limite TUV regola VC):
+  Prudente 2/3 / 0 / off (= Hard) · Cauto 0.6 / 0.5 / 4 · Equilibrato 0.55 / 1 / 8 ·
+  Audace 0.45 / 2 / 12 · Spericolato 0.4 / 3 / 16. Motivo: Hard conta 2/3 del contrattacco; con più
+  rischio l'AI scommette che il nemico non contrattacchi a pieno (peso giù) e accetta scambi
+  leggermente negativi (tolleranza in TUV, ordine di grandezza dei contrattacchi visti: 4-15 TUV).
+  Le VC non hanno valore nel controllo: il limite TUV è il "prezzo" accettato per togliere VC +
+  produzione (Egypt: 2 PU/turno + VC + obiettivo italiano). Scambi su terre senza produzione
+  (Alexandria, Vyborg) restano scartati: nella prima versione la regola li teneva tutti.
+- Diario: motivi distinti con numeri (vedi sezione diario), "tenuto da Pro+" negli eseguiti.
+  Correzioni: la voce "upgrade" degli acquisti ora dice "1 carro al posto di 1 artiglieria" (prima
+  "1 carro, -1 artiglieria"); riga "Tempo AI" doppia = era quella della **Francia del round
+  precedente** (0 PU ⇒ niente fase piazzamento ⇒ il turno si chiudeva solo al turno successivo,
+  sotto il blocco dell'Italia): ora `GameDiary.turnStarted` chiude il turno rimasto aperto di
+  un'altra nazione quando ne inizia una nuova.
+
+#### Test
+- `NotWorthAttackRuleTest` (regole per livello, Hard/Prudente mai), `RiskLevelTest` (mappatura
+  monotona, Prudente = Hard), `ItalianTest`, `DiaryRecorderTest.aTurnWithoutPlace...`.
+- Golden `HardNeutralityGoldenTest`, `HardPriorityGoldenTest`, `DiaryNeutralityTest` invariati e
+  verdi (258 test `ai.*` verdi).
+
+#### Prova Europe 1940 (sandbox, banco temporaneo non committato, 4 partite con dadi di gioco
+seed 1-4, Asse Spericolato / Alleati Equilibrato; a ogni turno di Germania e Italia il combat move
+è ripianificato sulla stessa copia con dadi di simulazione fissi: "prima" = step 2c, "dopo" = 2d)
+- Germania R1 (stesso stato in tutti i seed): + Normandy Bordeaux (tenuta per rischio, valore Pro+
+  −1); in 2 seed + Southern France, ma 110 Sea Zone esce (le unità vanno a Normandy, la 110 scende
+  a 64% < 65%); in 1 seed (s4) + 110 SZ e 91 SZ.
+- Italia: Egypt aggiunto in s2 R1, s2 R2, s4 R1; in s1 R1 Egypt resta scartato da un'altra verifica
+  finale non ancora tracciata nel diario ("final_checks" generico, non trasporti esposti).
+  Effetti collaterali visti: talvolta escono Algeria/Malta/Gibraltar/Cyprus (unità spostate su
+  Egypt o su attacchi tenuti), entra Trans-Jordan/Syria.
+- R2-R3 Germania quasi sempre uguale; 11 piani diversi su 24 turni Asse.
+Giudizio: il cursore ora incide sul controllo finale; l'effetto è concentrato su R1 e sull'Egitto.
+Da verificare in partita: perdite reali degli attacchi tenuti (Normandy contrattaccata al 100%).

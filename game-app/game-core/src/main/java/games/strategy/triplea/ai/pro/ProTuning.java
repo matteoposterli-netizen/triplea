@@ -2,8 +2,10 @@ package games.strategy.triplea.ai.pro;
 
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
+import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Properties;
+import java.util.Optional;
 
 /**
  * The Pro AI numbers that a variant of the AI may change. Every default returns exactly the value
@@ -64,5 +66,31 @@ public interface ProTuning {
    */
   default double attackPriorityVictoryCityWeight() {
     return 0;
+  }
+
+  /**
+   * Whether the combat move keeps a landing that "Hard (AI)" drops because its transports are
+   * exposed: 0.75 × {@code enemyTuvSwing} (TUV the enemy is expected to win against the transports)
+   * is more than {@code attackValue} (battle TUV swing plus production). Returns why it is kept, or
+   * empty to drop it as Hard does. Empty by default.
+   */
+  default Optional<String> keepsLandingWithExposedTransports(
+      final ProData proData,
+      final Territory territory,
+      final double winPercentage,
+      final double enemyTuvSwing,
+      final double attackValue) {
+    return Optional.empty();
+  }
+
+  /**
+   * Whether the combat move keeps an attack that "Hard (AI)" drops in its last check because its
+   * value is negative with the units assigned ({@link ProAttackWorth#negativeValue}; called only
+   * when that is the sole reason). Returns why it is kept (a short code), or empty to drop it as
+   * Hard does. Empty by default.
+   */
+  default Optional<String> keepsAttackNotWorthIt(
+      final ProData proData, final ProAttackWorth worth) {
+    return Optional.empty();
   }
 }

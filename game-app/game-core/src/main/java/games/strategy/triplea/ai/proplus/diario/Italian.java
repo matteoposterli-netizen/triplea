@@ -2,6 +2,7 @@ package games.strategy.triplea.ai.proplus.diario;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import lombok.experimental.UtilityClass;
 
@@ -80,7 +81,26 @@ final class Italian {
               "units_not_worth",
               "con le unita' assegnate non conviene (vince troppo di rado, non tenibile o valore"
                   + " negativo)"),
+          Map.entry("units_win_rarely", "con le unita' assegnate vince troppo di rado"),
+          Map.entry(
+              "units_no_land_unit",
+              "con le unita' assegnate in media non resta un'unita' di terra per conquistare"),
+          Map.entry("units_neutral_cant_hold", "neutrale non tenibile con le unita' assegnate"),
+          Map.entry(
+              "units_negative_value",
+              "con le unita' assegnate il valore d'attacco e' negativo (TUV atteso)"),
           Map.entry("capital_defense", "unita' tenute a difesa della capitale"),
+          Map.entry(
+              "transports_exposed", "sbarco annullato: trasporti esposti al contrattacco nemico"),
+          Map.entry(
+              "transports_scrambled",
+              "sbarco annullato: aerei nemici in scramble affonderebbero i trasporti"),
+          Map.entry(
+              "landing_unfought_zone",
+              "sbarco annullato: la zona di mare nemica di scarico non viene piu' attaccata"),
+          Map.entry(
+              "landing_blocked_by_subs",
+              "sbarco annullato: sottomarini nemici bloccano lo scarico senza scorta"),
           Map.entry("stage_priority", "scartato nella scelta delle priorita'"),
           Map.entry("stage_selection", "scartato nella scelta dei bersagli"),
           Map.entry("stage_units", "scartato nell'assegnazione delle unita'"),
@@ -130,6 +150,30 @@ final class Italian {
     return counts.entrySet().stream()
         .map(e -> unit(e.getKey(), e.getValue()))
         .collect(Collectors.joining(", "));
+  }
+
+  /**
+   * Units added and removed by one purchase step: "1 carro al posto di 1 artiglieria" (removals are
+   * negative counts), or just the added units.
+   */
+  static String unitChanges(final Map<String, Integer> delta) {
+    final Map<String, Integer> added = new TreeMap<>();
+    final Map<String, Integer> removed = new TreeMap<>();
+    delta.forEach(
+        (type, count) -> {
+          if (count > 0) {
+            added.put(type, count);
+          } else if (count < 0) {
+            removed.put(type, -count);
+          }
+        });
+    if (removed.isEmpty()) {
+      return units(added);
+    }
+    if (added.isEmpty()) {
+      return "tolte " + units(removed);
+    }
+    return units(added) + " al posto di " + units(removed);
   }
 
   static String unit(final String type, final int count) {

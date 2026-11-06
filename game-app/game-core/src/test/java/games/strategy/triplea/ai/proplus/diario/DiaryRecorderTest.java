@@ -74,4 +74,41 @@ class DiaryRecorderTest extends AbstractClientSettingTestCase {
     assertThat(DiaryRecorder.isNeutral(data, yugoslavia)).isTrue();
     assertThat(DiaryRecorder.isNeutral(data, france)).isFalse();
   }
+
+  @Test
+  void aTurnWithoutPlaceIsClosedWhenTheNextNationStarts() throws IOException {
+    final GamePlayer french = data.getPlayerList().getPlayerId("French");
+    final ProPlusAi frenchAi = new ProPlusAi("French", ProPlusAi.PLAYER_LABEL);
+    final ProPlusAi germanAi = new ProPlusAi("Germans", ProPlusAi.PLAYER_LABEL);
+    // French: nothing to buy nor place, so no purchase and no place phase
+    frenchAi.getProData().getRecorder().phaseStart(data, french, "combat");
+    frenchAi.getProData().getRecorder().phaseEnd(data, french, "combat", 100);
+    frenchAi.getProData().getRecorder().phaseStart(data, french, "noncombat");
+    frenchAi.getProData().getRecorder().phaseEnd(data, french, "noncombat", 900);
+    data.getSequence().setRoundAndStep(2, "Combat Move", germans);
+    germanAi.getProData().getRecorder().phaseStart(data, germans, "purchase");
+    germanAi.getProData().getRecorder().phaseEnd(data, germans, "purchase", 1);
+    germanAi.getProData().getRecorder().phaseStart(data, germans, "place");
+    germanAi.getProData().getRecorder().phaseEnd(data, germans, "place", 1);
+    frenchAi.getProData().getRecorder().phaseStart(data, french, "combat");
+
+    final String text = diaryText();
+    final int french1 = text.indexOf("Round 1 - Francia");
+    final int germany2 = text.indexOf("Round 2 - Germania");
+    final int french2 = text.indexOf("Round 2 - Francia");
+    assertThat(french1).isNotNegative();
+    assertThat(germany2).isGreaterThan(french1);
+    assertThat(french2).isGreaterThan(germany2);
+    // the French "Tempo AI" line is in the French turn, before Germany's turn, and only once
+    assertThat(text.substring(french1, germany2))
+        .contains("Tempo AI: combattimento 0.1 s, movimento 0.9 s");
+    assertThat(text.substring(germany2, french2)).containsOnlyOnce("Tempo AI");
+  }
+
+  private String diaryText() throws IOException {
+    try (Stream<Path> games = Files.list(diaryRoot)) {
+      final Path game = games.findFirst().orElseThrow();
+      return Files.readString(game.resolve(GameDiary.TEXT_FILE));
+    }
+  }
 }

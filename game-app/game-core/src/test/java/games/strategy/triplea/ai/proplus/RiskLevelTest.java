@@ -2,6 +2,7 @@ package games.strategy.triplea.ai.proplus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import games.strategy.triplea.ai.pro.ProAttackWorth;
 import games.strategy.triplea.ai.pro.ProTuning;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -56,5 +57,31 @@ class RiskLevelTest {
     assertThat(RiskLevel.PRUDENTE.desiredWinPercentage(false)).isEqualTo(hard.winPercentage(false));
     assertThat(RiskLevel.PRUDENTE.minimumWinPercentage(false))
         .isEqualTo(hard.minWinPercentage(false));
+  }
+
+  @org.junit.jupiter.api.Test
+  void prudenteDropsAttacksNotWorthItAsHard() {
+    assertThat(RiskLevel.PRUDENTE.keepsAttacksNotWorthIt()).isFalse();
+    assertThat(RiskLevel.PRUDENTE.getCounterAttackWeight())
+        .isEqualTo(ProAttackWorth.HARD_COUNTER_ATTACK_WEIGHT);
+    assertThat(RiskLevel.PRUDENTE.getValueTolerance()).isZero();
+    assertThat(RiskLevel.PRUDENTE.getObjectiveCostLimit()).isZero();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "CAUTO, PRUDENTE",
+    "EQUILIBRATO, CAUTO",
+    "AUDACE, EQUILIBRATO",
+    "SPERICOLATO, AUDACE"
+  })
+  void moreRiskToleratesMoreAttacksNotWorthIt(final RiskLevel level, final RiskLevel lower) {
+    assertThat(level.keepsAttacksNotWorthIt()).isTrue();
+    assertThat(level.getCounterAttackWeight()).isLessThan(lower.getCounterAttackWeight());
+    assertThat(level.getValueTolerance()).isGreaterThan(lower.getValueTolerance());
+    assertThat(level.getObjectiveCostLimit()).isGreaterThan(lower.getObjectiveCostLimit());
+    assertThat(level.objectiveRuleMinWin(false))
+        .isLessThanOrEqualTo(lower.objectiveRuleMinWin(false));
+    assertThat(level.objectiveRuleMinWin(false)).isGreaterThanOrEqualTo(75);
   }
 }

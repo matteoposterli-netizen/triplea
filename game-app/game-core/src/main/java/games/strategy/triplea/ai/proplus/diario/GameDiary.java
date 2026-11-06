@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.WeakHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import javax.annotation.Nullable;
 import lombok.Getter;
 import org.triplea.config.product.ProductVersionReader;
 
@@ -44,6 +45,9 @@ final class GameDiary {
 
   /** Nation -> last turn's objectives and every candidate's priority value. */
   private final Map<String, Objectives> previousObjectives = new HashMap<>();
+
+  /** Closes the nation turn still open in the diary, null if none. */
+  @Nullable private Runnable openTurnCloser;
 
   record Objectives(int round, List<String> top, Map<String, Double> values) {}
 
@@ -153,6 +157,29 @@ final class GameDiary {
 
   synchronized void json(final JsonObject event) {
     append(JSON_FILE, GSON.toJson(event) + "\n");
+  }
+
+  /**
+   * A nation's turn starts in the diary: first closes the turn still open in another nation's
+   * recorder (a nation with nothing to place gets no place phase, so its turn would otherwise close
+   * only when its next turn starts, with its "Tempo AI" line under another nation's turn).
+   */
+  void turnStarted(final Runnable closeThisTurn) {
+    final Runnable previous;
+    synchronized (this) {
+      previous = openTurnCloser;
+      openTurnCloser = closeThisTurn;
+    }
+    if (previous != null && previous != closeThisTurn) {
+      previous.run();
+    }
+  }
+
+  /** The turn opened with {@code closeThisTurn} was closed by its own recorder. */
+  synchronized void turnEnded(final Runnable closeThisTurn) {
+    if (openTurnCloser == closeThisTurn) {
+      openTurnCloser = null;
+    }
   }
 
   synchronized Optional<Objectives> previousObjectives(final String player) {

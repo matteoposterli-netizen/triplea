@@ -741,6 +741,9 @@ public class ProCombatMoveAi {
       for (final Territory z : patd.getTransportTerritoryMap().values()) {
         final ProTerritory zone = attackMap.get(z);
         if (z.isWater() && !clear.test(z) && (zone == null || zone.getUnits().isEmpty())) {
+          proData
+              .getRecorder()
+              .attackUnitsCleared(proData, patd, "landing_unfought_zone", Double.NaN, Double.NaN);
           ProLogger.debug(
               "Dropping landing in "
                   + patd.getTerritory().getName()
@@ -766,6 +769,9 @@ public class ProCombatMoveAi {
     final Map<Territory, ProTerritory> attackMap =
         territoryManager.getAttackOptions().getTerritoryMap();
     for (final ProTerritory landing : findLandingsBlockedByEnemySubs(player, attackMap)) {
+      proData
+          .getRecorder()
+          .attackUnitsCleared(proData, landing, "landing_blocked_by_subs", Double.NaN, Double.NaN);
       ProLogger.debug(
           "Dropping landing in "
               + landing.getTerritory().getName()
@@ -1188,6 +1194,9 @@ public class ProCombatMoveAi {
                   .map(Map.Entry::getKey)
                   .findAny();
           if (scrambledZone.isPresent()) {
+            proData
+                .getRecorder()
+                .attackUnitsCleared(proData, patd, "transports_scrambled", Double.NaN, Double.NaN);
             ProLogger.debug(
                 "Removing amphib territory: "
                     + t
@@ -1257,7 +1266,12 @@ public class ProCombatMoveAi {
         final int isCapital = isCapitalWorthTargeting(patd, player, data) ? 1 : 0;
         final double attackValue =
             result.getTuvSwing() + initialProductionAndIsCapital.production * (1 + 3.0 * isCapital);
-        if (!patd.isStrafing() && (0.75 * enemyTuvSwing) > attackValue) {
+        if (!patd.isStrafing()
+            && (0.75 * enemyTuvSwing) > attackValue
+            && !keepsLandingWithExposedTransports(patd, result, enemyTuvSwing, attackValue)) {
+          proData
+              .getRecorder()
+              .attackUnitsCleared(proData, patd, "transports_exposed", enemyTuvSwing, attackValue);
           ProLogger.debug(
               "Removing amphib territory: "
                   + patd.getTerritory()
@@ -1279,6 +1293,26 @@ public class ProCombatMoveAi {
         }
       }
     }
+  }
+
+  /** The tuning's exception to dropping a landing whose transports are exposed (Hard: none). */
+  private boolean keepsLandingWithExposedTransports(
+      final ProTerritory patd,
+      final ProBattleResult result,
+      final double enemyTuvSwing,
+      final double attackValue) {
+    final boolean kept =
+        proData
+            .getTuning()
+            .keepsLandingWithExposedTransports(
+                proData, patd.getTerritory(), result.getWinPercentage(), enemyTuvSwing, attackValue)
+            .isPresent();
+    if (kept) {
+      proData
+          .getRecorder()
+          .attackUnitsCleared(proData, patd, "kept_transports_exposed", enemyTuvSwing, attackValue);
+    }
+    return kept;
   }
 
   /**
@@ -1555,6 +1589,7 @@ public class ProCombatMoveAi {
         // Determine enemy counter-attack results
         boolean canHold = true;
         double enemyCounterTuvSwing = 0;
+        double enemyCounterWinPercentage = Double.NaN;
         if (enemyAttackOptions.getMax(t) != null
             && !ProMatches.territoryIsWaterAndAdjacentToOwnedFactory(player).test(t)) {
           List<Unit> remainingUnitsToDefendWith =
@@ -1581,6 +1616,7 @@ public class ProCombatMoveAi {
             }
           }
           canHold = canHoldAgainstCounterAttack(t, result2);
+          enemyCounterWinPercentage = result2.getWinPercentage();
           if (result2.getTuvSwing() > 0) {
             enemyCounterTuvSwing = result2.getTuvSwing();
           }
@@ -1654,15 +1690,31 @@ public class ProCombatMoveAi {
         }
 
         // Determine whether to remove attack
-        if (!patd.isStrafing()
-            && (capturesTooRarely(result)
-                || (isNeutral && !canHold)
-                || (attackValue < 0
-                    && (!isNeutral
-                        || allUnitsCanAttackOtherTerritory
-                        || result.getBattleRounds() >= 4)))) {
-          territoryToRemove = patd;
+        final ProAttackWorth worth =
+            new ProAttackWorth(
+                t,
+                result.getWinPercentage(),
+                result.isHasLandUnitRemaining(),
+                capturesTooRarely(result),
+                isNeutral,
+                canHold,
+                enemyCounterWinPercentage,
+                tuvSwing,
+                territoryValue,
+                enemyCounterTuvSwing,
+                attackValue,
+                allUnitsCanAttackOtherTerritory || result.getBattleRounds() >= 4);
+        String keptBy = null;
+        if (!patd.isStrafing() && worth.hardDrops()) {
+          // only an attack Hard drops for its value alone may be kept (Hard: never)
+          if (!worth.capturesTooRarely() && !(isNeutral && !canHold)) {
+            keptBy = proData.getTuning().keepsAttackNotWorthIt(proData, worth).orElse(null);
+          }
+          if (keptBy == null) {
+            territoryToRemove = patd;
+          }
         }
+        proData.getRecorder().attackWorth(proData, patd, worth, keptBy);
         ProLogger.debug(
             patd.getResultString()
                 + ", attackValue="
