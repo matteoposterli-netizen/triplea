@@ -1362,3 +1362,40 @@ degli sbarchi), `Italian` (+`amphibious_strafe`), JSON della strategia (firme). 
   `ContentDownloaderIntegrationTest` (scarica da internet, rete bloccata); `spotlessApply` segnala un
   errore del lint `expandwildcardimports` (Java-Parser), non del formato: la release non lo esegue.
 
+#### Autoplay in CI (run 42387525038, commit 68f095c, tutto verde)
+Release 8 min, autoplay 12 partite da 12 round (2 min 50 s - 7 min 24 s ciascuna). Nessuna vittoria
+entro 12 round. VC R12 medie Asse/Alleati: A/1 7.5/3.5, A/2 6/5, D/1 4.5/6.5, D/2 5.5/5.5, C/1 6/5,
+Hard 5/6. Lettura, probabilità media del piano reale / % round con lettura corretta, **R1-R8** (stessi
+round dell'autoplay precedente; 8bfb575 = 1 seme, 68f095c = media di 2 semi):
+
+| Config | Alleanza | 8bfb575 | 68f095c |
+|---|---|---|---|
+| A/1 | Asse | 59% / 100% | 40% / 43% |
+| A/1 | Alleati | 52% / 88% | 75% / 100% |
+| A/2 | Asse | 35% / 29% | 74% / 100% |
+| A/2 | Alleati | 50% / 88% | 70% / 100% |
+| D/1 | Asse | 53% / 86% | 56% / 71% |
+| D/1 | Alleati | 34% / 38% | 23% / 0% |
+| D/2 | Asse | 29% / 0% | 72% / 100% |
+| D/2 | Alleati | 26% / 25% | 23% / 6% |
+| C/1 | Asse | 56% / 100% | 48% / 43% |
+| C/1 | Alleati | 45% / 88% | 41% / 81% |
+
+- Migliorato: Asse distingue 2 (A/2, D/2 100% corretta); Alleati leggono A al 70-75% stabile.
+- **D non riconosciuto (peggio)**: nelle partite D la Germania di Pro+ non porta MAI unità di terra
+  nella lista "sud" né attacca nel Mediterraneo (misure sempre 0 in R1-R12, 4 partite), TUV a Est
+  0.4-0.5 come in A, 0 trasporti tedeschi ⇒ gli indizi di A "pochi trasporti" e "poche unità al sud"
+  valgono 1 anche in D. Il piano D, per la Germania, non produce il comportamento della sua firma:
+  problema del piano (logistica D: raccolta Greater Southern Germany/Northern Italy/Southern Italy),
+  non della lettura. Unico indizio D funzionante: nessuna guerra all'URSS al R3.
+- **Asse legge peggio 1 nei primi round** (A/1, C/1): (a) "attacchi alleati su territori italiani vs
+  costa tedesca" vale 1 per il piano 2 già al R1-R2 anche col piano 1 (l'UK attacca Ethiopia/Italian
+  Somaliland/flotta italiana con la logica di Hard in ogni piano) e, non essendoci poi attacchi né in
+  Italia né sulla costa tedesca, la quota resta "non disponibile" e la memoria **non decade mai**
+  (difetto di progetto: per le quote di eventi serve decadimento anche senza misura); (b) anche col
+  piano 1 l'UK piazza ~44% in Sud Africa (acquisti di Hard fuori dal mix). Valori non ritoccati.
+- Primo sbarco alleato: R1 Holland Belgium in 2 partite (unità britanniche a fine round in un
+  territorio tedesco senza battaglia registrata: da verificare), altrimenti R6-R12 (Norway, Denmark,
+  Holland Belgium, Greece); D/1 seme 2 nessuno. Trasporti a fine partita: USA 9-22 (Hard 31-35), UK
+  1-12 (Hard 14-18), Germania 0 ovunque, Italia 0-22.
+
