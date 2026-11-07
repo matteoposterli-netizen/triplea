@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import javax.annotation.Nullable;
 
 /**
@@ -50,6 +51,13 @@ public final class ProPlusTuning implements ProTuning {
    * 60 or more).
    */
   static final double ATTACK_PRIORITY_VICTORY_CITY_WEIGHT = 10;
+
+  /**
+   * Enemy win% above which the non-combat move keeps or brings back units to each own capital (step
+   * 3b-bis), with or without a plan; also where a plan's minimum purchase share stops limiting the
+   * defense of a factory or the capital. Hard has no such guard.
+   */
+  public static final double CAPITAL_GUARD_THRESHOLD = 25;
 
   /** {@link #keepsAttackNotWorthIt}: kept by the risk level's tolerance. */
   public static final String KEPT_BY_RISK = "risk";
@@ -179,7 +187,12 @@ public final class ProPlusTuning implements ProTuning {
                         o.minimo()))
             .toList();
     return new ProPurchaseOrders(
-        ordersLabel(plan, l), mix, mandatory, l.piazzamento(), plan.territoriAmmassamento(l));
+        ordersLabel(plan, l),
+        mix,
+        mandatory,
+        l.piazzamento(),
+        plan.territoriAmmassamento(l),
+        l.quotaMinimaPiano());
   }
 
   /**
@@ -199,12 +212,18 @@ public final class ProPlusTuning implements ProTuning {
                                 ordersLabel(plan, l),
                                 Optional.ofNullable(l.fronteAmmassamento()).orElse(""),
                                 plan.territoriAmmassamento(l),
-                                l.forza())));
+                                l.forza(),
+                                l.aerei())));
   }
 
   /** Eg: "A Barbarossa, Germans R1-3". */
   private static String ordersLabel(final PianoAttivo plan, final Strategia.Logistica l) {
     return plan.getPiano().label() + ", " + plan.getNazione() + " " + l.label();
+  }
+
+  @Override
+  public OptionalDouble capitalGuardThreshold(final ProData proData) {
+    return OptionalDouble.of(CAPITAL_GUARD_THRESHOLD);
   }
 
   @Override

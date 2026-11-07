@@ -6,6 +6,7 @@ import games.strategy.engine.data.Territory;
 import games.strategy.triplea.ai.pro.data.ProPurchaseTerritory;
 import games.strategy.triplea.ai.pro.data.ProTerritory;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
@@ -101,4 +102,21 @@ public interface ProDecisionRecorder {
       ProStagingOrders orders,
       ProStagingOrders.Result result,
       Map<Territory, ProTerritory> moveMap) {}
+
+  /**
+   * The defense of threatened land in the purchase was limited by a plan's minimum share ({@code
+   * share}), before the plan's purchases.
+   */
+  default void purchaseDefenseShare(
+      ProData proData, ProPurchaseOrders orders, ProPurchaseOrders.DefenseShare share) {}
+
+  /** The air units of the non-combat move landed with a plan's staging pull. */
+  default void airStaging(
+      ProData proData, ProStagingOrders orders, ProStagingOrders.AirResult result) {}
+
+  /**
+   * The capital guard of the non-combat move checked the own capitals ({@code results}, one per
+   * capital), just before the moves are made.
+   */
+  default void capitalGuard(ProData proData, List<ProCapitalGuard.Result> results) {}
 }

@@ -242,6 +242,10 @@ public final class Strategia {
    *     territories when {@code territoriAmmassamento} is empty)
    * @param territoriAmmassamento gathering territories and sea zones the reserves move towards
    * @param forza strength of the pull towards the gathering territories (1 = normal, 0 = none)
+   * @param aerei whether the air units land towards the gathering territories too (step 3b-bis)
+   * @param quotaMinimaPiano percent of the turn's PUs reserved for the plan's purchases: the
+   *     defense of threatened land may take more only for a factory or the capital at risk of being
+   *     taken (step 3b-bis); 0 = no reserve
    */
   public record Logistica(
       int daRound,
@@ -251,7 +255,9 @@ public final class Strategia {
       List<String> piazzamento,
       @Nullable String fronteAmmassamento,
       List<String> territoriAmmassamento,
-      double forza) {
+      double forza,
+      boolean aerei,
+      double quotaMinimaPiano) {
     public boolean covers(final int round) {
       return round >= daRound && round <= aRound;
     }
@@ -460,6 +466,11 @@ public final class Strategia {
     }
     final JsonObject staging =
         l.has("ammassamento") ? l.getAsJsonObject("ammassamento") : new JsonObject();
+    final double quota =
+        l.has("quota_minima_piano") ? l.get("quota_minima_piano").getAsDouble() : 0;
+    if (quota < 0 || quota > 100) {
+      throw new IllegalArgumentException("quota_minima_piano fuori da 0-100: " + where);
+    }
     return new Logistica(
         from,
         to,
@@ -468,7 +479,9 @@ public final class Strategia {
         strings(l, "piazzamento"),
         string(staging, "fronte"),
         strings(staging, "territori"),
-        staging.has("forza") ? staging.get("forza").getAsDouble() : 1);
+        staging.has("forza") ? staging.get("forza").getAsDouble() : 1,
+        staging.has("aerei") && staging.get("aerei").getAsBoolean(),
+        quota);
   }
 
   private static void checkCategory(

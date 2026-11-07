@@ -6,6 +6,7 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Properties;
 import java.util.Optional;
+import java.util.OptionalDouble;
 
 /**
  * The Pro AI numbers that a variant of the AI may change. Every default returns exactly the value
@@ -143,5 +144,15 @@ public interface ProTuning {
    */
   default Optional<ProStagingOrders> stagingOrders(final ProData proData) {
     return Optional.empty();
+  }
+
+  /**
+   * Enemy win% above which the non-combat move keeps units in, or brings units back to, each own
+   * capital ({@link ProCapitalGuard}), and above which a factory or capital may take more than the
+   * defense share a plan leaves ({@link ProPurchaseOrders#minimumShare}). Empty by default: Hard
+   * and Hard Beta have no such guard.
+   */
+  default OptionalDouble capitalGuardThreshold(final ProData proData) {
+    return OptionalDouble.empty();
   }
 }

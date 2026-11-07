@@ -49,15 +49,18 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.annotation.Nullable;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.triplea.java.collections.CollectionUtils;
 
@@ -70,6 +73,14 @@ class ProNonCombatMoveAi {
   private GamePlayer player;
   private Map<Unit, Territory> unitTerritoryMap;
   private ProTerritoryManager territoryManager;
+
+  /** A plan's staging orders that also pull the air units (Pro+); null: air lands as Hard does. */
+  private @Nullable ProStagingOrders airStaging;
+
+  /**
+   * Where the air units landed with {@link #airStaging} (last {@link #moveUnitsToBestTerritories}).
+   */
+  private final Map<Unit, Territory> airStaged = new HashMap<>();
 
   ProNonCombatMoveAi(final AbstractProAi ai) {
     calc = ai.getCalc();
@@ -155,6 +166,7 @@ class ProNonCombatMoveAi {
                     territoryManager.getDefendTerritories(),
                     territoryValueMap,
                     seaTerritoryValueMap));
+    airStaging = stagingOrders.filter(ProStagingOrders::air).orElse(null);
     final Map<Territory, Double> evaderSeaValueMap =
         proData.isBeta() ? findEvaderSeaValues(territoriesThatCantBeHeld) : Map.of();
     Map<Territory, ProTerritory> moveMap = territoryManager.getDefendOptions().getTerritoryMap();
@@ -201,6 +213,14 @@ class ProNonCombatMoveAi {
       moveUnitsToBestTerritories(isCombatMove, evaderSeaValueMap);
     }
 
+    // Pro+: minimum garrison of the capitals against the enemy's best attack next turn
+    final OptionalDouble capitalThreshold = proData.getTuning().capitalGuardThreshold(proData);
+    if (capitalThreshold.isPresent()) {
+      final List<ProCapitalGuard.Result> guard =
+          new ProCapitalGuard(proData, calc).apply(moveMap, capitalThreshold.getAsDouble());
+      proData.getRecorder().capitalGuard(proData, guard);
+    }
+
     // Determine where to move infra units
     factoryMoveMap = moveInfraUnits(isCombatMove, factoryMoveMap, infraUnitMoveMap);
 
@@ -220,7 +240,11 @@ class ProNonCombatMoveAi {
 
     if (stagingOrders.isPresent()) {
       proData.getRecorder().staging(proData, stagingOrders.get(), staging.orElseThrow(), moveMap);
+      if (airStaging != null) {
+        proData.getRecorder().airStaging(proData, airStaging, airStagingResult(moveMap));
+      }
     }
+    airStaging = null;
 
     // Calculate move routes and perform moves
     doMove(isCombatMove, moveMap, moveDel, data, player);
@@ -2171,6 +2195,8 @@ class ProNonCombatMoveAi {
             .collect(Collectors.toList());
 
     // Move air units to safe territory with most attack options
+    airStaged.clear();
+    final Map<Territory, Integer> airStagingDistance = new HashMap<>();
     for (final Iterator<Unit> it = unitMoveMap.keySet().iterator(); it.hasNext(); ) {
       final Unit u = it.next();
       if (Matches.unitIsNotAir().test(u)) {
@@ -2178,6 +2204,7 @@ class ProNonCombatMoveAi {
       }
       double maxAirValue = 0;
       Territory maxTerritory = null;
+      final Map<Territory, Double> safeAirValues = new LinkedHashMap<>();
       for (final Territory t : unitMoveMap.get(u)) {
         final ProTerritory proTerritory = moveMap.get(t);
         if (!proTerritory.isCanHold()) {
@@ -2268,6 +2295,7 @@ class ProNonCombatMoveAi {
           maxAirValue = airValue;
           maxTerritory = t;
         }
+        safeAirValues.put(t, airValue);
         ProLogger.trace(
             String.format(
                 "Safe territory: %s, airValue=%s, numLandAttackOptions=%s, "
@@ -2277,6 +2305,12 @@ class ProNonCombatMoveAi {
                 numLandAttackTerritories,
                 numSeaAttackTerritories,
                 numEnemyAttackTerritories));
+      }
+      if (airStaging != null && !safeAirValues.isEmpty()) {
+        maxTerritory = stagedAirTerritory(safeAirValues, maxTerritory, airStagingDistance);
+        if (maxTerritory != null) {
+          airStaged.put(u, maxTerritory);
+        }
       }
       if (maxTerritory != null) {
         ProLogger.debug(
@@ -2328,6 +2362,94 @@ class ProNonCombatMoveAi {
         it.remove();
       }
     }
+  }
+
+  /**
+   * Pro+ air staging: among the safe territories (with Hard's air value), the one with the highest
+   * air value plus {@code strength × best air value / (1 + distance)} (distance by air from the
+   * nearest gathering territory, up to {@link ProStagingOrders#RANGE}); Hard's choice on ties.
+   */
+  private @Nullable Territory stagedAirTerritory(
+      final Map<Territory, Double> safeAirValues,
+      final @Nullable Territory hardChoice,
+      final Map<Territory, Integer> distanceCache) {
+    final double scale =
+        Math.max(
+            1, safeAirValues.values().stream().mapToDouble(Double::doubleValue).max().orElse(1));
+    Territory best = hardChoice;
+    double bestScore =
+        hardChoice == null
+            ? Double.NEGATIVE_INFINITY
+            : airScore(hardChoice, safeAirValues.get(hardChoice), scale, distanceCache);
+    for (final Map.Entry<Territory, Double> e : safeAirValues.entrySet()) {
+      final double score = airScore(e.getKey(), e.getValue(), scale, distanceCache);
+      if (score > bestScore) {
+        bestScore = score;
+        best = e.getKey();
+      }
+    }
+    return best;
+  }
+
+  private double airScore(
+      final Territory t,
+      final double airValue,
+      final double scale,
+      final Map<Territory, Integer> distanceCache) {
+    final int distance = airStagingDistance(t, distanceCache);
+    if (distance < 0 || distance > ProStagingOrders.RANGE) {
+      return airValue;
+    }
+    return airValue + airStaging.strength() * scale / (1.0 + distance);
+  }
+
+  /** Distance by air from {@code t} to the nearest land gathering territory; -1 if none. */
+  private int airStagingDistance(final Territory t, final Map<Territory, Integer> cache) {
+    return cache.computeIfAbsent(
+        t,
+        from -> {
+          final List<Territory> targets = new ArrayList<>();
+          for (final String name : airStaging.territories()) {
+            final Territory target = data.getMap().getTerritoryOrNull(name);
+            if (target != null && !target.isWater()) {
+              targets.add(target);
+            }
+          }
+          return ProStaging.distance(
+              data, from, targets, ProMatches.territoryCanMoveAirUnits(data, player, true));
+        });
+  }
+
+  /** The diary's summary of {@link #airStaged}: destinations and distances before/after. */
+  private ProStagingOrders.AirResult airStagingResult(final Map<Territory, ProTerritory> moveMap) {
+    final Map<String, Map<String, Integer>> units = new TreeMap<>();
+    final Map<Territory, Integer> cache = new HashMap<>();
+    int closer = 0;
+    int same = 0;
+    int farther = 0;
+    for (final Map.Entry<Unit, Territory> e : airStaged.entrySet()) {
+      final Unit u = e.getKey();
+      final Territory to = e.getValue();
+      if (moveMap.get(to) == null || !moveMap.get(to).getUnits().contains(u)) {
+        continue; // moved again later (capital guard)
+      }
+      units
+          .computeIfAbsent(to.getName(), k -> new TreeMap<>())
+          .merge(u.getType().getName(), 1, Integer::sum);
+      final Territory from = unitTerritoryMap.get(u);
+      final int before = from == null ? -1 : airStagingDistance(from, cache);
+      final int after = airStagingDistance(to, cache);
+      final int b = before < 0 ? Integer.MAX_VALUE : before;
+      final int a = after < 0 ? Integer.MAX_VALUE : after;
+      if (a < b) {
+        closer++;
+      } else if (a == b) {
+        same++;
+      } else {
+        farther++;
+      }
+    }
+    return new ProStagingOrders.AirResult(units, closer, same, farther);
   }
 
   // If carrier has dependent allied fighters then move them too

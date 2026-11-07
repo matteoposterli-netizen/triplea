@@ -11,6 +11,7 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.ai.pro.AbstractProAi;
 import games.strategy.triplea.ai.pro.ProAttackWorth;
+import games.strategy.triplea.ai.pro.ProCapitalGuard;
 import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.ProDecisionRecorder;
 import games.strategy.triplea.ai.pro.ProPurchaseOrders;
@@ -95,6 +96,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   private int purchaseSpent;
   private @Nullable ProPurchaseOrders planOrders;
   private @Nullable ProPurchaseOrders.Result planResult;
+  private @Nullable ProPurchaseOrders.DefenseShare defenseShare;
   private Map<String, Double> unitCosts = Map.of();
 
   // combat plan
@@ -190,6 +192,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     purchaseWritten = false;
     planOrders = null;
     planResult = null;
+    defenseShare = null;
     planFrozen = false;
     attacksWritten = false;
     attacks = new LinkedHashMap<>();
@@ -484,10 +487,89 @@ public final class DiaryRecorder implements ProDecisionRecorder {
         sb.append('\n');
       }
     }
+    if (defenseShare != null) {
+      sb.append(defenseShareText(defenseShare));
+    }
     if (planOrders != null && planResult != null) {
       sb.append(planPurchaseText(planOrders, planResult));
     }
     diary.text(sb.toString());
+  }
+
+  @Override
+  public void purchaseDefenseShare(
+      final ProData proData,
+      final ProPurchaseOrders orders,
+      final ProPurchaseOrders.DefenseShare share) {
+    guard(
+        () -> {
+          if (!active || !"purchase".equals(phase)) {
+            return;
+          }
+          defenseShare = share;
+          final JsonObject json = event("quota_piano");
+          json.addProperty("ordini", orders.label());
+          json.addProperty("pu", share.pus());
+          json.addProperty("quota_minima_piano", share.minimumShare());
+          json.addProperty("tetto_difesa", share.defenseCap());
+          json.addProperty("soglia_rischio", share.threshold());
+          final JsonObject critical = new JsonObject();
+          share.critical().forEach((t, r) -> critical.addProperty(t, round1(r)));
+          json.add("difesa_a_rischio", critical);
+          json.addProperty("pu_difesa_a_rischio", share.spentCritical());
+          final JsonObject limited = new JsonObject();
+          share.limited().forEach((t, r) -> limited.addProperty(t, round1(r)));
+          json.add("difesa_nel_tetto", limited);
+          json.addProperty("pu_difesa_nel_tetto", share.spentLimited());
+          json.addProperty("pu_al_piano", share.pusLeft());
+          diary.json(json);
+        });
+  }
+
+  /**
+   * Eg: "Quota del piano: almeno 70% di 35 PU al piano (difesa urgente fino a 10 PU): difesa 8 PU,
+   * al piano 27 PU (77%)" and why the defense took what it took.
+   */
+  private static String defenseShareText(final ProPurchaseOrders.DefenseShare share) {
+    final StringBuilder sb = new StringBuilder();
+    final int defense = share.spentCritical() + share.spentLimited();
+    sb.append(
+        String.format(
+            Locale.ROOT,
+            "  Quota del piano: almeno %s di %d PU al piano (difesa urgente fino a %d PU):"
+                + " difesa %d PU, al piano %d PU (%s)%n",
+            Italian.percent(share.minimumShare()),
+            share.pus(),
+            share.defenseCap(),
+            defense,
+            share.pusLeft(),
+            Italian.percent(100.0 * share.pusLeft() / Math.max(1, share.pus()))));
+    if (!share.critical().isEmpty()) {
+      sb.append(
+          String.format(
+              "    difesa senza tetto %d PU: fabbrica/capitale a rischio di essere presa (win%%"
+                  + " nemica oltre %s): %s%n",
+              share.spentCritical(),
+              Italian.percent(share.threshold()),
+              riskList(share.critical())));
+    }
+    if (!share.limited().isEmpty()) {
+      sb.append(
+          String.format(
+              "    difesa nel tetto %d PU: territori minacciati ma non a rischio di caduta: %s%n",
+              share.spentLimited(), riskList(share.limited())));
+    }
+    if (share.critical().isEmpty() && share.limited().isEmpty()) {
+      sb.append("    nessun territorio minacciato: tutti i PU al piano\n");
+    }
+    return sb.toString();
+  }
+
+  /** Eg: "Eastern United States 18%, Germany 34%". */
+  private static String riskList(final Map<String, Double> risks) {
+    return risks.entrySet().stream()
+        .map(e -> e.getKey() + " " + Italian.percent(e.getValue()))
+        .collect(Collectors.joining(", "));
   }
 
   @Override
@@ -745,6 +827,128 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           json.add("ferme", counts(stayed));
           diary.json(json);
         });
+  }
+
+  @Override
+  public void airStaging(
+      final ProData proData,
+      final ProStagingOrders orders,
+      final ProStagingOrders.AirResult result) {
+    guard(
+        () -> {
+          if (!active || !"noncombat".equals(phase)) {
+            return;
+          }
+          final int moved = result.closer() + result.same() + result.farther();
+          final StringBuilder sb = new StringBuilder();
+          sb.append(
+              String.format(
+                  Locale.ROOT,
+                  "    aerei verso la raccolta %d: %d avvicinati, %d alla stessa distanza, %d"
+                      + " allontanati%s%n",
+                  moved,
+                  result.closer(),
+                  result.same(),
+                  result.farther(),
+                  result.units().isEmpty()
+                      ? ""
+                      : "; atterraggi: "
+                          + result.units().entrySet().stream()
+                              .map(e -> e.getKey() + " " + Italian.units(e.getValue()))
+                              .collect(Collectors.joining("; "))));
+          sb.append(
+              "    Perche' (aerei): tra i territori dove Hard li considera al sicuro, ognuno"
+                  + " riceve un bonus = forza x miglior valore aereo / (1 + distanza in volo dalla"
+                  + " raccolta).\n");
+          diary.text(sb.toString());
+          final JsonObject json = event("ammassamento_aerei");
+          json.addProperty("ordini", orders.label());
+          json.addProperty("aerei", moved);
+          json.addProperty("avvicinati", result.closer());
+          json.addProperty("stessa_distanza", result.same());
+          json.addProperty("allontanati", result.farther());
+          final JsonObject dest = new JsonObject();
+          result.units().forEach((t, units) -> dest.add(t, counts(units)));
+          json.add("destinazioni", dest);
+          diary.json(json);
+        });
+  }
+
+  // ---------------------------------------------------------------- capital guard
+
+  @Override
+  public void capitalGuard(final ProData proData, final List<ProCapitalGuard.Result> results) {
+    guard(
+        () -> {
+          if (!active || !"noncombat".equals(phase)) {
+            return;
+          }
+          final StringBuilder sb = new StringBuilder();
+          for (final ProCapitalGuard.Result r : results) {
+            sb.append(capitalGuardText(r));
+            final JsonObject json = event("capitale");
+            json.addProperty("territorio", r.capital().getName());
+            json.addProperty("soglia", r.threshold());
+            json.addProperty("rischio_prima", round1(r.riskBefore()));
+            json.addProperty("rischio", round1(r.riskAfter()));
+            json.addProperty("guarnigione_prima", r.garrisonBefore());
+            json.addProperty("guarnigione", r.garrisonAfter());
+            json.add("trattenute", counts(r.kept()));
+            final JsonObject back = new JsonObject();
+            r.broughtBack().forEach((t, units) -> back.add(t, counts(units)));
+            json.add("riportate", back);
+            json.addProperty("non_difendibile", r.hopeless());
+            diary.json(json);
+          }
+          diary.text(sb.toString());
+        });
+  }
+
+  /**
+   * Eg: "Capitale: rischio stimato 34% -> 21% (soglia 25%), guarnigione 6 -> 9 unita' (trattenute:
+   * 2 fanterie; riportate: 1 artiglieria da Poland)".
+   */
+  public static String capitalGuardText(final ProCapitalGuard.Result r) {
+    final boolean changed = !r.kept().isEmpty() || !r.broughtBack().isEmpty();
+    final String risk =
+        changed
+            ? Italian.percent(r.riskBefore()) + " -> " + Italian.percent(r.riskAfter())
+            : Italian.percent(r.riskAfter());
+    final String garrison =
+        changed ? r.garrisonBefore() + " -> " + r.garrisonAfter() : "" + r.garrisonAfter();
+    final List<String> actions = new ArrayList<>();
+    if (!r.kept().isEmpty()) {
+      actions.add("trattenute: " + Italian.units(r.kept()));
+    }
+    if (!r.broughtBack().isEmpty()) {
+      actions.add(
+          "riportate: "
+              + r.broughtBack().entrySet().stream()
+                  .map(e -> Italian.units(e.getValue()) + " da " + e.getKey())
+                  .collect(Collectors.joining(", ")));
+    }
+    if (r.hopeless() && !changed) {
+      actions.add(
+          r.riskBefore() > r.threshold()
+              ? "non difendibile: anche con tutte le unita' che possono arrivare il rischio resta"
+                  + " sopra il "
+                  + Italian.percent(ProCapitalGuard.HOPELESS)
+                  + ", nessuna modifica"
+              : "nessuna azione");
+    } else if (r.riskAfter() > r.threshold()) {
+      actions.add(
+          "resta sopra la soglia con tutte le unita' disponibili: al prossimo acquisto la difesa"
+              + " della capitale viene prima del mix del piano");
+    } else if (!changed) {
+      actions.add("nessuna azione: sotto la soglia");
+    }
+    return String.format(
+        "  Capitale %s: rischio stimato %s (soglia %s), guarnigione %s unita' (%s)%n",
+        r.capital().getName(),
+        risk,
+        Italian.percent(r.threshold()),
+        garrison,
+        String.join("; ", actions));
   }
 
   /** Eg: "Poland 4 (Est, distanza 0, bonus +12)". */

@@ -393,6 +393,36 @@ Italia in B) ⇒ acquisti e movimenti di Hard.
   distanza e bonus, ferme, "Perche'". JSON: `acquisti_piano`, `ammassamento`.
 - Cache: `ProPlusTuning.plan` per (GameData, giocatore, round); il livello del cursore è letto a
   ogni uso. `ProPlusAi` svuota la cache dopo aver fissato il piano.
+- Step 3b-bis: `quota_minima_piano` (campo della voce di logistica, % dei PU del turno riservata al
+  piano) e `ammassamento.aerei` (true = anche gli aerei atterrano verso la raccolta). Categoria
+  `scorta` = [carrier, destroyer] (portaerei se i PU bastano, altrimenti cacciatorpediniere).
+
+### Guarnigione della capitale e quota del piano (step 3b-bis)
+
+- `ProTuning.capitalGuardThreshold` (default vuoto = Hard; Pro+ `ProPlusTuning.CAPITAL_GUARD_THRESHOLD`
+  = 25, sempre attiva, con o senza piano). `ai/pro/ProCapitalGuard`: alla fine di
+  `ProNonCombatMoveAi.doNonCombatMove` (dopo il ciclo "difesa della capitale" di Hard, prima delle
+  mosse) per ogni capitale propria calcola la win% del massimo attacco nemico (stesse unità nemiche
+  massime che usa la difesa di Hard: **solo nazioni già in guerra**) contro i difensori dopo le mosse
+  (unità assegnate, ferme, piazzamenti del turno). Sopra soglia: trattiene le unità che stavano
+  uscendo dalla capitale, poi riporta unità di terra (più economiche prima) e aerei che possono
+  arrivarci, una alla volta (max 40 calcoli), escluse quelle su trasporti. Se anche con tutte resta
+  ≥ 90% (`HOPELESS`) non cambia nulla. Acquisti: la difesa di Hard (`defend_land`) viene già prima
+  del mix e per la capitale punta sotto il 10%: nessun passo nuovo.
+- Quota: `ProPurchaseOrders.minimumShare`; in `ProPurchaseAi.purchase`, se > 0,
+  `purchaseDefendersWithinPlanShare`: prima i territori minacciati con fabbrica o capitale e win%
+  nemica (prima dell'acquisto) > soglia guarnigione, senza tetto; poi gli altri con al massimo
+  `PU iniziali × (100 − quota)%` meno quanto già speso (PU accantonati con
+  `ProResourceTracker.reserve/release`). I territori di piazzamento di terra hanno tutti una
+  fabbrica, quindi il tetto vale per quelli con rischio ≤ 25%.
+- Aerei (`ProStagingOrders.air`): nel ciclo "aerei nel territorio sicuro con più opzioni d'attacco" di
+  `moveUnitsToBestTerritories`, tra i territori sicuri vince valore aereo di Hard + forza × miglior
+  valore aereo / (1 + distanza in volo dalla raccolta di terra); parità ⇒ scelta di Hard.
+- Diario: "Capitale X: rischio stimato A% -> B% (soglia 25%), guarnigione N -> M unita' (trattenute
+  ...; riportate ... da ...)" nel movimento; "Quota del piano: almeno Q% di P PU al piano (difesa
+  urgente fino a T PU): difesa D PU, al piano R PU" + righe "difesa senza tetto" / "difesa nel
+  tetto" negli acquisti; "aerei verso la raccolta" nell'ammassamento. JSON `capitale`,
+  `quota_piano`, `ammassamento_aerei`.
 
 ## Log degli step
 
@@ -880,3 +910,36 @@ Pro+ Equilibrato, 6 round, dadi di gioco seed 1; partite A/1, B/2, N/3)
   per la difesa di Hard: "allontanate").
 - Capitali: Germania a 1 unità a fine R3 in B (riserve spinte verso Holland Belgium e Polonia; in
   N anche Hard scende a 3 al R1). Nessuna caduta di capitale in 6 round in nessuna partita.
+
+### Step 3b-bis — guarnigione capitale, quota del piano, dati Sea Lion (2026-11-07)
+
+Vedi "Guarnigione della capitale e quota del piano". Classi Pro toccate (solo agganci, default =
+Hard): `ProTuning` (+ `capitalGuardThreshold`), `ProPurchaseOrders` (+ `minimumShare`,
+`DefenseShare`), `ProStagingOrders` (+ `air`, `AirResult`), `ProDecisionRecorder` (+ 3 hook),
+`ProPurchaseAi`, `ProNonCombatMoveAi`, `ProResourceTracker` (+ `reserve/release`). Nuova
+`ProCapitalGuard`. Dati: USA quota 70% (piani 1 e 2), UK 40% (piano 1); Sea Lion R1 3 trasporti +
+scorta nel Baltico (114/113), R2 2 trasporti + mix aerei 40/fanteria 35/artiglieria 25, aerei
+nell'ammassamento B (Germania R1-3) e D (Italia).
+
+#### Test
+- `CapitalGuardTest` (trattenute prima, poi riportate, capitale persa comunque = nessuna modifica,
+  nessuna minaccia, riga del diario), `PlanShareTest` (capitale a rischio oltre il tetto; altrimenti
+  difesa nel tetto; senza quota e Hard nessun ramo nuovo — confronto delle unità impossibile:
+  `ProPurchaseUtils.randomizePurchaseOption` usa `Math.random`), `PlanLogisticsTest` (Sea Lion R1/R2,
+  aerei B sì / A no), `StrategiaFileTest` (quote, aerei, scorta, quota fuori 0-100 rifiutata).
+- Golden Hard e `DiaryNeutralityTest` invariati e verdi: 310 test `ai.*` + `:ai:test` verdi.
+
+#### Banco Europe 1940 (1 partita, 3 round, dadi seed 1, tutti Pro+ Equilibrato, Asse B / Alleati 1; 112 s)
+- Capitale tedesca: R1 rischio 100% → 25% (5 fanterie trattenute); R2 0% con 0 unità, R3 0% con 3:
+  nessun nemico in guerra può arrivarci (la stima non conta l'URSS finché non è in guerra).
+- USA: R1 quota 70%, ma Central United States a rischio 100% (fabbrica) ⇒ difesa senza tetto 12 PU,
+  al piano 23/35 (66%); R2 35/35, R3 59/59 al piano. UK R1 20/29 (69%), R2-3 100%.
+- Trasporti tedeschi: 4 a fine R1 (1 iniziale + 3), 6 a fine R2, tutti fermi in 114 Sea Zone;
+  distrutti dall'URSS (1 caccia + 1 tattico) al R3. Da 114 SZ il Regno Unito è fuori portata (3 zone):
+  win% su United Kingdom R1 0%, R2 0%, R3 non candidato; R4 non misurato (tetto 3 round).
+  Problema: la "zona più sicura del Baltico" è una trappola per Sea Lion; l'ammassamento navale
+  (scala mare 1-2.5) non li porta verso 112 SZ.
+- Aerei (B): R1 12 su 12 verso Western Germany; R2 8 aerei finiti a Libya/Tobruk ("allontanati"):
+  la scelta per valore aereo di Hard (attacchi possibili nel Mediterraneo) supera il bonus quando la
+  raccolta più vicina (Holland Belgium appena presa) non è sicura. Da rivedere.
+

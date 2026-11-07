@@ -47,6 +47,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -458,13 +459,20 @@ class ProPurchaseAi {
     // Prioritize land territories that need defended and purchase additional defenders
     final List<ProPlaceTerritory> needToDefendLandTerritories =
         prioritizeTerritoriesToDefend(purchaseTerritories, true);
-    purchaseDefenders(
-        purchaseTerritories,
-        needToDefendLandTerritories,
-        purchaseOptions.getLandFodderOptions(),
-        purchaseOptions.getLandZeroMoveOptions(),
-        purchaseOptions.getAirOptions(),
-        true);
+    final Optional<ProPurchaseOrders> planOrders = proData.getTuning().purchaseOrders(proData);
+    if (planOrders.isPresent() && planOrders.get().minimumShare() > 0) {
+      // Pro+: a share of the PUs is reserved for the plan, unless a factory or capital is at risk
+      purchaseDefendersWithinPlanShare(
+          purchaseTerritories, needToDefendLandTerritories, purchaseOptions, planOrders.get());
+    } else {
+      purchaseDefenders(
+          purchaseTerritories,
+          needToDefendLandTerritories,
+          purchaseOptions.getLandFodderOptions(),
+          purchaseOptions.getLandZeroMoveOptions(),
+          purchaseOptions.getAirOptions(),
+          true);
+    }
     proData.getRecorder().purchaseStep(proData, "defend_land", purchaseTerritories, Map.of());
     if (proData.isBeta()) {
       purchaseCapitalDefenceIfCooked(purchaseTerritories, purchaseOptions);
@@ -493,25 +501,22 @@ class ProPurchaseAi {
     }
 
     // A strategy plan's purchase orders (Pro+): after urgent defense, the PUs left follow its mix
-    proData
-        .getTuning()
-        .purchaseOrders(proData)
-        .ifPresent(
-            orders -> {
-              final ProPurchaseOrders.Result result =
-                  new ProPlanPurchase(
-                          orders,
-                          proData,
-                          startOfTurnData,
-                          resourceTracker,
-                          territoryManager,
-                          purchaseTerritories,
-                          purchaseOptions,
-                          this::addUnitsToPlace)
-                      .buy();
-              proData.getRecorder().purchaseOrders(proData, orders, result);
-              proData.getRecorder().purchaseStep(proData, "plan", purchaseTerritories, Map.of());
-            });
+    planOrders.ifPresent(
+        orders -> {
+          final ProPurchaseOrders.Result result =
+              new ProPlanPurchase(
+                      orders,
+                      proData,
+                      startOfTurnData,
+                      resourceTracker,
+                      territoryManager,
+                      purchaseTerritories,
+                      purchaseOptions,
+                      this::addUnitsToPlace)
+                  .buy();
+          proData.getRecorder().purchaseOrders(proData, orders, result);
+          proData.getRecorder().purchaseStep(proData, "plan", purchaseTerritories, Map.of());
+        });
 
     // Prioritize land place options purchase AA then land units
     final List<ProPlaceTerritory> prioritizedLandTerritories =
@@ -775,6 +780,75 @@ class ProPurchaseAi {
         }
       }
     }
+  }
+
+  /**
+   * Defense of threatened land with a plan's minimum share (Pro+): the territories with a factory
+   * or the capital whose enemy win% is above the capital guard threshold are defended first, with
+   * every PU; the other threatened territories only with what is left of the defense share ({@code
+   * 100 - minimumShare}% of the PUs at the start of the purchase).
+   */
+  private void purchaseDefendersWithinPlanShare(
+      final Map<Territory, ProPurchaseTerritory> purchaseTerritories,
+      final List<ProPlaceTerritory> needToDefend,
+      final ProPurchaseOptionMap purchaseOptions,
+      final ProPurchaseOrders orders) {
+    final Resource pus = data.getResourceList().getResourceOrThrow(Constants.PUS);
+    final int start = resourceTracker.getRemaining(pus);
+    final double threshold =
+        proData.getTuning().capitalGuardThreshold(proData).orElse(100 - proData.getWinPercentage());
+    final List<ProPlaceTerritory> critical = new ArrayList<>();
+    final List<ProPlaceTerritory> limited = new ArrayList<>();
+    final Map<String, Double> criticalRisk = new LinkedHashMap<>();
+    final Map<String, Double> limitedRisk = new LinkedHashMap<>();
+    for (final ProPlaceTerritory ppt : needToDefend) {
+      final Territory t = ppt.getTerritory();
+      final double risk = ppt.getMinBattleResult().getWinPercentage();
+      final boolean factoryOrCapital =
+          t.equals(proData.getMyCapital())
+              || ProMatches.territoryHasInfraFactoryAndIsOwnedLand(player).test(t);
+      if (factoryOrCapital && risk > threshold) {
+        critical.add(ppt);
+        criticalRisk.put(t.getName(), risk);
+      } else {
+        limited.add(ppt);
+        limitedRisk.put(t.getName(), risk);
+      }
+    }
+    purchaseDefenders(
+        purchaseTerritories,
+        critical,
+        purchaseOptions.getLandFodderOptions(),
+        purchaseOptions.getLandZeroMoveOptions(),
+        purchaseOptions.getAirOptions(),
+        true);
+    final int afterCritical = resourceTracker.getRemaining(pus);
+    final int defenseCap = (int) Math.floor(start * (100 - orders.minimumShare()) / 100);
+    final int allowed = Math.max(0, defenseCap - (start - afterCritical));
+    final int reserved = Math.max(0, afterCritical - allowed);
+    resourceTracker.reserve(pus, reserved);
+    purchaseDefenders(
+        purchaseTerritories,
+        limited,
+        purchaseOptions.getLandFodderOptions(),
+        purchaseOptions.getLandZeroMoveOptions(),
+        purchaseOptions.getAirOptions(),
+        true);
+    resourceTracker.release(pus, reserved);
+    final int end = resourceTracker.getRemaining(pus);
+    final ProPurchaseOrders.DefenseShare share =
+        new ProPurchaseOrders.DefenseShare(
+            start,
+            orders.minimumShare(),
+            defenseCap,
+            threshold,
+            criticalRisk,
+            start - afterCritical,
+            limitedRisk,
+            afterCritical - end,
+            end);
+    ProLogger.info("[Pro+] Plan share in the defense purchase: " + share);
+    proData.getRecorder().purchaseDefenseShare(proData, orders, share);
   }
 
   private void findDefendersInPlaceTerritories(

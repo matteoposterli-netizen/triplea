@@ -209,8 +209,9 @@ class StrategiaFileTest {
     final Strategia.Logistica seaLion =
         axis.piano("B").orElseThrow().logistica("Germans", 1).orElseThrow();
     assertThat(seaLion.obbligati())
-        .containsExactly(
-            new Strategia.Obbligo("trasporti", 2), new Strategia.Obbligo("cacciatorpediniere", 1));
+        .containsExactly(new Strategia.Obbligo("trasporti", 3), new Strategia.Obbligo("scorta", 1));
+    assertThat(seaLion.piazzamento()).startsWith("114 Sea Zone", "113 Sea Zone");
+    assertThat(s.getCategorie().get("scorta")).containsExactly("carrier", "destroyer");
     assertThat(axis.piano("B").orElseThrow().logistica("Germans", 5).orElseThrow())
         .isEqualTo(
             new Strategia.Logistica(
@@ -221,7 +222,9 @@ class StrategiaFileTest {
                 barbarossa.piazzamento(),
                 "Est",
                 barbarossa.territoriAmmassamento(),
-                1));
+                1,
+                false,
+                0));
     // the neutral plans give no orders: Hard's purchase and moves
     assertThat(axis.piano("N").orElseThrow().logistica()).isEmpty();
     assertThat(axis.piano("B").orElseThrow().logistica("Italians", 1)).isEmpty();
@@ -284,5 +287,60 @@ class StrategiaFileTest {
     assertThatThrownBy(() -> Strategia.parse(new StringReader(json)))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("100");
+  }
+
+  @Test
+  void planShareAndAirStagingOfStep3bBis() throws IOException {
+    final Strategia s = europe();
+    final Strategia.Alleanza allies = s.alleanza("Allies").orElseThrow();
+    assertThat(allies.piano("1").orElseThrow().logistica("Americans", 1).orElseThrow())
+        .extracting(Strategia.Logistica::quotaMinimaPiano)
+        .isEqualTo(70.0);
+    assertThat(allies.piano("1").orElseThrow().logistica("Americans", 5).orElseThrow())
+        .extracting(Strategia.Logistica::quotaMinimaPiano)
+        .isEqualTo(70.0);
+    assertThat(allies.piano("2").orElseThrow().logistica("Americans", 1).orElseThrow())
+        .extracting(Strategia.Logistica::quotaMinimaPiano)
+        .isEqualTo(70.0);
+    assertThat(allies.piano("1").orElseThrow().logistica("British", 1).orElseThrow())
+        .extracting(Strategia.Logistica::quotaMinimaPiano)
+        .isEqualTo(40.0);
+    // nowhere else
+    assertThat(allies.piano("2").orElseThrow().logistica("British", 1).orElseThrow())
+        .extracting(Strategia.Logistica::quotaMinimaPiano)
+        .isEqualTo(0.0);
+    assertThat(allies.piano("3").orElseThrow().logistica("Americans", 1).orElseThrow())
+        .extracting(Strategia.Logistica::quotaMinimaPiano)
+        .isEqualTo(0.0);
+
+    final Strategia.Alleanza axis = s.alleanza("Axis").orElseThrow();
+    for (final int round : List.of(1, 2, 3)) {
+      assertThat(axis.piano("B").orElseThrow().logistica("Germans", round).orElseThrow().aerei())
+          .isTrue();
+    }
+    assertThat(axis.piano("B").orElseThrow().logistica("Germans", 4).orElseThrow().aerei())
+        .isFalse();
+    assertThat(axis.piano("D").orElseThrow().logistica("Italians", 1).orElseThrow().aerei())
+        .isTrue();
+    assertThat(axis.piano("A").orElseThrow().logistica("Germans", 1).orElseThrow().aerei())
+        .isFalse();
+    final Strategia.Logistica seaLionR2 =
+        axis.piano("B").orElseThrow().logistica("Germans", 2).orElseThrow();
+    assertThat(seaLionR2.obbligati()).containsExactly(new Strategia.Obbligo("trasporti", 2));
+    assertThat(seaLionR2.mix()).containsKeys("aerei", "fanteria", "artiglieria");
+    assertThat(seaLionR2.territoriAmmassamento())
+        .contains("Holland Belgium", "Normandy Bordeaux", "Denmark");
+  }
+
+  @Test
+  void aPlanShareOutside0To100IsRefused() {
+    final String json =
+        "{\"categorie\":{\"fanteria\":[\"infantry\"]},\"alleanze\":{\"Axis\":{\"piani\":"
+            + "[{\"id\":\"X\",\"logistica\":{\"Germans\":[{\"quota_minima_piano\":120,"
+            + "\"acquisti\":{\"mix\":{\"fanteria\":50}}}]}}]}}}";
+
+    assertThatThrownBy(() -> Strategia.parse(new StringReader(json)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("quota_minima_piano");
   }
 }

@@ -49,6 +49,16 @@ public class ProResourceTracker {
     }
   }
 
+  /** Sets {@code amount} of {@code resource} aside: it counts as spent until {@link #release}. */
+  public void reserve(final Resource resource, final int amount) {
+    resources.add(resource, -amount);
+  }
+
+  /** Gives back what {@link #reserve} set aside. */
+  public void release(final Resource resource, final int amount) {
+    resources.add(resource, amount);
+  }
+
   public void confirmTempPurchases() {
     resources.subtract(tempPurchases);
     clearTempPurchases();

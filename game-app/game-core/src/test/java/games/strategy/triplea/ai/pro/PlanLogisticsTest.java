@@ -110,12 +110,13 @@ class PlanLogisticsTest extends AbstractClientSettingTestCase {
   }
 
   @Test
-  void seaLionBuysTwoTransportsAndADestroyerFirstAndPlacesThemAtSea() {
+  void seaLionBuysThreeTransportsAndAnEscortFirstAndPlacesThemAtSea() {
     final Purchase seaLion = purchase("B");
 
     final ProPurchaseOrders.Result result = seaLion.result();
-    assertThat(result.units().get("trasporti")).containsEntry("transport", 2);
-    assertThat(result.units().get("cacciatorpediniere")).containsEntry("destroyer", 1);
+    assertThat(result.units().get("trasporti")).containsEntry("transport", 3);
+    // 30 PUs: 3 transports (21) leave too little for a carrier (16), so a destroyer
+    assertThat(result.units().get("scorta")).containsEntry("destroyer", 1);
     assertThat(result.mandatoryMissing()).isEmpty();
     final Map<String, Integer> shipsBySeaZone = new TreeMap<>();
     result
@@ -126,8 +127,32 @@ class PlanLogisticsTest extends AbstractClientSettingTestCase {
                 units.forEach((u, n) -> shipsBySeaZone.merge(u, n, Integer::sum));
               }
             });
-    assertThat(shipsBySeaZone).containsEntry("transport", 2).containsEntry("destroyer", 1);
-    assertThat(seaLion.bought().get("buyTransport")).isGreaterThanOrEqualTo(2);
+    assertThat(shipsBySeaZone).containsEntry("transport", 3).containsEntry("destroyer", 1);
+    assertThat(seaLion.bought().get("buyTransport")).isGreaterThanOrEqualTo(3);
+  }
+
+  @Test
+  void seaLionRound2BuysTwoTransportsAndAircraft() {
+    data.getSequence().setRoundAndStep(2, "Combat Move", germans);
+    final Purchase seaLion = purchase("B");
+
+    final ProPurchaseOrders.Result result = seaLion.result();
+    assertThat(seaLion.orders().label()).isEqualTo("B Sea Lion, Germans R2");
+    assertThat(result.units().get("trasporti")).containsEntry("transport", 2);
+    assertThat(result.units()).containsKey("aerei");
+  }
+
+  @Test
+  void seaLionStagesTheAirUnitsTooBarbarossaDoesNot() throws IOException {
+    data.getSequence().setRoundAndStep(1, "Non Combat Move", germans);
+    final AirCapture seaLion = airStaging("B");
+    final AirCapture barbarossa = airStaging("A");
+
+    assertThat(barbarossa.result).isNull();
+    assertThat(seaLion.result).isNotNull();
+    assertThat(seaLion.result.closer() + seaLion.result.same() + seaLion.result.farther())
+        .isPositive();
+    assertThat(seaLion.result.farther()).isLessThanOrEqualTo(seaLion.result.closer());
   }
 
   @Test
@@ -251,6 +276,31 @@ class PlanLogisticsTest extends AbstractClientSettingTestCase {
     recorder.phaseStart(data, germans, "place");
     recorder.phaseEnd(data, germans, "place", 1);
     return moves;
+  }
+
+  private AirCapture airStaging(final String plan) {
+    StatoMaggiore.setChoice(data.getProperties(), "Axis", plan);
+    final ProData proData = new ProData(false, new ProPlusTuning());
+    final TestAi ai = new TestAi(proData, new SeededBattleCalculator(SEED));
+    final AirCapture capture = new AirCapture();
+    proData.setRecorder(capture);
+    proData.initializeSimulation(ai, data, germans);
+    ai.prepareData(data);
+    new ProNonCombatMoveAi(ai).doNonCombatMove(null, null, recordingMoves(new ArrayList<>()));
+    return capture;
+  }
+
+  /** Keeps the air staging result of the non-combat move. */
+  private static final class AirCapture implements ProDecisionRecorder {
+    private ProStagingOrders.AirResult result;
+
+    @Override
+    public void airStaging(
+        final ProData proData,
+        final ProStagingOrders orders,
+        final ProStagingOrders.AirResult result) {
+      this.result = result;
+    }
   }
 
   private static long unitsEndingIn(final List<String> moves, final String... territories) {

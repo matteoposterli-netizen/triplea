@@ -1,5 +1,5 @@
 {
-  "_nota": "Strategia Pro+ per World War II Europe 1940 2nd Edition. Valori modificabili. Modificatore di un fronte: -1, 0, +1 (rischio effettivo = livello del cursore dell'alleanza + modificatore, tra 1 e 5). Fronte non indicato in una fase = 0. 'a_round' assente = fino a fine partita. Obiettivo: 'territorio' (nome reale) oppure 'flotta' (zone di mare con navi di quella nazione); 'nazioni' assente = per tutta l'alleanza. 'peso' = punti aggiunti alla priorita' d'attacco (prima dei moltiplicatori capitale x5 / vicino alla mia capitale x3). Campi 'tappe', 'firma', 'punti_critici', 'ruoli' non usati in gioco. 'categorie': unita' di ogni categoria degli acquisti, comprate a rotazione nell'ordine scritto (un nome ripetuto = comprato piu' spesso). 'logistica' (step 3b), per nazione e per intervallo di round: 'acquisti.mix' = % dei PU rimasti dopo la difesa urgente per categoria (somma <= 100; il resto lo spende la logica di Hard), 'acquisti.obbligati' = minimi da comprare prima del mix; 'piazzamento' = fabbriche/zone di mare dove piazzare per primi gli acquisti del piano; 'ammassamento' = fronte e territori/zone di raccolta verso cui il movimento non di combattimento sposta le riserve ('forza' 1 = normale, 0 = spento). Nazione o round senza logistica = acquisti e movimenti di Hard.",
+  "_nota": "Strategia Pro+ per World War II Europe 1940 2nd Edition. Valori modificabili. Modificatore di un fronte: -1, 0, +1 (rischio effettivo = livello del cursore dell'alleanza + modificatore, tra 1 e 5). Fronte non indicato in una fase = 0. 'a_round' assente = fino a fine partita. Obiettivo: 'territorio' (nome reale) oppure 'flotta' (zone di mare con navi di quella nazione); 'nazioni' assente = per tutta l'alleanza. 'peso' = punti aggiunti alla priorita' d'attacco (prima dei moltiplicatori capitale x5 / vicino alla mia capitale x3). Campi 'tappe', 'firma', 'punti_critici', 'ruoli' non usati in gioco. 'categorie': unita' di ogni categoria degli acquisti, comprate a rotazione nell'ordine scritto (un nome ripetuto = comprato piu' spesso). 'logistica' (step 3b), per nazione e per intervallo di round: 'acquisti.mix' = % dei PU rimasti dopo la difesa urgente per categoria (somma <= 100; il resto lo spende la logica di Hard), 'acquisti.obbligati' = minimi da comprare prima del mix; 'piazzamento' = fabbriche/zone di mare dove piazzare per primi gli acquisti del piano; 'ammassamento' = fronte e territori/zone di raccolta verso cui il movimento non di combattimento sposta le riserve ('forza' 1 = normale, 0 = spento). Nazione o round senza logistica = acquisti e movimenti di Hard. Step 3b-bis: 'quota_minima_piano' = % dei PU del turno riservata al piano (la difesa urgente puo' superare il resto solo per una fabbrica o la capitale a rischio oltre il 25%); 'ammassamento.aerei' true = anche gli aerei atterrano verso la raccolta (tra i territori sicuri); categoria 'scorta' = portaerei se i PU bastano, altrimenti cacciatorpediniere.",
   "gioco": "World War II Europe 1940 2nd Edition",
   "fronti": [
     {
@@ -48,6 +48,7 @@
     "bombardieri": ["bomber"],
     "navi_da_guerra": ["destroyer", "cruiser", "destroyer", "carrier"],
     "cacciatorpediniere": ["destroyer"],
+    "scorta": ["carrier", "destroyer"],
     "trasporti": ["transport"]
   },
   "alleanze": {
@@ -157,13 +158,17 @@
           "logistica": {
             "Germans": [
               { "da_round": 1, "a_round": 1,
-                "acquisti": { "mix": {"fanteria": 55, "artiglieria": 45}, "obbligati": [{ "categoria": "trasporti", "minimo": 2 }, { "categoria": "cacciatorpediniere", "minimo": 1 }] },
-                "piazzamento": ["Western Germany", "112 Sea Zone"],
-                "ammassamento": { "fronte": "Ovest", "territori": ["Holland Belgium", "Normandy Bordeaux", "Denmark", "112 Sea Zone"] } },
-              { "da_round": 2, "a_round": 3,
+                "acquisti": { "mix": {"fanteria": 55, "artiglieria": 45}, "obbligati": [{ "categoria": "trasporti", "minimo": 3 }, { "categoria": "scorta", "minimo": 1 }] },
+                "piazzamento": ["114 Sea Zone", "113 Sea Zone", "Western Germany"],
+                "ammassamento": { "fronte": "Ovest", "territori": ["Holland Belgium", "Normandy Bordeaux", "Denmark", "112 Sea Zone"], "aerei": true } },
+              { "da_round": 2, "a_round": 2,
+                "acquisti": { "mix": {"aerei": 40, "fanteria": 35, "artiglieria": 25}, "obbligati": [{ "categoria": "trasporti", "minimo": 2 }] },
+                "piazzamento": ["Western Germany", "112 Sea Zone", "113 Sea Zone"],
+                "ammassamento": { "fronte": "Ovest", "territori": ["Holland Belgium", "Normandy Bordeaux", "Denmark", "112 Sea Zone"], "aerei": true } },
+              { "da_round": 3, "a_round": 3,
                 "acquisti": { "mix": {"fanteria": 30, "artiglieria": 20, "carri_mech": 25, "aerei": 25} },
                 "piazzamento": ["Western Germany", "112 Sea Zone"],
-                "ammassamento": { "fronte": "Ovest", "territori": ["Holland Belgium", "Normandy Bordeaux", "Denmark", "112 Sea Zone"] } },
+                "ammassamento": { "fronte": "Ovest", "territori": ["Holland Belgium", "Normandy Bordeaux", "Denmark", "112 Sea Zone"], "aerei": true } },
               { "da_round": 4,
                 "acquisti": { "mix": {"fanteria": 35, "artiglieria": 25, "carri_mech": 30, "aerei": 10} },
                 "piazzamento": ["Germany"],
@@ -296,7 +301,7 @@
               { "da_round": 1,
                 "acquisti": { "mix": {"trasporti": 30, "carri_mech": 40, "fanteria": 30} },
                 "piazzamento": ["Southern Italy", "97 Sea Zone", "95 Sea Zone"],
-                "ammassamento": { "fronte": "Mediterraneo-Africa", "territori": ["Libya", "Tobruk", "96 Sea Zone"] } }
+                "ammassamento": { "fronte": "Mediterraneo-Africa", "territori": ["Libya", "Tobruk", "96 Sea Zone"], "aerei": true } }
             ]
           },
           "ruoli": {
@@ -359,17 +364,17 @@
           ],
           "logistica": {
             "Americans": [
-              { "da_round": 1, "a_round": 3,
+              { "da_round": 1, "a_round": 3, "quota_minima_piano": 70,
                 "acquisti": { "mix": {"navi_da_guerra": 35, "trasporti": 20, "fanteria": 25, "artiglieria": 10, "carri_mech": 10} },
                 "piazzamento": ["Eastern United States", "101 Sea Zone"],
                 "ammassamento": { "fronte": "Ovest", "territori": ["United Kingdom", "109 Sea Zone", "110 Sea Zone"] } },
-              { "da_round": 4,
+              { "da_round": 4, "quota_minima_piano": 70,
                 "acquisti": { "mix": {"fanteria": 35, "artiglieria": 20, "carri_mech": 20, "trasporti": 15, "navi_da_guerra": 10} },
                 "piazzamento": ["Eastern United States", "101 Sea Zone"],
                 "ammassamento": { "fronte": "Ovest", "territori": ["United Kingdom", "109 Sea Zone", "110 Sea Zone"] } }
             ],
             "British": [
-              { "da_round": 1,
+              { "da_round": 1, "quota_minima_piano": 40,
                 "acquisti": { "mix": {"fanteria": 50, "artiglieria": 15, "trasporti": 20, "navi_da_guerra": 15} },
                 "piazzamento": ["United Kingdom", "110 Sea Zone", "109 Sea Zone"],
                 "ammassamento": { "fronte": "Ovest", "territori": ["United Kingdom", "110 Sea Zone"] } }
@@ -419,7 +424,7 @@
           ],
           "logistica": {
             "Americans": [
-              { "da_round": 1,
+              { "da_round": 1, "quota_minima_piano": 70,
                 "acquisti": { "mix": {"navi_da_guerra": 35, "trasporti": 20, "fanteria": 25, "artiglieria": 10, "carri_mech": 10} },
                 "piazzamento": ["Eastern United States", "101 Sea Zone"],
                 "ammassamento": { "fronte": "Mediterraneo-Africa", "territori": ["Morocco", "Gibraltar", "91 Sea Zone", "92 Sea Zone"] } }

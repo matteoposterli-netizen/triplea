@@ -14,9 +14,11 @@ import java.util.Map;
  * @param territories names of the gathering territories (land) and sea zones (fleet)
  * @param strength 1 = a gathering territory gets as much value as the best destination of the turn,
  *     half at distance 1, a third at distance 2...; 0 = no pull
+ * @param air whether air units land towards the gathering territories too (among the territories
+ *     where Hard would find them safe); otherwise air units land as Hard decides
  */
 public record ProStagingOrders(
-    String label, String front, List<String> territories, double strength) {
+    String label, String front, List<String> territories, double strength, boolean air) {
 
   /** Farthest distance (in moves) from a gathering territory that still gets a bonus. */
   public static final int RANGE = 8;
@@ -35,4 +37,15 @@ public record ProStagingOrders(
       double seaScale,
       Map<Territory, Integer> distance,
       Map<Territory, Double> bonus) {}
+
+  /**
+   * Where the air units landed with the pull (see {@link #air}).
+   *
+   * @param units air units moved (or staying), per destination name → type → count
+   * @param closer units that land nearer to the gathering territories than they started
+   * @param same units at the same distance
+   * @param farther units farther away
+   */
+  public record AirResult(
+      Map<String, Map<String, Integer>> units, int closer, int same, int farther) {}
 }
