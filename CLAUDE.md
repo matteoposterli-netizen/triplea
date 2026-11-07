@@ -728,3 +728,58 @@ seed 1-4, Asse Spericolato / Alleati Equilibrato; a ogni turno di Germania e Ita
 - R2-R3 Germania quasi sempre uguale; 11 piani diversi su 24 turni Asse.
 Giudizio: il cursore ora incide sul controllo finale; l'effetto è concentrato su R1 e sull'Egitto.
 Da verificare in partita: perdite reali degli attacchi tenuti (Normandy contrattaccata al 100%).
+
+### Step 3a — stato maggiore e piani per alleanza (2026-11-07)
+
+Vedi "Stato maggiore e piani" per il funzionamento. Modifiche alle classi Pro (solo struttura,
+default = valori di prima): `ProTuning` (+ `targetAttackWinPercentage`,
+`targetAttackMinWinPercentage`, `attackWinPercentageCeiling`, `attackPriorityPlanBonus`),
+`ProData` (+ getter per bersaglio e ceiling), `ProCombatMoveAi` (soglie per bersaglio,
+`belowAttackTarget`, bonus piano nella priorità), `ProTerritory`, `ProTerritoryManager`,
+`ProDecisionRecorder.attackPriority(+planPart)`.
+
+#### Test
+- Neutralità Hard: `HardNeutralityGoldenTest`, `HardPriorityGoldenTest`, `DiaryNeutralityTest`
+  invariati e verdi (282 test `ai.*`). `DiaryNeutralityTest` ora anche con piano A: decisioni
+  identiche diario on/off + contenuto del diario.
+- `StrategyTuningTest`: soglie per fronte, ceiling, **Prudente + piano N = Hard** (soglie per ogni
+  territorio, bonus 0, regole "non conviene" spente), regola obiettivo del piano col livello del
+  fronte, senza file = step 2d.
+- `strategia.StrategiaFileTest` (schema completo, modificatori, nomi validi su Global 1940; verificati
+  a mano anche sull'XML reale Europe 1940), `strategia.StatoMaggioreTest` (fissato una volta,
+  salvataggio/caricamento, rischio effettivo e limiti 1..5, obiettivi per nazione e flotta).
+- `ProPlusSettingsDialogTest` (tendina piano, scrittura, piano fissato non modificabile). Pannello
+  verificato con screenshot sotto Xvfb a scala 150% e 200% (schermo 1280x800): pulsanti visibili,
+  contenuto scorrevole, nessuna barra orizzontale.
+- Nota: il peso VC di Pro+ resta anche con Prudente + N ⇒ la **priorità** dei bersagli VC resta
+  diversa da Hard (come dallo step 2c); soglie e regole sono quelle di Hard.
+
+#### Prova Europe 1940 (sandbox, banco temporaneo non committato)
+Partita reale XML Europe 1940 2nd Ed., tutte le nazioni Pro+ Equilibrato, piani Automatico (A / 1),
+4 round. A ogni turno (prima degli acquisti) il combat move è ripianificato sulla stessa copia con
+dadi di simulazione fissi per: "2d" (nessun file = step 2d) e ogni piano dell'alleanza.
+- Stato salvato a fine prova: Axis `{"piano":"A","round_inizio":1,"storico":[]}`, Allies piano 1.
+- Prestazioni: nessun costo misurabile (stesse durate tra 2d e piani, variazioni dentro il rumore);
+  partita reale 24-35 s per round.
+- R1 Germania (il turno con più scelte): differenze forti.
+  - 2d: France 90% (16 unità), Normandy 97%, 110 SZ 100%, 91 SZ, 106 SZ, Southern France, Yugoslavia.
+  - A Barbarossa: France 73% con 14 unità, aggiunge 111 SZ (flotta UK, 67%), 110 SZ 95%.
+  - B/C Sea Lion: 4 zone di mare con flotta UK (111 SZ 53%), France 88%.
+  - D: France 72%, 111 SZ 99%.
+  - N: = 2d tranne Normandy Bordeaux (nello step 2d tenuta dalla regola VC/obiettivo nazionale,
+    con N non è obiettivo).
+  **Problema**: con Ovest +1 (Audace, desiderata 72%) l'AI mette su France solo le unità per
+  arrivare al 72% e usa il resto altrove: l'obiettivo principale del piano diventa più rischioso
+  (73% contro 90% della 2d). È l'effetto diretto di "rischio +1 sul fronte" applicato anche agli
+  obiettivi; da decidere nello step successivo (es. soglia desiderata degli obiettivi non sotto
+  quella del cursore).
+- R1 Italia: B/C (Med −1) tolgono Alexandria e Malta; D toglie Alexandria/Malta e marca Greece
+  obiettivo. R2 Italia con D: aggiunge Egypt (obiettivo, 100%).
+- R2-R4: i bersagli raggiungibili sono pochi e quasi tutti vinti al 95-100% ⇒ i piani cambiano
+  solo le soglie, quasi mai l'elenco (R3 Italia Novgorod obiettivo con A/C, R4 Germania
+  Novgorod/Ukraine obiettivi con A/C: stessi attacchi).
+- Alleati: effetto quasi nullo in combattimento nei round 1-4. Americani: nessun attacco
+  possibile R1-R3; R1 Gran Bretagna con piano 2: Tobruk (obiettivo, 86%) e Italian Somaliland al
+  posto di Ethiopia/96 SZ. Il piano 1 conta dal R4 (obiettivi sbarco) ma gli sbarchi richiedono
+  acquisti e movimenti preparatori che il piano non guida ancora.
+- Sea Lion (B) non ha fasi dopo il R3 ⇒ dal R4 "fase nessuna" (tutti 0, nessun obiettivo).
