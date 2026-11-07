@@ -35,7 +35,7 @@ public final class StatoMaggiore {
    *
    * @param piano id of the plan in force
    * @param roundInizio round the plan was fixed in
-   * @param storico one entry per round (empty for now)
+   * @param storico one entry per round ({@link Valutazione})
    */
   public record Stato(String piano, int roundInizio, JsonArray storico) {
     String toJson() {
@@ -112,6 +112,25 @@ public final class StatoMaggiore {
     final Stato state = new Stato(plan.get().id(), data.getSequence().getRound(), new JsonArray());
     set(props, STATE_PREFIX + alliance, state.toJson());
     return Optional.of(state);
+  }
+
+  /**
+   * Appends {@code entry} to the history ({@code storico}) of {@code alliance}'s fixed plan (step
+   * 3c: progress and reading of the enemy, one entry per round). Nothing without a fixed plan.
+   */
+  public static void aggiungiStorico(
+      final GameState data, final String alliance, final JsonObject entry) {
+    final GameProperties props = data.getProperties();
+    getState(props, alliance)
+        .ifPresent(
+            state -> {
+              final JsonArray storico = state.storico().deepCopy();
+              storico.add(entry);
+              set(
+                  props,
+                  STATE_PREFIX + alliance,
+                  new Stato(state.piano(), state.roundInizio(), storico).toJson());
+            });
   }
 
   private static void set(final GameProperties props, final String key, final String value) {

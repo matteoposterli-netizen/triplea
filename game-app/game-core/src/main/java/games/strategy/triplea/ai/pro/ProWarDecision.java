@@ -2,7 +2,7 @@ package games.strategy.triplea.ai.pro;
 
 /**
  * What a variant of the Pro AI decides about declaring war on one enemy player (Pro+ strategy
- * plans, step 3c). {@link Kind#HARD} leaves the decision to the Pro AI's own random rule.
+ * plans, step 3b-ter). {@link Kind#HARD} leaves the decision to the Pro AI's own random rule.
  *
  * @param kind the decision
  * @param reason why (Italian text for the diary), empty for {@link Kind#HARD}

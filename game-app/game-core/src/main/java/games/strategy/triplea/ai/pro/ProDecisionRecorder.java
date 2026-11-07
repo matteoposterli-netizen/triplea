@@ -128,4 +128,18 @@ public interface ProDecisionRecorder {
    * just before the moves are made.
    */
   default void minimumGarrisons(ProData proData, List<ProCapitalGuard.GarrisonResult> results) {}
+
+  /**
+   * Pro+ (step 3c): the purchase defended {@code defended} against real threats; the defense of
+   * Hard would have spent about {@code pusSaved} more PUs on {@code territoriesSaved} territories
+   * that only players unable to attack before the next turn threaten.
+   */
+  default void realThreatDefense(
+      ProData proData, List<ProThreat> defended, int pusSaved, int territoriesSaved) {}
+
+  /**
+   * Pro+ (step 3c): {@code count} minimum garrisons of a plan were not kept: no enemy can land
+   * there before the next turn.
+   */
+  default void garrisonsNotNeeded(ProData proData, int count) {}
 }

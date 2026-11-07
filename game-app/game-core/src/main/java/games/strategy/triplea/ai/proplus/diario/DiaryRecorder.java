@@ -16,6 +16,7 @@ import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.ProDecisionRecorder;
 import games.strategy.triplea.ai.pro.ProPurchaseOrders;
 import games.strategy.triplea.ai.pro.ProStagingOrders;
+import games.strategy.triplea.ai.pro.ProThreat;
 import games.strategy.triplea.ai.pro.ProTuning;
 import games.strategy.triplea.ai.pro.ProWarDecision;
 import games.strategy.triplea.ai.pro.data.ProBattleResult;
@@ -31,6 +32,7 @@ import games.strategy.triplea.ai.proplus.ProPlusTuning;
 import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.Strategia;
+import games.strategy.triplea.ai.proplus.strategia.Valutazione;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.battle.BattleTracker;
@@ -98,6 +100,9 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   private @Nullable ProPurchaseOrders planOrders;
   private @Nullable ProPurchaseOrders.Result planResult;
   private @Nullable ProPurchaseOrders.DefenseShare defenseShare;
+  private List<ProThreat> threatDefended = List.of();
+  private int threatPusSaved = -1;
+  private int threatTerritoriesSaved;
 
   /** Politics lines of the coming turn (politics comes before the turn opens), by player. */
   private final List<String[]> pendingPolitics = new ArrayList<>();
@@ -198,6 +203,9 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     planOrders = null;
     planResult = null;
     defenseShare = null;
+    threatDefended = List.of();
+    threatPusSaved = -1;
+    threatTerritoriesSaved = 0;
     planFrozen = false;
     attacksWritten = false;
     attacks = new LinkedHashMap<>();
@@ -505,6 +513,21 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     pendingPolitics.clear();
     if (defenseShare != null) {
       sb.append(defenseShareText(defenseShare));
+    }
+    if (threatPusSaved >= 0) {
+      for (final ProThreat t : threatDefended) {
+        sb.append("  difendo ").append(t.territory()).append(": ").append(threatText(t));
+        sb.append('\n');
+      }
+      sb.append("  PU risparmiati sulla difesa: ").append(threatPusSaved);
+      if (threatTerritoriesSaved > 0) {
+        sb.append(" (stima: difesa di Hard per ")
+            .append(threatTerritoriesSaved)
+            .append(
+                threatTerritoriesSaved == 1 ? " territorio minacciato" : " territori minacciati")
+            .append(" solo da nazioni che non possono attaccare prima del prossimo turno)");
+      }
+      sb.append('\n');
     }
     if (planOrders != null && planResult != null) {
       sb.append(planPurchaseText(planOrders, planResult));
@@ -907,6 +930,107 @@ public final class DiaryRecorder implements ProDecisionRecorder {
                 }));
   }
 
+  /**
+   * Step 3c: the block of an alliance's general staff at the start of a round (progress of its
+   * plan, reading of the enemy's), written before the turn of the alliance's first nation. Only
+   * while the diary is on; never changes a decision.
+   */
+  public static void allianceRound(final GameState data, final Valutazione.Risultato result) {
+    if (!DiarySettings.isEnabled() || !(data instanceof GameData gameData)) {
+      return;
+    }
+    GameDiary.forGame(gameData)
+        .ifPresent(
+            diary -> {
+              try {
+                diary.turnStarted(() -> {});
+                diary.text(result.testo());
+                final JsonObject json = result.storico().deepCopy();
+                json.addProperty("evento", "stato_maggiore_round");
+                json.addProperty("alleanza", result.alleanza());
+                diary.json(json);
+              } catch (final RuntimeException e) {
+                ProLogger.warn("Diario Pro+: blocco dello stato maggiore non scritto: " + e);
+              }
+            });
+  }
+
+  @Override
+  public void realThreatDefense(
+      final ProData proData,
+      final List<ProThreat> defended,
+      final int pusSaved,
+      final int territoriesSaved) {
+    guard(
+        () -> {
+          if (!active || !"purchase".equals(phase)) {
+            return;
+          }
+          threatDefended = List.copyOf(defended);
+          threatPusSaved = pusSaved;
+          threatTerritoriesSaved = territoriesSaved;
+          final JsonObject json = event("difesa_minaccia_reale");
+          final JsonObject territories = new JsonObject();
+          defended.forEach(t -> territories.add(t.territory(), threatJson(t)));
+          json.add("difesi", territories);
+          json.addProperty("pu_risparmiati", pusSaved);
+          json.addProperty("territori_non_minacciati", territoriesSaved);
+          diary.json(json);
+        });
+  }
+
+  @Override
+  public void garrisonsNotNeeded(final ProData proData, final int count) {
+    guard(
+        () -> {
+          if (!active || !"noncombat".equals(phase)) {
+            return;
+          }
+          diary.text(
+              String.format(
+                  "  Presidi non necessari (nessuno sbarco nemico possibile prima del prossimo"
+                      + " turno): %d%n",
+                  count));
+          final JsonObject json = event("presidi_non_necessari");
+          json.addProperty("territori", count);
+          diary.json(json);
+        });
+  }
+
+  /**
+   * Eg: "minaccia reale da Gran Bretagna (in guerra): 2 fanterie, 1 caccia; URSS (guerra prevista
+   * dal piano dal round 3): 3 carri".
+   */
+  public static String threatText(final ProThreat threat) {
+    if (threat.isEmpty()) {
+      return "nessuna minaccia reale";
+    }
+    return "minaccia reale da "
+        + threat.units().entrySet().stream()
+            .map(
+                e ->
+                    Italian.nation(e.getKey())
+                        + Optional.ofNullable(threat.why().get(e.getKey()))
+                            .map(w -> " (" + w + ")")
+                            .orElse("")
+                        + ": "
+                        + Italian.units(e.getValue()))
+            .collect(Collectors.joining("; "));
+  }
+
+  private static JsonObject threatJson(final ProThreat threat) {
+    final JsonObject json = new JsonObject();
+    threat
+        .units()
+        .forEach(
+            (nation, units) -> {
+              final JsonObject n = counts(units);
+              Optional.ofNullable(threat.why().get(nation)).ifPresent(w -> n.addProperty("_", w));
+              json.add(nation, n);
+            });
+    return json;
+  }
+
   @Override
   public void minimumGarrisons(
       final ProData proData, final List<ProCapitalGuard.GarrisonResult> results) {
@@ -931,11 +1055,18 @@ public final class DiaryRecorder implements ProDecisionRecorder {
                                 .map(e -> Italian.units(e.getValue()) + " da " + e.getKey())
                                 .collect(Collectors.joining(", "))
                             + ")"));
+            if (!r.threat().isEmpty()) {
+              sb.append(
+                  String.format(
+                      "    difendo %s: %s (sbarco)%n",
+                      r.territory().getName(), threatText(r.threat())));
+            }
             final JsonObject json = event("presidio");
             json.addProperty("territorio", r.territory().getName());
             json.addProperty("minimo", r.required());
             json.addProperty("prima", r.before());
             json.addProperty("dopo", r.after());
+            json.add("minaccia", threatJson(r.threat()));
             final JsonObject moved = new JsonObject();
             r.moved().forEach((t, units) -> moved.add(t, counts(units)));
             json.add("portate", moved);
@@ -1013,13 +1144,18 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     } else if (!changed) {
       actions.add("nessuna azione: sotto la soglia");
     }
-    return String.format(
-        "  Capitale %s: rischio stimato %s (soglia %s), guarnigione %s unita' (%s)%n",
-        r.capital().getName(),
-        risk,
-        Italian.percent(r.threshold()),
-        garrison,
-        String.join("; ", actions));
+    final String line =
+        String.format(
+            "  Capitale %s: rischio stimato %s (soglia %s), guarnigione %s unita' (%s)%n",
+            r.capital().getName(),
+            risk,
+            Italian.percent(r.threshold()),
+            garrison,
+            String.join("; ", actions));
+    return changed && r.threat() != null && !r.threat().isEmpty()
+        ? line
+            + String.format("    difendo %s: %s%n", r.capital().getName(), threatText(r.threat()))
+        : line;
   }
 
   /** Eg: "Poland 4 (Est, distanza 0, bonus +12)". */

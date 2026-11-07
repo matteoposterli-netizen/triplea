@@ -80,7 +80,7 @@ class StrategyTuningTest {
     assertThat(equilibrato.getAttackMinWinPercentage(france)).isEqualTo(52);
     assertThat(equilibrato.getAttackWinPercentage(france)).isEqualTo(80);
     assertThat(ProPlusTuning.check(equilibrato, notWorthIn(france)).desired()).isEqualTo(80);
-    // Spericolato: France is a critical objective (step 3c), planned to at least 80
+    // Spericolato: France is a critical objective (step 3b-ter), planned to at least 80
     final ProData spericolato = proPlus(RiskLevel.SPERICOLATO, "A");
     assertThat(spericolato.getAttackWinPercentage(france))
         .isEqualTo(ProPlusTuning.CRITICAL_OBJECTIVE_DESIRED);

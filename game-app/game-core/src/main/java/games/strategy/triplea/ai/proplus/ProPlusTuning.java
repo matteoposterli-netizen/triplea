@@ -3,6 +3,7 @@ package games.strategy.triplea.ai.proplus;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.Territory;
+import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.ai.pro.ProAttackWorth;
@@ -61,8 +62,8 @@ public final class ProPlusTuning implements ProTuning {
   public static final double CAPITAL_GUARD_THRESHOLD = 25;
 
   /**
-   * Desired win% of a critical objective of the plan (step 3c: France in round 1, enemy capitals),
-   * whatever the risk slider.
+   * Desired win% of a critical objective of the plan (step 3b-ter: France in round 1, enemy
+   * capitals), whatever the risk slider.
    */
   public static final double CRITICAL_OBJECTIVE_DESIRED = 80;
 
@@ -187,8 +188,8 @@ public final class ProPlusTuning implements ProTuning {
   }
 
   /**
-   * Step 3c: the gathering is overseas and the transports near the embarkation point can't carry
-   * the units waiting there: one transport more among the mandatory purchases.
+   * Step 3b-ter: the gathering is overseas and the transports near the embarkation point can't
+   * carry the units waiting there: one transport more among the mandatory purchases.
    */
   private static ProPurchaseOrders withTransport(
       final ProPurchaseOrders orders, final PianoAttivo plan) {
@@ -249,7 +250,7 @@ public final class ProPlusTuning implements ProTuning {
 
   /**
    * The plan's staging orders for this nation and round (step 3b): the gathering territories (or
-   * the front's land territories) and the pull strength. Step 3c: a group in "linea_del_fronte"
+   * the front's land territories) and the pull strength. Step 3b-ter: a group in "linea_del_fronte"
    * mode gathers on the front line computed this turn ({@link Staging#frontLine}), extra groups are
    * weighed against the main one, and gathering overseas adds the embarkation points. Empty without
    * orders or with strength 0.
@@ -264,7 +265,7 @@ public final class ProPlusTuning implements ProTuning {
                     .flatMap(l -> Staging.orders(proData, plan, l, ordersLabel(plan, l))));
   }
 
-  /** The plan's minimum garrisons (step 3c): own territory → land units. */
+  /** The plan's minimum garrisons (step 3b-ter): own territory → land units. */
   @Override
   public Map<String, Integer> minimumGarrisons(final ProData proData) {
     return planOf(proData)
@@ -274,8 +275,8 @@ public final class ProPlusTuning implements ProTuning {
   }
 
   /**
-   * War orders of the plan (step 3c): a declaration of this nation on {@code enemy} is forbidden
-   * before its round; from that round it is made once the staging is done ({@link
+   * War orders of the plan (step 3b-ter): a declaration of this nation on {@code enemy} is
+   * forbidden before its round; from that round it is made once the staging is done ({@link
    * Staging#readiness}). Hard's own rule for enemies the plan doesn't name.
    */
   @Override
@@ -314,6 +315,47 @@ public final class ProPlusTuning implements ProTuning {
   /** Eg: "A Barbarossa, Germans R1-3". */
   private static String ordersLabel(final PianoAttivo plan, final Strategia.Logistica l) {
     return plan.getPiano().label() + ", " + plan.getNazione() + " " + l.label();
+  }
+
+  /** Cache of {@link #realEnemies}: the same for one game state, player, round and step. */
+  private @Nullable GameState threatData;
+
+  private @Nullable GamePlayer threatPlayer;
+  private int threatRound = -1;
+  private @Nullable String threatStep;
+  private Map<GamePlayer, String> threats = Map.of();
+
+  /**
+   * Step 3c: only the enemies that can really attack before the next turn ({@link MinacciaReale}),
+   * with or without a plan.
+   */
+  @Override
+  public Optional<Map<GamePlayer, String>> realEnemies(
+      final ProData proData, final GamePlayer player) {
+    final GameState data = proData.getData();
+    final int round = data.getSequence().getRound();
+    final String step = data.getSequence().getStep().getName();
+    if (data != threatData
+        || player != threatPlayer
+        || round != threatRound
+        || !step.equals(threatStep)) {
+      threats = MinacciaReale.nemici(data, player, plan(data, player));
+      threatData = data;
+      threatPlayer = player;
+      threatRound = round;
+      threatStep = step;
+    }
+    return Optional.of(threats);
+  }
+
+  /**
+   * Step 3c: a plan's minimum garrison only against a real landing: some enemy unit can land there
+   * before the next turn from transports in range.
+   */
+  @Override
+  public boolean garrisonNeeded(
+      final ProData proData, final Territory territory, final List<Unit> landingEnemies) {
+    return !landingEnemies.isEmpty();
   }
 
   @Override

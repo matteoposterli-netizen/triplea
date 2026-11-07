@@ -25,8 +25,9 @@ import lombok.Getter;
  * the map's territory names and, per alliance, the plans the alliance's general staff can follow.
  *
  * <p>Fields of a plan used in game (step 3a): {@code fasi} (per range of rounds: risk modifier per
- * front, weighted objectives). Read but not used yet: {@code tappe}, {@code firma}, {@code
- * punti_critici}, {@code ruoli}.
+ * front, weighted objectives). Step 3c: {@code tappe} (the plan's progress) and {@code firma} (the
+ * enemy reading the plan), observation only. Read but not used: {@code punti_critici}, {@code
+ * ruoli}.
  */
 public final class Strategia {
   /** Front of the territories no front lists (modifier 0). */
@@ -115,6 +116,16 @@ public final class Strategia {
             }
           }
         }
+        for (final Tappa t : piano.tappe()) {
+          t.territori().stream()
+              .filter(name -> map.getTerritoryOrNull(name) == null)
+              .forEach(unknown::add);
+        }
+        for (final Firma f : piano.firma()) {
+          f.territori().stream()
+              .filter(name -> map.getTerritoryOrNull(name) == null)
+              .forEach(unknown::add);
+        }
         for (final List<Logistica> orders : piano.logistica().values()) {
           for (final Logistica l : orders) {
             for (final String name : l.territoriNominati()) {
@@ -146,9 +157,14 @@ public final class Strategia {
       return piani.stream().filter(p -> p.id().equals(id)).findFirst();
     }
 
-    /** The plan "Automatico" stands for: {@link #automatico}, else the first plan. */
+    /**
+     * The plan "Automatico" stands for: {@link #automatico}, else the first plan; never an
+     * experimental plan ({@link Piano#sperimentale}).
+     */
     public Optional<Piano> pianoAutomatico() {
-      return piano(automatico).or(() -> piani.stream().findFirst());
+      return piano(automatico)
+          .filter(p -> !p.sperimentale())
+          .or(() -> piani.stream().filter(p -> !p.sperimentale()).findFirst());
     }
   }
 
@@ -161,6 +177,8 @@ public final class Strategia {
    * @param puntiCritici what puts the plan in trouble
    * @param logistica per nation (name in the map XML), purchase / placement / staging orders by
    *     range of rounds (step 3b)
+   * @param sperimentale shown as "(sperimentale)" in the settings dialog, never chosen by
+   *     "Automatico" (step 3c)
    */
   public record Piano(
       String id,
@@ -171,7 +189,13 @@ public final class Strategia {
       List<Tappa> tappe,
       List<Firma> firma,
       List<PuntoCritico> puntiCritici,
-      Map<String, List<Logistica>> logistica) {
+      Map<String, List<Logistica>> logistica,
+      boolean sperimentale) {
+
+    /** Eg: "B Sea Lion (sperimentale)": the label of the settings dialog. */
+    public String etichettaPannello() {
+      return sperimentale ? label() + " (sperimentale)" : label();
+    }
 
     /** The phase that covers {@code round}, if any. */
     public Optional<Fase> fase(final int round) {
@@ -306,13 +330,13 @@ public final class Strategia {
   }
 
   /**
-   * War declaration of the plan (step 3c): nation {@code da} may declare war on {@code a} only from
-   * round {@code dalRound} ("never before"), and does it from then on when ready.
+   * War declaration of the plan (step 3b-ter): nation {@code da} may declare war on {@code a} only
+   * from round {@code dalRound} ("never before"), and does it from then on when ready.
    */
   public record Dichiarazione(String da, String a, int dalRound) {}
 
   /**
-   * An extra gathering group of the staging orders (step 3c): {@code peso} relative to the main
+   * An extra gathering group of the staging orders (step 3b-ter): {@code peso} relative to the main
    * one; {@code lineaDelFronte} = the front line of {@code fronte}, computed each turn.
    */
   public record Raccolta(
@@ -321,16 +345,66 @@ public final class Strategia {
   /** At least {@code minimo} units of {@code categoria}, bought before the mix. */
   public record Obbligo(String categoria, int minimo) {}
 
-  public record Tappa(String territorio, int entroRound) {}
+  /**
+   * A milestone of a plan (step 3c): its territories taken by the alliance by round {@code
+   * entroRound}; {@code tutti} = all of them, else one is enough.
+   */
+  public record Tappa(String nome, List<String> territori, boolean tutti, int entroRound) {
+    /** Eg: "France R1", "Libya+Tobruk R5", "prima zona di sbarco R5". */
+    public String label() {
+      return nome + " R" + entroRound;
+    }
+  }
 
+  /**
+   * A clue of a plan's signature (step 3c), read by the enemy's general staff: a measure {@code
+   * tipo} of the units of {@code nazioni}, turned into 0..1 by a linear ramp from {@code da} (0) to
+   * {@code a} (1; {@code a < da} = the less, the stronger), counted with {@code peso} in rounds
+   * {@code daRound}..{@code aRound}. Measures:
+   *
+   * <ul>
+   *   <li>{@value #QUOTA_TUV_FRONTE}: share of the nations' land TUV on {@code fronte} (0..1);
+   *   <li>{@value #QUOTA_ACQUISTI}: share of the PUs of the nations' last two purchases spent on
+   *       {@code unita} / {@code classe} (0..1; not counted before they bought anything);
+   *   <li>{@value #UNITA_IN}: units of {@code unita} / {@code classe} in {@code territori} (land
+   *       and sea zones; none listed = everywhere).
+   * </ul>
+   *
+   * <p>Classes: {@code terra}, {@code aerei}, {@code navi}, {@code navi_da_guerra}, {@code
+   * trasporti}.
+   */
   public record Firma(
       String indizio,
       String tipo,
+      List<String> nazioni,
+      @Nullable String fronte,
       List<String> territori,
-      List<String> zone,
       List<String> unita,
-      @Nullable String nazione,
-      double peso) {}
+      List<String> classi,
+      double da,
+      double a,
+      double peso,
+      int daRound,
+      int aRound) {
+    public static final String QUOTA_TUV_FRONTE = "quota_tuv_fronte";
+    public static final String QUOTA_ACQUISTI = "quota_acquisti";
+    public static final String UNITA_IN = "unita_in";
+    static final Set<String> TIPI = Set.of(QUOTA_TUV_FRONTE, QUOTA_ACQUISTI, UNITA_IN);
+    static final Set<String> CLASSI =
+        Set.of("terra", "aerei", "navi", "navi_da_guerra", "trasporti");
+
+    public boolean covers(final int round) {
+      return round >= daRound && round <= aRound;
+    }
+
+    /** {@code x} on the ramp {@link #da} → {@link #a}, limited to 0..1. */
+    public double valore(final double x) {
+      if (a == da) {
+        return x >= a ? 1 : 0;
+      }
+      return Math.max(0, Math.min(1, (x - da) / (a - da)));
+    }
+  }
 
   public record PuntoCritico(
       String descrizione,
@@ -425,21 +499,11 @@ public final class Strategia {
     }
     final List<Tappa> tappe = new ArrayList<>();
     for (final JsonElement t : array(p, "tappe")) {
-      final JsonObject o = t.getAsJsonObject();
-      tappe.add(new Tappa(string(o, "territorio"), o.get("entro_round").getAsInt()));
+      tappe.add(tappa(t.getAsJsonObject(), id));
     }
     final List<Firma> firma = new ArrayList<>();
     for (final JsonElement t : array(p, "firma")) {
-      final JsonObject o = t.getAsJsonObject();
-      firma.add(
-          new Firma(
-              Optional.ofNullable(string(o, "indizio")).orElse(""),
-              Optional.ofNullable(string(o, "tipo")).orElse(""),
-              strings(o, "territori"),
-              strings(o, "zone"),
-              strings(o, "unita"),
-              string(o, "nazione"),
-              o.has("peso") ? o.get("peso").getAsDouble() : 1));
+      firma.add(firma(t.getAsJsonObject(), id));
     }
     final List<PuntoCritico> puntiCritici = new ArrayList<>();
     for (final JsonElement t : array(p, "punti_critici")) {
@@ -472,7 +536,69 @@ public final class Strategia {
         List.copyOf(tappe),
         List.copyOf(firma),
         List.copyOf(puntiCritici),
-        Map.copyOf(logistica));
+        Map.copyOf(logistica),
+        p.has("sperimentale") && p.get("sperimentale").getAsBoolean());
+  }
+
+  private static Tappa tappa(final JsonObject o, final String plan) {
+    final List<String> territori = new ArrayList<>(strings(o, "territori"));
+    Optional.ofNullable(string(o, "territorio")).ifPresent(territori::add);
+    if (territori.isEmpty() || !o.has("entro_round")) {
+      throw new IllegalArgumentException(
+          "tappa senza territori o senza entro_round nel piano " + plan + ": " + o);
+    }
+    final boolean tutti = !"uno".equals(string(o, "richiesti"));
+    final String nome =
+        Optional.ofNullable(string(o, "nome"))
+            .orElseGet(() -> String.join(tutti ? "+" : " o ", territori));
+    return new Tappa(nome, List.copyOf(territori), tutti, o.get("entro_round").getAsInt());
+  }
+
+  private static Firma firma(final JsonObject o, final String plan) {
+    final String tipo = string(o, "tipo");
+    if (tipo == null || !Firma.TIPI.contains(tipo)) {
+      throw new IllegalArgumentException(
+          "indizio di tipo sconosciuto nel piano " + plan + ": " + tipo + " " + Firma.TIPI);
+    }
+    final List<String> nazioni = new ArrayList<>(strings(o, "nazioni"));
+    Optional.ofNullable(string(o, "nazione")).ifPresent(nazioni::add);
+    final List<String> classi = new ArrayList<>(strings(o, "classi"));
+    Optional.ofNullable(string(o, "classe")).ifPresent(classi::add);
+    for (final String c : classi) {
+      if (!Firma.CLASSI.contains(c)) {
+        throw new IllegalArgumentException("classe sconosciuta nel piano " + plan + ": " + c);
+      }
+    }
+    final String fronte = string(o, "fronte");
+    if (nazioni.isEmpty()
+        || !o.has("da")
+        || !o.has("a")
+        || (Firma.QUOTA_TUV_FRONTE.equals(tipo) && fronte == null)) {
+      throw new IllegalArgumentException(
+          "indizio incompleto nel piano "
+              + plan
+              + " (servono nazioni, da, a e per "
+              + Firma.QUOTA_TUV_FRONTE
+              + " il fronte): "
+              + o);
+    }
+    final List<String> territori = new ArrayList<>(strings(o, "territori"));
+    territori.addAll(strings(o, "zone"));
+    return new Firma(
+        Optional.ofNullable(string(o, "indizio")).orElse(tipo),
+        tipo,
+        List.copyOf(nazioni),
+        fronte,
+        List.copyOf(territori),
+        strings(o, "unita"),
+        List.copyOf(classi),
+        o.get("da").getAsDouble(),
+        o.get("a").getAsDouble(),
+        o.has("peso") ? o.get("peso").getAsDouble() : 1,
+        o.has("da_round") ? o.get("da_round").getAsInt() : 1,
+        o.has("a_round") && !o.get("a_round").isJsonNull()
+            ? o.get("a_round").getAsInt()
+            : Integer.MAX_VALUE);
   }
 
   private static Logistica logistica(

@@ -25,7 +25,7 @@ import java.util.function.Predicate;
 import lombok.experimental.UtilityClass;
 
 /**
- * Where a plan's reserves gather (step 3c): fixed territories of the file (preparation), or the
+ * Where a plan's reserves gather (step 3b-ter): fixed territories of the file (preparation), or the
  * front line computed each turn (offensive phases), several fronts with weights, and the
  * embarkation points when the gathering territories are overseas.
  */
@@ -181,8 +181,8 @@ class Staging {
   }
 
   /**
-   * Step 3c: the gathering is overseas, there are embarkation points, and the own transports near
-   * them carry fewer units than wait there (2 per transport; land units on and next to the
+   * Step 3b-ter: the gathering is overseas, there are embarkation points, and the own transports
+   * near them carry fewer units than wait there (2 per transport; land units on and next to the
    * embarkation territories).
    */
   static boolean needsTransport(

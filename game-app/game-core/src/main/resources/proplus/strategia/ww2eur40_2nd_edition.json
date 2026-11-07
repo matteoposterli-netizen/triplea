@@ -1,5 +1,5 @@
 {
-  "_nota": "Strategia Pro+ per World War II Europe 1940 2nd Edition. Valori modificabili. Modificatore di un fronte: -1, 0, +1 (rischio effettivo = livello del cursore dell'alleanza + modificatore, tra 1 e 5). Fronte non indicato in una fase = 0. 'a_round' assente = fino a fine partita. Obiettivo: 'territorio' (nome reale) oppure 'flotta' (zone di mare con navi di quella nazione); 'nazioni' assente = per tutta l'alleanza. 'peso' = punti aggiunti alla priorita' d'attacco (prima dei moltiplicatori capitale x5 / vicino alla mia capitale x3). Campi 'tappe', 'firma', 'punti_critici', 'ruoli' non usati in gioco. 'categorie': unita' di ogni categoria degli acquisti, comprate a rotazione nell'ordine scritto (un nome ripetuto = comprato piu' spesso). 'logistica' (step 3b), per nazione e per intervallo di round: 'acquisti.mix' = % dei PU rimasti dopo la difesa urgente per categoria (somma <= 100; il resto lo spende la logica di Hard), 'acquisti.obbligati' = minimi da comprare prima del mix; 'piazzamento' = fabbriche/zone di mare dove piazzare per primi gli acquisti del piano; 'ammassamento' = fronte e territori/zone di raccolta verso cui il movimento non di combattimento sposta le riserve ('forza' 1 = normale, 0 = spento). Nazione o round senza logistica = acquisti e movimenti di Hard. Step 3b-bis: 'quota_minima_piano' = % dei PU del turno riservata al piano (la difesa urgente puo' superare il resto solo per una fabbrica o la capitale a rischio oltre il 25%); 'ammassamento.aerei' true = anche gli aerei atterrano verso la raccolta (tra i territori sicuri); categoria 'scorta' = portaerei se i PU bastano, altrimenti cacciatorpediniere. Step 3c: fasi.'dichiarazioni' [{da, a, dal_round}] = guerra vietata prima di dal_round, poi dichiarata quando l'ammassamento e' fatto (TUV proprio sulla raccolta >= TUV nemico confinante); variante A1 = mettere dal_round 2. obiettivi.'critico' true = desiderata mai sotto 80. ammassamento.'modo' 'linea_del_fronte' = raccolta sui territori propri del fronte confinanti col nemico (pesati verso gli obiettivi), i 'territori' restano come ripiego prima della guerra; ammassamento.'peso' + 'altre_raccolte' [{fronte, peso, territori, modo}] = raccolte su piu' fronti pesate; 'presidio_minimo' {territori, unita} = unita' di terra minime dopo il movimento; 'imbarco' = punti d'imbarco usati quando la raccolta e' oltremare (+1 trasporto obbligato finche' la capacita' non basta).",
+  "_nota": "Strategia Pro+ per World War II Europe 1940 2nd Edition. Valori modificabili. Modificatore di un fronte: -1, 0, +1 (rischio effettivo = livello del cursore dell'alleanza + modificatore, tra 1 e 5). Fronte non indicato in una fase = 0. 'a_round' assente = fino a fine partita. Obiettivo: 'territorio' (nome reale) oppure 'flotta' (zone di mare con navi di quella nazione); 'nazioni' assente = per tutta l'alleanza. 'peso' = punti aggiunti alla priorita' d'attacco (prima dei moltiplicatori capitale x5 / vicino alla mia capitale x3). Step 3c (solo osservazione, nessuna decisione cambia): 'tappe' = [{'territorio' oppure 'territori' + 'richiesti' ('tutti' default | 'uno'), 'nome' opzionale, 'entro_round'}] per l'avanzamento del piano; 'firma' = indizi con cui lo stato maggiore nemico riconosce il piano: {'indizio', 'tipo' (quota_tuv_fronte: quota del TUV di terra delle 'nazioni' sul 'fronte'; quota_acquisti: quota dei PU degli ultimi due acquisti delle 'nazioni' spesa in 'unita'/'classi'; unita_in: numero di unita' 'unita'/'classi' delle 'nazioni' in 'territori'/'zone', nessuno = ovunque), 'da' (valore 0) e 'a' (valore 1) della rampa lineare (a < da = piu' basso e' piu' forte), 'peso', 'da_round'/'a_round' opzionali}; classi: terra, aerei, navi, navi_da_guerra, trasporti. 'sperimentale': true = '(sperimentale)' nel pannello, mai scelto da 'Automatico'. Campi 'punti_critici', 'ruoli' non usati in gioco. 'categorie': unita' di ogni categoria degli acquisti, comprate a rotazione nell'ordine scritto (un nome ripetuto = comprato piu' spesso). 'logistica' (step 3b), per nazione e per intervallo di round: 'acquisti.mix' = % dei PU rimasti dopo la difesa urgente per categoria (somma <= 100; il resto lo spende la logica di Hard), 'acquisti.obbligati' = minimi da comprare prima del mix; 'piazzamento' = fabbriche/zone di mare dove piazzare per primi gli acquisti del piano; 'ammassamento' = fronte e territori/zone di raccolta verso cui il movimento non di combattimento sposta le riserve ('forza' 1 = normale, 0 = spento). Nazione o round senza logistica = acquisti e movimenti di Hard. Step 3b-bis: 'quota_minima_piano' = % dei PU del turno riservata al piano (la difesa urgente puo' superare il resto solo per una fabbrica o la capitale a rischio oltre il 25%); 'ammassamento.aerei' true = anche gli aerei atterrano verso la raccolta (tra i territori sicuri); categoria 'scorta' = portaerei se i PU bastano, altrimenti cacciatorpediniere. Step 3c: fasi.'dichiarazioni' [{da, a, dal_round}] = guerra vietata prima di dal_round, poi dichiarata quando l'ammassamento e' fatto (TUV proprio sulla raccolta >= TUV nemico confinante); variante A1 = mettere dal_round 2. obiettivi.'critico' true = desiderata mai sotto 80. ammassamento.'modo' 'linea_del_fronte' = raccolta sui territori propri del fronte confinanti col nemico (pesati verso gli obiettivi), i 'territori' restano come ripiego prima della guerra; ammassamento.'peso' + 'altre_raccolte' [{fronte, peso, territori, modo}] = raccolte su piu' fronti pesate; 'presidio_minimo' {territori, unita} = unita' di terra minime dopo il movimento; 'imbarco' = punti d'imbarco usati quando la raccolta e' oltremare (+1 trasporto obbligato finche' la capacita' non basta).",
   "gioco": "World War II Europe 1940 2nd Edition",
   "fronti": [
     {
@@ -146,32 +146,14 @@
           },
           "tappe": [
             {"territorio": "France", "entro_round": 1},
-            {"territorio": "Novgorod", "entro_round": 5},
-            {"territorio": "Volgograd", "entro_round": 6},
-            {"territorio": "Russia", "entro_round": 7},
-            {"territorio": "Egypt", "entro_round": 4}
+            {"territorio": "Egypt", "entro_round": 4},
+            {"territorio": "Novgorod", "entro_round": 6},
+            {"territorio": "Russia", "entro_round": 9}
           ],
           "firma": [
-            {
-              "indizio": "ammassamento di unita' tedesche sul confine russo (Poland, Slovakia Hungary, Romania)",
-              "tipo": "ammassamento",
-              "territori": ["Poland", "Slovakia Hungary", "Romania"],
-              "nazione": "Germans",
-              "peso": 3
-            },
-            {
-              "indizio": "acquisti tedeschi di carri e fanteria meccanizzata, pochi trasporti",
-              "tipo": "acquisti",
-              "unita": ["armour", "mech_infantry"],
-              "nazione": "Germans",
-              "peso": 2
-            },
-            {
-              "indizio": "dichiarazione di guerra all'URSS entro il round 3",
-              "tipo": "politica",
-              "nazione": "Germans",
-              "peso": 3
-            }
+            {"indizio": "quota del TUV di terra tedesco sul fronte Est", "tipo": "quota_tuv_fronte", "nazioni": ["Germans"], "fronte": "Est", "da": 0.25, "a": 0.55, "peso": 3},
+            {"indizio": "acquisti tedeschi di terra oltre l'80%", "tipo": "quota_acquisti", "nazioni": ["Germans"], "classi": ["terra"], "da": 0.6, "a": 0.85, "peso": 2},
+            {"indizio": "pochi trasporti tedeschi", "tipo": "unita_in", "nazioni": ["Germans"], "classi": ["trasporti"], "da": 3, "a": 1, "peso": 2}
           ],
           "punti_critici": [
             {
@@ -194,6 +176,7 @@
         {
           "id": "B",
           "nome": "Sea Lion",
+          "sperimentale": true,
           "descrizione": "Francia e flotte britanniche al round 1, invasione del Regno Unito nei round 2-3, poi (R4+) come Barbarossa a Est.",
           "fasi": [
             {
@@ -294,30 +277,13 @@
             "Germans": "distrugge la flotta britannica e sbarca nel Regno Unito",
             "Italians": "tiene impegnata la flotta britannica nel Mediterraneo"
           },
-          "tappe": [{"territorio": "France", "entro_round": 1}, {"territorio": "United Kingdom", "entro_round": 3}],
+          "tappe": [
+            {"territorio": "United Kingdom", "entro_round": 3}
+          ],
           "firma": [
-            {
-              "indizio": "trasporti tedeschi nel Mare del Nord / Baltico (112, 113, 114 Sea Zone)",
-              "tipo": "unita_in_zona",
-              "zone": ["112 Sea Zone", "113 Sea Zone", "114 Sea Zone"],
-              "unita": ["transport"],
-              "nazione": "Germans",
-              "peso": 4
-            },
-            {
-              "indizio": "acquisti tedeschi di trasporti e navi nel round 1-2",
-              "tipo": "acquisti",
-              "unita": ["transport", "destroyer", "cruiser"],
-              "nazione": "Germans",
-              "peso": 3
-            },
-            {
-              "indizio": "aerei tedeschi concentrati in Western Germany / Holland Belgium / Normandy Bordeaux",
-              "tipo": "ammassamento",
-              "territori": ["Western Germany", "Holland Belgium", "Normandy Bordeaux"],
-              "nazione": "Germans",
-              "peso": 2
-            }
+            {"indizio": "almeno 3 trasporti tedeschi nel Baltico / Mare del Nord", "tipo": "unita_in", "nazioni": ["Germans"], "classi": ["trasporti"], "zone": ["110 Sea Zone", "111 Sea Zone", "112 Sea Zone", "113 Sea Zone", "114 Sea Zone", "115 Sea Zone"], "da": 0, "a": 3, "peso": 4},
+            {"indizio": "aerei tedeschi sulla costa ovest", "tipo": "unita_in", "nazioni": ["Germans"], "classi": ["aerei"], "territori": ["Western Germany", "Holland Belgium", "Normandy Bordeaux", "Denmark", "France"], "da": 6, "a": 12, "peso": 2},
+            {"indizio": "acquisti tedeschi navali", "tipo": "quota_acquisti", "nazioni": ["Germans"], "classi": ["navi"], "da": 0.1, "a": 0.4, "peso": 3}
           ],
           "punti_critici": [
             {
@@ -424,26 +390,17 @@
             "Italians": "tiene il Mediterraneo e chiude l'Egitto"
           },
           "tappe": [
-            {"territorio": "France", "entro_round": 1},
-            {"territorio": "Novgorod", "entro_round": 5},
-            {"territorio": "Russia", "entro_round": 7}
+            {"territorio": "France", "entro_round": 2},
+            {"territorio": "Egypt", "entro_round": 5},
+            {"territorio": "Novgorod", "entro_round": 7},
+            {"territorio": "Russia", "entro_round": 10}
           ],
           "firma": [
-            {
-              "indizio": "trasporti tedeschi nel Mare del Nord senza sbarco entro il round 3",
-              "tipo": "unita_in_zona",
-              "zone": ["112 Sea Zone", "113 Sea Zone"],
-              "unita": ["transport"],
-              "nazione": "Germans",
-              "peso": 3
-            },
-            {
-              "indizio": "ammassamento a Est dal round 2",
-              "tipo": "ammassamento",
-              "territori": ["Poland", "Slovakia Hungary", "Romania"],
-              "nazione": "Germans",
-              "peso": 3
-            }
+            {"indizio": "trasporti tedeschi nel Baltico / Mare del Nord nei primi round", "tipo": "unita_in", "nazioni": ["Germans"], "classi": ["trasporti"], "zone": ["110 Sea Zone", "111 Sea Zone", "112 Sea Zone", "113 Sea Zone", "114 Sea Zone", "115 Sea Zone"], "da": 0, "a": 3, "peso": 3, "a_round": 2},
+            {"indizio": "acquisti tedeschi navali nei primi round", "tipo": "quota_acquisti", "nazioni": ["Germans"], "classi": ["navi"], "da": 0.1, "a": 0.4, "peso": 2, "a_round": 2},
+            {"indizio": "poi ammassamento tedesco a Est", "tipo": "quota_tuv_fronte", "nazioni": ["Germans"], "fronte": "Est", "da": 0.25, "a": 0.55, "peso": 3, "da_round": 3},
+            {"indizio": "trasporti tedeschi ancora in mare ma nessuno sbarco nel Regno Unito", "tipo": "unita_in", "nazioni": ["Germans"], "classi": ["trasporti"], "da": 1, "a": 3, "peso": 2, "da_round": 3},
+            {"indizio": "nessuna unita' tedesca sbarcata nel Regno Unito", "tipo": "unita_in", "nazioni": ["Germans"], "classi": ["terra"], "territori": ["United Kingdom", "Scotland"], "da": 1, "a": 0, "peso": 1, "da_round": 3}
           ],
           "punti_critici": [
             {
@@ -519,34 +476,15 @@
             "Italians": "chiude: Egitto, Grecia, poi Medio Oriente"
           },
           "tappe": [
-            {"territorio": "France", "entro_round": 1},
             {"territorio": "Egypt", "entro_round": 3},
             {"territorio": "Gibraltar", "entro_round": 3},
+            {"territorio": "Trans-Jordan", "entro_round": 4},
             {"territorio": "Caucasus", "entro_round": 7}
           ],
           "firma": [
-            {
-              "indizio": "trasporti dell'Asse tra Italia e Libia (95, 96, 97 Sea Zone)",
-              "tipo": "unita_in_zona",
-              "zone": ["95 Sea Zone", "96 Sea Zone", "97 Sea Zone"],
-              "unita": ["transport"],
-              "nazione": "Italians",
-              "peso": 3
-            },
-            {
-              "indizio": "unita' tedesche in Libya / Tobruk",
-              "tipo": "ammassamento",
-              "territori": ["Libya", "Tobruk"],
-              "nazione": "Germans",
-              "peso": 4
-            },
-            {
-              "indizio": "pressione su Gibraltar e Malta",
-              "tipo": "ammassamento",
-              "territori": ["Southern France", "Sicily"],
-              "nazione": "Germans",
-              "peso": 2
-            }
+            {"indizio": "unita' o aerei tedeschi in Italia o in Africa", "tipo": "unita_in", "nazioni": ["Germans"], "classi": ["terra", "aerei"], "territori": ["Northern Italy", "Southern Italy", "Sicily", "Sardinia", "Albania", "Libya", "Tobruk", "Tunisia", "Algeria", "Egypt", "Alexandria", "Morocco"], "da": 0, "a": 4, "peso": 4},
+            {"indizio": "trasporti italiani attivi nel Mediterraneo", "tipo": "unita_in", "nazioni": ["Italians"], "classi": ["trasporti"], "zone": ["93 Sea Zone", "94 Sea Zone", "95 Sea Zone", "96 Sea Zone", "97 Sea Zone", "98 Sea Zone", "99 Sea Zone"], "da": 2, "a": 4, "peso": 2},
+            {"indizio": "TUV di terra dell'Asse sul fronte Mediterraneo-Africa alto", "tipo": "quota_tuv_fronte", "nazioni": ["Germans", "Italians"], "fronte": "Mediterraneo-Africa", "da": 0.3, "a": 0.5, "peso": 3}
           ],
           "punti_critici": [
             {
@@ -645,26 +583,14 @@
             "French": "difende quel che resta"
           },
           "tappe": [
-            {"territorio": "Normandy Bordeaux", "entro_round": 5},
-            {"territorio": "Holland Belgium", "entro_round": 6},
-            {"territorio": "Norway", "entro_round": 6}
+            {"nome": "prima zona di sbarco (Normandy Bordeaux o Norway o Holland Belgium)", "territori": ["Normandy Bordeaux", "Norway", "Holland Belgium"], "richiesti": "uno", "entro_round": 5},
+            {"territorio": "France", "entro_round": 8},
+            {"territorio": "Germany", "entro_round": 11}
           ],
           "firma": [
-            {
-              "indizio": "trasporti alleati in 106, 109, 110 Sea Zone",
-              "tipo": "unita_in_zona",
-              "zone": ["106 Sea Zone", "109 Sea Zone", "110 Sea Zone"],
-              "unita": ["transport"],
-              "nazione": "Americans",
-              "peso": 4
-            },
-            {
-              "indizio": "acquisti americani di trasporti e fanteria",
-              "tipo": "acquisti",
-              "unita": ["transport", "infantry"],
-              "nazione": "Americans",
-              "peso": 3
-            }
+            {"indizio": "acquisti americani navali e di trasporti", "tipo": "quota_acquisti", "nazioni": ["Americans"], "classi": ["navi"], "da": 0.3, "a": 0.6, "peso": 3},
+            {"indizio": "flotta americana verso l'Atlantico orientale / Regno Unito", "tipo": "unita_in", "nazioni": ["Americans"], "classi": ["navi"], "zone": ["104 Sea Zone", "105 Sea Zone", "109 Sea Zone", "110 Sea Zone", "111 Sea Zone", "119 Sea Zone"], "da": 0, "a": 4, "peso": 3},
+            {"indizio": "trasporti britannici attorno al Regno Unito", "tipo": "unita_in", "nazioni": ["British"], "classi": ["trasporti"], "zone": ["109 Sea Zone", "110 Sea Zone", "111 Sea Zone", "119 Sea Zone"], "da": 1, "a": 3, "peso": 2}
           ],
           "punti_critici": [
             {
@@ -737,26 +663,14 @@
             "French": "difende quel che resta"
           },
           "tappe": [
-            {"territorio": "Tobruk", "entro_round": 3},
-            {"territorio": "Libya", "entro_round": 4},
-            {"territorio": "Southern Italy", "entro_round": 6}
+            {"territori": ["Libya", "Tobruk"], "richiesti": "tutti", "entro_round": 5},
+            {"territorio": "Southern Italy", "entro_round": 7},
+            {"territorio": "Northern Italy", "entro_round": 9}
           ],
           "firma": [
-            {
-              "indizio": "trasporti alleati in 91, 92, 93 Sea Zone (Gibilterra)",
-              "tipo": "unita_in_zona",
-              "zone": ["91 Sea Zone", "92 Sea Zone", "93 Sea Zone"],
-              "unita": ["transport"],
-              "nazione": "Americans",
-              "peso": 3
-            },
-            {
-              "indizio": "rinforzi britannici in Egypt",
-              "tipo": "ammassamento",
-              "territori": ["Egypt", "Alexandria"],
-              "nazione": "British",
-              "peso": 3
-            }
+            {"indizio": "flotta americana verso Gibilterra / Marocco", "tipo": "unita_in", "nazioni": ["Americans"], "classi": ["navi"], "zone": ["91 Sea Zone", "92 Sea Zone", "93 Sea Zone"], "da": 0, "a": 4, "peso": 3},
+            {"indizio": "rinforzi britannici in Egitto", "tipo": "unita_in", "nazioni": ["British"], "classi": ["terra"], "territori": ["Egypt", "Alexandria", "Trans-Jordan", "Anglo Egyptian Sudan"], "da": 5, "a": 10, "peso": 3},
+            {"indizio": "marina alleata nel Mediterraneo", "tipo": "unita_in", "nazioni": ["British", "Americans", "French"], "classi": ["navi"], "zone": ["92 Sea Zone", "93 Sea Zone", "94 Sea Zone", "95 Sea Zone", "96 Sea Zone", "97 Sea Zone", "98 Sea Zone", "99 Sea Zone", "100 Sea Zone"], "da": 6, "a": 12, "peso": 2}
           ],
           "punti_critici": [
             {
@@ -807,7 +721,9 @@
             "French": "difende quel che resta"
           },
           "tappe": [],
-          "firma": [],
+          "firma": [
+            {"indizio": "quota di bombardieri negli acquisti alleati alta", "tipo": "quota_acquisti", "nazioni": ["Americans", "British"], "unita": ["bomber"], "da": 0.1, "a": 0.35, "peso": 4}
+          ],
           "punti_critici": []
         }
       ]

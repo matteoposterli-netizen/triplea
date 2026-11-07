@@ -115,6 +115,9 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   nelle proprietà della partita, `fix`), `PianoAttivo` (ordini per nazione/round: fase, rischio per
   fronte, obiettivi). Dati: `game-core/src/main/resources/proplus/strategia/indice.json` +
   `ww2eur40_2nd_edition.json`. Vedi "Stato maggiore e piani".
+- Step 3c: `ai/proplus/MinacciaReale` (nemici reali), `ai/pro/ProThreat` (minaccia per il diario),
+  `ai/proplus/strategia/Valutazione` (avanzamento del piano e lettura del nemico). Vedi "Minaccia
+  reale" e "Avanzamento del piano e lettura del nemico".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -150,6 +153,15 @@ JDK 25 richiesto (toolchain Gradle `JavaLanguageVersion.of(25)`; `mise.toml` →
   (le dipendenze scaricate restano in cache). JDK 25 scaricabile da GitHub releases Adoptium.
 
 ### Partita headless AI vs AI
+
+**Banco Pro+ (dallo step 3c, committato)**: `smoke-testing/.../engine/data/ProPlusBenchTest`, attivo
+solo con la variabile d'ambiente `PROPLUS_BANCO_XML` (percorso dell'XML della mappa, es.
+`ww2eur40_2nd_edition.xml` scaricato da `triplea-maps/world_war_ii_europe`); `PROPLUS_BANCO_ROUNDS`
+(4), `PROPLUS_BANCO_PIANI` (`Axis=A,Allies=1`), `PROPLUS_BANCO_SEED` (1, dadi di gioco; le
+simulazioni dell'AI restano casuali), `PROPLUS_BANCO_DIARIO` (cartella del diario = l'output).
+Tutte le nazioni Pro+ Equilibrato. Comando: `./gradlew :smoke-testing:test --tests
+'*ProPlusBenchTest' --rerun` (senza `--rerun` Gradle salta il test se il codice non è cambiato).
+Nella CI e in `:smoke-testing:test` normale è saltato.
 
 Non esiste un runner CLI. Il modo supportato è `AiGameTest` in `:smoke-testing`
 (`GameTestUtils.setUpGameWithAis(xml)` mette `PlayerTypes.PRO_AI` su tutti i giocatori e chiama
@@ -316,11 +328,12 @@ rischio effettivo e obiettivi per bersaglio).
 - Schema per piano: `id`, `nome`, `descrizione`, `fasi` [`da_round`, `a_round` (assente = fino a
   fine partita), `fronti` {fronte: -1/0/+1, assente = 0}, `obiettivi` [{`territorio` | `flotta`
   (zone di mare con navi di quella nazione), `peso`, `nazioni` opzionale}]], `ruoli` {nazione:
-  compito}, `tappe` [{`territorio`, `entro_round`}], `firma` [{`indizio`, `tipo`, `territori`,
-  `zone`, `unita`, `nazione`, `peso`}], `punti_critici` [{`descrizione`, `tipo`, `territori`,
-  `zone`, `unita`, `nazione`}], `logistica` (step 3b, vedi "Logistica del piano"). Usati: `fasi`
-  (rischio, obiettivi), `logistica`; `ruoli` appare nel diario; `tappe`/`firma`/`punti_critici`
-  sono letti ma non usati.
+  compito}, `tappe` e `firma` (step 3c, vedi "Avanzamento del piano e lettura del nemico"),
+  `sperimentale` (step 3c: "(sperimentale)" nel pannello, mai scelto da "Automatico"; B Sea Lion),
+  `punti_critici` [{`descrizione`, `tipo`, `territori`, `zone`, `unita`, `nazione`}], `logistica`
+  (step 3b, vedi "Logistica del piano"). Usati: `fasi` (rischio, obiettivi), `logistica`; `ruoli`
+  appare nel diario; `tappe`/`firma` solo osservazione (step 3c); `punti_critici` letti ma non
+  usati.
 - Fronti Europe 1940: Ovest, Est, Mediterraneo-Africa, Mari (`zone_di_mare: true` = tutte le zone
   di mare), Altro. Piani: Asse A Barbarossa (Automatico), B Sea Lion, C Finta Sea Lion,
   D Sud/Mediterraneo, N Neutro (tutti 0, nessun obiettivo, nessuna logistica: per confronti); B
@@ -424,7 +437,7 @@ Italia in B) ⇒ acquisti e movimenti di Hard.
   tetto" negli acquisti; "aerei verso la raccolta" nell'ammassamento. JSON `capitale`,
   `quota_piano`, `ammassamento_aerei`.
 
-### Politica, linea del fronte, presidi, imbarco, obiettivi critici (step 3c)
+### Politica, linea del fronte, presidi, imbarco, obiettivi critici (step 3b-ter)
 
 - **Politica**: `fasi[].dichiarazioni` [{`da`, `a`, `dal_round`}] (unione di tutte le fasi del piano,
   `Piano.dichiarazione`). `ProTuning.warDecision(proData, nemico)` → `ProWarDecision` (HARD default;
@@ -457,6 +470,94 @@ Italia in B) ⇒ acquisti e movimenti di Hard.
   etichetta "+ trasporto per l'imbarco").
 - **Quote**: Germania 50%, Italia 40% in tutti i piani (oltre a USA 70%, UK 40%).
 - Russi: raccolta `linea_del_fronte` (Est) in tutti i piani alleati, ripiego "Russia".
+
+### Minaccia reale (step 3c)
+
+Principio (deciso da Matteo): un territorio, capitali comprese, si presidia o rinforza **solo se può
+essere attaccato prima del prossimo turno della nazione** da unità che possono arrivarci davvero.
+- **Causa delle difese inutili** (verificata sul banco, R1 USA): la stima degli attacchi nemici di
+  Hard (`ProTerritoryManager.findEnemyAttackOptions`) prende come nemici **tutti i giocatori non
+  alleati** (`ProUtils.getEnemyPlayersInTurnOrder`) e li muove ignorando i rapporti
+  (`isIgnoringRelationships = true`). In Europe 1940 USA e Regno Unito sono in "Neutrality" fino
+  all'entrata in guerra degli USA ⇒ per gli USA le unità britanniche in Ontario/Quebec + bombardiere
+  UK "attaccano" Central United States (rischio 100% con la sola fabbrica: la simulazione del turno
+  ha già spostato via le unità) e per il Regno Unito le unità USA "attaccano" il Quebec. Trasporti
+  e aerei erano contati correttamente (aerei: atterraggio controllato; trasporti: raggio e carico).
+- `ProTuning.realEnemies(proData, player)` (default vuoto = Hard: tutti i non alleati). Pro+
+  (`ProPlusTuning`, cache per dati/giocatore/round/step; con o senza piano) usa
+  `proplus/MinacciaReale.nemici`: nemici **in guerra**; nemici a cui il piano fa dichiarare guerra
+  dalla nazione stessa entro il prossimo round (`dichiarazioni` con `da` = la nazione e `dal_round` ≤
+  round+1: la dichiarazione avviene a inizio del prossimo turno e le unità lasciate ora sono quelle
+  che il nemico trova; es. Germania R2 con Barbarossa ⇒ URSS conta); nemici che **possono
+  dichiararci guerra adesso** secondo la mappa (azione politica di un giocatore non alleato, condizioni
+  vere, tentativi rimasti, che mette in guerra lui e la nazione; condizioni testate con
+  `ProDummyDelegateBridge`; es. per gli USA la Germania conta sempre, per la Germania l'URSS conta
+  dal round 4 in Europe 1940). Il filtro è applicato in `findEnemyAttackOptions` (gli
+  altri usi delle unità nemiche — valore dei territori, bersagli — non cambiano) ⇒ vale per tutto
+  ciò che usa la stima: difesa negli acquisti (`defend_land`), eccezioni alla quota del piano,
+  guarnigione della capitale, movimenti di difesa del non-combattimento, contrattacchi stimati nel
+  combattimento.
+- Raggiungibilità: resta il modello di Hard (terra per movimento, sbarchi da trasporti in raggio
+  con unità caricabili, aerei nel raggio con atterraggio). **Produzione nemica non contata**: le unità
+  che il nemico piazza nel suo turno non possono attaccare prima del mio prossimo turno (scelta
+  motivata nel report dello step 3c).
+- **Presidi** (`presidio_minimo`, step 3b-ter): `ProTuning.garrisonNeeded` (default sì); Pro+ solo
+  se la stima ha unità nemiche **sbarcabili** su quel territorio (`getMaxAmphibUnits` della stima
+  filtrata) ⇒ presidio solo con trasporti nemici in raggio e unità da caricare. Limite noto del
+  modello di Hard: un trasporto non passa per zone con navi nemiche (le mie): la flotta tedesca in
+  110 SZ "protegge" Normandy/Holland Belgium dagli sbarchi britannici anche se l'UK potrebbe
+  attaccarla prima di sbarcare.
+- Diario: negli acquisti "difendo X: minaccia reale da <nazione> (<perché>): <unità>" per ogni
+  territorio dove la difesa ha comprato, poi "PU risparmiati sulla difesa: N (stima: difesa di Hard
+  per K territori minacciati solo da nazioni che non possono attaccare prima del prossimo turno)".
+  Stima (`ProPurchaseAi.reportRealThreatDefense`, solo diario, calcolata sempre per Pro+ così le
+  decisioni non dipendono dal diario on/off): seconda stima con tutti i non alleati
+  (`ProTerritoryManager.populateEnemyAttackOptionsOfEveryEnemy`); per ogni territorio di
+  piazzamento che il test di Hard trova in pericolo solo così, la fanteria/unità di terra più
+  economica, una alla volta (max produzione della fabbrica, max 10), finché tiene come vuole Hard;
+  limite ai PU del turno. Movimento: "difendo X: ..." sotto la riga della capitale quando la
+  guarnigione cambia, "difendo X: ... (sbarco)" sotto ogni presidio, "Presidi non necessari (nessuno
+  sbarco nemico possibile prima del prossimo turno): N". JSON `difesa_minaccia_reale`
+  {difesi, pu_risparmiati, territori_non_minacciati}, `presidi_non_necessari`, `presidio.minaccia`.
+- Codice: `ProThreat` (unità nemiche per nazione + perché), `ProCapitalGuard.Result.threat`,
+  `GarrisonResult.threat`, hook `ProDecisionRecorder.realThreatDefense` / `garrisonsNotNeeded`.
+
+### Avanzamento del piano e lettura del nemico (step 3c, solo osservazione)
+
+Nessuna decisione dell'AI legge questi dati. `strategia/Valutazione.inizioRound`, chiamata in
+`ProPlusAi.logPhase` al primo turno Pro+ di ogni round dell'alleanza (le altre nazioni trovano la
+voce già scritta), aggiunge una voce a `storico` di `"Pro+ stato maggiore: <alleanza>"`
+(`StatoMaggiore.aggiungiStorico`) e scrive nel diario un blocco "Stato maggiore <alleanza> - inizio
+round N (piano X)" prima del turno della prima nazione (`DiaryRecorder.allianceRound`; JSON
+`stato_maggiore_round` = la voce dello storico).
+- **Tappe** (`tappe` [{`territorio` | `territori` + `richiesti` `tutti` (default) / `uno`, `nome`
+  opzionale, `entro_round`}]): raggiunta (territori dell'alleanza ora, o raggiunta a un inizio round
+  precedente: resta raggiunta) / in tempo / in ritardo (round superato e non raggiunta). Dati: A France
+  R1, Egypt R4, Novgorod R6, Russia R9; B United Kingdom R3; C come A + 1 round (France R2 compresa,
+  alla lettera); D Egypt R3, Gibraltar R3, Trans-Jordan R4, Caucasus R7; Alleati 1 "prima zona di
+  sbarco" (uno tra Normandy Bordeaux, Norway, Holland Belgium) R5, France R8, Germany R11; 2
+  Libya+Tobruk R5, Southern Italy R7, Northern Italy R9; N e 3 nessuna.
+- **Indicatori**: reddito dell'alleanza (somma `ProUtils.getPlayerProduction`, solo produzione dei
+  territori) ora, al R1 (prima voce dello storico) e del nemico; bilancio TUV cumulato = TUV nemico
+  distrutto − TUV perso in tutte le battaglie (`BattleRecordsList`, per attaccante; il difensore è
+  considerato dell'altra parte: attacchi a neutrali contano come perdite nemiche).
+- **Stato**: IN CRISI se ≥ 2 tappe in ritardo e reddito in calo in ciascuno degli ultimi 2 round;
+  IN RITARDO se ≥ 1 tappa in ritardo o reddito in calo da 2 round; altrimenti IN LINEA.
+- **Lettura del nemico**: per ogni piano nemico con `firma` (N escluso): punteggio = media pesata dei
+  valori degli indizi validi nel round; probabilità del round ∝ punteggio² + 0.05 (`EPSILON`);
+  probabilità = 0.5 × quelle del round prima + 0.5 × quelle del round (`INERZIA`; R1 parte da
+  probabilità uguali) ⇒ si muovono al massimo di metà distanza per round. Indizio (`firma`):
+  {`indizio`, `tipo`, `nazioni`, `fronte`, `territori`/`zone`, `unita`/`classi`, `da`, `a`, `peso`,
+  `da_round`, `a_round`}; valore = rampa lineare da `da` (0) ad `a` (1), `a < da` = più basso è più
+  forte. Tipi: `quota_tuv_fronte` (quota del TUV di terra delle nazioni sul fronte), `quota_acquisti`
+  (quota dei PU degli ultimi 2 acquisti delle nazioni, dalla **cronologia della partita**: eventi
+  dei passi `...Purchase` con le unità; nessun acquisto ancora ⇒ indizio non valutato),
+  `unita_in` (unità nei territori/zone, nessuno = ovunque). Classi: terra, aerei, navi,
+  navi_da_guerra, trasporti. Pesi e rampe iniziali (scelti, non tarati) nel file. Indizi principali
+  = i 3 con peso × valore più alti. Con avversario Pro+ (piano fissato nelle proprietà) "(piano
+  reale avversario: X - lettura corretta si'/no)", corretta = il piano più probabile è quello vero.
+- Testi: "Avanzamento: <stato> - tappe: ...; reddito N PU (R1 .., nemico ..), bilancio TUV ±N
+  (nemico -.., noi -..)" e "Lettura del nemico: <piano> 55%, ... - indizi principali: ...".
 
 ## Log degli step
 
@@ -977,7 +1078,10 @@ nell'ammassamento B (Germania R1-3) e D (Italia).
   la scelta per valore aereo di Hard (attacchi possibili nel Mediterraneo) supera il bonus quando la
   raccolta più vicina (Holland Belgium appena presa) non è sicura. Da rivedere.
 
-### Step 3c — correzioni dalla partita di Matteo (7 round, Asse A Spericolato, Alleati 1) (2026-11-07)
+### Step 3b-ter — correzioni dalla partita di Matteo (7 round, Asse A Spericolato, Alleati 1) (2026-11-07)
+
+Nota: nei commit e nei commenti del codice di quel giorno questo step si chiama ancora "step 3c"
+(rinominato su richiesta di Matteo; lo step 3c è quello sotto).
 
 Vedi "Politica, linea del fronte, presidi, imbarco, obiettivi critici". Classi Pro toccate (solo
 agganci, default = Hard): `ProTuning` (+ `warDecision`, `minimumGarrisons`), `ProPoliticsAi`,
@@ -1012,4 +1116,46 @@ Holland Belgium, Denmark); stessi ordini per B R4+ e C R3+.
   (solo terre proprie/alleate) e coperto da test, non ripetuto nel banco.
 - Russi: linea del fronte formata dal R3; al R4 32 unità su 49 "allontanate" dalla linea (la difesa
   di Hard le ritira verso l'interno): da valutare.
+
+### Step 3c — difesa solo su minaccia reale + avanzamento del piano e lettura del nemico (2026-11-07)
+
+Vedi "Minaccia reale" e "Avanzamento del piano e lettura del nemico". Classi Pro toccate (solo
+agganci, default = Hard): `ProTuning` (+ `realEnemies`, `garrisonNeeded`), `ProTerritoryManager`
+(filtro in `findEnemyAttackOptions`, + `populateEnemyAttackOptionsOfEveryEnemy`), `ProPurchaseAi`
+(`reportRealThreatDefense`, solo diario), `ProNonCombatMoveAi` (presidi condizionati),
+`ProCapitalGuard` (`Result.threat`, `GarrisonResult.threat`), `ProDecisionRecorder` (+ 2 hook). Nuove:
+`ProThreat`, `proplus/MinacciaReale`, `strategia/Valutazione`, banco `ProPlusBenchTest`. Dati: tappe e
+firme di tutti i piani, B Sea Lion `sperimentale`. Rinominato lo step precedente "3c" → "3b-ter"
+(CLAUDE.md e commenti; i nomi `PlanStep3cTest`/`ordersOfStep3c` restano).
+
+#### Test
+- `RealThreatTest`: USA R1 senza britannici/russi tra i nemici reali (Germania sì, "regole della
+  mappa"); causa: con Hard le unità britanniche attaccano Central United States; Washington (Eastern
+  United States) e Central United States senza acquisti di difesa ai R1-R3; Manica senza trasporti
+  alleati ⇒ 3 presidi non necessari; con il trasporto UK di 109 SZ ⇒ presidio di Denmark con minaccia
+  "British in guerra" (Normandy no: 110 SZ ha navi tedesche); Germania R1 Barbarossa senza URSS, R2 con
+  URSS ("guerra prevista dal piano dal round 3") nella stima degli attacchi su Berlino.
+- `ValutazioneTest` (9): tappe nel file, B sperimentale e mai "Automatico", file malformati, rampa,
+  avanzamento in tempo/in ritardo/raggiunta (resta raggiunta), una voce per round per alleanza, tappa
+  già alleata a inizio partita raggiunta solo se ripresa, lettura con inerzia (Sea Lion sale coi
+  trasporti tedeschi), piano reale avversario, acquisti dalla cronologia.
+- Golden Hard, `DiaryNeutralityTest`, tutti i test `ai.*` + `:ai:test` + `:game-headed:test` verdi.
+
+#### Banco Europe 1940 (4 round, dadi seed 1, tutti Pro+ Equilibrato; A/1 126 s, D/2 121 s)
+PU in difesa (`defend_land`) per nazione, R1/R2/R3/R4, nuova vs build precedente (stesso seed):
+- A/1: USA 0/0/0/0 vs 13/7/9/0 (al piano 30/30/30/56 vs 19/23/23/56); UK 0/0/0/0 vs 9/10/0/0;
+  Germania 0/0/0/12 vs 9/0/0/0; URSS 6/7/6/0 vs 3/6/20/0; Italia 0 vs 0/0/0/6.
+- D/2: USA 0/0/0/0 vs 12/10/12/0; UK 0/0/0/0 vs 9/9/0/0; URSS 4/9/3/10 vs 10/7/0/9; Germania e Italia 0.
+- "PU risparmiati" stimati: USA 12/12/12 (A/1), 12/6/0 (D/2); UK 9/9/0. Presidi Manica: R3 3 non
+  necessari, R4 tenuti (sbarco possibile). Berlino R2 (URSS contata): rischio 0%, 8 unità (nessuna
+  unità sovietica arriva in un turno).
+- Avanzamento: Asse IN LINEA in entrambe (A: France R2 raggiunta, Egypt R4; D: Gibraltar R2,
+  Egypt R3, Trans-Jordan R4); Alleati IN RITARDO dal R3 per reddito in calo (102→100→99).
+- Lettura (prob. del piano reale): A/1 Alleati leggono A 33/48/53/57% (>50% dal R3); Asse legge 1
+  27/46/56/61% (>50% dal R3). D/2 Alleati leggono D 48/29/32/21% (mai >50%; A in testa dal R2);
+  Asse legge 2 46/32/24/24% (mai; 1 al 58% dal R3).
+- Indizi che mancano (D/2): gli acquisti navali USA sono uguali nei piani 1 e 2 e la flotta USA non
+  può entrare nelle zone di Gibilterra prima della guerra ⇒ niente distingue 1 da 2 nei primi round;
+  "unità/aerei tedeschi in Italia/Africa" oscilla (17/0/17/0: aerei che atterrano e ripartono) e la
+  quota TUV Asse nel Mediterraneo crolla quando l'Italia perde unità ⇒ D non si stabilizza.
 

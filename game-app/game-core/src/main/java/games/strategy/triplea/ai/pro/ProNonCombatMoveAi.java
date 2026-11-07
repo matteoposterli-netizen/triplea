@@ -220,13 +220,42 @@ class ProNonCombatMoveAi {
           new ProCapitalGuard(proData, calc).apply(moveMap, capitalThreshold.getAsDouble());
       proData.getRecorder().capitalGuard(proData, guard);
     }
-    // Pro+: minimum garrisons of a plan (coasts exposed to landings)
+    // Pro+: minimum garrisons of a plan (coasts exposed to landings), where the tuning wants them
     final Map<String, Integer> garrisons = proData.getTuning().minimumGarrisons(proData);
     if (!garrisons.isEmpty()) {
+      final Map<String, Integer> needed = new LinkedHashMap<>();
+      final Map<String, ProThreat> threats = new HashMap<>();
+      final Map<GamePlayer, String> reasons =
+          proData.getTuning().realEnemies(proData, player).orElse(Map.of());
+      garrisons.forEach(
+          (name, units) -> {
+            final Territory t = data.getMap().getTerritoryOrNull(name);
+            if (t == null) {
+              return;
+            }
+            final ProTerritory enemy = territoryManager.getEnemyAttackOptions().getMax(t);
+            final List<Unit> landing =
+                enemy == null ? List.of() : new ArrayList<>(enemy.getMaxAmphibUnits());
+            if (proData.getTuning().garrisonNeeded(proData, t, landing)) {
+              needed.put(name, units);
+              threats.put(name, ProThreat.of(t, landing, reasons));
+            }
+          });
+      final int notNeeded =
+          (int)
+              garrisons.keySet().stream()
+                  .filter(name -> !needed.containsKey(name))
+                  .map(data.getMap()::getTerritoryOrNull)
+                  .filter(t -> t != null && t.isOwnedBy(player))
+                  .count();
       proData
           .getRecorder()
           .minimumGarrisons(
-              proData, new ProCapitalGuard(proData, calc).minimumGarrisons(moveMap, garrisons));
+              proData,
+              new ProCapitalGuard(proData, calc).minimumGarrisons(moveMap, needed, threats));
+      if (notNeeded > 0) {
+        proData.getRecorder().garrisonsNotNeeded(proData, notNeeded);
+      }
     }
 
     // Determine where to move infra units

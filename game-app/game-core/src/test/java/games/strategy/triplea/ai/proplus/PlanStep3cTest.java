@@ -16,8 +16,8 @@ import games.strategy.triplea.xml.TestMapGameData;
 import org.junit.jupiter.api.Test;
 
 /**
- * Step 3c: politics, critical objectives, front line staging, minimum garrisons and embarkation of
- * the plans (Pro+ only). Global 1940 renamed as Europe 1940 (same European names).
+ * Step 3b-ter: politics, critical objectives, front line staging, minimum garrisons and embarkation
+ * of the plans (Pro+ only). Global 1940 renamed as Europe 1940 (same European names).
  */
 class PlanStep3cTest {
   private static final String EUROPE = "World War II Europe 1940 2nd Edition";

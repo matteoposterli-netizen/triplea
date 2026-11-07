@@ -50,6 +50,7 @@ public class ProCapitalGuard {
    * @param broughtBack units brought back, per territory they were going to (name → type → count)
    * @param hopeless the capital stays above the threshold even with every unit that can reach it
    *     (changes undone if at {@link #HOPELESS} or more)
+   * @param threat the enemy units that can attack the capital before the next turn
    */
   public record Result(
       Territory capital,
@@ -60,7 +61,8 @@ public class ProCapitalGuard {
       int garrisonAfter,
       Map<String, Integer> kept,
       Map<String, Map<String, Integer>> broughtBack,
-      boolean hopeless) {}
+      boolean hopeless,
+      ProThreat threat) {}
 
   private final ProData proData;
   private final ProOddsCalculator calc;
@@ -104,7 +106,8 @@ public class ProCapitalGuard {
           garrisonBefore,
           kept,
           broughtBack,
-          false);
+          false,
+          threat(cap));
     }
 
     final Set<Unit> cargo = cargo(moveMap);
@@ -166,7 +169,8 @@ public class ProCapitalGuard {
           garrisonBefore,
           kept,
           broughtBack,
-          true);
+          true,
+          threat(cap));
     }
     moved.forEach(
         (u, from) -> {
@@ -200,7 +204,8 @@ public class ProCapitalGuard {
         garrison(defenders),
         kept,
         broughtBack,
-        hopeless);
+        hopeless,
+        threat(cap));
   }
 
   /**
@@ -212,13 +217,15 @@ public class ProCapitalGuard {
    * @param after land units after the changes
    * @param moved units that stay or are brought in, per territory they were going to (name → type →
    *     count)
+   * @param threat the enemy units that can land there before the next turn (step 3c)
    */
   public record GarrisonResult(
       Territory territory,
       int required,
       int before,
       int after,
-      Map<String, Map<String, Integer>> moved) {}
+      Map<String, Map<String, Integer>> moved,
+      ProThreat threat) {}
 
   /**
    * Keeps at least the required land units in each own territory of {@code garrisons} (name →
@@ -226,7 +233,9 @@ public class ProCapitalGuard {
    * another garrisoned territory below its minimum. Territories not owned are skipped.
    */
   List<GarrisonResult> minimumGarrisons(
-      final Map<Territory, ProTerritory> moveMap, final Map<String, Integer> garrisons) {
+      final Map<Territory, ProTerritory> moveMap,
+      final Map<String, Integer> garrisons,
+      final Map<String, ProThreat> threats) {
     final List<GarrisonResult> results = new ArrayList<>();
     final Set<Territory> capitals =
         new HashSet<>(
@@ -301,9 +310,26 @@ public class ProCapitalGuard {
               + e.getValue()
               + "), moved "
               + moved);
-      results.add(new GarrisonResult(pt.getTerritory(), e.getValue(), before, after, moved));
+      results.add(
+          new GarrisonResult(
+              pt.getTerritory(),
+              e.getValue(),
+              before,
+              after,
+              moved,
+              threats.getOrDefault(
+                  pt.getTerritory().getName(),
+                  ProThreat.of(pt.getTerritory(), List.of(), Map.of()))));
     }
     return results;
+  }
+
+  /** The enemy units that can attack the capital, with why their nations count. */
+  private ProThreat threat(final ProTerritory cap) {
+    return ProThreat.of(
+        cap.getTerritory(),
+        cap.getMaxEnemyUnits(),
+        proData.getTuning().realEnemies(proData, player).orElse(Map.of()));
   }
 
   private static int landCount(final Collection<Unit> units) {

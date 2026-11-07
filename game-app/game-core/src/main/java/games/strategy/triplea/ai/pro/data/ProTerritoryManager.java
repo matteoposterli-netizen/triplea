@@ -10,6 +10,7 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.util.BreadthFirstSearch;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.ai.pro.ProData;
+import games.strategy.triplea.ai.pro.ProTuning;
 import games.strategy.triplea.ai.pro.logging.ProLogger;
 import games.strategy.triplea.ai.pro.util.ProBattleUtils;
 import games.strategy.triplea.ai.pro.util.ProMatches;
@@ -128,7 +129,19 @@ public class ProTerritoryManager {
       final Collection<Territory> clearedTerritories,
       final Collection<Territory> territoriesToCheck) {
     enemyAttackOptions =
-        findEnemyAttackOptions(proData, player, clearedTerritories, territoriesToCheck);
+        findEnemyAttackOptions(proData, player, clearedTerritories, territoriesToCheck, false);
+  }
+
+  /**
+   * {@link #populateEnemyAttackOptions} with every player not allied to the player, as the Pro AI
+   * counts them, even if the tuning keeps only its {@link ProTuning#realEnemies} (Pro+ diary: what
+   * the Hard defense would have answered).
+   */
+  public void populateEnemyAttackOptionsOfEveryEnemy(
+      final Collection<Territory> clearedTerritories,
+      final Collection<Territory> territoriesToCheck) {
+    enemyAttackOptions =
+        findEnemyAttackOptions(proData, player, clearedTerritories, territoriesToCheck, true);
   }
 
   public void populateEnemyDefenseOptions() {
@@ -507,11 +520,19 @@ public class ProTerritoryManager {
       final ProData proData,
       final GamePlayer player,
       final Collection<Territory> clearedTerritories,
-      final Collection<Territory> territoriesToCheck) {
+      final Collection<Territory> territoriesToCheck,
+      final boolean everyEnemy) {
     final GameState data = proData.getData();
 
     // Get enemy players in order of turn
     final List<GamePlayer> enemyPlayers = ProUtils.getEnemyPlayersInTurnOrder(player);
+    // Pro+: only the enemies that can really attack before the next turn (Hard: every one)
+    if (!everyEnemy) {
+      proData
+          .getTuning()
+          .realEnemies(proData, player)
+          .ifPresent(real -> enemyPlayers.removeIf(e -> !real.containsKey(e)));
+    }
     final List<Map<Territory, ProTerritory>> enemyAttackMaps = new ArrayList<>();
     final Set<Territory> alliedTerritories = new HashSet<>();
     final List<Territory> enemyTerritories = new ArrayList<>(clearedTerritories);

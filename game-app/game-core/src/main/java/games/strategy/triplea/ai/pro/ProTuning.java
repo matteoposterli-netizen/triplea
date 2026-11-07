@@ -3,8 +3,10 @@ package games.strategy.triplea.ai.pro;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.Territory;
+import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Properties;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -158,8 +160,8 @@ public interface ProTuning {
   }
 
   /**
-   * Whether the politics phase declares war on {@code enemy} (step 3c). {@link ProWarDecision#HARD}
-   * by default: the Pro AI's own random rule.
+   * Whether the politics phase declares war on {@code enemy} (step 3b-ter). {@link
+   * ProWarDecision#HARD} by default: the Pro AI's own random rule.
    */
   default ProWarDecision warDecision(final ProData proData, final GamePlayer enemy) {
     return ProWarDecision.HARD;
@@ -171,5 +173,25 @@ public interface ProTuning {
    */
   default Map<String, Integer> minimumGarrisons(final ProData proData) {
     return Map.of();
+  }
+
+  /**
+   * The players whose units can really attack {@code player}'s territories before its next turn,
+   * each with why (Pro+, step 3c: at war, war the plan declares, war the map lets them declare).
+   * Empty by default: the Pro AI counts every player not allied to {@code player}, as if at war.
+   */
+  default Optional<Map<GamePlayer, String>> realEnemies(
+      final ProData proData, final GamePlayer player) {
+    return Optional.empty();
+  }
+
+  /**
+   * Whether a plan's minimum garrison of {@code territory} applies this turn: {@code
+   * landingEnemies} are the enemy units that can land there before the next turn (from transports
+   * in range). Always by default (step 3b-ter garrisons were fixed).
+   */
+  default boolean garrisonNeeded(
+      final ProData proData, final Territory territory, final List<Unit> landingEnemies) {
+    return true;
   }
 }

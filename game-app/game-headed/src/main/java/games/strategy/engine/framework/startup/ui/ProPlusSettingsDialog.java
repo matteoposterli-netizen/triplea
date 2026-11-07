@@ -229,7 +229,7 @@ final class ProPlusSettingsDialog {
       final String auto = alleanza.pianoAutomatico().map(p -> " (= " + p.label() + ")").orElse("");
       combo.addItem(new PlanChoice(StatoMaggiore.AUTOMATICO, "Automatico" + auto, ""));
       for (final Strategia.Piano piano : alleanza.piani()) {
-        combo.addItem(new PlanChoice(piano.id(), piano.label(), piano.descrizione()));
+        combo.addItem(new PlanChoice(piano.id(), piano.etichettaPannello(), piano.descrizione()));
       }
       final Optional<StatoMaggiore.Stato> fixed = StatoMaggiore.getState(props, alliance);
       final String selected =

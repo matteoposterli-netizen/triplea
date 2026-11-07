@@ -474,6 +474,16 @@ class ProPurchaseAi {
           true);
     }
     proData.getRecorder().purchaseStep(proData, "defend_land", purchaseTerritories, Map.of());
+    final Optional<Map<GamePlayer, String>> realEnemies =
+        proData.getTuning().realEnemies(proData, player);
+    if (realEnemies.isPresent()) {
+      reportRealThreatDefense(
+          purchaseTerritories,
+          needToDefendLandTerritories,
+          placeTerritories,
+          purchaseOptions,
+          realEnemies.get());
+    }
     if (proData.isBeta()) {
       purchaseCapitalDefenceIfCooked(purchaseTerritories, purchaseOptions);
       proData
@@ -849,6 +859,95 @@ class ProPurchaseAi {
             end);
     ProLogger.info("[Pro+] Plan share in the defense purchase: " + share);
     proData.getRecorder().purchaseDefenseShare(proData, orders, share);
+  }
+
+  /**
+   * Pro+ (step 3c), for the diary: the land the defense bought units for and the enemy units it
+   * answers, and an estimate of the PUs the Hard defense would have spent on land that only players
+   * unable to attack before the next turn threaten: for each such territory that Hard's test finds
+   * in danger, the cheapest land defender, one at a time (at most the factory's production, 10 at
+   * most), until it holds as Hard's defense wants it to. Decisions don't change.
+   */
+  private void reportRealThreatDefense(
+      final Map<Territory, ProPurchaseTerritory> purchaseTerritories,
+      final List<ProPlaceTerritory> needToDefend,
+      final Set<Territory> placeTerritories,
+      final ProPurchaseOptionMap purchaseOptions,
+      final Map<GamePlayer, String> reasons) {
+    final ProOtherMoveOptions enemy = territoryManager.getEnemyAttackOptions();
+    final List<ProThreat> defended = new ArrayList<>();
+    final Set<Territory> needed = new HashSet<>();
+    for (final ProPlaceTerritory ppt : needToDefend) {
+      needed.add(ppt.getTerritory());
+      if (!ppt.getPlaceUnits().isEmpty() && enemy.getMax(ppt.getTerritory()) != null) {
+        defended.add(
+            ProThreat.of(ppt.getTerritory(), attackers(enemy, ppt.getTerritory()), reasons));
+      }
+    }
+    final ProTerritoryManager hard = new ProTerritoryManager(calc, proData);
+    hard.populateEnemyAttackOptionsOfEveryEnemy(List.of(), placeTerritories);
+    final ProOtherMoveOptions hardEnemy = hard.getEnemyAttackOptions();
+    final Optional<ProPurchaseOption> cheapest =
+        purchaseOptions.getLandFodderOptions().stream()
+            .filter(o -> o.getCost() > 0)
+            .min(
+                Comparator.comparingInt(ProPurchaseOption::getCost)
+                    .thenComparing(o -> o.getUnitType().getName()));
+    int saved = 0;
+    int territories = 0;
+    for (final ProPurchaseTerritory pt : purchaseTerritories.values()) {
+      for (final ProPlaceTerritory place : pt.getCanPlaceTerritories()) {
+        final Territory t = place.getTerritory();
+        if (t.isWater() || needed.contains(t) || hardEnemy.getMax(t) == null) {
+          continue;
+        }
+        final Set<Unit> hardAttackers = attackers(hardEnemy, t);
+        if (enemy.getMax(t) != null && attackers(enemy, t).containsAll(hardAttackers)) {
+          continue;
+        }
+        final Set<Unit> bombard = hardEnemy.getMax(t).getMaxBombardUnits();
+        final List<Unit> defenders = new ArrayList<>(place.getDefendingUnits());
+        ProBattleResult result =
+            calc.calculateBattleResults(proData, t, hardAttackers, defenders, bombard);
+        final boolean onlyAir =
+            !hardAttackers.isEmpty() && hardAttackers.stream().allMatch(Matches.unitIsAir());
+        final boolean inDanger =
+            result.isHasLandUnitRemaining()
+                || result.getTuvSwing() > 0
+                || (t.equals(proData.getMyCapital())
+                    && !onlyAir
+                    && result.getWinPercentage() > (100 - proData.getWinPercentage()));
+        if (!inDanger || cheapest.isEmpty()) {
+          continue;
+        }
+        territories++;
+        final int maxUnits = Math.min(10, pt.getUnitProduction());
+        int units = 0;
+        while (units < maxUnits) {
+          defenders.addAll(cheapest.get().createTempUnits());
+          units += cheapest.get().getQuantity();
+          saved += cheapest.get().getCost();
+          result = calc.calculateBattleResults(proData, t, hardAttackers, defenders, bombard);
+          final boolean holds =
+              t.equals(proData.getMyCapital())
+                  ? result.getWinPercentage() < (100 - proData.getWinPercentage())
+                      && result.getTuvSwing() <= 0
+                  : !result.isHasLandUnitRemaining() && result.getTuvSwing() <= 0;
+          if (holds) {
+            break;
+          }
+        }
+      }
+    }
+    final int pus =
+        player.getResources().getQuantity(data.getResourceList().getResourceOrThrow(Constants.PUS));
+    proData.getRecorder().realThreatDefense(proData, defended, Math.min(saved, pus), territories);
+  }
+
+  private static Set<Unit> attackers(final ProOtherMoveOptions options, final Territory t) {
+    final Set<Unit> units = new HashSet<>(options.getMax(t).getMaxUnits());
+    units.addAll(options.getMax(t).getMaxAmphibUnits());
+    return units;
   }
 
   private void findDefendersInPlaceTerritories(

@@ -149,7 +149,7 @@ public final class PianoAttivo {
     return obiettivi.stream().anyMatch(o -> matches(o, t));
   }
 
-  /** Whether {@code t} is a critical objective of this nation's phase (step 3c). */
+  /** Whether {@code t} is a critical objective of this nation's phase (step 3b-ter). */
   public boolean isCritico(final Territory t) {
     return obiettivi.stream().anyMatch(o -> o.critico() && matches(o, t));
   }

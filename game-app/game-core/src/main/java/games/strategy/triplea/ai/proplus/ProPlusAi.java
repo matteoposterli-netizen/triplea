@@ -11,6 +11,7 @@ import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.ai.proplus.strategia.Strategie;
+import games.strategy.triplea.ai.proplus.strategia.Valutazione;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
@@ -80,6 +81,12 @@ public class ProPlusAi extends ProAi {
       fixPlan(data, player);
       if (getProData().getTuning() instanceof ProPlusTuning tuning) {
         tuning.forgetPlan();
+      }
+      // step 3c, observation only: the alliance's general staff at the start of the round
+      try {
+        Valutazione.inizioRound(data, player).ifPresent(r -> DiaryRecorder.allianceRound(data, r));
+      } catch (final RuntimeException e) {
+        ProLogger.warn("[Pro+] General staff check failed: " + e);
       }
       ProLogger.info(turnStartLine(data, player));
     }
