@@ -13,6 +13,8 @@ import games.strategy.triplea.ai.pro.AbstractProAi;
 import games.strategy.triplea.ai.pro.ProAttackWorth;
 import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.ProDecisionRecorder;
+import games.strategy.triplea.ai.pro.ProPurchaseOrders;
+import games.strategy.triplea.ai.pro.ProStagingOrders;
 import games.strategy.triplea.ai.pro.ProTuning;
 import games.strategy.triplea.ai.pro.data.ProBattleResult;
 import games.strategy.triplea.ai.pro.data.ProPlaceTerritory;
@@ -91,6 +93,9 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   private boolean purchaseWritten = true;
   private int pusAtStart;
   private int purchaseSpent;
+  private @Nullable ProPurchaseOrders planOrders;
+  private @Nullable ProPurchaseOrders.Result planResult;
+  private Map<String, Double> unitCosts = Map.of();
 
   // combat plan
   private boolean planFrozen;
@@ -183,6 +188,8 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     purchaseTotal = Map.of();
     purchaseSpent = 0;
     purchaseWritten = false;
+    planOrders = null;
+    planResult = null;
     planFrozen = false;
     attacksWritten = false;
     attacks = new LinkedHashMap<>();
@@ -477,7 +484,299 @@ public final class DiaryRecorder implements ProDecisionRecorder {
         sb.append('\n');
       }
     }
+    if (planOrders != null && planResult != null) {
+      sb.append(planPurchaseText(planOrders, planResult));
+    }
     diary.text(sb.toString());
+  }
+
+  @Override
+  public void purchaseOrders(
+      final ProData proData,
+      final ProPurchaseOrders orders,
+      final ProPurchaseOrders.Result result) {
+    guard(
+        () -> {
+          if (!active || !"purchase".equals(phase)) {
+            return;
+          }
+          planOrders = orders;
+          planResult = result;
+          unitCosts = unitCosts(proData);
+          final JsonObject json = event("acquisti_piano");
+          json.addProperty("ordini", orders.label());
+          json.addProperty("pu_dopo_difesa", result.budget());
+          json.addProperty("pu_avanzati", result.left());
+          final JsonObject mix = new JsonObject();
+          for (final ProPurchaseOrders.Category c : orders.mix()) {
+            final JsonObject j = new JsonObject();
+            j.addProperty("percento", c.percent());
+            j.addProperty("pu_obiettivo", round1(result.targets().get(c.name())));
+            j.addProperty("pu_piano", result.spent().getOrDefault(c.name(), 0));
+            j.add("unita_piano", counts(result.units().getOrDefault(c.name(), Map.of())));
+            mix.add(c.name(), j);
+          }
+          json.add("mix", mix);
+          final JsonObject placed = new JsonObject();
+          result.placements().forEach((t, units) -> placed.add(t, counts(units)));
+          json.add("piazzamento", placed);
+          final JsonArray missing = new JsonArray();
+          result.mandatoryMissing().forEach(missing::add);
+          json.add("obbligati_mancanti", missing);
+          final JsonObject exposed = new JsonObject();
+          result.exposed().forEach((zone, tuv) -> exposed.addProperty(zone, round1(tuv)));
+          json.add("zone_esposte", exposed);
+          diary.json(json);
+        });
+  }
+
+  /**
+   * Eg: "Mix del piano (A Barbarossa, Germans R1-3), 30 PU dopo la difesa urgente:" then per
+   * category the target, what the plan's purchase bought and what the whole turn bought.
+   */
+  private String planPurchaseText(
+      final ProPurchaseOrders orders, final ProPurchaseOrders.Result result) {
+    final StringBuilder sb = new StringBuilder();
+    sb.append(
+        String.format(
+            "  Mix del piano (%s), %d PU dopo la difesa urgente (%d avanzati al resto"
+                + " dell'acquisto):%n",
+            orders.label(), result.budget(), result.left()));
+    final Map<String, Integer> realSpent = realSpentByCategory(orders);
+    final int total = Math.max(1, purchaseSpent);
+    for (final ProPurchaseOrders.Category c : orders.mix()) {
+      final Map<String, Integer> units = result.units().getOrDefault(c.name(), Map.of());
+      sb.append(
+          String.format(
+              Locale.ROOT,
+              "    - %s: obiettivo %s%% = %s PU; piano %d PU (%s); reale nel turno %d PU (%s)%n",
+              c.name(),
+              Italian.number(c.percent()),
+              Italian.number(result.targets().get(c.name())),
+              result.spent().getOrDefault(c.name(), 0),
+              Italian.units(units),
+              realSpent.getOrDefault(c.name(), 0),
+              Italian.percent(100.0 * realSpent.getOrDefault(c.name(), 0) / total)));
+    }
+    for (final ProPurchaseOrders.Mandatory m : orders.mandatory()) {
+      if (orders.mix().stream().anyMatch(c -> c.name().equals(m.category()))) {
+        continue;
+      }
+      sb.append(
+          String.format(
+              Locale.ROOT,
+              "    - %s (obbligato, almeno %d): piano %d PU (%s); reale nel turno %d PU (%s)%n",
+              m.category(),
+              m.minimum(),
+              result.spent().getOrDefault(m.category(), 0),
+              Italian.units(result.units().getOrDefault(m.category(), Map.of())),
+              realSpent.getOrDefault(m.category(), 0),
+              Italian.percent(100.0 * realSpent.getOrDefault(m.category(), 0) / total)));
+    }
+    final int other = realSpent.getOrDefault("", 0);
+    if (other > 0) {
+      sb.append(
+          String.format(
+              "    - fuori dal mix (difesa urgente, avanzi, altre unita'): %d PU (%s)%n",
+              other, Italian.percent(100.0 * other / total)));
+    }
+    result
+        .exposed()
+        .forEach(
+            (zone, tuv) ->
+                sb.append(
+                    String.format(
+                        "    ! navi del piano in una zona attaccabile (nessuna zona sicura): %s,"
+                            + " il nemico puo' attaccare con %s TUV oltre la difesa%n",
+                        zone, Italian.number(tuv))));
+    for (final String missing : result.mandatoryMissing()) {
+      sb.append("    ! acquisto obbligato non fatto: ").append(missing).append('\n');
+    }
+    if (!result.placements().isEmpty()) {
+      sb.append("    Piazzamento del piano: ");
+      sb.append(
+          result.placements().entrySet().stream()
+              .map(e -> e.getKey() + " " + Italian.units(e.getValue()))
+              .collect(Collectors.joining("; ")));
+      sb.append('\n');
+    }
+    return sb.toString();
+  }
+
+  /**
+   * PUs of the whole turn's purchase per category of the mix: a unit type counts in the first
+   * category that has it (mix order, then mandatory categories); "" = in none.
+   */
+  private Map<String, Integer> realSpentByCategory(final ProPurchaseOrders orders) {
+    final Map<String, String> categoryOf = new HashMap<>();
+    orders.mix().forEach(c -> c.unitTypes().forEach(u -> categoryOf.putIfAbsent(u, c.name())));
+    orders
+        .mandatory()
+        .forEach(m -> m.unitTypes().forEach(u -> categoryOf.putIfAbsent(u, m.category())));
+    final Map<String, Double> spent = new HashMap<>();
+    purchaseTotal.forEach(
+        (type, count) ->
+            spent.merge(
+                categoryOf.getOrDefault(type, ""),
+                unitCosts.getOrDefault(type, 0.0) * count,
+                Double::sum));
+    final Map<String, Integer> rounded = new HashMap<>();
+    spent.forEach((k, v) -> rounded.put(k, (int) Math.round(v)));
+    return rounded;
+  }
+
+  private static Map<String, Double> unitCosts(final ProData proData) {
+    final Map<String, Double> unitCost = new HashMap<>();
+    if (proData.getPurchaseOptions() != null) {
+      proData
+          .getPurchaseOptions()
+          .getAllOptions()
+          .forEach(
+              o ->
+                  unitCost.putIfAbsent(
+                      o.getUnitType().getName(),
+                      o.getCost() / (double) Math.max(1, o.getQuantity())));
+    }
+    return unitCost;
+  }
+
+  // ---------------------------------------------------------------- staging (non-combat move)
+
+  @Override
+  public void staging(
+      final ProData proData,
+      final ProStagingOrders orders,
+      final ProStagingOrders.Result result,
+      final Map<Territory, ProTerritory> moveMap) {
+    guard(
+        () -> {
+          if (!active || !"noncombat".equals(phase)) {
+            return;
+          }
+          final GamePlayer player = proData.getPlayer();
+          final Map<String, Integer> movedTo = new TreeMap<>();
+          final Map<String, Integer> stayed = new TreeMap<>();
+          int closer = 0;
+          int same = 0;
+          int farther = 0;
+          double distanceBefore = 0;
+          double distanceAfter = 0;
+          int measured = 0;
+          for (final ProTerritory dest : moveMap.values()) {
+            for (final Unit u : dest.getUnits()) {
+              if (!u.isOwnedBy(player) || Matches.unitIsInfrastructure().test(u)) {
+                continue;
+              }
+              final Territory from = proData.getUnitTerritory(u);
+              final Territory to = dest.getTerritory();
+              if (from == null || from.equals(to)) {
+                stayed.merge(to.getName(), 1, Integer::sum);
+                continue;
+              }
+              movedTo.merge(to.getName(), 1, Integer::sum);
+              final int before = result.distance().getOrDefault(from, ProStagingOrders.RANGE + 1);
+              final int after = result.distance().getOrDefault(to, ProStagingOrders.RANGE + 1);
+              if (after < before) {
+                closer++;
+              } else if (after == before) {
+                same++;
+              } else {
+                farther++;
+              }
+              distanceBefore += before;
+              distanceAfter += after;
+              measured++;
+            }
+          }
+          final StringBuilder sb = new StringBuilder();
+          sb.append(
+              String.format(
+                  "  Ammassamento (%s)%s, raccolta: %s%n",
+                  orders.label(),
+                  orders.front().isEmpty() ? "" : " verso il fronte " + orders.front(),
+                  String.join(", ", orders.territories())));
+          final int moved = closer + same + farther;
+          sb.append(
+              String.format(
+                  Locale.ROOT,
+                  "    unita' mosse %d: %d avvicinate alla raccolta, %d alla stessa distanza, %d"
+                      + " allontanate; distanza media %s -> %s (oltre %d = %d)%n",
+                  moved,
+                  closer,
+                  same,
+                  farther,
+                  Italian.number(measured == 0 ? 0 : distanceBefore / measured),
+                  Italian.number(measured == 0 ? 0 : distanceAfter / measured),
+                  ProStagingOrders.RANGE,
+                  ProStagingOrders.RANGE + 1));
+          if (!movedTo.isEmpty()) {
+            sb.append("    destinazioni: ")
+                .append(stagingPlaces(movedTo, proData, result))
+                .append('\n');
+          }
+          if (!stayed.isEmpty()) {
+            sb.append("    ferme: ").append(stagingPlaces(stayed, proData, result)).append('\n');
+          }
+          sb.append(
+              String.format(
+                  Locale.ROOT,
+                  "    Perche': dopo i movimenti di difesa dei territori minacciati, ogni"
+                      + " destinazione riceve un bonus di valore = forza %s x %s (terra) / %s"
+                      + " (mare) / (1 + distanza dalla raccolta); le riserve vanno dove il valore"
+                      + " totale e' piu' alto.%n",
+                  Italian.number(orders.strength()),
+                  Italian.number(result.landScale()),
+                  Italian.number(result.seaScale())));
+          diary.text(sb.toString());
+          final JsonObject json = event("ammassamento");
+          json.addProperty("ordini", orders.label());
+          json.addProperty("fronte", orders.front());
+          final JsonArray targets = new JsonArray();
+          orders.territories().forEach(targets::add);
+          json.add("raccolta", targets);
+          json.addProperty("forza", orders.strength());
+          json.addProperty("scala_terra", round1(result.landScale()));
+          json.addProperty("scala_mare", round1(result.seaScale()));
+          json.addProperty("mosse", moved);
+          json.addProperty("avvicinate", closer);
+          json.addProperty("stessa_distanza", same);
+          json.addProperty("allontanate", farther);
+          json.add("destinazioni", counts(movedTo));
+          json.add("ferme", counts(stayed));
+          diary.json(json);
+        });
+  }
+
+  /** Eg: "Poland 4 (Est, distanza 0, bonus +12)". */
+  private String stagingPlaces(
+      final Map<String, Integer> counts,
+      final ProData proData,
+      final ProStagingOrders.Result result) {
+    final Optional<PianoAttivo> plan =
+        ai.getProData().getTuning() instanceof ProPlusTuning tuning
+            ? tuning.plan(proData.getData(), proData.getPlayer())
+            : Optional.empty();
+    return counts.entrySet().stream()
+        .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+        .map(
+            e -> {
+              final Territory t = proData.getData().getMap().getTerritoryOrNull(e.getKey());
+              final StringBuilder sb =
+                  new StringBuilder(e.getKey()).append(' ').append(e.getValue());
+              if (t != null) {
+                sb.append(" (");
+                plan.ifPresent(p -> sb.append(p.fronte(t)).append(", "));
+                final Integer d = result.distance().get(t);
+                sb.append(d == null ? "lontano" : "distanza " + d);
+                final Double bonus = result.bonus().get(t);
+                if (bonus != null) {
+                  sb.append(", bonus +").append(Italian.number(bonus));
+                }
+                sb.append(')');
+              }
+              return sb.toString();
+            })
+        .collect(Collectors.joining(", "));
   }
 
   // ---------------------------------------------------------------- combat plan

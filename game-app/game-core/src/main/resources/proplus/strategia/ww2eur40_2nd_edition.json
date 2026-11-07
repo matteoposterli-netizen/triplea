@@ -1,5 +1,5 @@
 {
-  "_nota": "Strategia Pro+ per World War II Europe 1940 2nd Edition. Valori modificabili. Modificatore di un fronte: -1, 0, +1 (rischio effettivo = livello del cursore dell'alleanza + modificatore, tra 1 e 5). Fronte non indicato in una fase = 0. 'a_round' assente = fino a fine partita. Obiettivo: 'territorio' (nome reale) oppure 'flotta' (zone di mare con navi di quella nazione); 'nazioni' assente = per tutta l'alleanza. 'peso' = punti aggiunti alla priorita' d'attacco (prima dei moltiplicatori capitale x5 / vicino alla mia capitale x3). Campi 'tappe', 'firma', 'punti_critici', 'ruoli' non usati in gioco nello step 3a.",
+  "_nota": "Strategia Pro+ per World War II Europe 1940 2nd Edition. Valori modificabili. Modificatore di un fronte: -1, 0, +1 (rischio effettivo = livello del cursore dell'alleanza + modificatore, tra 1 e 5). Fronte non indicato in una fase = 0. 'a_round' assente = fino a fine partita. Obiettivo: 'territorio' (nome reale) oppure 'flotta' (zone di mare con navi di quella nazione); 'nazioni' assente = per tutta l'alleanza. 'peso' = punti aggiunti alla priorita' d'attacco (prima dei moltiplicatori capitale x5 / vicino alla mia capitale x3). Campi 'tappe', 'firma', 'punti_critici', 'ruoli' non usati in gioco. 'categorie': unita' di ogni categoria degli acquisti, comprate a rotazione nell'ordine scritto (un nome ripetuto = comprato piu' spesso). 'logistica' (step 3b), per nazione e per intervallo di round: 'acquisti.mix' = % dei PU rimasti dopo la difesa urgente per categoria (somma <= 100; il resto lo spende la logica di Hard), 'acquisti.obbligati' = minimi da comprare prima del mix; 'piazzamento' = fabbriche/zone di mare dove piazzare per primi gli acquisti del piano; 'ammassamento' = fronte e territori/zone di raccolta verso cui il movimento non di combattimento sposta le riserve ('forza' 1 = normale, 0 = spento). Nazione o round senza logistica = acquisti e movimenti di Hard.",
   "gioco": "World War II Europe 1940 2nd Edition",
   "fronti": [
     {
@@ -39,6 +39,17 @@
       "zone_di_mare": true
     }
   ],
+  "categorie": {
+    "fanteria": ["infantry"],
+    "artiglieria": ["artillery"],
+    "carri_mech": ["armour", "mech_infantry"],
+    "aerei": ["fighter", "tactical_bomber"],
+    "caccia": ["fighter"],
+    "bombardieri": ["bomber"],
+    "navi_da_guerra": ["destroyer", "cruiser", "destroyer", "carrier"],
+    "cacciatorpediniere": ["destroyer"],
+    "trasporti": ["transport"]
+  },
   "alleanze": {
     "Axis": {
       "automatico": "A",
@@ -69,6 +80,24 @@
               ]
             }
           ],
+          "logistica": {
+            "Germans": [
+              { "da_round": 1, "a_round": 3,
+                "acquisti": { "mix": {"fanteria": 35, "artiglieria": 25, "carri_mech": 30, "aerei": 10} },
+                "piazzamento": ["Germany"],
+                "ammassamento": { "fronte": "Est", "territori": ["Poland", "Slovakia Hungary", "Romania"] } },
+              { "da_round": 4,
+                "acquisti": { "mix": {"fanteria": 35, "artiglieria": 25, "carri_mech": 30, "aerei": 10} },
+                "piazzamento": ["Germany"],
+                "ammassamento": { "fronte": "Est", "territori": ["Poland", "Slovakia Hungary", "Romania"] } }
+            ],
+            "Italians": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"trasporti": 25, "fanteria": 40, "carri_mech": 35} },
+                "piazzamento": ["Southern Italy", "97 Sea Zone", "95 Sea Zone"],
+                "ammassamento": { "fronte": "Mediterraneo-Africa", "territori": ["Libya", "Tobruk", "96 Sea Zone"] } }
+            ]
+          },
           "ruoli": {
             "Germans": "prende la Francia, colpisce la flotta britannica, poi guida l'invasione dell'URSS",
             "Italians": "tiene il Mediterraneo e chiude l'Egitto"
@@ -94,7 +123,7 @@
         {
           "id": "B",
           "nome": "Sea Lion",
-          "descrizione": "Francia e flotte britanniche al round 1, poi invasione del Regno Unito nei round 2-3.",
+          "descrizione": "Francia e flotte britanniche al round 1, invasione del Regno Unito nei round 2-3, poi (R4+) come Barbarossa a Est.",
           "fasi": [
             {
               "da_round": 1,
@@ -112,8 +141,35 @@
               "obiettivi": [
                 { "territorio": "United Kingdom", "peso": 20 }
               ]
+            },
+            {
+              "da_round": 4,
+              "fronti": { "Est": 1, "Ovest": -1, "Mediterraneo-Africa": 0, "Mari": 0 },
+              "obiettivi": [
+                { "territorio": "Novgorod", "peso": 15 },
+                { "territorio": "Russia", "peso": 15 },
+                { "territorio": "Volgograd", "peso": 15 },
+                { "territorio": "Ukraine", "peso": 10 },
+                { "territorio": "Egypt", "peso": 15, "nazioni": ["Italians"] }
+              ]
             }
           ],
+          "logistica": {
+            "Germans": [
+              { "da_round": 1, "a_round": 1,
+                "acquisti": { "mix": {"fanteria": 55, "artiglieria": 45}, "obbligati": [{ "categoria": "trasporti", "minimo": 2 }, { "categoria": "cacciatorpediniere", "minimo": 1 }] },
+                "piazzamento": ["Western Germany", "112 Sea Zone"],
+                "ammassamento": { "fronte": "Ovest", "territori": ["Holland Belgium", "Normandy Bordeaux", "Denmark", "112 Sea Zone"] } },
+              { "da_round": 2, "a_round": 3,
+                "acquisti": { "mix": {"fanteria": 30, "artiglieria": 20, "carri_mech": 25, "aerei": 25} },
+                "piazzamento": ["Western Germany", "112 Sea Zone"],
+                "ammassamento": { "fronte": "Ovest", "territori": ["Holland Belgium", "Normandy Bordeaux", "Denmark", "112 Sea Zone"] } },
+              { "da_round": 4,
+                "acquisti": { "mix": {"fanteria": 35, "artiglieria": 25, "carri_mech": 30, "aerei": 10} },
+                "piazzamento": ["Germany"],
+                "ammassamento": { "fronte": "Est", "territori": ["Poland", "Slovakia Hungary", "Romania"] } }
+            ]
+          },
           "ruoli": {
             "Germans": "distrugge la flotta britannica e sbarca nel Regno Unito",
             "Italians": "tiene impegnata la flotta britannica nel Mediterraneo"
@@ -165,6 +221,24 @@
               ]
             }
           ],
+          "logistica": {
+            "Germans": [
+              { "da_round": 1, "a_round": 2,
+                "acquisti": { "mix": {"fanteria": 40, "artiglieria": 25, "carri_mech": 25, "trasporti": 10}, "obbligati": [{ "categoria": "trasporti", "minimo": 1 }] },
+                "piazzamento": ["Western Germany", "112 Sea Zone"],
+                "ammassamento": { "fronte": "Ovest", "territori": ["Holland Belgium", "Normandy Bordeaux", "Denmark", "112 Sea Zone"] } },
+              { "da_round": 3,
+                "acquisti": { "mix": {"fanteria": 35, "artiglieria": 25, "carri_mech": 30, "aerei": 10} },
+                "piazzamento": ["Germany"],
+                "ammassamento": { "fronte": "Est", "territori": ["Poland", "Slovakia Hungary", "Romania"] } }
+            ],
+            "Italians": [
+              { "da_round": 3,
+                "acquisti": { "mix": {"trasporti": 25, "fanteria": 40, "carri_mech": 35} },
+                "piazzamento": ["Southern Italy", "97 Sea Zone", "95 Sea Zone"],
+                "ammassamento": { "fronte": "Mediterraneo-Africa", "territori": ["Libya", "Tobruk", "96 Sea Zone"] } }
+            ]
+          },
           "ruoli": {
             "Germans": "minaccia lo sbarco per tenere ferme le difese britanniche, poi attacca l'URSS",
             "Italians": "tiene il Mediterraneo e chiude l'Egitto"
@@ -211,6 +285,20 @@
               ]
             }
           ],
+          "logistica": {
+            "Germans": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"fanteria": 30, "artiglieria": 20, "carri_mech": 22, "aerei": 28} },
+                "piazzamento": ["Germany"],
+                "ammassamento": { "fronte": "Mediterraneo-Africa", "territori": ["Greater Southern Germany", "Northern Italy", "Southern Italy"] } }
+            ],
+            "Italians": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"trasporti": 30, "carri_mech": 40, "fanteria": 30} },
+                "piazzamento": ["Southern Italy", "97 Sea Zone", "95 Sea Zone"],
+                "ammassamento": { "fronte": "Mediterraneo-Africa", "territori": ["Libya", "Tobruk", "96 Sea Zone"] } }
+            ]
+          },
           "ruoli": {
             "Germans": "indebolisce: prende la Francia e manda aerei e carri in Nord Africa",
             "Italians": "chiude: Egitto, Grecia, poi Medio Oriente"
@@ -269,6 +357,30 @@
               ]
             }
           ],
+          "logistica": {
+            "Americans": [
+              { "da_round": 1, "a_round": 3,
+                "acquisti": { "mix": {"navi_da_guerra": 35, "trasporti": 20, "fanteria": 25, "artiglieria": 10, "carri_mech": 10} },
+                "piazzamento": ["Eastern United States", "101 Sea Zone"],
+                "ammassamento": { "fronte": "Ovest", "territori": ["United Kingdom", "109 Sea Zone", "110 Sea Zone"] } },
+              { "da_round": 4,
+                "acquisti": { "mix": {"fanteria": 35, "artiglieria": 20, "carri_mech": 20, "trasporti": 15, "navi_da_guerra": 10} },
+                "piazzamento": ["Eastern United States", "101 Sea Zone"],
+                "ammassamento": { "fronte": "Ovest", "territori": ["United Kingdom", "109 Sea Zone", "110 Sea Zone"] } }
+            ],
+            "British": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"fanteria": 50, "artiglieria": 15, "trasporti": 20, "navi_da_guerra": 15} },
+                "piazzamento": ["United Kingdom", "110 Sea Zone", "109 Sea Zone"],
+                "ammassamento": { "fronte": "Ovest", "territori": ["United Kingdom", "110 Sea Zone"] } }
+            ],
+            "Russians": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"fanteria": 65, "artiglieria": 35} },
+                "piazzamento": ["Russia"],
+                "ammassamento": { "fronte": "Est", "territori": ["Russia"] } }
+            ]
+          },
           "ruoli": {
             "Americans": "costruisce la flotta di sbarco e sbarca in Francia dal round 4",
             "British": "tiene il Regno Unito e la Manica, sbarca con gli americani",
@@ -305,6 +417,26 @@
               ]
             }
           ],
+          "logistica": {
+            "Americans": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"navi_da_guerra": 35, "trasporti": 20, "fanteria": 25, "artiglieria": 10, "carri_mech": 10} },
+                "piazzamento": ["Eastern United States", "101 Sea Zone"],
+                "ammassamento": { "fronte": "Mediterraneo-Africa", "territori": ["Morocco", "Gibraltar", "91 Sea Zone", "92 Sea Zone"] } }
+            ],
+            "British": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"fanteria": 35, "artiglieria": 15, "carri_mech": 15, "navi_da_guerra": 25, "trasporti": 10} },
+                "piazzamento": ["Union of South Africa", "71 Sea Zone", "United Kingdom"],
+                "ammassamento": { "fronte": "Mediterraneo-Africa", "territori": ["Egypt", "98 Sea Zone"] } }
+            ],
+            "Russians": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"fanteria": 65, "artiglieria": 35} },
+                "piazzamento": ["Russia"],
+                "ammassamento": { "fronte": "Est", "territori": ["Russia"] } }
+            ]
+          },
           "ruoli": {
             "Americans": "porta truppe nel Mediterraneo",
             "British": "chiude il Nord Africa italiano dall'Egitto",
@@ -332,6 +464,26 @@
           "fasi": [
             { "da_round": 1, "fronti": {}, "obiettivi": [] }
           ],
+          "logistica": {
+            "Americans": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"bombardieri": 35, "caccia": 15, "navi_da_guerra": 20, "trasporti": 15, "fanteria": 15} },
+                "piazzamento": ["Eastern United States", "101 Sea Zone"],
+                "ammassamento": { "territori": ["United Kingdom", "110 Sea Zone"] } }
+            ],
+            "British": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"bombardieri": 35, "caccia": 15, "fanteria": 35, "artiglieria": 15} },
+                "piazzamento": ["United Kingdom"],
+                "ammassamento": { "territori": ["United Kingdom"] } }
+            ],
+            "Russians": [
+              { "da_round": 1,
+                "acquisti": { "mix": {"fanteria": 65, "artiglieria": 35} },
+                "piazzamento": ["Russia"],
+                "ammassamento": { "fronte": "Est", "territori": ["Russia"] } }
+            ]
+          },
           "ruoli": {
             "Americans": "produce e rinforza dove serve",
             "British": "tiene le rotte e l'economia",

@@ -84,4 +84,21 @@ public interface ProDecisionRecorder {
       String step,
       Map<Territory, ProPurchaseTerritory> purchaseTerritories,
       Map<Territory, ProPurchaseTerritory> factoryTerritories) {}
+
+  /**
+   * The purchase followed a strategy plan's {@code orders} (called after the plan's purchases,
+   * before the rest of the Pro purchase).
+   */
+  default void purchaseOrders(
+      ProData proData, ProPurchaseOrders orders, ProPurchaseOrders.Result result) {}
+
+  /**
+   * The non-combat move followed a strategy plan's staging {@code orders}: {@code moveMap} holds
+   * the units assigned to each destination (also those that stay), just before the moves are made.
+   */
+  default void staging(
+      ProData proData,
+      ProStagingOrders orders,
+      ProStagingOrders.Result result,
+      Map<Territory, ProTerritory> moveMap) {}
 }

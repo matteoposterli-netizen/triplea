@@ -144,6 +144,17 @@ class ProNonCombatMoveAi {
     final Map<Territory, Double> seaTerritoryValueMap =
         ProTerritoryValueUtils.findSeaTerritoryValues(
             player, territoriesThatCantBeHeld, territoryManager.getDefendTerritories());
+    // A strategy plan's staging orders (Pro+): the units not needed for defense gather there
+    final Optional<ProStagingOrders> stagingOrders = proData.getTuning().stagingOrders(proData);
+    final Optional<ProStagingOrders.Result> staging =
+        stagingOrders.map(
+            orders ->
+                ProStaging.apply(
+                    proData,
+                    orders,
+                    territoryManager.getDefendTerritories(),
+                    territoryValueMap,
+                    seaTerritoryValueMap));
     final Map<Territory, Double> evaderSeaValueMap =
         proData.isBeta() ? findEvaderSeaValues(territoriesThatCantBeHeld) : Map.of();
     Map<Territory, ProTerritory> moveMap = territoryManager.getDefendOptions().getTerritoryMap();
@@ -205,6 +216,10 @@ class ProNonCombatMoveAi {
                 + " with options: "
                 + territoryManager.getDefendOptions().getUnitMoveMap().get(u));
       }
+    }
+
+    if (stagingOrders.isPresent()) {
+      proData.getRecorder().staging(proData, stagingOrders.get(), staging.orElseThrow(), moveMap);
     }
 
     // Calculate move routes and perform moves

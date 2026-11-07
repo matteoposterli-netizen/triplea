@@ -7,7 +7,7 @@ Data build      : @DATE@
 Sorgente        : https://github.com/@REPO@/tree/@COMMIT@
 
 
-STATO ATTUALE (step 3a)
+STATO ATTUALE (step 3b)
 -----------------------
 Nella scelta dei giocatori c'e' il tipo "Pro+ (AI)": e' l'AI "Hard (AI)"
 con queste differenze:
@@ -15,7 +15,9 @@ con queste differenze:
   - attacca secondo la "Propensione al rischio" scelta per la sua alleanza;
   - (step 3a) segue il PIANO dello "stato maggiore" della sua alleanza
     (vedi sotto): il rischio cambia per fronte e gli obiettivi del piano
-    hanno la precedenza.
+    hanno la precedenza;
+  - (step 3b) il piano guida anche ACQUISTI, PIAZZAMENTO e AMMASSAMENTO
+    delle riserve (vedi "LOGISTICA DEL PIANO").
 "Hard (AI)" e "Hard Beta (AI)" restano identiche all'originale.
 Il DIARIO DELLE DECISIONI (vedi sotto) racconta in italiano cosa ha deciso
 l'AI in ogni turno e perche'.
@@ -39,7 +41,8 @@ IMPOSTAZIONI PRO+ (propensione al rischio)
      5 Spericolato  65% (minimo 45%)
    Con Low Luck i valori salgono di 5 punti (massimo 95%); Prudente resta
    uguale a Hard anche con Low Luck (95%, minimo 75%).
-   Riguarda solo gli ATTACCHI: difesa, acquisti e ritirate restano come Hard.
+   Riguarda solo gli ATTACCHI: difesa e ritirate restano come Hard (gli
+   acquisti li orienta il piano, vedi "LOGISTICA DEL PIANO").
 4. I valori vengono salvati DENTRO la partita: ricaricando il salvataggio
    ritrovi gli stessi livelli (puoi cambiarli di nuovo dal pulsante prima di
    ripartire).
@@ -72,6 +75,11 @@ Cosa fa il piano, round per round (fasi):
   - gli OBIETTIVI del piano (es. France, la flotta britannica) salgono
     nella classifica degli attacchi e possono essere attaccati anche se
     poi non si tengono, entro un limite di perdite (TUV) del livello.
+    Il fronte +1 decide SE tentare l'obiettivo (soglia minima del livello
+    del fronte), ma le unita' impegnate puntano almeno alla soglia
+    desiderata del cursore (step 3b). Es. Barbarossa R1, cursore
+    Equilibrato, Ovest +1: France tentata da 52%, pianificata a 80%.
+  - Sea Lion (B) dal round 4 diventa come Barbarossa (Est +1, Ovest -1).
 Con il piano N/3 (tutti i fronti 0) e il cursore a Prudente le soglie e le
 regole d'attacco sono quelle di Hard.
 Il diario, a inizio turno, scrive piano, fase, rischio per fronte e
@@ -80,6 +88,47 @@ obiettivo del piano. Su mappe senza file di strategia Pro+ gioca come
 nello step 2d (nessun piano, avviso nel log).
 I piani sono nel file proplus/strategia/ww2eur40_2nd_edition.json dentro
 il programma: i numeri si possono cambiare in una build successiva.
+
+
+LOGISTICA DEL PIANO  (novita' step 3b, solo Pro+ con un piano)
+---------------------------------------------------------------
+Per ogni piano, nazione e gruppo di round il file dei piani dice:
+  - ACQUISTI: il "mix" = percentuale dei PU per categoria (fanteria,
+    artiglieria, carri/mech, aerei, navi da guerra, trasporti, caccia,
+    bombardieri) e gli acquisti obbligati (es. Sea Lion R1: almeno 2
+    trasporti e 1 cacciatorpediniere);
+  - PIAZZAMENTO: dove piazzare per primi gli acquisti del piano (es.
+    Barbarossa: Germany, la fabbrica piu' vicina all'Est);
+  - AMMASSAMENTO: verso quali territori/zone di mare spostare le riserve
+    nel movimento non di combattimento (es. Barbarossa: Poland, Slovakia
+    Hungary, Romania).
+La DIFESA RESTA PRIORITARIA: prima l'AI compra come Hard i difensori dei
+territori minacciati (capitale compresa); solo i PU che restano seguono il
+mix. Le navi del piano vanno prima nelle zone di mare che il nemico non
+puo' attaccare. Nel movimento, prima si difendono i territori minacciati,
+poi le riserve libere vanno verso la raccolta.
+Proposta attuale:
+  Asse  A Barbarossa: Germania fanteria 35%, artiglieria 25%, carri/mech
+          30%, aerei 10%, verso Est; Italia trasporti 25%, fanteria 40%,
+          carri/mech 35%, verso Libia/Tobruk.
+        B Sea Lion: Germania R1 2 trasporti + 1 cacciatorpediniere, resto
+          fanteria/artiglieria, verso Olanda-Belgio/Danimarca/Mare del
+          Nord; R2-3 terra + aerei (25%); R4+ come Barbarossa.
+        C Finta: R1-2 almeno 1 trasporto (10%), piu' terra; R3+ come A.
+        D Sud: Germania aerei 28% + terra, verso Italia; Italia
+          trasporti 30%, carri/mech 40%, fanteria 30% verso la Libia.
+        N Neutro: nessun effetto (acquisti e movimenti di Hard).
+  Alleati 1 Germania prima: USA R1-3 navi 35% + trasporti 20% (poi piu'
+          terra) verso Regno Unito/Manica; UK fanteria 50% + trasporti
+          nel Regno Unito; URSS fanteria/artiglieria verso Mosca.
+        2 Italia prima: USA navi + trasporti verso Gibilterra/Marocco; UK
+          rinforzi e marina verso l'Egitto; URSS come sopra.
+        3 Pressione economica: UK/USA bombardieri 35% + caccia 15%.
+  Francia e le nazioni non elencate comprano come Hard.
+Il diario, per ogni turno, scrive il "Mix del piano": per ogni categoria
+obiettivo (% e PU), cosa ha comprato il piano e cosa e' stato comprato in
+tutto il turno; e la sezione "Ammassamento": quante unita' si sono
+avvicinate alla raccolta, dove sono andate (fronte, distanza) e perche'.
 
 
 DIARIO DELLE DECISIONI  (novita' step 2bis)

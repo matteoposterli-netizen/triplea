@@ -128,4 +128,20 @@ public interface ProTuning {
       final ProData proData, final ProAttackWorth worth) {
     return Optional.empty();
   }
+
+  /**
+   * Purchase orders of a strategy plan for {@code proData}'s player now (mix per category,
+   * mandatory purchases, placement). Empty by default: Hard and Hard Beta buy as always.
+   */
+  default Optional<ProPurchaseOrders> purchaseOrders(final ProData proData) {
+    return Optional.empty();
+  }
+
+  /**
+   * Staging orders of a strategy plan for {@code proData}'s player now (where the non-combat move
+   * gathers the units not needed for defense). Empty by default: Hard and Hard Beta move as always.
+   */
+  default Optional<ProStagingOrders> stagingOrders(final ProData proData) {
+    return Optional.empty();
+  }
 }

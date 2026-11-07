@@ -52,10 +52,14 @@ class StrategyTuningTest {
     final ProData proData = proPlus(RiskLevel.EQUILIBRATO, "A");
     final boolean lowLuck = ProPlusTuning.isLowLuck(data);
 
+    // France is an objective: minimum of the front (Audace), desired of the base level (step 3b)
     assertThat(proData.getAttackWinPercentage(france))
-        .isEqualTo(RiskLevel.AUDACE.desiredWinPercentage(lowLuck));
+        .isEqualTo(RiskLevel.EQUILIBRATO.desiredWinPercentage(lowLuck));
     assertThat(proData.getAttackMinWinPercentage(france))
         .isEqualTo(RiskLevel.AUDACE.minimumWinPercentage(lowLuck));
+    // not an objective, same front: both from the front's level
+    assertThat(proData.getAttackWinPercentage(territory("Normandy Bordeaux")))
+        .isEqualTo(RiskLevel.AUDACE.desiredWinPercentage(lowLuck));
     assertThat(proData.getAttackWinPercentage(poland))
         .isEqualTo(RiskLevel.CAUTO.desiredWinPercentage(lowLuck));
     assertThat(proData.getAttackWinPercentage(egypt))
@@ -66,6 +70,44 @@ class StrategyTuningTest {
     // the searches start from the most cautious front
     assertThat(proData.getAttackWinPercentageCeiling())
         .isEqualTo(RiskLevel.CAUTO.desiredWinPercentage(lowLuck));
+  }
+
+  @Test
+  void anObjectiveIsTriedFromTheFrontsMinimumButPlannedToTheBaseLevelsDesired() {
+    final boolean lowLuck = ProPlusTuning.isLowLuck(data);
+    // Barbarossa R1, base Equilibrato, Ovest +1: France minimum 52 (Audace), desired 80
+    final ProData equilibrato = proPlus(RiskLevel.EQUILIBRATO, "A");
+    assertThat(equilibrato.getAttackMinWinPercentage(france)).isEqualTo(52);
+    assertThat(equilibrato.getAttackWinPercentage(france)).isEqualTo(80);
+    assertThat(ProPlusTuning.check(equilibrato, notWorthIn(france)).desired()).isEqualTo(80);
+    // a base level the front can't raise (Spericolato): the same level for both
+    final ProData spericolato = proPlus(RiskLevel.SPERICOLATO, "A");
+    assertThat(spericolato.getAttackWinPercentage(france))
+        .isEqualTo(RiskLevel.SPERICOLATO.desiredWinPercentage(lowLuck));
+    // Prudente + Ovest +1 = Cauto: tried from Cauto's minimum, planned to Prudente's desired
+    final ProData prudente = proPlus(RiskLevel.PRUDENTE, "A");
+    assertThat(prudente.getAttackMinWinPercentage(france))
+        .isEqualTo(RiskLevel.CAUTO.minimumWinPercentage(lowLuck));
+    assertThat(prudente.getAttackWinPercentage(france))
+        .isEqualTo(RiskLevel.PRUDENTE.desiredWinPercentage(lowLuck));
+    // the turn's ceiling still covers every target
+    for (final Territory t : data.getMap().getTerritories()) {
+      assertThat(equilibrato.getAttackWinPercentage(t))
+          .isLessThanOrEqualTo(equilibrato.getAttackWinPercentageCeiling());
+    }
+  }
+
+  @Test
+  void aFleetObjectiveSeaZoneIsPlannedToTheBaseLevelsDesiredToo() {
+    final ProData proData = proPlus(RiskLevel.EQUILIBRATO, "B"); // R1: Mari +1, flotta British
+    final Territory britishFleet =
+        data.getMap().getTerritories().stream()
+            .filter(
+                t -> t.isWater() && t.anyUnitsMatch(u -> u.getOwner().getName().equals("British")))
+            .findFirst()
+            .orElseThrow();
+    assertThat(proData.getAttackMinWinPercentage(britishFleet)).isEqualTo(52);
+    assertThat(proData.getAttackWinPercentage(britishFleet)).isEqualTo(80);
   }
 
   @Test

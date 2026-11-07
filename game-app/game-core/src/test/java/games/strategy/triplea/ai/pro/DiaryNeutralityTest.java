@@ -173,7 +173,9 @@ class DiaryNeutralityTest extends AbstractClientSettingTestCase {
     assertThat(france.get("fronte").getAsString()).isEqualTo("Ovest");
     assertThat(france.get("rischio_effettivo").getAsString()).isEqualTo("Audace");
     assertThat(france.get("obiettivo_piano").getAsBoolean()).isTrue();
-    assertThat(france.get("soglia_desiderata").getAsDouble()).isEqualTo(72);
+    // an objective of the plan: the front's minimum, the base level's desired win% (step 3b)
+    assertThat(france.get("soglia_desiderata").getAsDouble()).isEqualTo(80);
+    assertThat(france.get("soglia_minima").getAsDouble()).isEqualTo(52);
   }
 
   /** One German turn: phase hooks, purchase (with its attack plan) and combat move. */

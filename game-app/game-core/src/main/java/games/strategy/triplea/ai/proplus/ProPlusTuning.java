@@ -7,11 +7,17 @@ import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.ai.pro.ProAttackWorth;
 import games.strategy.triplea.ai.pro.ProData;
+import games.strategy.triplea.ai.pro.ProPurchaseOrders;
+import games.strategy.triplea.ai.pro.ProStagingOrders;
 import games.strategy.triplea.ai.pro.ProTuning;
 import games.strategy.triplea.ai.pro.util.ProNationalObjectiveUtils;
 import games.strategy.triplea.ai.pro.util.ProUtils;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
+import games.strategy.triplea.ai.proplus.strategia.Strategia;
 import games.strategy.triplea.attachments.TerritoryAttachment;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import javax.annotation.Nullable;
 
@@ -92,10 +98,26 @@ public final class ProPlusTuning implements ProTuning {
         .orElseGet(() -> ProPlusSettings.riskLevelFor(proData.getData(), proData.getPlayer()));
   }
 
+  /**
+   * Desired win% of an attack on {@code target}: the effective level's (base level + the front's
+   * modifier), but for an objective of the plan in force never below the base level's. The front's
+   * modifier decides whether to try an objective (minimum win%), not how few units to commit to it:
+   * with Ovest +1 France is tried from Audace's minimum but planned to Equilibrato's desired win%.
+   */
   @Override
   public double targetAttackWinPercentage(
       final ProData proData, final Territory target, final double attackWinPercentage) {
-    return riskLevel(proData, target).desiredWinPercentage(isLowLuck(proData.getData()));
+    return desiredWinPercentage(proData, target);
+  }
+
+  /** See {@link #targetAttackWinPercentage}. */
+  public static double desiredWinPercentage(final ProData proData, final Territory target) {
+    final boolean lowLuck = isLowLuck(proData.getData());
+    final double desired = riskLevel(proData, target).desiredWinPercentage(lowLuck);
+    return planOf(proData)
+        .filter(p -> !ProUtils.isNeutralLand(target) && p.isObiettivo(target))
+        .map(p -> Math.max(desired, p.getLivelloBase().desiredWinPercentage(lowLuck)))
+        .orElse(desired);
   }
 
   @Override
@@ -120,6 +142,69 @@ public final class ProPlusTuning implements ProTuning {
       return 0;
     }
     return planOf(proData).map(p -> p.peso(target)).orElse(0.0);
+  }
+
+  /**
+   * The plan's purchase orders for this nation and round (step 3b): the mix per category with the
+   * unit types of each category from the strategy file, mandatory purchases, preferred placement
+   * and the gathering territories (placement nearest to them). Empty without orders (plan N, a
+   * nation or round the plan has none for, no strategy file).
+   */
+  @Override
+  public Optional<ProPurchaseOrders> purchaseOrders(final ProData proData) {
+    return planOf(proData)
+        .flatMap(
+            plan ->
+                plan.getLogistica()
+                    .filter(l -> !l.mix().isEmpty() || !l.obbligati().isEmpty())
+                    .map(l -> purchaseOrders(plan, l)));
+  }
+
+  static ProPurchaseOrders purchaseOrders(final PianoAttivo plan, final Strategia.Logistica l) {
+    final Map<String, List<String>> categories = plan.getStrategia().getCategorie();
+    final List<ProPurchaseOrders.Category> mix = new ArrayList<>();
+    l.mix()
+        .forEach(
+            (name, percent) ->
+                mix.add(
+                    new ProPurchaseOrders.Category(
+                        name, percent, categories.getOrDefault(name, List.of()))));
+    final List<ProPurchaseOrders.Mandatory> mandatory =
+        l.obbligati().stream()
+            .map(
+                o ->
+                    new ProPurchaseOrders.Mandatory(
+                        o.categoria(),
+                        categories.getOrDefault(o.categoria(), List.of()),
+                        o.minimo()))
+            .toList();
+    return new ProPurchaseOrders(
+        ordersLabel(plan, l), mix, mandatory, l.piazzamento(), plan.territoriAmmassamento(l));
+  }
+
+  /**
+   * The plan's staging orders for this nation and round (step 3b): the gathering territories (or
+   * the front's land territories) and the pull strength. Empty without orders or with strength 0.
+   */
+  @Override
+  public Optional<ProStagingOrders> stagingOrders(final ProData proData) {
+    return planOf(proData)
+        .flatMap(
+            plan ->
+                plan.getLogistica()
+                    .filter(l -> l.forza() > 0 && !plan.territoriAmmassamento(l).isEmpty())
+                    .map(
+                        l ->
+                            new ProStagingOrders(
+                                ordersLabel(plan, l),
+                                Optional.ofNullable(l.fronteAmmassamento()).orElse(""),
+                                plan.territoriAmmassamento(l),
+                                l.forza())));
+  }
+
+  /** Eg: "A Barbarossa, Germans R1-3". */
+  private static String ordersLabel(final PianoAttivo plan, final Strategia.Logistica l) {
+    return plan.getPiano().label() + ", " + plan.getNazione() + " " + l.label();
   }
 
   @Override
@@ -209,10 +294,11 @@ public final class ProPlusTuning implements ProTuning {
     final boolean objectiveTarget = isObjectiveTarget(proData, worth.territory());
     final double objectiveMinWin = level.objectiveRuleMinWin(lowLuck);
     String keptBy = null;
+    final double desired = desiredWinPercentage(proData, worth.territory());
     if (level.keepsAttacksNotWorthIt()
         && !worth.neutral()
         && !worth.capturesTooRarely()
-        && worth.winPercentage() >= level.desiredWinPercentage(lowLuck)) {
+        && worth.winPercentage() >= desired) {
       if (takesSomething(worth) && riskValue >= -level.getValueTolerance()) {
         keptBy = KEPT_BY_RISK;
       } else if (objectiveTarget
@@ -223,7 +309,7 @@ public final class ProPlusTuning implements ProTuning {
     }
     return new UnworthAttackCheck(
         level,
-        level.desiredWinPercentage(lowLuck),
+        desired,
         riskValue,
         objectiveTarget,
         planOf(proData).isPresent(),

@@ -92,6 +92,10 @@ public final class Strategie {
     if (!unknown.isEmpty()) {
       ProLogger.warn("[Pro+] Strategia: nomi che non sono territori della mappa: " + unknown);
     }
+    final Set<String> unknownUnits = strategia.unknownUnitTypes(data);
+    if (!unknownUnits.isEmpty()) {
+      ProLogger.warn("[Pro+] Strategia: unita' che non esistono nella mappa: " + unknownUnits);
+    }
     final Set<String> unmapped = strategia.unmappedTerritories(data.getMap());
     if (!unmapped.isEmpty()) {
       ProLogger.warn(

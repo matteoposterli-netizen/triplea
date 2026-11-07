@@ -492,6 +492,27 @@ class ProPurchaseAi {
       }
     }
 
+    // A strategy plan's purchase orders (Pro+): after urgent defense, the PUs left follow its mix
+    proData
+        .getTuning()
+        .purchaseOrders(proData)
+        .ifPresent(
+            orders -> {
+              final ProPurchaseOrders.Result result =
+                  new ProPlanPurchase(
+                          orders,
+                          proData,
+                          startOfTurnData,
+                          resourceTracker,
+                          territoryManager,
+                          purchaseTerritories,
+                          purchaseOptions,
+                          this::addUnitsToPlace)
+                      .buy();
+              proData.getRecorder().purchaseOrders(proData, orders, result);
+              proData.getRecorder().purchaseStep(proData, "plan", purchaseTerritories, Map.of());
+            });
+
     // Prioritize land place options purchase AA then land units
     final List<ProPlaceTerritory> prioritizedLandTerritories =
         prioritizeLandTerritories(purchaseTerritories);

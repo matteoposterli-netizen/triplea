@@ -114,6 +114,7 @@ public final class Italian {
   private static final Map<String, String> PURCHASE_STEPS =
       Map.ofEntries(
           Map.entry("defend_land", "difesa dei territori minacciati"),
+          Map.entry("plan", "mix del piano dello stato maggiore"),
           Map.entry("capital_emergency", "difesa d'emergenza della capitale"),
           Map.entry("aa", "contraerea"),
           Map.entry("land", "unita' di terra per i territori prioritari"),

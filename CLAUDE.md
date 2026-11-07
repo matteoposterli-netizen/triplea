@@ -107,6 +107,9 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `keepsLandingWithExposedTransports`). `ai/pro/ProAttackWorth.java` (step 2d) — numeri del
   controllo finale "conviene con le unità assegnate". `RiskLevel.java` — i 5 livelli. `ProPlusSettings.java` — alleanze configurabili e
   lettura/scrittura dei livelli nelle proprietà della partita.
+- `ai/pro/ProPurchaseOrders`, `ProStagingOrders` (record generici), `ProPlanPurchase` (esegue il
+  mix), `ProStaging` (bonus di ammassamento) — step 3b, usati solo se `ProTuning.purchaseOrders`/
+  `stagingOrders` restituiscono qualcosa (default vuoto ⇒ Hard identica).
 - `ai/proplus/strategia/` (step 3a) — stato maggiore: `Strategia` (modello + parsing del file
   JSON), `Strategie` (indice gioco→file, cache, avvisi), `StatoMaggiore` (scelta e stato salvati
   nelle proprietà della partita, `fix`), `PianoAttivo` (ordini per nazione/round: fase, rischio per
@@ -315,11 +318,13 @@ rischio effettivo e obiettivi per bersaglio).
   (zone di mare con navi di quella nazione), `peso`, `nazioni` opzionale}]], `ruoli` {nazione:
   compito}, `tappe` [{`territorio`, `entro_round`}], `firma` [{`indizio`, `tipo`, `territori`,
   `zone`, `unita`, `nazione`, `peso`}], `punti_critici` [{`descrizione`, `tipo`, `territori`,
-  `zone`, `unita`, `nazione`}]. Nello step 3a sono usati solo `fasi` (rischio, obiettivi); `ruoli`
-  appare nel diario; `tappe`/`firma`/`punti_critici` sono letti ma non usati.
+  `zone`, `unita`, `nazione`}], `logistica` (step 3b, vedi "Logistica del piano"). Usati: `fasi`
+  (rischio, obiettivi), `logistica`; `ruoli` appare nel diario; `tappe`/`firma`/`punti_critici`
+  sono letti ma non usati.
 - Fronti Europe 1940: Ovest, Est, Mediterraneo-Africa, Mari (`zone_di_mare: true` = tutte le zone
   di mare), Altro. Piani: Asse A Barbarossa (Automatico), B Sea Lion, C Finta Sea Lion,
-  D Sud/Mediterraneo, N Neutro (tutti 0, nessun obiettivo: per confronti); Alleati 1 Germania prima
+  D Sud/Mediterraneo, N Neutro (tutti 0, nessun obiettivo, nessuna logistica: per confronti); B
+  dal R4 = fase R3+ di Barbarossa (step 3b); Alleati 1 Germania prima
   (Automatico; "Est −1 fino al R4 poi 0" interpretato come R1-3 −1, R4+ 0, obiettivi di sbarco dal
   R4), 2 Italia prima, 3 Pressione economica (tutti 0).
 - Persistenza (solo `String` JDK ⇒ salvataggio apribile dalla TripleA ufficiale):
@@ -345,6 +350,47 @@ rischio effettivo e obiettivi per bersaglio).
   zone di mare per gli obiettivi `flotta`), con i limiti TUV del livello effettivo del fronte.
   Senza file di strategia resta la regola dello step 2d.
 - Peso VC di priorità dello step 2c: **invariato a 10** (vedi report step 3a).
+- Soglia desiderata degli obiettivi (step 3b): per un bersaglio che è obiettivo del piano attivo
+  (territorio o zona di mare `flotta`, mai neutrali) la desiderata = max(desiderata del livello
+  del fronte, desiderata del livello base del cursore); la minima resta quella del fronte
+  (`ProPlusTuning.desiredWinPercentage`, usata anche dalla regola "non conviene" dello step 2d).
+  Il fronte decide SE tentare l'obiettivo, non con quante poche unità.
+- Fasi e round: la fase è scelta sul round di gioco assoluto; "Est −1 fino al R4" = round 1-3
+  (confermato da Matteo).
+
+### Logistica del piano (step 3b)
+
+Nel file di strategia: `categorie` {nome: [tipi di unità in ordine di rotazione]} e per piano
+`logistica` {nazione: [{`da_round`, `a_round`, `acquisti`: {`mix` {categoria: %}, `obbligati`
+[{`categoria`, `minimo`}]}, `piazzamento` [territori/zone], `ammassamento` {`fronte`,
+`territori`, `forza`}}]}. Intervalli di round **propri** della logistica (non le `fasi` del
+combattimento: es. Barbarossa acquisti R1-3/R4+, fasi R1-2/R3+). Mix > 100% o categoria ignota ⇒
+file rifiutato; unità ignote ⇒ avviso nel log. Nazione/round senza logistica (Francia, piano N,
+Italia in B) ⇒ acquisti e movimenti di Hard.
+- **Acquisti** (`ProPurchaseAi.purchase`): dopo `defend_land` (difesa dei territori minacciati,
+  capitale compresa) e il calcolo del valore strategico dei territori di piazzamento, se
+  `tuning.purchaseOrders(proData)` c'è, `ProPlanPurchase` spende i PU restanti: prima gli
+  obbligati, poi (base = PU restanti − obbligati fuori dal mix) una unità alla volta nella
+  categoria più lontana dal suo obiettivo, se un'unità ci sta (costo ≤ 2 × quota mancante) ed è
+  piazzabile; tipi della categoria a rotazione. Poi la pipeline di Hard continua con gli avanzi
+  (AA, terra, difesa navale, fabbriche, mare, avanzi, upgrade — l'upgrade può sostituire unità
+  del piano). Passo del diario `plan`.
+- **Piazzamento** delle unità del piano: terra/aerei in territori di terra tenibili, navi prima in
+  zone che il nemico non può attaccare con più TUV di quanto le difende (navi alleate + piazzate);
+  poi territori di `piazzamento` in ordine (anche la fabbrica di una zona di mare), poi vicinanza
+  ai territori di raccolta, poi valore strategico. Le unità di Hard (difesa ecc.) non cambiano.
+- **Ammassamento** (`ProNonCombatMoveAi.doNonCombatMove`): dopo `findTerritoryValues`/
+  `findSeaTerritoryValues`, `ProStaging.apply` aggiunge a ogni destinazione `forza × scala /
+  (1 + distanza)` (distanza dalla raccolta più vicina via terra per i territori, via mare per le
+  zone; max 8; scala = valore massimo delle destinazioni di quel tipo, min 1). I movimenti di
+  difesa (`moveUnitsToDefendTerritories`) sono già fatti e non leggono questi valori; li leggono
+  `moveUnitsToBestTerritories` (terra, mare, trasporti) e il ciclo "difesa della capitale" (×10
+  vicino alla capitale se serve). Non guida gli aerei (logica "atterraggio sicuro" di Hard).
+- Diario: dopo gli acquisti "Mix del piano (...)": per categoria obiettivo %/PU, comprato dal piano,
+  reale nel turno (tutte le unità del turno, prima categoria del mix che le contiene) + "fuori dal
+  mix", obbligati mancanti, piazzamento. Nel movimento "Ammassamento (...)": unità mosse,
+  avvicinate/stessa distanza/allontanate, distanza media prima→dopo, destinazioni con fronte,
+  distanza e bonus, ferme, "Perche'". JSON: `acquisti_piano`, `ammassamento`.
 - Cache: `ProPlusTuning.plan` per (GameData, giocatore, round); il livello del cursore è letto a
   ogni uso. `ProPlusAi` svuota la cache dopo aver fissato il piano.
 
@@ -783,3 +829,54 @@ dadi di simulazione fissi per: "2d" (nessun file = step 2d) e ogni piano dell'al
   posto di Ethiopia/96 SZ. Il piano 1 conta dal R4 (obiettivi sbarco) ma gli sbarchi richiedono
   acquisti e movimenti preparatori che il piano non guida ancora.
 - Sea Lion (B) non ha fasi dopo il R3 ⇒ dal R4 "fase nessuna" (tutti 0, nessun obiettivo).
+
+### Step 3b — acquisti, piazzamento e ammassamento guidati dal piano (2026-11-07)
+
+Vedi "Logistica del piano" per il funzionamento. Correzioni dallo step 3a: soglia desiderata degli
+obiettivi ≥ livello base (Barbarossa R1, Equilibrato, Ovest +1: France minima 52, desiderata 80);
+Sea Lion R4+ = Barbarossa R3+. Modifiche alle classi Pro (solo agganci, default = Hard):
+`ProTuning` (+ `purchaseOrders`, `stagingOrders`), `ProDecisionRecorder` (+ `purchaseOrders`,
+`staging`), `ProPurchaseAi` (passo `plan` dopo `defend_land`), `ProNonCombatMoveAi` (bonus ai
+valori + hook diario), `ProResourceTracker.getRemaining`. Nuove: `ProPurchaseOrders`,
+`ProStagingOrders`, `ProPlanPurchase`, `ProStaging`.
+
+#### Test
+- `PlanLogisticsTest` (Global 1940 rinominata Europe, Germania R1, dadi fissi): Hard e piano N senza
+  ordini; N compra come "nessun file"; Barbarossa rispetta il mix (entro un'unità per categoria),
+  piazza in Germany; Sea Lion compra 2 trasporti + 1 cacciatorpediniere e li piazza in mare;
+  bonus di ammassamento (1, 1/2, 1/3 della scala); non-combat con piano A: mosse identiche diario
+  on/off, più unità finiscono in Poland/Slovakia Hungary/Romania che con N; testo del diario.
+- `StrategyTuningTest` (desiderata obiettivi, flotta), `StrategiaFileTest` (logistica, Sea Lion R4+,
+  mix ≤ 100%, categorie note, unità esistenti in Global 1940, file malformati).
+- Golden Hard (`HardNeutralityGoldenTest`, `HardPriorityGoldenTest`) invariati e verdi;
+  `DiaryNeutralityTest` verde (France ora 80/52). CI locale: `:game-core:test :ai:test
+  :game-headed:test` verdi tranne `ContentDownloaderIntegrationTest` (rete assente in sandbox).
+- Instabilità osservata 1 volta su 6 esecuzioni: `DiaryNeutralityTest.decisionsAreTheSame...` ha
+  fallito il controllo preliminare "off = off" (stesso insieme di mosse, ordine diverso) nel caso
+  senza piano, che lo step 3b non tocca. Non riprodotta in 5 esecuzioni successive (da sola e con
+  tutta la suite). Probabile ordine di iterazione su oggetti con hash di identità: da indagare se
+  ricompare in CI.
+
+#### Prova Europe 1940 (sandbox, banco temporaneo non committato, XML reale, tutte le nazioni
+Pro+ Equilibrato, 6 round, dadi di gioco seed 1; partite A/1, B/2, N/3)
+- France R1 (A): 86% con desiderata 80 (step 3a 73%, step 2d 90%). Con B: 92%.
+- Germania, unità di terra a Est a fine round (A / B / N): R1 16/10/20, R2 34/34/32,
+  R3 65/39/57, R4 80/39/63, R6 72/77/83. Barbarossa ammassa prima (R2: 54 unità su 55 mosse si
+  avvicinano a Poland/Slovakia Hungary/Romania, distanza media 2.8 → 0.9); B a Ovest R1-3 (Holland
+  Belgium 18-23 unità) poi a Est dal R4.
+- Acquisti tedeschi: A R1-3 ~35/25/30/10 (es. R2: 5 fant., 6 art., 2 carri, 1 mech, 1 caccia);
+  B R1 2 trasporti + 1 cacciatorpediniere + fanteria/artiglieria, R2-3 con 1 caccia/turno.
+- Trasporti tedeschi (B): prima versione piazzati in 112 SZ e affondati nel turno britannico del
+  R1 ⇒ correzione: tra zone tutte attaccabili si sceglie la meno esposta (114 SZ, Baltico) e il
+  diario lo segnala ("! navi del piano in una zona attaccabile"). Seconda prova: 3 trasporti a fine
+  R1, in 110 SZ al R2, ma lo sbarco nel Regno Unito ha win% max 0% in R2-R3 (UK difeso) ⇒ Sea
+  Lion prepara ma non sbarca; trasporti persi entro il R6.
+- USA: fino all'entrata in guerra le zone verso Gibilterra/Regno Unito sono vietate dalle regole di
+  neutralità della mappa (`movementRestrictionTerritories`) ⇒ ammassamento "lontano", nessun
+  effetto. Flotta USA a 91 SZ dal R4 (piano 2) / R5 (piano 1), in 104/110 SZ al R6 (piano 1).
+  La difesa urgente di Hard prende 18-26 PU su 35 ai R2-R3 (territori USA "minacciati") ⇒ il mix
+  navale vale su 9-17 PU: 1 cacciatorpediniere + 1 trasporto per turno al massimo.
+- URSS: mix 65/35 rispettato; ammassamento verso Mosca debole (molte unità restano/vanno al fronte
+  per la difesa di Hard: "allontanate").
+- Capitali: Germania a 1 unità a fine R3 in B (riserve spinte verso Holland Belgium e Polonia; in
+  N anche Hard scende a 3 al R1). Nessuna caduta di capitale in 6 round in nessuna partita.

@@ -168,4 +168,121 @@ class StrategiaFileTest {
     assertThatThrownBy(() -> Strategia.parse(new StringReader(json)))
         .isInstanceOf(IllegalArgumentException.class);
   }
+
+  @Test
+  void seaLionTurnsToBarbarossaFromRound4() throws IOException {
+    final Strategia.Alleanza axis = europe().alleanza("Axis").orElseThrow();
+    final Strategia.Fase seaLionLate = axis.piano("B").orElseThrow().fase(4).orElseThrow();
+
+    assertThat(seaLionLate.label()).isEqualTo("R4+");
+    assertThat(seaLionLate)
+        .isEqualTo(
+            new Strategia.Fase(
+                4,
+                Integer.MAX_VALUE,
+                axis.piano("A").orElseThrow().fase(3).orElseThrow().fronti(),
+                axis.piano("A").orElseThrow().fase(3).orElseThrow().obiettivi()));
+    assertThat(axis.piano("B").orElseThrow().fase(3).orElseThrow().label()).isEqualTo("R2-3");
+  }
+
+  @Test
+  void logisticsOfTheProposal() throws IOException {
+    final Strategia s = europe();
+    final Strategia.Alleanza axis = s.alleanza("Axis").orElseThrow();
+    final Strategia.Logistica barbarossa =
+        axis.piano("A").orElseThrow().logistica("Germans", 2).orElseThrow();
+
+    assertThat(barbarossa.label()).isEqualTo("R1-3");
+    assertThat(barbarossa.mix())
+        .containsExactly(
+            java.util.Map.entry("fanteria", 35.0),
+            java.util.Map.entry("artiglieria", 25.0),
+            java.util.Map.entry("carri_mech", 30.0),
+            java.util.Map.entry("aerei", 10.0));
+    assertThat(barbarossa.piazzamento()).containsExactly("Germany");
+    assertThat(barbarossa.fronteAmmassamento()).isEqualTo("Est");
+    assertThat(barbarossa.territoriAmmassamento())
+        .containsExactly("Poland", "Slovakia Hungary", "Romania");
+    assertThat(axis.piano("A").orElseThrow().logistica("Germans", 4).orElseThrow().label())
+        .isEqualTo("R4+");
+
+    final Strategia.Logistica seaLion =
+        axis.piano("B").orElseThrow().logistica("Germans", 1).orElseThrow();
+    assertThat(seaLion.obbligati())
+        .containsExactly(
+            new Strategia.Obbligo("trasporti", 2), new Strategia.Obbligo("cacciatorpediniere", 1));
+    assertThat(axis.piano("B").orElseThrow().logistica("Germans", 5).orElseThrow())
+        .isEqualTo(
+            new Strategia.Logistica(
+                4,
+                Integer.MAX_VALUE,
+                barbarossa.mix(),
+                List.of(),
+                barbarossa.piazzamento(),
+                "Est",
+                barbarossa.territoriAmmassamento(),
+                1));
+    // the neutral plans give no orders: Hard's purchase and moves
+    assertThat(axis.piano("N").orElseThrow().logistica()).isEmpty();
+    assertThat(axis.piano("B").orElseThrow().logistica("Italians", 1)).isEmpty();
+
+    final Strategia.Alleanza allies = s.alleanza("Allies").orElseThrow();
+    final Strategia.Logistica usa =
+        allies.piano("1").orElseThrow().logistica("Americans", 1).orElseThrow();
+    assertThat(usa.mix().get("navi_da_guerra") + usa.mix().get("trasporti"))
+        .isGreaterThanOrEqualTo(50);
+    assertThat(usa.territoriAmmassamento()).contains("United Kingdom", "110 Sea Zone");
+    assertThat(allies.piano("3").orElseThrow().logistica("British", 1).orElseThrow().mix())
+        .containsKeys("bombardieri", "caccia");
+  }
+
+  @Test
+  void everyMixIsAtMost100PercentOfKnownCategories() throws IOException {
+    final Strategia s = europe();
+    for (final String alliance : List.of("Axis", "Allies")) {
+      for (final Strategia.Piano plan : s.alleanza(alliance).orElseThrow().piani()) {
+        plan.logistica()
+            .values()
+            .forEach(
+                orders ->
+                    orders.forEach(
+                        l -> {
+                          assertThat(l.mix().values().stream().mapToDouble(d -> d).sum())
+                              .isBetween(0.0, 100.0);
+                          assertThat(s.getCategorie())
+                              .containsKeys(l.mix().keySet().toArray(String[]::new));
+                        }));
+      }
+    }
+  }
+
+  /** Unit names of the categories exist in Global 1940 (same unit set as Europe 1940). */
+  @Test
+  void everyCategoryUnitIsAUnitOfTheMap() throws IOException {
+    assertThat(europe().unknownUnitTypes(TestMapGameData.GLOBAL1940.getGameData())).isEmpty();
+  }
+
+  @Test
+  void anUnknownCategoryIsRefused() {
+    final String json =
+        "{\"categorie\":{\"fanteria\":[\"infantry\"]},\"alleanze\":{\"Axis\":{\"piani\":"
+            + "[{\"id\":\"X\",\"logistica\":{\"Germans\":[{\"acquisti\":{\"mix\":"
+            + "{\"carri\":50}}}]}}]}}}";
+
+    assertThatThrownBy(() -> Strategia.parse(new StringReader(json)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("carri");
+  }
+
+  @Test
+  void aMixOver100PercentIsRefused() {
+    final String json =
+        "{\"categorie\":{\"fanteria\":[\"infantry\"],\"aerei\":[\"fighter\"]},"
+            + "\"alleanze\":{\"Axis\":{\"piani\":[{\"id\":\"X\",\"logistica\":{\"Germans\":"
+            + "[{\"acquisti\":{\"mix\":{\"fanteria\":70,\"aerei\":40}}}]}}]}}}";
+
+    assertThatThrownBy(() -> Strategia.parse(new StringReader(json)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("100");
+  }
 }

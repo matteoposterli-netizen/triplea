@@ -158,6 +158,21 @@ public final class PianoAttivo {
         .orElse(0);
   }
 
+  /** The nation's purchase / placement / staging orders for this round (step 3b), if any. */
+  public Optional<Strategia.Logistica> getLogistica() {
+    return piano.logistica(nazione, round);
+  }
+
+  /**
+   * Gathering territories of the staging orders: listed ones, else the front's land territories.
+   */
+  public List<String> territoriAmmassamento(final Strategia.Logistica l) {
+    if (!l.territoriAmmassamento().isEmpty() || l.fronteAmmassamento() == null) {
+      return l.territoriAmmassamento();
+    }
+    return strategia.territoriDelFronte(l.fronteAmmassamento());
+  }
+
   /** Eg: "A Barbarossa, fase R1-2". */
   public String label() {
     return piano.label() + ", fase " + (fase == null ? "nessuna" : fase.label());
