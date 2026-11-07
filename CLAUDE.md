@@ -1237,3 +1237,9 @@ Vedi "Partita headless AI vs AI" (runner) e "Autoplay in CI". Nessuna classe di 
   (Francia caduta al R2, VC Asse 3→4, lettura Alleati R2 = A 48% corretta); Hard vs Hard 1 round 37 s;
   confronto con una cartella vuota ⇒ "FALLITA".
 
+- Prima run in CI (run 42381039087, commit 93ba1fa, tutto verde): release 8 min 30 s, autoplay 7 min
+  20 s (prepare 3 min, 6 partite in parallelo da 8 round: 2 min 36 s - 3 min 51 s di partita, ~20 s per
+  round; publish 19 s). Nessuna vittoria entro 8 round; VC R8 Asse/Alleati: A/1 7/4, A/2 5/6, D/1 6/5,
+  D/2 4/7, C/1 6/5, Hard 6/5. Lettura: gli Alleati leggono bene A (>50% dal R3-R4) e D tardi (dal R6-R7);
+  l'Asse legge 1 bene ma confonde 2 con 1 fino al R7 (A/2) o sempre (D/2), come già visto nello step 3c.
+  Asse in A/1 spende in difesa quasi quanto per il piano (292 vs 297 PU): da guardare.
