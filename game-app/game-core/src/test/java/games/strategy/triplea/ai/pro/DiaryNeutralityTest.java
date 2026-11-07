@@ -68,14 +68,35 @@ class DiaryNeutralityTest extends AbstractClientSettingTestCase {
 
   @Test
   void decisionsAreTheSameWithAndWithoutDiary() throws IOException {
-    final String off = germanTurn(false);
-    final String offAgain = germanTurn(false);
-    final String on = germanTurn(true);
+    // The attack plan and its moves are reproducible (seeded battle dice); the Pro AI's purchase
+    // is not always: ProPurchaseUtils.randomizePurchaseOption uses Math.random. Moves are compared
+    // on every try; the purchase only on a try where two replays without diary buy the same.
+    for (int attempt = 1; attempt <= MAX_PURCHASE_ATTEMPTS; attempt++) {
+      final String off = germanTurn(false);
+      final String offAgain = germanTurn(false);
+      final String on = germanTurn(true);
 
-    assertThat(offAgain).as("replay without diary is reproducible").isEqualTo(off);
-    assertThat(on).isEqualTo(off);
-    assertThat(off).contains("move ").contains("buy ");
-    assertThat(diaryFiles()).isNotEmpty();
+      assertThat(moves(offAgain)).as("replay without diary is reproducible").isEqualTo(moves(off));
+      assertThat(moves(on)).isEqualTo(moves(off));
+      assertThat(off).contains("move ").contains("buy ");
+      assertThat(diaryFiles()).isNotEmpty();
+      if (purchases(offAgain).equals(purchases(off))) {
+        assertThat(purchases(on)).isEqualTo(purchases(off));
+        return;
+      }
+    }
+    org.junit.jupiter.api.Assertions.fail(
+        "the purchase without diary was never reproducible in " + MAX_PURCHASE_ATTEMPTS + " tries");
+  }
+
+  private static final int MAX_PURCHASE_ATTEMPTS = 4;
+
+  private static String moves(final String decisions) {
+    return decisions.lines().filter(l -> !l.startsWith("buy ")).collect(Collectors.joining("\n"));
+  }
+
+  private static String purchases(final String decisions) {
+    return decisions.lines().filter(l -> l.startsWith("buy ")).collect(Collectors.joining("\n"));
   }
 
   @Test
@@ -129,7 +150,17 @@ class DiaryNeutralityTest extends AbstractClientSettingTestCase {
     final String off = germanTurn(false);
     final String on = germanTurn(true);
 
-    assertThat(on).isEqualTo(off);
+    assertThat(moves(on)).isEqualTo(moves(off));
+    // the purchase is compared where it is reproducible (see decisionsAreTheSame...)
+    if (!purchases(on).equals(purchases(off))) {
+      final String offAgain = germanTurn(false);
+      final String onAgain = germanTurn(true);
+      assertThat(
+              purchases(onAgain).equals(purchases(offAgain))
+                  || !purchases(offAgain).equals(purchases(off)))
+          .as("same purchase with and without diary when the replay without diary is reproducible")
+          .isTrue();
+    }
     final String text =
         Files.readString(diaryFiles().get(0).resolve("diario.txt"), StandardCharsets.UTF_8);
     Files.writeString(

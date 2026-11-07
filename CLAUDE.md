@@ -1763,3 +1763,9 @@ persi negli attacchi dell'Asse su territori americani di Europa occidentale (anc
   e trasporti nella stessa zona nello stesso turno) e la capacità di rinforzo britannica (trasporti UK
   pochi o fuori raggio: rinforzi 0 in parte degli scarti).
 
+- `DiaryNeutralityTest` reso robusto (run 42414747630 fallita sul controllo preliminare "replay without
+  diary is reproducible": due turni senza diario con acquisti diversi, 2 o 3 artiglierie; in locale 2
+  su 13 su 574ad7b, 0 su 6 su 92d6059, 1 su 6 allo step 3b): le mosse si confrontano sempre, gli
+  acquisti (Hard usa `Math.random` in `ProPurchaseUtils.randomizePurchaseOption`) solo in un tentativo
+  in cui due ripetizioni senza diario comprano uguale (max 4 tentativi). 6/6 verdi in locale.
+
