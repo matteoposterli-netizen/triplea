@@ -1141,21 +1141,30 @@ firme di tutti i piani, B Sea Lion `sperimentale`. Rinominato lo step precedente
   trasporti tedeschi), piano reale avversario, acquisti dalla cronologia.
 - Golden Hard, `DiaryNeutralityTest`, tutti i test `ai.*` + `:ai:test` + `:game-headed:test` verdi.
 
-#### Banco Europe 1940 (4 round, dadi seed 1, tutti Pro+ Equilibrato; A/1 126 s, D/2 121 s)
-PU in difesa (`defend_land`) per nazione, R1/R2/R3/R4, nuova vs build precedente (stesso seed):
-- A/1: USA 0/0/0/0 vs 13/7/9/0 (al piano 30/30/30/56 vs 19/23/23/56); UK 0/0/0/0 vs 9/10/0/0;
-  Germania 0/0/0/12 vs 9/0/0/0; URSS 6/7/6/0 vs 3/6/20/0; Italia 0 vs 0/0/0/6.
-- D/2: USA 0/0/0/0 vs 12/10/12/0; UK 0/0/0/0 vs 9/9/0/0; URSS 4/9/3/10 vs 10/7/0/9; Germania e Italia 0.
-- "PU risparmiati" stimati: USA 12/12/12 (A/1), 12/6/0 (D/2); UK 9/9/0. Presidi Manica: R3 3 non
-  necessari, R4 tenuti (sbarco possibile). Berlino R2 (URSS contata): rischio 0%, 8 unità (nessuna
-  unità sovietica arriva in un turno).
-- Avanzamento: Asse IN LINEA in entrambe (A: France R2 raggiunta, Egypt R4; D: Gibraltar R2,
-  Egypt R3, Trans-Jordan R4); Alleati IN RITARDO dal R3 per reddito in calo (102→100→99).
-- Lettura (prob. del piano reale): A/1 Alleati leggono A 33/48/53/57% (>50% dal R3); Asse legge 1
-  27/46/56/61% (>50% dal R3). D/2 Alleati leggono D 48/29/32/21% (mai >50%; A in testa dal R2);
-  Asse legge 2 46/32/24/24% (mai; 1 al 58% dal R3).
-- Indizi che mancano (D/2): gli acquisti navali USA sono uguali nei piani 1 e 2 e la flotta USA non
-  può entrare nelle zone di Gibilterra prima della guerra ⇒ niente distingue 1 da 2 nei primi round;
-  "unità/aerei tedeschi in Italia/Africa" oscilla (17/0/17/0: aerei che atterrano e ripartono) e la
-  quota TUV Asse nel Mediterraneo crolla quando l'Italia perde unità ⇒ D non si stabilizza.
-
+#### Banco Europe 1940 (4 round, dadi seed 1, tutti Pro+ Equilibrato; A/1 136 s, D/2 123 s)
+PU in difesa (`defend_land`) per nazione, R1/R2/R3/R4, nuova vs build precedente (stessi dadi di
+gioco; le simulazioni dell'AI sono casuali, quindi le partite divergono dopo pochi turni):
+- A/1: USA 0/0/0/0 vs 13/7/9/0 (al piano 30/30/53/56 vs 19/23/23/56); UK 0/13/0/0 vs 9/10/0/0
+  (R2: minaccia reale, Asse in guerra); Germania 0 vs 9/0/0/0; URSS 0/6/9/0 vs 3/6/20/0; Italia
+  0/0/0/21 vs 0/0/0/6.
+- D/2: USA 0/0/0/0 vs 12/10/12/0; UK 0 vs 9/9/0/0; Germania 7/0/0/0 vs 0; URSS 0/6/6/9 vs
+  10/7/0/9; Italia 0.
+- "PU risparmiati" (stima): R1 Germania 15, USA 15, UK 9; UK 9 al R2 in D/2; poi 0 (dal R2-R3 la
+  stima di Hard senza filtro non trova più territori in pericolo solo per nazioni non in guerra).
+  Prima versione con il calcolatore di battaglie: tolta perché consumava i dadi della simulazione
+  dell'AI (la Action ha fallito su `DiaryNeutralityTest` "replay without diary is reproducible");
+  ora usa `ProBattleUtils.estimateStrengthDifference` (> 55 = "probabile conquista" di Hard).
+- Presidi Manica: R3 3 non necessari, R4 tenuti (sbarco possibile). Berlino R2 (URSS contata):
+  rischio 0% (nessuna unità sovietica arriva in un turno).
+- Avanzamento: Asse IN LINEA in entrambe (A: France raggiunta al R2, Egypt R4; D: Egypt e Gibraltar
+  R2); Alleati IN RITARDO dal R3 per reddito in calo da 2 round (105→99→97, 105→96→94).
+- Lettura (prob. del piano reale): A/1 Alleati leggono A 45/62/59/58% (>50% dal R2); Asse legge 1
+  27/46/56/61% (>50% dal R3). D/2 Alleati leggono D 43/28/29/18% (mai >50%; A in testa dal R2);
+  Asse legge 2 46/32/24/21% (mai; 1 al 56-61% dal R3). La lettura dell'Asse è **identica** nelle
+  due partite: gli indizi degli Alleati non distinguono i piani.
+- Indizi che mancano: (Asse) gli acquisti navali USA sono uguali nei piani 1 e 2 e prima della
+  guerra la flotta USA non può entrare nelle zone di Gibilterra/Regno Unito ⇒ servono indizi su dove
+  vengono piazzate/ammassate le navi USA (101-106 SZ verso nord o verso sud) e sugli acquisti UK in
+  Egitto/Sud Africa; (Alleati) "unità/aerei tedeschi in Italia/Africa" oscilla (aerei che atterrano
+  e ripartono) e la quota TUV dell'Asse nel Mediterraneo crolla quando l'Italia perde unità ⇒ servono
+  indizi stabili (unità di terra tedesche in Africa, trasporti italiani carichi, acquisti italiani).
