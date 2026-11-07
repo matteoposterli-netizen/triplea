@@ -1202,7 +1202,7 @@ public class ProCombatMoveAi {
           }
         }
 
-        if (proData.isBeta()) {
+        if (proData.getTuning().checksLandingScramble(proData.isBeta())) {
           final Optional<Territory> scrambledZone =
               territoryTransportAndBombardMap.entrySet().stream()
                   .filter(e -> isLostToScramble(t, e.getKey(), e.getValue()))
@@ -1592,6 +1592,7 @@ public class ProCombatMoveAi {
         usedUnits.addAll(patd.getUnits());
       }
       ProTerritory territoryToRemove = null;
+      String dropReason = "units_not_worth";
       for (final ProTerritory patd : prioritizedTerritories) {
         final Territory t = patd.getTerritory();
 
@@ -1719,6 +1720,14 @@ public class ProCombatMoveAi {
                 enemyCounterTuvSwing,
                 attackValue,
                 allUnitsCanAttackOtherTerritory || result.getBattleRounds() >= 4);
+        if (patd.isStrafing()
+            && !patd.getAmphibAttackMap().isEmpty()
+            && proData.getTuning().dropsAmphibiousStrafe(proData, t, result.getWinPercentage())) {
+          proData.getRecorder().attackWorth(proData, patd, worth, null);
+          territoryToRemove = patd;
+          dropReason = "amphibious_strafe";
+          break;
+        }
         String keptBy = null;
         if (!patd.isStrafing() && worth.hardDrops()) {
           // only an attack Hard drops for its value alone may be kept (Hard: never)
@@ -1747,7 +1756,7 @@ public class ProCombatMoveAi {
         break;
       }
 
-      proData.getRecorder().attackDropped(proData, territoryToRemove, "units_not_worth");
+      proData.getRecorder().attackDropped(proData, territoryToRemove, dropReason);
       prioritizedTerritories.remove(territoryToRemove);
       ProLogger.debug("Removing " + territoryToRemove.getTerritory().getName());
     }

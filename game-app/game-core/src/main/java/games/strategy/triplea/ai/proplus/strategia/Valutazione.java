@@ -18,6 +18,7 @@ import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.OriginalOwnerTracker;
 import games.strategy.triplea.delegate.data.BattleRecords;
+import games.strategy.triplea.delegate.data.PlacementDescription;
 import games.strategy.triplea.util.TuvCostsCalculator;
 import games.strategy.triplea.util.TuvUtils;
 import java.util.ArrayList;
@@ -57,12 +58,15 @@ import org.triplea.java.collections.IntegerMap;
  *   <li>{@value #IN_LINEA}: otherwise.
  * </ul>
  *
- * <p>Reading the enemy: each enemy plan with a signature ({@code firma}) gets a score, the weighted
- * mean of its clues' values (0..1, {@link Strategia.Firma}); the scores are squared (to sharpen),
- * plus {@link #EPSILON}, and normalized into this round's reading; the probabilities are {@link
- * #INERZIA} × last round's + (1 − {@link #INERZIA}) × this reading (round 1 starts from equal
- * probabilities), so they move at most halfway per round. Enemy purchases come from the game
- * history (the units of each purchase step).
+ * <p>Reading the enemy (step 3c-bis: cumulated evidence): each clue of an enemy plan's signature
+ * ({@code firma}, {@link Strategia.Firma}) is measured, turned into 0..1 and remembered across
+ * rounds in the history ({@code lettura.memoria}): a state clue as {@link #MEMORIA} × remembered +
+ * (1 − {@link #MEMORIA}) × this round's value; an event clue (a battle) as the larger of this
+ * round's value and {@link #MEMORIA_EVENTI} × remembered, so a battle seen once fades slowly. A
+ * clue not measurable this round, or out of its rounds, keeps its remembered value. Each plan's
+ * score is the weighted mean of its clues' remembered values; the probabilities are the scores
+ * squared (to sharpen) plus {@link #EPSILON}, normalized. Enemy purchases and placements come from
+ * the game history (purchase and place steps), battles from the battle records.
  */
 @UtilityClass
 public final class Valutazione {
@@ -70,13 +74,19 @@ public final class Valutazione {
   public static final String IN_RITARDO = "IN RITARDO";
   public static final String IN_CRISI = "IN CRISI";
 
-  /** Weight of last round's probabilities. */
-  public static final double INERZIA = 0.5;
+  /** Weight of a state clue's remembered value against this round's value (step 3c-bis). */
+  public static final double MEMORIA = 0.6;
+
+  /** Per-round decay of a remembered event clue (a battle) not seen again (step 3c-bis). */
+  public static final double MEMORIA_EVENTI = 0.75;
 
   /** Added to every squared score, so no plan drops to 0 at once. */
   public static final double EPSILON = 0.05;
 
-  /** Enemy purchases read for {@link Strategia.Firma#QUOTA_ACQUISTI}: the last ones per nation. */
+  /**
+   * Enemy purchases and placements read for {@link Strategia.Firma#QUOTA_ACQUISTI} and {@link
+   * Strategia.Firma#PIAZZAMENTI}: the last ones per nation.
+   */
   static final int PURCHASES = 2;
 
   /**
@@ -385,45 +395,54 @@ public final class Valutazione {
       final int round) {
     final List<Strategia.Piano> plans =
         enemy.piani().stream().filter(p -> !p.firma().isEmpty()).toList();
-    final Map<String, Double> previous = new LinkedHashMap<>();
-    if (last != null && last.has("lettura")) {
-      last.getAsJsonObject("lettura")
-          .getAsJsonObject("probabilita")
-          .entrySet()
-          .forEach(e -> previous.put(e.getKey(), e.getValue().getAsDouble()));
-    }
-    final Measures measures = new Measures(data, strategia);
+    final JsonObject previousMemory =
+        last != null && last.has("lettura") && last.getAsJsonObject("lettura").has("memoria")
+            ? last.getAsJsonObject("lettura").getAsJsonObject("memoria")
+            : new JsonObject();
+    final Measures measures = new Measures(data, strategia, round);
     final Map<String, Double> scores = new LinkedHashMap<>();
     final List<Clue> clues = new ArrayList<>();
     final JsonObject cluesJson = new JsonObject();
+    final JsonObject memory = new JsonObject();
     for (final Strategia.Piano plan : plans) {
+      final JsonObject planBefore =
+          previousMemory.has(plan.id())
+              ? previousMemory.getAsJsonObject(plan.id())
+              : new JsonObject();
+      final JsonObject planMemory = new JsonObject();
       double weighted = 0;
       double weights = 0;
       final JsonArray planClues = new JsonArray();
       for (final Strategia.Firma f : plan.firma()) {
-        if (!f.covers(round)) {
-          continue;
-        }
-        final OptionalMeasure x = measures.measure(f);
+        final Double before =
+            planBefore.has(f.indizio()) ? planBefore.get(f.indizio()).getAsDouble() : null;
+        final Double x = f.covers(round) ? measures.measure(f).value() : null;
+        final Double now = x == null ? null : f.valore(x);
+        final Double remembered = remember(f, before, now);
         final JsonObject c = new JsonObject();
         c.addProperty("indizio", f.indizio());
-        if (x.value() == null) {
-          c.addProperty("misura", "non disponibile");
+        if (x == null) {
+          c.addProperty("misura", f.covers(round) ? "non disponibile" : "fuori dai suoi round");
+        } else {
+          c.addProperty("misura", round2(x));
+          c.addProperty("valore_round", round2(now));
+        }
+        if (remembered == null) {
           planClues.add(c);
           continue;
         }
-        final double v = f.valore(x.value());
-        weighted += f.peso() * v;
+        planMemory.addProperty(f.indizio(), round3(remembered));
+        weighted += f.peso() * remembered;
         weights += f.peso();
-        c.addProperty("misura", round2(x.value()));
-        c.addProperty("valore", round2(v));
+        c.addProperty("valore", round2(remembered));
         c.addProperty("peso", f.peso());
         planClues.add(c);
-        clues.add(new Clue(plan, f, x.value(), v));
+        clues.add(new Clue(plan, f, remembered));
       }
       final double score = weights > 0 ? weighted / weights : 0;
       scores.put(plan.id(), score);
       cluesJson.add(plan.id(), planClues);
+      memory.add(plan.id(), planMemory);
     }
     double total = 0;
     final Map<String, Double> raw = new LinkedHashMap<>();
@@ -432,22 +451,13 @@ public final class Valutazione {
       raw.put(e.getKey(), r);
       total += r;
     }
-    final Map<String, Double> probabilities = new LinkedHashMap<>();
-    double sum = 0;
-    for (final Map.Entry<String, Double> e : raw.entrySet()) {
-      final double now = e.getValue() / total;
-      final double before = previous.getOrDefault(e.getKey(), 1.0 / raw.size());
-      final double p = INERZIA * before + (1 - INERZIA) * now;
-      probabilities.put(e.getKey(), p);
-      sum += p;
-    }
     final JsonObject json = new JsonObject();
     final JsonObject probs = new JsonObject();
     final JsonObject scoresJson = new JsonObject();
     String best = "";
     double bestP = -1;
-    for (final Map.Entry<String, Double> e : probabilities.entrySet()) {
-      final double p = e.getValue() / sum;
+    for (final Map.Entry<String, Double> e : raw.entrySet()) {
+      final double p = e.getValue() / total;
       probs.addProperty(e.getKey(), round3(p));
       scoresJson.addProperty(e.getKey(), round2(scores.get(e.getKey())));
       if (p > bestP) {
@@ -459,6 +469,7 @@ public final class Valutazione {
     json.add("punteggi", scoresJson);
     json.addProperty("piu_probabile", best);
     json.add("indizi", cluesJson);
+    json.add("memoria", memory);
     final JsonArray main = new JsonArray();
     clues.stream()
         .filter(c -> c.value() > 0)
@@ -512,36 +523,59 @@ public final class Valutazione {
     return sb.toString();
   }
 
-  private record Clue(Strategia.Piano plan, Strategia.Firma firma, double x, double value) {}
+  /**
+   * The clue's value to remember: this round's {@code now} merged with the remembered {@code
+   * before} (either may be missing), see the class comment.
+   */
+  static @Nullable Double remember(
+      final Strategia.Firma f, final @Nullable Double before, final @Nullable Double now) {
+    if (now == null || before == null) {
+      return now == null ? before : now;
+    }
+    return f.isEvento()
+        ? Math.max(now, MEMORIA_EVENTI * before)
+        : MEMORIA * before + (1 - MEMORIA) * now;
+  }
+
+  private record Clue(Strategia.Piano plan, Strategia.Firma firma, double value) {}
 
   private record OptionalMeasure(@Nullable Double value) {}
 
-  /** The measures of the clues on the current game state (TUV costs and purchases cached). */
+  /** The measures of the clues on the current game state (TUV costs and history cached). */
   private static final class Measures {
     private final GameState data;
     private final Strategia strategia;
+    private final int round;
     private final Map<String, IntegerMap<UnitType>> costs = new HashMap<>();
     private final Map<String, List<Unit>> purchases = new HashMap<>();
+    private final Map<String, List<Placement>> placements = new HashMap<>();
 
-    Measures(final GameState data, final Strategia strategia) {
+    Measures(final GameState data, final Strategia strategia, final int round) {
       this.data = data;
       this.strategia = strategia;
+      this.round = round;
     }
 
     OptionalMeasure measure(final Strategia.Firma f) {
-      final List<GamePlayer> nations =
-          f.nazioni().stream()
-              .map(n -> data.getPlayerList().getPlayerId(n))
-              .filter(p -> p != null && !p.isNull())
-              .toList();
+      final List<GamePlayer> nations = players(f.nazioni());
       if (nations.isEmpty()) {
         return new OptionalMeasure(null);
       }
       return switch (f.tipo()) {
         case Strategia.Firma.QUOTA_TUV_FRONTE -> frontShare(f, nations);
         case Strategia.Firma.QUOTA_ACQUISTI -> purchaseShare(f, nations);
-        default -> new OptionalMeasure((double) unitsIn(f, nations));
+        case Strategia.Firma.PIAZZAMENTI -> placementShare(f, nations);
+        case Strategia.Firma.ATTACCHI -> attacks(f, nations);
+        case Strategia.Firma.IN_GUERRA -> atWar(f, nations);
+        default -> unitsIn(f, nations);
       };
+    }
+
+    private List<GamePlayer> players(final List<String> names) {
+      return names.stream()
+          .map(n -> data.getPlayerList().getPlayerId(n))
+          .filter(p -> p != null && !p.isNull())
+          .toList();
     }
 
     private OptionalMeasure frontShare(final Strategia.Firma f, final List<GamePlayer> nations) {
@@ -581,13 +615,130 @@ public final class Valutazione {
       return new OptionalMeasure(all > 0 ? matching / all : null);
     }
 
-    private int unitsIn(final Strategia.Firma f, final List<GamePlayer> nations) {
-      final Set<String> where = Set.copyOf(f.territori());
-      final Predicate<Unit> filter = filter(f).and(Matches.unitIsOwnedByAnyOf(nations));
+    /** TUV placed in {@code territori} / in {@code territori} + {@code altrove} (or anywhere). */
+    private OptionalMeasure placementShare(
+        final Strategia.Firma f, final List<GamePlayer> nations) {
+      final Set<String> here = Set.copyOf(f.territori());
+      final Set<String> elsewhere = Set.copyOf(f.altrove());
+      final Predicate<Unit> filter = filter(f);
+      double inHere = 0;
+      double all = 0;
+      for (final GamePlayer p : nations) {
+        for (final Placement placement : placements(p)) {
+          final boolean isHere = here.contains(placement.territory());
+          if (!isHere && !elsewhere.isEmpty() && !elsewhere.contains(placement.territory())) {
+            continue;
+          }
+          for (final Unit u : placement.units()) {
+            if (filter.test(u)) {
+              final double c = cost(p).getInt(u.getType());
+              all += c;
+              if (isHere) {
+                inHere += c;
+              }
+            }
+          }
+        }
+      }
+      return new OptionalMeasure(all > 0 ? inHere / all : null);
+    }
+
+    /** Territories of the clue with a battle of the nations as attacker in this or last round. */
+    private OptionalMeasure attacks(final Strategia.Firma f, final List<GamePlayer> nations) {
+      final int here = battlesIn(f.territori(), nations, players(f.contro()));
+      if (f.altrove().isEmpty()) {
+        return new OptionalMeasure((double) here);
+      }
+      final int elsewhere = battlesIn(f.altrove(), nations, players(f.contro()));
+      return new OptionalMeasure(here + elsewhere > 0 ? (double) here / (here + elsewhere) : null);
+    }
+
+    private int battlesIn(
+        final List<String> names,
+        final List<GamePlayer> attackers,
+        final List<GamePlayer> defenders) {
+      final BattleRecordsList list = data.getBattleRecordsList();
+      if (list == null) {
+        return 0;
+      }
+      final Map<Integer, BattleRecords> byRound = list.getBattleRecordsMapCopy();
+      final List<BattleRecords> recent = new ArrayList<>();
+      for (int r = Math.max(1, round - 1); r <= round; r++) {
+        Optional.ofNullable(byRound.get(r)).ifPresent(recent::add);
+      }
+      int count = 0;
+      for (final String name : names) {
+        final Territory t = data.getMap().getTerritoryOrNull(name);
+        if (t != null && foughtIn(recent, t, attackers, defenders)) {
+          count++;
+        }
+      }
+      return count;
+    }
+
+    private static boolean foughtIn(
+        final List<BattleRecords> recent,
+        final Territory t,
+        final List<GamePlayer> attackers,
+        final List<GamePlayer> defenders) {
+      for (final BattleRecords records : recent) {
+        for (final GamePlayer attacker : attackers) {
+          final var theirs = BattleRecords.getRecordsForPlayerId(attacker, records);
+          if (defenders.isEmpty()
+              ? BattleRecords.getWereThereBattlesInTerritoriesMatching(
+                  theirs, attacker, null, "any", Set.of(t))
+              : defenders.stream()
+                  .anyMatch(
+                      d ->
+                          BattleRecords.getWereThereBattlesInTerritoriesMatching(
+                              theirs, attacker, d, "any", Set.of(t)))) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    private OptionalMeasure atWar(final Strategia.Firma f, final List<GamePlayer> nations) {
+      final List<GamePlayer> enemies = players(f.contro());
+      final boolean war =
+          nations.stream()
+              .anyMatch(
+                  p -> enemies.stream().anyMatch(e -> data.getRelationshipTracker().isAtWar(p, e)));
+      return new OptionalMeasure(war ? 1.0 : 0.0);
+    }
+
+    /** Units in {@code territori}, or their share in {@code territori} + {@code altrove}. */
+    private OptionalMeasure unitsIn(final Strategia.Firma f, final List<GamePlayer> nations) {
+      final int here = count(f, nations, f.territori());
+      if (f.altrove().isEmpty()) {
+        return new OptionalMeasure((double) here);
+      }
+      final int elsewhere = count(f, nations, f.altrove());
+      return new OptionalMeasure(here + elsewhere > 0 ? (double) here / (here + elsewhere) : null);
+    }
+
+    private int count(
+        final Strategia.Firma f, final List<GamePlayer> nations, final List<String> names) {
+      final Set<String> where = Set.copyOf(names);
+      final Predicate<Unit> owned = Matches.unitIsOwnedByAnyOf(nations);
+      final Predicate<Unit> filter = filter(f).and(owned);
+      final boolean loaded = f.classi().contains(Strategia.Firma.TRASPORTI_CARICHI);
       int count = 0;
       for (final Territory t : data.getMap().getTerritories()) {
         if (where.isEmpty() || where.contains(t.getName())) {
           count += t.getUnitCollection().countMatches(filter);
+          if (loaded) {
+            // transports carrying units (the cargo is only known in its territory)
+            count +=
+                (int)
+                    t
+                        .getUnitCollection()
+                        .getMatches(owned.and(Matches.unitIsSeaTransport()))
+                        .stream()
+                        .filter(u -> !filter.test(u) && !u.getTransporting(t).isEmpty())
+                        .count();
+          }
         }
       }
       return count;
@@ -600,6 +751,53 @@ public final class Valutazione {
     /** Units of the last {@link #PURCHASES} purchase steps of {@code p} in the game history. */
     private List<Unit> purchases(final GamePlayer p) {
       return purchases.computeIfAbsent(p.getName(), k -> lastPurchases(data, p, PURCHASES));
+    }
+
+    /** Placements of the last {@link #PURCHASES} place steps of {@code p} in the game history. */
+    private List<Placement> placements(final GamePlayer p) {
+      return placements.computeIfAbsent(p.getName(), k -> lastPlacements(data, p, PURCHASES));
+    }
+  }
+
+  /** Units placed in one territory or sea zone. */
+  record Placement(String territory, List<Unit> units) {}
+
+  /** Placements of {@code p} in its last {@code count} place steps (from the game history). */
+  static List<Placement> lastPlacements(final GameState data, final GamePlayer p, final int count) {
+    if (!(data instanceof GameData gameData) || gameData.getHistory() == null) {
+      return List.of();
+    }
+    final List<List<Placement>> steps = new ArrayList<>();
+    collectPlacements((HistoryNode) gameData.getHistory().getRoot(), p, steps);
+    final List<Placement> placements = new ArrayList<>();
+    for (int i = Math.max(0, steps.size() - count); i < steps.size(); i++) {
+      placements.addAll(steps.get(i));
+    }
+    return placements;
+  }
+
+  private static void collectPlacements(
+      final HistoryNode node, final GamePlayer p, final List<List<Placement>> steps) {
+    for (int i = 0; i < node.getChildCount(); i++) {
+      final HistoryNode child = (HistoryNode) node.getChildAt(i);
+      if (child instanceof Step step) {
+        final String name = step.getStepName().toLowerCase(Locale.ROOT);
+        if (name.endsWith("place")
+            && !name.endsWith("bidplace")
+            && step.getPlayerId().map(p::equals).orElse(false)) {
+          final List<Placement> placed = new ArrayList<>();
+          for (int j = 0; j < step.getChildCount(); j++) {
+            if (step.getChildAt(j) instanceof Event event
+                && event.getRenderingData() instanceof PlacementDescription d
+                && d.getTerritory() != null) {
+              placed.add(new Placement(d.getTerritory().getName(), List.copyOf(d.getUnits())));
+            }
+          }
+          steps.add(placed);
+        }
+      } else {
+        collectPlacements(child, p, steps);
+      }
     }
   }
 
@@ -661,6 +859,8 @@ public final class Valutazione {
       case "navi" -> Matches.unitIsSea();
       case "navi_da_guerra" -> Matches.unitIsSea().and(Matches.unitIsSeaTransport().negate());
       case "trasporti" -> Matches.unitIsSeaTransport();
+      // counted per territory in Measures (the cargo is known only there)
+      case Strategia.Firma.TRASPORTI_CARICHI -> u -> false;
       default -> u -> false;
     };
   }

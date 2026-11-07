@@ -93,6 +93,10 @@ public final class Italian {
           Map.entry(
               "transports_exposed", "sbarco annullato: trasporti esposti al contrattacco nemico"),
           Map.entry(
+              "amphibious_strafe",
+              "logoramento con sbarco sotto la soglia minima: le unita' sbarcate non possono"
+                  + " ritirarsi"),
+          Map.entry(
               "transports_scrambled",
               "sbarco annullato: aerei nemici in scramble affonderebbero i trasporti"),
           Map.entry(

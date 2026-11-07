@@ -119,6 +119,9 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
 - Step 3c: `ai/proplus/MinacciaReale` (nemici reali), `ai/pro/ProThreat` (minaccia per il diario),
   `ai/proplus/strategia/Valutazione` (avanzamento del piano e lettura del nemico). Vedi "Minaccia
   reale" e "Avanzamento del piano e lettura del nemico".
+- Step 3c-bis: `ProTuning.checksLandingScramble` (default = Hard Beta; Pro+ sempre) e
+  `ProTuning.dropsAmphibiousStrafe` (default mai; Pro+ sotto la soglia minima del bersaglio), agganci
+  in `ProCombatMoveAi`. Vedi "Step 3c-bis".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -182,7 +185,7 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
 .../bin/proplus-autoplay confronto out --titolo "Prova"
 ```
 - Parametri (per alleanza = nome XML dell'alleanza: `Axis`, `Allies`): `--mappa` (obbligatorio),
-  `--round` (8), `--piano` (id del piano, default `auto`), `--rischio` (1-5 o nome, default
+  `--round` (12, dallo step 3c-bis), `--piano` (id del piano, default `auto`), `--rischio` (1-5 o nome, default
   Equilibrato), `--tipo` (`proplus` | `hard`, default proplus; Hard = `PlayerTypes.PRO_AI`, col diario),
   `--seme` (1), `--output` (`autoplay-output`), `--minuti` (55: oltre, la partita si ferma e il
   riepilogo è "parziale"), `--nome`. Nazioni fuori dalle alleanze configurabili: Pro+ (Hard se tutte
@@ -199,7 +202,13 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
   la nazione di turno); capitali cadute/liberate; top 5 battaglie per TUV perso (attaccante+difensore,
   da `BattleRecordsList`, campi letti per riflessione) con win% stimata ed esito del diario
   (`esito_battaglia`); esito (vincitori dell'`EndRoundDelegate` ⇒ "vittoria Asse/Alleati", altrimenti
-  "nessuna entro N round") e VC finali.
+  "nessuna entro N round") e VC finali. Step 3c-bis: trasporti per nazione a fine round (colonna
+  "Trasporti") e **primo sbarco alleato in Europa** (`primo_sbarco_europa`): il round più basso tra
+  (a) una battaglia `NORMAL` (non bombardamento) di British/Americans (`Monitor.WESTERN_ALLIES`) in un
+  territorio di `Monitor.EUROPE` (Europa continentale + Italia, isole, Balcani, Norvegia/Finlandia)
+  e (b) unità di terra British/Americans a fine round in un territorio di `EUROPE` non alleato in
+  origine (entrare in un territorio francese non è uno sbarco); a parità vince la battaglia. Limite:
+  (a) conta anche un attacco di soli aerei.
 - **D'ora in poi niente banchi lunghi in sandbox**: verifica breve locale (UNA partita da 2 round,
   ~1 min) + autoplay in CI (sotto). Il banco `ProPlusBenchTest` resta per compatibilità.
 - Test: `:proplus-autoplay:test` (`AutoplayTest`: parametri, PU dal diario, markdown, confronto).
@@ -207,19 +216,24 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
 ## Autoplay in CI (`.github/workflows/proplus-autoplay.yml`)
 
 - Trigger: job `autoplay` di `proplus-release.yml` (dopo `build`, workflow riutilizzabile
-  `workflow_call`, 8 round, 6 partite): la release è già pubblicata, quindi non la blocca né la
+  `workflow_call`, 12 round, 6 configurazioni × 2 semi = 12 partite dallo step 3c-bis): la release è già pubblicata, quindi non la blocca né la
   modifica. `concurrency` di `proplus-release` spostata sul job `build` (un'altra release non aspetta
   le partite). **`workflow_run` e `workflow_dispatch` non funzionano**: GitHub li accetta solo per
   workflow presenti sul branch di default (`main` = upstream, non si tocca): verificato, `gh workflow
   run` ⇒ "HTTP 404: workflow proplus-autoplay.yml not found on the default branch".
-  `workflow_dispatch` (input `round`, `partite` = prime N di A/1, A/2, D/1, D/2, C/1, Hard, `piani` =
-  es. `A/1,B/2,hard`) resta nel file per quando/se il file sarà su `main`. Ripetere a mano oggi:
+  `workflow_dispatch` (input `round`, `partite` = prime N configurazioni di A/1, A/2, D/1, D/2, C/1,
+  Hard, `semi` = semi per configurazione (2, max 4), `piani` = es. `A/1,B/2,hard`) resta nel file per quando/se il file sarà su `main`. Ripetere a mano oggi:
   Actions → run di "ProPlus Release" → "Re-run all jobs" (rifà anche la release).
 - Job: `prepare` (installDist + XML della mappa + matrice, artefatto `autoplay-kit`), `play` (matrice,
-  max-parallel 6, fail-fast off, timeout 60 min, `--minuti 52`, semi 1..6, rischio Equilibrato per
-  entrambe, artefatto `partita-<id>`), `publish` (anche se qualche partita fallisce: cartella vuota =
-  "FALLITA" nel confronto; `riepilogo-generale.md` con VC ai round 4/6/8, PU finali, esito, lettura
-  per round, PU difesa/piano/spesi; `autoplay.zip`; release **`autoplay-latest`** ricreata sul commit
+  max-parallel 6, fail-fast off, timeout 60 min, `--minuti 52`, semi 1..N **uguali per ogni
+  configurazione** (id `<n>-Asse-A-Alleati-1-seme<s>`), rischio Equilibrato per entrambe, artefatto
+  `partita-<id>`), `publish` (anche se qualche partita fallisce: cartella vuota = "FALLITA" nel
+  confronto; `riepilogo-generale.md` con: tabella per partita (VC a 1/3, 2/3 e fine = round 4/8/12,
+  PU finali, esito), **tabella per configurazione** (chiave = tipi + piani, es. "Pro+ A / Pro+ 1";
+  media dei semi: VC, vittorie col round, PU finali) e **lettura per configurazione** (per round:
+  probabilità media del piano reale + partite con lettura corretta, colonna "Media" con % OK),
+  primo sbarco alleato in Europa e trasporti per nazione a fine partita, lettura per partita e round,
+  PU difesa/piano/spesi; `autoplay.zip`; release **`autoplay-latest`** ricreata sul commit
   testato, prerelease, note con commit/data/run; non pubblica se `proplus` è già a un commit più nuovo,
 la cui run pubblicherà). `proplus-latest` mai toccata.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
@@ -601,10 +615,10 @@ round N (piano X)" prima del turno della prima nazione (`DiaryRecorder.allianceR
   considerato dell'altra parte: attacchi a neutrali contano come perdite nemiche).
 - **Stato**: IN CRISI se ≥ 2 tappe in ritardo e reddito in calo in ciascuno degli ultimi 2 round;
   IN RITARDO se ≥ 1 tappa in ritardo o reddito in calo da 2 round; altrimenti IN LINEA.
-- **Lettura del nemico**: per ogni piano nemico con `firma` (N escluso): punteggio = media pesata dei
-  valori degli indizi validi nel round; probabilità del round ∝ punteggio² + 0.05 (`EPSILON`);
-  probabilità = 0.5 × quelle del round prima + 0.5 × quelle del round (`INERZIA`; R1 parte da
-  probabilità uguali) ⇒ si muovono al massimo di metà distanza per round. Indizio (`firma`):
+- **Lettura del nemico** (dallo step 3c-bis **evidenza cumulata**, sotto): per ogni piano nemico con
+  `firma` (N escluso): punteggio = media pesata dei valori **ricordati** degli indizi; probabilità ∝
+  punteggio² + 0.05 (`EPSILON`), normalizzate (l'`INERZIA` 0.5 sulle probabilità dello step 3c è
+  stata tolta: la memoria è sugli indizi). Indizio (`firma`):
   {`indizio`, `tipo`, `nazioni`, `fronte`, `territori`/`zone`, `unita`/`classi`, `da`, `a`, `peso`,
   `da_round`, `a_round`}; valore = rampa lineare da `da` (0) ad `a` (1), `a < da` = più basso è più
   forte. Tipi: `quota_tuv_fronte` (quota del TUV di terra delle nazioni sul fronte), `quota_acquisti`
@@ -616,6 +630,63 @@ round N (piano X)" prima del turno della prima nazione (`DiaryRecorder.allianceR
   reale avversario: X - lettura corretta si'/no)", corretta = il piano più probabile è quello vero.
 - Testi: "Avanzamento: <stato> - tappe: ...; reddito N PU (R1 .., nemico ..), bilancio TUV ±N
   (nemico -.., noi -..)" e "Lettura del nemico: <piano> 55%, ... - indizi principali: ...".
+
+#### Evidenza cumulata e indizi nuovi (step 3c-bis, solo osservazione)
+
+- **Memoria** (`Valutazione.remember`, salvata nello storico: `lettura.memoria` {piano: {indizio:
+  valore}}; il nome dell'indizio deve essere unico nel piano): indizio di stato m = 0.6 × m_prima +
+  0.4 × valore del round (`MEMORIA`); indizio evento (`attacchi` senza `altrove`) m = max(valore,
+  0.75 × m_prima) (`MEMORIA_EVENTI`: una battaglia vista una volta pesa 1, 0.75, 0.56...). Indizio
+  non misurabile nel round o fuori da `da_round`/`a_round` ⇒ resta il valore ricordato (es. "guerra
+  all'URSS al R3" misurato solo al R3 conta per tutta la partita). Prima misura ⇒ m = valore. JSON
+  per indizio: `misura`, `valore_round`, `valore` (ricordato), `peso`.
+- **Tipi nuovi** (`Strategia.Firma`): `piazzamenti` (TUV piazzato dalle nazioni negli ultimi 2 passi
+  `...Place` della cronologia, eventi con `PlacementDescription`; quota in `territori` sul totale o su
+  `territori`+`altrove`; niente piazzato ⇒ non valutato), `attacchi` (territori di `territori` con una
+  battaglia delle nazioni come attaccante nel round o nel precedente, contro `contro` se indicato,
+  da `BattleRecordsList` con `BattleRecords.getWereThereBattlesInTerritoriesMatching`), `in_guerra`
+  (1 se una delle nazioni è in guerra con una di `contro`). Campo `altrove` (o `zone_altrove`) per
+  `unita_in`/`piazzamenti`/`attacchi` ⇒ la misura è la quota in `territori` rispetto a `territori` +
+  `altrove` (nessuna unità/battaglia in entrambi ⇒ non valutato): così lo stesso fatto è a favore
+  di un piano e contro l'altro (rampe speculari). Classe `trasporti_carichi` (trasporti con unità a
+  bordo, contati nel loro territorio).
+- **Indizi e pesi** (scelti, non tarati; rampa da→a; "q" = quota con `altrove`):
+
+  | Piano | Indizio | Tipo | Rampa | Peso |
+  |---|---|---|---|---|
+  | 1 | piazzamenti UK in Union of South Africa/71 SZ (q vs United Kingdom/109/110) bassi | piazzamenti | 0.3→0 | 3 |
+  | 1 | navi UK in 96/97/98 (q vs 109-112) basse | unita_in | 0.5→0.15 | 2 |
+  | 1 | attacchi di British/Americans/French su territori italiani (q vs costa tedesca: Normandy Bordeaux, Holland Belgium, Denmark, Norway, Western Germany) bassi | attacchi | 0.5→0.1 | 3 |
+  | 1 | navi USA in 91/92 (q vs 109/110) basse | unita_in | 0.5→0.1 | 3 |
+  | 1 | trasporti carichi UK+USA nel Mediterraneo 91-99 (q vs 106/109-112/119) bassi | unita_in | 0.5→0.1 | 2 |
+  | 1 | trasporti UK in 109/110/111/119 (q vs 71/81/91-99) | unita_in | 0.5→0.9 | 2 |
+  | 1, 2 | acquisti USA navali | quota_acquisti | 0.3→0.6 | 1 |
+  | 2 | piazzamenti UK in Sud Africa (q) | piazzamenti | 0.1→0.5 | 3 |
+  | 2 | navi UK in 96/97/98 (q) | unita_in | 0.5→0.85 | 2 |
+  | 2 | attacco UK alla flotta italiana in 95/96/97 (letture R1-R3) | attacchi (evento) | 0→1 | 2 |
+  | 2 | attacchi alleati su territori italiani (Libya, Tobruk, Ethiopia, Italian Somaliland, Sicily, Sardinia, Southern/Northern Italy, Albania) (q) | attacchi | 0.5→0.9 | 3 |
+  | 2 | navi USA in 91/92 (q) | unita_in | 0.5→0.9 | 3 |
+  | 2 | trasporti carichi UK+USA nel Mediterraneo (q) | unita_in | 0.5→0.9 | 2 |
+  | 2 | unità di terra UK in Egypt/Alexandria/Trans-Jordan/Sudan | unita_in | 5→10 | 1 (era 3) |
+  | 3 | bombardieri negli acquisti UK+USA | quota_acquisti | 0.1→0.35 | 4 |
+  | A | TUV di terra tedesco a Est | quota_tuv_fronte | 0.25→0.55 | 3 |
+  | A | Germania in guerra con l'URSS al R3 (misurato solo al R3) | in_guerra | 0→1 | 3 |
+  | A | poche unità di terra tedesche al sud (Southern Italy, Sicily, Sardinia, Albania, Greece, Bulgaria, Libya, Tobruk, Tunisia, Algeria, Morocco, Egypt, Alexandria, Trans-Jordan) | unita_in | 3→0 | 2 |
+  | A | acquisti tedeschi di terra / pochi trasporti tedeschi | quota_acquisti / unita_in | 0.6→0.85 / 3→1 | 1 + 1 (erano 2 + 2) |
+  | B, C | indizi dello step 3c + nessuna guerra all'URSS al R3 | in_guerra | 1→0 | 1 |
+  | D | unità di terra tedesche al sud (stessa lista) | unita_in | 0→4 | 4 |
+  | D | aerei tedeschi al sud (peso basso: atterrano e ripartono) | unita_in | 0→4 | 1 |
+  | D | attacchi tedeschi nel Mediterraneo (Egypt, Alexandria, Malta, Greece, Gibraltar, Trans-Jordan, Crete, Cyprus, 92-99 SZ) | attacchi (evento) | 0→1 | 3 |
+  | D | attacchi di Germania/Italia a Malta, Greece, Gibraltar | attacchi (evento) | 0→1 | 2 |
+  | D | nessuna guerra all'URSS al R3 (A la dichiara al R3, B/C/D dal R4) | in_guerra | 1→0 | 3 |
+  | D | ammassamento tedesco a Est basso | quota_tuv_fronte | 0.35→0.15 | 3 |
+  | D | trasporti italiani negli acquisti / carichi in 93-99 | quota_acquisti / unita_in | 0.15→0.35 / 0→2 | 1 + 1 |
+
+  Tolti: D "unità o aerei tedeschi in Italia/Africa" (peso 4, aerei inclusi ⇒ oscillava), D "TUV di
+  terra dell'Asse nel Mediterraneo" (crollava con le perdite italiane), 1 "flotta USA verso l'Atlantico
+  orientale" e "trasporti UK attorno al Regno Unito" in conteggio assoluto, 2 "marina alleata nel
+  Mediterraneo" (sostituiti dalle quote). Northern Italy escluso dalla lista "sud": al R1 la Germania
+  in piano A vi parcheggia unità (logica di Hard) ⇒ falso indizio D.
 
 ## Log degli step
 
@@ -1243,3 +1314,51 @@ Vedi "Partita headless AI vs AI" (runner) e "Autoplay in CI". Nessuna classe di 
   D/2 4/7, C/1 6/5, Hard 6/5. Lettura: gli Alleati leggono bene A (>50% dal R3-R4) e D tardi (dal R6-R7);
   l'Asse legge 1 bene ma confonde 2 con 1 fino al R7 (A/2) o sempre (D/2), come già visto nello step 3c.
   Asse in A/1 spende in difesa quasi quanto per il piano (292 vs 297 PU): da guardare.
+
+### Step 3c-bis — lettura del nemico cumulata + due anomalie tattiche + autoplay 12 partite (2026-11-07)
+
+Vedi "Evidenza cumulata e indizi nuovi" e "Autoplay in CI". Classi Pro toccate (solo agganci, default =
+Hard): `ProTuning` (+2 metodi), `ProCombatMoveAi` (2 punti). Pro+: `ProPlusTuning`, `Valutazione`,
+`Strategia.Firma` (+`altrove`, `contro`, 3 tipi, classe `trasporti_carichi`), `DiaryRecorder` (esito
+degli sbarchi), `Italian` (+`amphibious_strafe`), JSON della strategia (firme). Autoplay: `Monitor`,
+`Riepilogo`, `RiepilogoGenerale`, `AutoplayOptions` (12 round), workflow (12 round, 2 semi).
+
+#### Anomalie dell'autoplay di 8bfb575 (partita A/2, round 8, USA)
+- **a) Normandy Bordeaux a 0%** (12 unità contro 15, 6 unità di terra perse): era uno **strafe** di
+  Hard (`ProTerritoryManager.removeTerritoriesThatCantBeConquered`): per un territorio con fabbrica
+  che non posso conquistare ma che un alleato (UK, che gioca dopo) può prendere, Hard attacca "per
+  logorare" e sostituisce la win% del bersaglio con quella dell'alleato dopo lo strafe (100% ⇒ "max
+  possibile 100%" nel diario); gli strafe sono esenti da tutti i controlli successivi (`allAttacksSucceed`,
+  controllo "conviene", trasporti esposti). La stima dello strafe (`callBattleCalcWithRetreatAir`) fa
+  ritirare solo gli aerei: con unità sbarcate (che non possono ritirarsi) l'attacco combatte fino alla
+  fine. Pro+: `dropsAmphibiousStrafe` ⇒ scartato se la win% con le unità assegnate è sotto la soglia
+  minima del livello effettivo del bersaglio (`getAttackMinWinPercentage(t)`), motivo
+  `amphibious_strafe` nel diario. Hard: invariata.
+- **b) Northern Italy 100% → "SCONFITTA" con 0 difensori** (e Sicily 100% → "RITIRATA"): errore del
+  **gioco** (di Hard), non del diario. I due sbarchi scaricavano da 95 Sea Zone, confinante con
+  Southern Italy (aeroporto italiano); con "Scramble To Any Amphibious Assault" i caccia italiani
+  scramblano nella zona di scarico: il motore ricarica il carico prima della battaglia navale, un
+  trasporto affondato porta con sé le unità (Northern Italy: carro + fanteria = TUV −9, i difensori
+  restano 0) e i trasporti superstiti si ritirano col carico (Sicily: 2 "ritirati"). Hard Beta ha già
+  il controllo (`isLostToScramble`), Hard no. Pro+: `checksLandingScramble` = sempre. Il diario
+  attribuiva l'esito giusto ma lo descriveva male: ora "PERSI IN MARE (battaglia navale in <zona>
+  prima dello sbarco ...)" o "SBARCO ANNULLATO (...)" quando le unità sbarcate mancano, i difensori
+  non hanno perso nulla e c'è stata una battaglia mia in una zona di mare confinante nel round.
+  (Verificato su codice, mappa e numeri del diario: il log della partita non ha il dettaglio.)
+
+#### Test
+- `ValutazioneTest`: memoria (stessa evidenza ⇒ stessa probabilità; trasporti spariti ⇒ 0.6, 0.36),
+  `remember` (stato/evento), Asse legge 2 da piazzamenti UK in Sud Africa + attacco alla flotta
+  italiana, Alleati leggono A dalla guerra all'URSS al R3 (valore tenuto al R4), firme nuove nel file.
+- `ProPlusTuningTest`: i due agganci (Hard: no scramble check, nessuno strafe scartato; Pro+ sì, soglia
+  60% a Equilibrato). `AutoplayTest`: colonne VC 4/8/12, tabelle per configurazione, primo sbarco
+  (battaglia/presenza, niente bombardamenti/Africa), colonna trasporti.
+- Golden Hard (`HardNeutralityGoldenTest`, `HardPriorityGoldenTest`), `DiaryNeutralityTest`, tutto
+  `:game-core:test` e `:proplus-autoplay:test` verdi in locale.
+- Verifica locale (firme finali): 1 partita A/2, 2 round, seme 1, 45 s. Lettura Asse R2: 2 al 66%
+  corretta (indizi: piazzamenti UK in Sud Africa, attacco UK alla flotta italiana); Alleati: A 70% (R1),
+  74% (R2), corretta. (Prima di togliere Northern Italy dalla lista "sud" gli Alleati leggevano A al 40%
+  al R1: D saliva per 2 unità tedesche parcheggiate lì.) In sandbox fallisce solo
+  `ContentDownloaderIntegrationTest` (scarica da internet, rete bloccata); `spotlessApply` segnala un
+  errore del lint `expandwildcardimports` (Java-Parser), non del formato: la release non lo esegue.
+

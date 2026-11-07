@@ -380,6 +380,27 @@ public final class ProPlusTuning implements ProTuning {
     return true;
   }
 
+  /**
+   * Step 3c-bis: as Hard Beta, no landing whose transports enemy air can scramble on and sink
+   * (autoplay A/2, round 8: the Americans lost the landing on Northern Italy to Italian fighters
+   * scrambled from Southern Italy into 95 Sea Zone).
+   */
+  @Override
+  public boolean checksLandingScramble(final boolean beta) {
+    return true;
+  }
+
+  /**
+   * Step 3c-bis: no strafe with units landing from transports below the minimum win% of the
+   * target's effective risk level: landed units cannot retreat (autoplay A/2, round 8: 12 American
+   * units against 15 defenders in Normandy Bordeaux at 0%, 6 land units lost).
+   */
+  @Override
+  public boolean dropsAmphibiousStrafe(
+      final ProData proData, final Territory target, final double winPercentage) {
+    return winPercentage < proData.getAttackMinWinPercentage(target);
+  }
+
   @Override
   public boolean hasVictoryCityWinCondition(final GameProperties props) {
     return ProTuning.super.hasVictoryCityWinCondition(props)

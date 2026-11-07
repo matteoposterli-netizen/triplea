@@ -11,6 +11,7 @@ import java.io.Reader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -123,6 +124,9 @@ public final class Strategia {
         }
         for (final Firma f : piano.firma()) {
           f.territori().stream()
+              .filter(name -> map.getTerritoryOrNull(name) == null)
+              .forEach(unknown::add);
+          f.altrove().stream()
               .filter(name -> map.getTerritoryOrNull(name) == null)
               .forEach(unknown::add);
         }
@@ -360,18 +364,31 @@ public final class Strategia {
    * A clue of a plan's signature (step 3c), read by the enemy's general staff: a measure {@code
    * tipo} of the units of {@code nazioni}, turned into 0..1 by a linear ramp from {@code da} (0) to
    * {@code a} (1; {@code a < da} = the less, the stronger), counted with {@code peso} in rounds
-   * {@code daRound}..{@code aRound}. Measures:
+   * {@code daRound}..{@code aRound} (step 3c-bis: outside them the clue keeps its remembered value,
+   * see {@link Valutazione}). Measures:
    *
    * <ul>
    *   <li>{@value #QUOTA_TUV_FRONTE}: share of the nations' land TUV on {@code fronte} (0..1);
    *   <li>{@value #QUOTA_ACQUISTI}: share of the PUs of the nations' last two purchases spent on
    *       {@code unita} / {@code classe} (0..1; not counted before they bought anything);
    *   <li>{@value #UNITA_IN}: units of {@code unita} / {@code classe} in {@code territori} (land
-   *       and sea zones; none listed = everywhere).
+   *       and sea zones; none listed = everywhere); with {@code altrove}, the share in {@code
+   *       territori} of those in {@code territori} + {@code altrove} (0..1; none in both = not
+   *       counted);
+   *   <li>{@value #PIAZZAMENTI} (3c-bis): TUV of the units of {@code unita} / {@code classe} the
+   *       nations placed in their last two placements in {@code territori}, as a share of all their
+   *       placed TUV, or of the placed TUV in {@code territori} + {@code altrove} (0..1; nothing
+   *       placed = not counted);
+   *   <li>{@value #ATTACCHI} (3c-bis): territories in {@code territori} where the nations fought a
+   *       battle as attacker in this round or the last one (against {@code contro}, if listed);
+   *       with {@code altrove}, the share in {@code territori} of those in both (none = not
+   *       counted);
+   *   <li>{@value #IN_GUERRA} (3c-bis): 1 if one of the nations is at war with one of {@code
+   *       contro}, else 0.
    * </ul>
    *
    * <p>Classes: {@code terra}, {@code aerei}, {@code navi}, {@code navi_da_guerra}, {@code
-   * trasporti}.
+   * trasporti}, {@code trasporti_carichi} (3c-bis: transports carrying units).
    */
   public record Firma(
       String indizio,
@@ -381,6 +398,8 @@ public final class Strategia {
       List<String> territori,
       List<String> unita,
       List<String> classi,
+      List<String> altrove,
+      List<String> contro,
       double da,
       double a,
       double peso,
@@ -389,9 +408,19 @@ public final class Strategia {
     public static final String QUOTA_TUV_FRONTE = "quota_tuv_fronte";
     public static final String QUOTA_ACQUISTI = "quota_acquisti";
     public static final String UNITA_IN = "unita_in";
-    static final Set<String> TIPI = Set.of(QUOTA_TUV_FRONTE, QUOTA_ACQUISTI, UNITA_IN);
+    public static final String PIAZZAMENTI = "piazzamenti";
+    public static final String ATTACCHI = "attacchi";
+    public static final String IN_GUERRA = "in_guerra";
+    static final Set<String> TIPI =
+        Set.of(QUOTA_TUV_FRONTE, QUOTA_ACQUISTI, UNITA_IN, PIAZZAMENTI, ATTACCHI, IN_GUERRA);
+    public static final String TRASPORTI_CARICHI = "trasporti_carichi";
     static final Set<String> CLASSI =
-        Set.of("terra", "aerei", "navi", "navi_da_guerra", "trasporti");
+        Set.of("terra", "aerei", "navi", "navi_da_guerra", "trasporti", TRASPORTI_CARICHI);
+
+    /** Whether the clue is an event (a battle) rather than a state: remembered differently. */
+    public boolean isEvento() {
+      return ATTACCHI.equals(tipo) && altrove.isEmpty();
+    }
 
     public boolean covers(final int round) {
       return round >= daRound && round <= aRound;
@@ -502,8 +531,14 @@ public final class Strategia {
       tappe.add(tappa(t.getAsJsonObject(), id));
     }
     final List<Firma> firma = new ArrayList<>();
+    final Set<String> clueNames = new HashSet<>();
     for (final JsonElement t : array(p, "firma")) {
-      firma.add(firma(t.getAsJsonObject(), id));
+      final Firma f = firma(t.getAsJsonObject(), id);
+      // the name keys the clue's memory (step 3c-bis)
+      if (!clueNames.add(f.indizio())) {
+        throw new IllegalArgumentException("indizio ripetuto nel piano " + id + ": " + f.indizio());
+      }
+      firma.add(f);
     }
     final List<PuntoCritico> puntiCritici = new ArrayList<>();
     for (final JsonElement t : array(p, "punti_critici")) {
@@ -570,20 +605,26 @@ public final class Strategia {
       }
     }
     final String fronte = string(o, "fronte");
+    final List<String> contro = strings(o, "contro");
     if (nazioni.isEmpty()
         || !o.has("da")
         || !o.has("a")
-        || (Firma.QUOTA_TUV_FRONTE.equals(tipo) && fronte == null)) {
+        || (Firma.QUOTA_TUV_FRONTE.equals(tipo) && fronte == null)
+        || (Firma.IN_GUERRA.equals(tipo) && contro.isEmpty())) {
       throw new IllegalArgumentException(
           "indizio incompleto nel piano "
               + plan
-              + " (servono nazioni, da, a e per "
+              + " (servono nazioni, da, a, per "
               + Firma.QUOTA_TUV_FRONTE
-              + " il fronte): "
+              + " il fronte e per "
+              + Firma.IN_GUERRA
+              + " 'contro'): "
               + o);
     }
     final List<String> territori = new ArrayList<>(strings(o, "territori"));
     territori.addAll(strings(o, "zone"));
+    final List<String> altrove = new ArrayList<>(strings(o, "altrove"));
+    altrove.addAll(strings(o, "zone_altrove"));
     return new Firma(
         Optional.ofNullable(string(o, "indizio")).orElse(tipo),
         tipo,
@@ -592,6 +633,8 @@ public final class Strategia {
         List.copyOf(territori),
         strings(o, "unita"),
         List.copyOf(classi),
+        List.copyOf(altrove),
+        contro,
         o.get("da").getAsDouble(),
         o.get("a").getAsDouble(),
         o.has("peso") ? o.get("peso").getAsDouble() : 1,

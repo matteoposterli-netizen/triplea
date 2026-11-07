@@ -108,5 +108,6 @@ jobs:
     needs: build
     uses: ./.github/workflows/proplus-autoplay.yml
     with:
-      round: "8"
+      round: "12"
       partite: "6"
+      semi: "2"

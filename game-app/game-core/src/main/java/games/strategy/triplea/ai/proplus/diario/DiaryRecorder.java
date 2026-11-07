@@ -2,6 +2,7 @@ package games.strategy.triplea.ai.proplus.diario;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import games.strategy.engine.data.BattleRecordsList;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
@@ -37,6 +38,7 @@ import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.battle.BattleTracker;
 import games.strategy.triplea.delegate.battle.IBattle.BattleType;
+import games.strategy.triplea.delegate.data.BattleRecords;
 import games.strategy.triplea.util.TuvCostsCalculator;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1630,10 +1632,25 @@ public final class DiaryRecorder implements ProDecisionRecorder {
                     && data.getRelationshipTracker().isAllied(player, t.getOwner())
                     && !rec.owner.equals(t.getOwner().getName()));
       }
+      final Optional<String> seaBattle =
+          attackersHere == 0 && !win && rec.amphib && tuvDefendersLost == 0
+              ? seaBattleNextTo(data, player, t)
+              : Optional.empty();
       final String outcome;
       if (win) {
         outcome = t.isWater() ? "VITTORIA (zona ripulita)" : "VITTORIA (conquistato)";
         won++;
+      } else if (seaBattle.isPresent() && attackersRetreated == 0) {
+        outcome =
+            "PERSI IN MARE (battaglia navale in "
+                + seaBattle.get()
+                + " prima dello sbarco, es. aerei nemici in scramble: trasporti affondati col"
+                + " carico)";
+      } else if (seaBattle.isPresent()) {
+        outcome =
+            "SBARCO ANNULLATO (battaglia navale in "
+                + seaBattle.get()
+                + " prima dello sbarco: unita' rimaste sui trasporti)";
       } else if (attackersHere == 0 && attackersRetreated > 0) {
         outcome = "RITIRATA";
       } else if (attackersHere == 0) {
@@ -1686,6 +1703,32 @@ public final class DiaryRecorder implements ProDecisionRecorder {
             expected));
     pendingOutcomes.clear();
     diary.text(sb.toString());
+  }
+
+  /**
+   * A sea zone next to {@code t} where {@code player} fought a battle as attacker this round: the
+   * battle before a landing (step 3c-bis), eg. against enemy air scrambled to the unload zone. A
+   * lost one sinks the transports with their cargo; a retreat takes the cargo back to sea.
+   */
+  private static Optional<String> seaBattleNextTo(
+      final GameState data, final GamePlayer player, final Territory t) {
+    final BattleRecordsList list = data.getBattleRecordsList();
+    if (list == null) {
+      return Optional.empty();
+    }
+    final BattleRecords records = list.getBattleRecordsMapCopy().get(data.getSequence().getRound());
+    if (records == null) {
+      return Optional.empty();
+    }
+    final var mine = BattleRecords.getRecordsForPlayerId(player, records);
+    return data.getMap().getNeighbors(t, Matches.territoryIsWater()).stream()
+        .filter(
+            zone ->
+                BattleRecords.getWereThereBattlesInTerritoriesMatching(
+                    mine, player, null, "any", Set.of(zone)))
+        .map(Territory::getName)
+        .sorted()
+        .findFirst();
   }
 
   // ---------------------------------------------------------------- text of the attack plan

@@ -10,8 +10,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
@@ -132,6 +135,9 @@ final class RiepilogoGenerale {
         .append(String.join(" / ", alliances.stream().map(Riepilogo::allianceLabel).toList()))
         .append(" (PU = somma della cassa delle nazioni a fine round).\n");
 
+    configurations(md, games, alliances, vcRounds, maxRound);
+    landingsAndTransports(md, games, alliances);
+
     md.append(
 """
 
@@ -221,13 +227,201 @@ final class RiepilogoGenerale {
     return md.toString();
   }
 
-  /** Rounds for the VC columns: half, three quarters and the end (8 rounds: 4, 6, 8). */
+  /** Rounds for the VC columns: a third, two thirds and the end (12 rounds: 4, 8, 12). */
   static List<Integer> vcRounds(final int maxRound) {
     final TreeSet<Integer> set = new TreeSet<>();
-    set.add(Math.max(1, (maxRound + 1) / 2));
-    set.add(Math.max(1, (3 * maxRound + 3) / 4));
+    set.add(Math.max(1, (maxRound + 2) / 3));
+    set.add(Math.max(1, (2 * maxRound + 2) / 3));
     set.add(maxRound);
     return new ArrayList<>(set);
+  }
+
+  /** "Pro+ A / Pro+ 1", "Hard / Hard": the game's configuration (its seed aside). */
+  static String configuration(final JsonObject json, final List<String> alliances) {
+    final JsonObject p = json.getAsJsonObject("parametri");
+    return join(
+        alliances,
+        a -> {
+          final String type = text(p.getAsJsonObject("tipi"), a);
+          return AutoplayOptions.HARD.equals(type)
+              ? Riepilogo.typeLabel(type)
+              : Riepilogo.typeLabel(type) + " " + text(p.getAsJsonObject("piani"), a);
+        });
+  }
+
+  /**
+   * One row per configuration, the mean of its games (seeds): VC at the VC rounds, victories with
+   * their round, final PUs; then the reading of the enemy per round (mean probability of the real
+   * plan, games where it was the most probable).
+   */
+  private static void configurations(
+      final StringBuilder md,
+      final List<Game> games,
+      final List<String> alliances,
+      final List<Integer> vcRounds,
+      final int maxRound) {
+    final Map<String, List<JsonObject>> byConfig = new LinkedHashMap<>();
+    for (final Game g : games) {
+      if (g.json() != null) {
+        byConfig
+            .computeIfAbsent(configuration(g.json(), alliances), k -> new ArrayList<>())
+            .add(g.json());
+      }
+    }
+    md.append("\n## Per configurazione (media dei semi)\n\n| Configurazione | Partite | ");
+    vcRounds.forEach(r -> md.append("VC R").append(r).append(" | "));
+    md.append("Vittoria (round) | PU finali |\n|---|---|");
+    vcRounds.forEach(r -> md.append("---|"));
+    md.append("---|---|\n");
+    for (final Map.Entry<String, List<JsonObject>> c : byConfig.entrySet()) {
+      final List<JsonObject> list = c.getValue();
+      md.append("| ").append(c.getKey()).append(" | ").append(list.size()).append(" | ");
+      for (final int r : vcRounds) {
+        md.append(
+                join(
+                    alliances,
+                    a ->
+                        mean(
+                            list.stream()
+                                .map(j -> round(j, r))
+                                .filter(Objects::nonNull)
+                                .map(
+                                    round ->
+                                        round
+                                            .getAsJsonObject("vc")
+                                            .getAsJsonObject(a)
+                                            .get("numero")
+                                            .getAsDouble())
+                                .toList())))
+            .append(" | ");
+      }
+      final List<String> wins = new ArrayList<>();
+      for (final JsonObject j : list) {
+        final JsonObject outcome = j.getAsJsonObject("esito");
+        final JsonObject last = lastRound(j);
+        if (outcome.has("vincitore") && last != null) {
+          wins.add(
+              Riepilogo.allianceLabel(outcome.get("vincitore").getAsString())
+                  + " R"
+                  + last.get("round").getAsInt());
+        }
+      }
+      md.append(wins.isEmpty() ? "nessuna" : String.join(", ", wins)).append(" | ");
+      md.append(
+              join(
+                  alliances,
+                  a ->
+                      mean(
+                          list.stream()
+                              .filter(j -> lastRound(j) != null)
+                              .map(j -> (double) sum(j, lastRound(j), a, "pu"))
+                              .toList())))
+          .append(" |\n");
+    }
+
+    md.append(
+        "\nLettura dell'avversario per configurazione: probabilita' media del piano reale e"
+            + " partite in cui era il piu' probabile.\n\n| Configurazione | Alleanza |");
+    for (int r = 1; r <= maxRound; r++) {
+      md.append(" R").append(r).append(" |");
+    }
+    md.append(" Media |\n|---|---|");
+    for (int r = 1; r <= maxRound; r++) {
+      md.append("---|");
+    }
+    md.append("---|\n");
+    for (final Map.Entry<String, List<JsonObject>> c : byConfig.entrySet()) {
+      for (final String a : alliances) {
+        final StringBuilder row = new StringBuilder();
+        double sumAll = 0;
+        int nAll = 0;
+        int okAll = 0;
+        for (int r = 1; r <= maxRound; r++) {
+          double sumRound = 0;
+          int n = 0;
+          int ok = 0;
+          for (final JsonObject j : c.getValue()) {
+            final JsonObject l = reading(j, r, a);
+            if (l != null && l.has("prob_piano_reale")) {
+              sumRound += l.get("prob_piano_reale").getAsDouble();
+              n++;
+              ok += l.get("corretta").getAsBoolean() ? 1 : 0;
+            }
+          }
+          sumAll += sumRound;
+          nAll += n;
+          okAll += ok;
+          row.append(' ')
+              .append(n == 0 ? "-" : Riepilogo.percent(sumRound / n) + " " + ok + "/" + n)
+              .append(" |");
+        }
+        if (nAll > 0) {
+          md.append("| ")
+              .append(c.getKey())
+              .append(" | ")
+              .append(Riepilogo.allianceLabel(a))
+              .append(" |")
+              .append(row)
+              .append(' ')
+              .append(Riepilogo.percent(sumAll / nAll))
+              .append(" (OK ")
+              .append(Riepilogo.percent((double) okAll / nAll))
+              .append(") |\n");
+        }
+      }
+    }
+  }
+
+  /** First Allied landing in Europe and transports per nation at the end, per game. */
+  private static void landingsAndTransports(
+      final StringBuilder md, final List<Game> games, final List<String> alliances) {
+    md.append(
+"""
+
+## Primo sbarco alleato in Europa e trasporti a fine partita
+
+| Partita | Primo sbarco alleato in Europa | Trasporti a fine partita |
+|---|---|---|
+""");
+    for (final Game g : games) {
+      if (g.json() == null) {
+        continue;
+      }
+      final JsonObject last = lastRound(g.json());
+      final List<String> transports = new ArrayList<>();
+      if (last != null) {
+        for (final String a : alliances) {
+          for (final JsonElement m : g.json().getAsJsonObject("alleanze").getAsJsonArray(a)) {
+            final JsonObject n = last.getAsJsonObject("nazioni").getAsJsonObject(m.getAsString());
+            if (n != null && n.has("trasporti")) {
+              transports.add(m.getAsString() + " " + n.get("trasporti").getAsInt());
+            }
+          }
+        }
+      }
+      md.append("| ")
+          .append(g.folder())
+          .append(" | ")
+          .append(Riepilogo.firstLandingText(g.json()))
+          .append(" | ")
+          .append(transports.isEmpty() ? "-" : String.join(", ", transports))
+          .append(" |\n");
+    }
+  }
+
+  private static JsonObject reading(final JsonObject json, final int r, final String alliance) {
+    final JsonObject round = round(json, r);
+    final JsonObject staff =
+        round == null ? null : round.getAsJsonObject("stato_maggiore").getAsJsonObject(alliance);
+    return staff != null && staff.has("lettura") ? staff.getAsJsonObject("lettura") : null;
+  }
+
+  private static String mean(final List<Double> values) {
+    if (values.isEmpty()) {
+      return "-";
+    }
+    final double m = values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+    return m == Math.rint(m) ? String.valueOf((long) m) : String.format(Locale.ROOT, "%.1f", m);
   }
 
   private static List<String> alliances(final List<Game> games) {

@@ -81,6 +81,25 @@ public interface ProTuning {
     return 0;
   }
 
+  /**
+   * Whether an amphibious attack is dropped when enemy air can scramble into its unload zone and
+   * sink the transports with their cargo. Only Hard Beta by default.
+   */
+  default boolean checksLandingScramble(final boolean beta) {
+    return beta;
+  }
+
+  /**
+   * Whether a strafing attack (to weaken the defenders for an ally, see {@code
+   * ProTerritoryManager}) with units landing from transports is dropped at {@code winPercentage}
+   * with the units assigned: landed units cannot retreat, so they fight to the end. Never by
+   * default: Hard and Hard Beta keep every strafe.
+   */
+  default boolean dropsAmphibiousStrafe(
+      final ProData proData, final Territory target, final double winPercentage) {
+    return false;
+  }
+
   /** Whether territories are worth more for their victory cities. Only Hard Beta by default. */
   default boolean valuesVictoryCities(final boolean beta) {
     return beta;

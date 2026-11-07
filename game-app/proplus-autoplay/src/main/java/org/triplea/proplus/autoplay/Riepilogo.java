@@ -86,6 +86,8 @@ final class Riepilogo {
     json.add("dichiarazioni_guerra", data.get("dichiarazioni_guerra"));
     json.add("capitali", data.get("capitali"));
     json.add("battaglie_top", topBattles(data.getAsJsonArray("battaglie"), diaryData));
+    firstLandingInEurope(data.getAsJsonArray("battaglie"), rounds)
+        .ifPresent(l -> json.add("primo_sbarco_europa", l));
     json.add("esito", outcome(o, monitor, rounds, winner, gameOver));
     return json;
   }
@@ -123,6 +125,64 @@ final class Riepilogo {
     p.add("piani", plans);
     p.add("rischio_base", risks);
     return p;
+  }
+
+  /**
+   * The first British/American landing in continental Europe: the earliest round with a battle of
+   * theirs (attack, not a bombing raid) in a European land territory, or with their land units in
+   * one at the end of the round (a landing without battle). A battle wins a tie.
+   */
+  static Optional<JsonObject> firstLandingInEurope(
+      final JsonArray battles, final JsonArray rounds) {
+    JsonObject best = null;
+    for (final JsonElement e : battles) {
+      final JsonObject b = e.getAsJsonObject();
+      if (Monitor.WESTERN_ALLIES.contains(b.get("attaccante").getAsString())
+          && Monitor.EUROPE.contains(b.get("territorio").getAsString())
+          && "NORMAL".equals(text(b, "tipo"))
+          && (best == null || b.get("round").getAsInt() < best.get("round").getAsInt())) {
+        best = new JsonObject();
+        best.addProperty("round", b.get("round").getAsInt());
+        best.addProperty("territorio", b.get("territorio").getAsString());
+        best.addProperty("nazione", b.get("attaccante").getAsString());
+        best.addProperty("come", "attacco (" + text(b, "risultato") + ")");
+      }
+    }
+    for (final JsonElement e : rounds) {
+      final JsonObject r = e.getAsJsonObject();
+      final int round = r.get("round").getAsInt();
+      if (!r.has("alleati_in_europa")
+          || r.getAsJsonObject("alleati_in_europa").isEmpty()
+          || (best != null && best.get("round").getAsInt() <= round)) {
+        continue;
+      }
+      final Map.Entry<String, JsonElement> first =
+          r.getAsJsonObject("alleati_in_europa").entrySet().iterator().next();
+      best = new JsonObject();
+      best.addProperty("round", round);
+      best.addProperty("territorio", first.getKey());
+      best.addProperty("nazione", strings(first.getValue().getAsJsonArray()).get(0));
+      best.addProperty("come", "unita' presenti a fine round");
+      break;
+    }
+    return Optional.ofNullable(best);
+  }
+
+  /** Eg: "R5 Normandy Bordeaux (Americans, attacco (CONQUERED))", or "nessuno". */
+  static String firstLandingText(final JsonObject json) {
+    if (!json.has("primo_sbarco_europa")) {
+      return "nessuno";
+    }
+    final JsonObject l = json.getAsJsonObject("primo_sbarco_europa");
+    return "R"
+        + l.get("round").getAsInt()
+        + " "
+        + l.get("territorio").getAsString()
+        + " ("
+        + l.get("nazione").getAsString()
+        + ", "
+        + l.get("come").getAsString()
+        + ")";
   }
 
   private static JsonArray topBattles(final JsonArray all, final DiaryData diary) {
@@ -217,6 +277,7 @@ final class Riepilogo {
         .append(", durata ")
         .append(duration(json.get("durata_s").getAsLong()))
         .append('\n');
+    md.append("- Primo sbarco alleato in Europa: ").append(firstLandingText(json)).append('\n');
     md.append("- Mappa: ")
         .append(p.get("gioco").getAsString())
         .append(" (")
@@ -266,17 +327,27 @@ final class Riepilogo {
 """);
     md.append(
         "PU = cassa a fine round; difesa = PU spesi nei passi di difesa (defend_land,"
-            + " capital_emergency); piano = PU spesi nel mix del piano; spesi = totale acquisti.\n\n");
+            + " capital_emergency); piano = PU spesi nel mix del piano; spesi = totale acquisti;"
+            + " trasporti = trasporti della nazione a fine round.\n\n");
     md.append(
-        "| Round | Nazione | PU | Reddito | PU difesa | PU piano | PU spesi | TUV | Territori |\n");
-    md.append("|---|---|---|---|---|---|---|---|---|\n");
+        "| Round | Nazione | PU | Reddito | PU difesa | PU piano | PU spesi | TUV | Territori |"
+            + " Trasporti |\n");
+    md.append("|---|---|---|---|---|---|---|---|---|---|\n");
     for (final JsonElement e : rounds) {
       final JsonObject r = e.getAsJsonObject();
       for (final Map.Entry<String, JsonElement> n : r.getAsJsonObject("nazioni").entrySet()) {
         final JsonObject v = n.getValue().getAsJsonObject();
         md.append("| ").append(roundLabel(r)).append(" | ").append(n.getKey()).append(" | ");
         for (final String k :
-            List.of("pu", "reddito", "pu_difesa", "pu_piano", "pu_spesi", "tuv", "territori")) {
+            List.of(
+                "pu",
+                "reddito",
+                "pu_difesa",
+                "pu_piano",
+                "pu_spesi",
+                "tuv",
+                "territori",
+                "trasporti")) {
           md.append(num(v, k)).append(" | ");
         }
         md.setLength(md.length() - 1);

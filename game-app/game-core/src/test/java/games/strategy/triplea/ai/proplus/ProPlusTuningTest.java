@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
+import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.properties.IEditableProperty;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.ai.pro.ProData;
+import games.strategy.triplea.ai.pro.ProTuning;
 import games.strategy.triplea.ai.pro.util.ProTerritoryValueUtils;
 import games.strategy.triplea.settings.AbstractClientSettingTestCase;
 import games.strategy.triplea.xml.TestMapGameData;
@@ -39,6 +41,25 @@ class ProPlusTuningTest extends AbstractClientSettingTestCase {
     // defense, purchase and scramble keep the Hard thresholds
     assertThat(proData.getWinPercentage()).isEqualTo(90);
     assertThat(proData.getMinWinPercentage()).isEqualTo(65);
+  }
+
+  @Test
+  void landingScrambleCheckAndAmphibiousStrafeRuleAreProPlusOnly() {
+    // Hard: no scramble check (Hard Beta yes), every strafe kept
+    assertThat(ProTuning.DEFAULT.checksLandingScramble(false)).isFalse();
+    assertThat(ProTuning.DEFAULT.checksLandingScramble(true)).isTrue();
+    final ProData hard = new ProData();
+    hard.initializeSimulation(null, data, germans);
+    final Territory france = data.getMap().getTerritoryOrThrow("France");
+    assertThat(ProTuning.DEFAULT.dropsAmphibiousStrafe(hard, france, 0)).isFalse();
+
+    // Pro+ (Equilibrato, minimum 60%): scramble checked, amphibious strafe below 60% dropped
+    final ProData proData = initializedProPlusData();
+    final ProTuning tuning = proData.getTuning();
+    assertThat(tuning.checksLandingScramble(false)).isTrue();
+    assertThat(tuning.dropsAmphibiousStrafe(proData, france, 0)).isTrue();
+    assertThat(tuning.dropsAmphibiousStrafe(proData, france, 59.9)).isTrue();
+    assertThat(tuning.dropsAmphibiousStrafe(proData, france, 60)).isFalse();
   }
 
   @Test

@@ -2,20 +2,28 @@ package games.strategy.triplea.ai.proplus.strategia;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.offset;
 
 import com.google.gson.JsonObject;
+import games.strategy.engine.data.BattleRecordsList;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.history.HistoryWriter;
+import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.battle.IBattle;
+import games.strategy.triplea.delegate.data.BattleRecord;
+import games.strategy.triplea.delegate.data.BattleRecords;
+import games.strategy.triplea.delegate.data.PlacementDescription;
 import games.strategy.triplea.xml.TestMapGameData;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -181,7 +189,7 @@ class ValutazioneTest {
   }
 
   @Test
-  void theAlliesReadSeaLionFromGermanTransportsAndTheProbabilitiesMoveWithInertia() {
+  void theAlliesReadSeaLionFromGermanTransportsAndRememberTheEvidence() {
     final Strategia s = europe();
     data.getSequence().setRoundAndStep(1, "Purchase", russians);
     StatoMaggiore.fix(data, "Allies", s);
@@ -192,29 +200,136 @@ class ValutazioneTest {
     buy(germans, 1, "germansPurchase", "transport", 3, "destroyer", 1);
 
     final List<Map<String, Double>> rounds = new ArrayList<>();
-    for (int round = 1; round <= 3; round++) {
-      data.getSequence().setRoundAndStep(round, "Purchase", russians);
-      final JsonObject reading =
-          Valutazione.inizioRound(data, russians)
-              .orElseThrow()
-              .storico()
-              .getAsJsonObject("lettura");
-      final Map<String, Double> p = new TreeMap<>();
-      reading
-          .getAsJsonObject("probabilita")
-          .entrySet()
-          .forEach(e -> p.put(e.getKey(), e.getValue().getAsDouble()));
-      rounds.add(p);
-      assertThat(p.values().stream().mapToDouble(Double::doubleValue).sum())
-          .isCloseTo(1, org.assertj.core.data.Offset.offset(0.01));
+    for (int round = 1; round <= 4; round++) {
+      if (round == 3) {
+        // the transports leave: the evidence fades, it does not vanish at once
+        for (int zone = 110; zone <= 115; zone++) {
+          final Territory t = data.getMap().getTerritoryOrThrow(zone + " Sea Zone");
+          data.performChange(
+              ChangeFactory.removeUnits(
+                  t,
+                  t.getMatches(Matches.unitIsOwnedBy(germans).and(Matches.unitIsSeaTransport()))));
+        }
+      }
+      rounds.add(probabilities(round));
     }
     // A, B, C, D read (N has no signature)
     assertThat(rounds.get(0)).containsOnlyKeys("A", "B", "C", "D");
-    // Sea Lion leads and grows, at most halfway towards this round's reading each round
+    rounds.forEach(
+        p ->
+            assertThat(p.values().stream().mapToDouble(Double::doubleValue).sum())
+                .isCloseTo(1, org.assertj.core.data.Offset.offset(0.01)));
+    // Sea Lion leads and, with the same evidence, stays where it is
     assertThat(rounds.get(0).get("B")).isGreaterThan(rounds.get(0).get("A"));
-    assertThat(rounds.get(0).get("B")).isLessThan(0.25 + 0.5 * 0.75);
-    assertThat(rounds.get(1).get("B")).isGreaterThan(rounds.get(0).get("B"));
-    assertThat(rounds.get(2).get("B")).isGreaterThan(rounds.get(1).get("B"));
+    assertThat(rounds.get(1).get("B")).isCloseTo(rounds.get(0).get("B"), offset(0.01));
+    // without the transports (round 3, when "no war on the Soviets by round 3" also starts to
+    // count for B, C and D) it falls round after round
+    assertThat(rounds.get(3).get("B")).isLessThan(rounds.get(2).get("B"));
+    final JsonObject memory =
+        StatoMaggiore.getState(data.getProperties(), "Allies")
+            .orElseThrow()
+            .storico()
+            .get(3)
+            .getAsJsonObject()
+            .getAsJsonObject("lettura")
+            .getAsJsonObject("memoria");
+    // 1 at rounds 1-2, then 0: 0.6 x 1 = 0.6 at round 3, 0.36 at round 4
+    assertThat(
+            memory
+                .getAsJsonObject("B")
+                .get("almeno 3 trasporti tedeschi nel Baltico / Mare del Nord")
+                .getAsDouble())
+        .isCloseTo(0.36, offset(0.001));
+  }
+
+  @Test
+  void aStateClueIsAveragedAndAnEventFadesSlowly() {
+    final Strategia.Firma state = clue(0, 1);
+    assertThat(Valutazione.remember(state, null, null)).isNull();
+    assertThat(Valutazione.remember(state, null, 0.8)).isEqualTo(0.8);
+    assertThat(Valutazione.remember(state, 0.8, null)).isEqualTo(0.8);
+    assertThat(Valutazione.remember(state, 1.0, 0.0)).isCloseTo(Valutazione.MEMORIA, offset(1e-9));
+    final Strategia.Firma event = clue(Strategia.Firma.ATTACCHI, 0, 1);
+    assertThat(event.isEvento()).isTrue();
+    assertThat(Valutazione.remember(event, 1.0, 0.0))
+        .isCloseTo(Valutazione.MEMORIA_EVENTI, offset(1e-9));
+    assertThat(Valutazione.remember(event, 0.2, 1.0)).isEqualTo(1.0);
+  }
+
+  @Test
+  void theAxisReadsItalyFirstFromBritishPlacementsAndAttacks() {
+    final Strategia s = europe();
+    final GamePlayer british = data.getPlayerList().getPlayerId("British");
+    final GamePlayer italians = data.getPlayerList().getPlayerId("Italians");
+    StatoMaggiore.setChoice(data.getProperties(), "Allies", "2");
+    data.getSequence().setRoundAndStep(1, "Purchase", russians);
+    StatoMaggiore.fix(data, "Allies", s);
+    data.getSequence().setRoundAndStep(2, "Purchase", germans);
+    StatoMaggiore.fix(data, "Axis", s);
+    place(british, 1, "Union of South Africa", "infantry", 3);
+    place(british, 1, "United Kingdom", "infantry", 1);
+    final BattleRecords records = new BattleRecords();
+    final UUID id = UUID.randomUUID();
+    records.addBattle(
+        british, id, data.getMap().getTerritoryOrThrow("96 Sea Zone"), IBattle.BattleType.NORMAL);
+    records.addResultToBattle(
+        british,
+        id,
+        italians,
+        0,
+        10,
+        BattleRecord.BattleResultDescription.WON_WITHOUT_CONQUERING,
+        null);
+    BattleRecordsList.addRecords(data.getBattleRecordsList().getBattleRecordsMap(), 1, records);
+
+    final JsonObject reading =
+        Valutazione.inizioRound(data, germans).orElseThrow().storico().getAsJsonObject("lettura");
+
+    assertThat(reading.get("piu_probabile").getAsString()).isEqualTo("2");
+    final Map<String, Double> values = clueValues(reading, "2");
+    assertThat(values.get("piazzamenti britannici in Sud Africa")).isEqualTo(1.0);
+    assertThat(values.get("attacco britannico alla flotta italiana nei primi round"))
+        .isEqualTo(1.0);
+    assertThat(
+            clueValues(reading, "1")
+                .get("piazzamenti britannici nel Regno Unito, non in Sud Africa"))
+        .isZero();
+    assertThat(Valutazione.lastPlacements(data, british, 2))
+        .extracting(Valutazione.Placement::territory)
+        .containsExactly("Union of South Africa", "United Kingdom");
+  }
+
+  @Test
+  void aWarOnTheSovietsByRound3IsReadAsBarbarossa() {
+    final Strategia s = europe();
+    data.getSequence().setRoundAndStep(1, "Purchase", russians);
+    StatoMaggiore.fix(data, "Allies", s);
+    probabilities(1);
+    probabilities(2);
+    final GamePlayer british = data.getPlayerList().getPlayerId("British");
+    data.performChange(
+        ChangeFactory.relationshipChange(
+            germans,
+            russians,
+            data.getRelationshipTracker().getRelationshipType(germans, russians),
+            data.getRelationshipTracker().getRelationshipType(germans, british)));
+    assertThat(data.getRelationshipTracker().isAtWar(germans, russians)).isTrue();
+
+    final Map<String, Double> r3 = probabilities(3);
+
+    final JsonObject reading =
+        StatoMaggiore.getState(data.getProperties(), "Allies")
+            .orElseThrow()
+            .storico()
+            .get(2)
+            .getAsJsonObject()
+            .getAsJsonObject("lettura");
+    assertThat(clueValues(reading, "A").get("guerra tedesca all'URSS gia' al round 3"))
+        .isEqualTo(1.0);
+    assertThat(clueValues(reading, "D").get("nessuna guerra tedesca all'URSS al round 3")).isZero();
+    // out of its round the clue keeps its value
+    final Map<String, Double> r4 = probabilities(4);
+    assertThat(r4.get("A")).isCloseTo(r3.get("A"), offset(0.02));
   }
 
   @Test
@@ -254,6 +369,52 @@ class ValutazioneTest {
   private Strategia europe() {
     data.setGameName(EUROPE);
     return Strategie.forGame(data).orElseThrow();
+  }
+
+  /** The Allies' reading of the Axis plan at the start of {@code round}: plan -> probability. */
+  private Map<String, Double> probabilities(final int round) {
+    data.getSequence().setRoundAndStep(round, "Purchase", russians);
+    final JsonObject reading =
+        Valutazione.inizioRound(data, russians).orElseThrow().storico().getAsJsonObject("lettura");
+    final Map<String, Double> p = new TreeMap<>();
+    reading
+        .getAsJsonObject("probabilita")
+        .entrySet()
+        .forEach(e -> p.put(e.getKey(), e.getValue().getAsDouble()));
+    return p;
+  }
+
+  /** Remembered value of each clue of {@code plan} in the reading. */
+  private static Map<String, Double> clueValues(final JsonObject reading, final String plan) {
+    final Map<String, Double> values = new TreeMap<>();
+    reading
+        .getAsJsonObject("indizi")
+        .getAsJsonArray(plan)
+        .forEach(
+            e -> {
+              final JsonObject c = e.getAsJsonObject();
+              if (c.has("valore")) {
+                values.put(c.get("indizio").getAsString(), c.get("valore").getAsDouble());
+              }
+            });
+    return values;
+  }
+
+  /** Writes a place step of {@code player} in round {@code round} to the game history. */
+  private void place(
+      final GamePlayer player,
+      final int round,
+      final String territory,
+      final String type,
+      final int count) {
+    final HistoryWriter writer = data.getHistory().getHistoryWriter();
+    writer.startNextRound(round);
+    writer.startNextStep(
+        player.getName().toLowerCase(java.util.Locale.ROOT) + "Place", "place", player, "Place");
+    final List<Unit> units = data.getUnitTypeList().getUnitTypeOrThrow(type).create(count, player);
+    writer.startEvent(type + " placed in " + territory);
+    writer.setRenderingData(
+        new PlacementDescription(units, data.getMap().getTerritoryOrThrow(territory)));
   }
 
   /** Writes a purchase step of {@code player} in round {@code round} to the game history. */
@@ -296,11 +457,17 @@ class ValutazioneTest {
   }
 
   private static Strategia.Firma clue(final double from, final double to) {
+    return clue(Strategia.Firma.UNITA_IN, from, to);
+  }
+
+  private static Strategia.Firma clue(final String type, final double from, final double to) {
     return new Strategia.Firma(
         "x",
-        Strategia.Firma.UNITA_IN,
+        type,
         List.of("Germans"),
         null,
+        List.of(),
+        List.of(),
         List.of(),
         List.of(),
         List.of(),

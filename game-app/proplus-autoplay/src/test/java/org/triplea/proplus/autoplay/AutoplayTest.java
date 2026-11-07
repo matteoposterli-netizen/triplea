@@ -3,6 +3,7 @@ package org.triplea.proplus.autoplay;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import games.strategy.triplea.ai.proplus.RiskLevel;
@@ -83,7 +84,8 @@ class AutoplayTest {
 
   @Test
   void roundsOfTheVcColumns() {
-    assertThat(RiepilogoGenerale.vcRounds(8)).containsExactly(4, 6, 8);
+    assertThat(RiepilogoGenerale.vcRounds(12)).containsExactly(4, 8, 12);
+    assertThat(RiepilogoGenerale.vcRounds(8)).containsExactly(3, 6, 8);
     assertThat(RiepilogoGenerale.vcRounds(2)).containsExactly(1, 2);
   }
 
@@ -109,7 +111,43 @@ class AutoplayTest {
         .contains("| 1-A-1 | Pro+ A | Pro+ 1 | vittoria Asse | 3 / 1 | 30 / 20 | completata |")
         .contains("| 2-x | - | - | **FALLITA** (nessun riepilogo) |")
         .contains("| 1-A-1 | Alleati | 60% OK |")
-        .contains("| 1-A-1 | 9 / 18 / 33 | 0 / 0 / 0 |");
+        .contains("| 1-A-1 | 9 / 18 / 33 | 0 / 0 / 0 |")
+        .contains("| Pro+ A / Pro+ 1 | 1 | 3 / 1 | Asse R1 | 30 / 20 |")
+        .contains("| Pro+ A / Pro+ 1 | Alleati | 60% 1/1 | 60% (OK 100%) |")
+        .contains(
+            "| 1-A-1 | R1 Normandy Bordeaux (British, attacco (LOST)) | Germans 2, British 3 |");
+    assertThat(md)
+        .contains(
+            "- Primo sbarco alleato in Europa: R1 Normandy Bordeaux (British, attacco (LOST))")
+        .contains("| R1 | Germans | 30 | 40 | 9 | 18 | 33 | 500 | 12 | 2 |");
+  }
+
+  @Test
+  void firstLandingInEuropeIsTheEarliestBattleOrPresence() {
+    final JsonArray battles =
+        JsonParser.parseString(
+                "[{\"round\":3,\"territorio\":\"Norway\",\"attaccante\":\"British\","
+                    + "\"tipo\":\"NORMAL\",\"risultato\":\"CONQUERED\"},"
+                    + "{\"round\":2,\"territorio\":\"Germany\",\"attaccante\":\"Americans\","
+                    + "\"tipo\":\"BOMBING_RAID\",\"risultato\":\"BOMBED\"},"
+                    + "{\"round\":2,\"territorio\":\"Libya\",\"attaccante\":\"British\","
+                    + "\"tipo\":\"NORMAL\",\"risultato\":\"CONQUERED\"}]")
+            .getAsJsonArray();
+    final JsonArray rounds =
+        JsonParser.parseString(
+                "[{\"round\":1,\"alleati_in_europa\":{}},"
+                    + "{\"round\":2,\"alleati_in_europa\":{\"Sicily\":[\"Americans\"]}}]")
+            .getAsJsonArray();
+    final JsonObject landing = Riepilogo.firstLandingInEurope(battles, rounds).orElseThrow();
+    assertThat(landing.get("round").getAsInt()).isEqualTo(2);
+    assertThat(landing.get("territorio").getAsString()).isEqualTo("Sicily");
+    // a battle in Europe in an earlier round wins
+    assertThat(
+            Riepilogo.firstLandingInEurope(battles, JsonParser.parseString("[]").getAsJsonArray())
+                .orElseThrow()
+                .get("territorio")
+                .getAsString())
+        .isEqualTo("Norway");
   }
 
   private static final String SAMPLE =
@@ -121,9 +159,9 @@ class AutoplayTest {
        "alleanze":{"Axis":["Germans"],"Allies":["British"]},
        "round":[{"round":1,"completo":true,
          "nazioni":{"Germans":{"pu":30,"reddito":40,"tuv":500,"territori":12,
-                               "pu_difesa":9,"pu_piano":18,"pu_spesi":33},
+                               "pu_difesa":9,"pu_piano":18,"pu_spesi":33,"trasporti":2},
                     "British":{"pu":20,"reddito":25,"tuv":300,"territori":20,
-                               "pu_difesa":0,"pu_piano":0,"pu_spesi":0}},
+                               "pu_difesa":0,"pu_piano":0,"pu_spesi":0,"trasporti":3}},
          "vc":{"Axis":{"numero":3,"citta":["Berlin"]},"Allies":{"numero":1,"citta":["London"]}},
          "stato_maggiore":{"Allies":{"piano":"1","stato":"IN LINEA",
            "lettura":{"piu_probabile":"A","piano_reale":"A","prob_piano_reale":0.6,
@@ -135,6 +173,8 @@ class AutoplayTest {
        "battaglie_top":[{"round":1,"territorio":"France","attaccante":"Germans",
          "difensore":"French","tuv_perso_attaccante":10,"tuv_perso_difensore":40,
          "tuv_totale":50,"risultato":"CONQUERED","win_stimata":90.0,"esito_diario":"VITTORIA"}],
-       "esito":{"vincitore":"Axis","testo":"vittoria Asse","vc_finali":{"Axis":3,"Allies":1}}}
+       "esito":{"vincitore":"Axis","testo":"vittoria Asse","vc_finali":{"Axis":3,"Allies":1}},
+       "primo_sbarco_europa":{"round":1,"territorio":"Normandy Bordeaux","nazione":"British",
+                              "come":"attacco (LOST)"}}
       """;
 }

@@ -12,7 +12,7 @@ import javax.annotation.Nullable;
  *
  * <pre>
  * --mappa PATH         map XML (required), eg. ww2eur40_2nd_edition.xml
- * --round N            last round played (default 8)
+ * --round N            last round played (default 12)
  * --piano A=X,...      plan per alliance, eg. Axis=A,Allies=1 (default: "auto" = Automatico)
  * --rischio A=L,...    base risk level per alliance, 1-5 or name (default Equilibrato)
  * --tipo A=T,...       player type per alliance: proplus | hard (default proplus)
@@ -53,7 +53,7 @@ record AutoplayOptions(
     types.replaceAll((alliance, type) -> type(type));
     return new AutoplayOptions(
         Path.of(map),
-        Integer.parseInt(values.getOrDefault("round", "8")),
+        Integer.parseInt(values.getOrDefault("round", "12")),
         pairs(values.get("piano")),
         pairs(values.get("rischio")),
         types,

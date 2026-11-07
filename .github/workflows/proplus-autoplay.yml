@@ -12,10 +12,13 @@ on:
     inputs:
       round:
         type: string
-        default: "8"
+        default: "12"
       partite:
         type: string
         default: "6"
+      semi:
+        type: string
+        default: "2"
       piani:
         type: string
         default: ""
@@ -23,10 +26,13 @@ on:
     inputs:
       round:
         description: "Round per partita"
-        default: "8"
+        default: "12"
       partite:
-        description: "Numero di partite (le prime N della lista: A/1, A/2, D/1, D/2, C/1, Hard)"
+        description: "Numero di configurazioni (le prime N della lista: A/1, A/2, D/1, D/2, C/1, Hard)"
         default: "6"
+      semi:
+        description: "Semi dei dadi per configurazione (1..N): partite = configurazioni x semi"
+        default: "2"
       piani:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
@@ -65,27 +71,32 @@ jobs:
       - name: Games to play
         id: matrix
         env:
-          ROUND: ${{ inputs.round || '8' }}
+          ROUND: ${{ inputs.round || '12' }}
           PARTITE: ${{ inputs.partite || '6' }}
+          SEMI: ${{ inputs.semi || '2' }}
           PIANI: ${{ inputs.piani || '' }}
         run: |
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json, os, re
           rounds = int(os.environ["ROUND"])
+          seeds = max(1, min(4, int(os.environ["SEMI"])))
           default = ["A/1", "A/2", "D/1", "D/2", "C/1", "hard"]
           custom = [p.strip() for p in os.environ["PIANI"].split(",") if p.strip()]
-          games = custom or default[: max(1, min(6, int(os.environ["PARTITE"])))]
+          configs = custom or default[: max(1, min(6, int(os.environ["PARTITE"])))]
+          # every configuration with the same seeds 1..N, so the configurations are comparable
           include = []
-          for i, g in enumerate(games, 1):
-              if g.lower() == "hard":
-                  include.append({"id": f"{i}-Hard-vs-Hard", "nome": "Hard vs Hard",
-                                  "tipo": "Axis=hard,Allies=hard", "piano": "", "seme": i})
-              else:
-                  axis, allies = g.split("/")
-                  include.append({"id": f"{i}-Asse-{axis}-Alleati-{allies}",
-                                  "nome": f"Asse {axis} / Alleati {allies}",
-                                  "tipo": "Axis=proplus,Allies=proplus",
-                                  "piano": f"Axis={axis},Allies={allies}", "seme": i})
+          for i, g in enumerate(configs, 1):
+              for seed in range(1, seeds + 1):
+                  if g.lower() == "hard":
+                      include.append({"id": f"{i}-Hard-vs-Hard-seme{seed}",
+                                      "nome": f"Hard vs Hard (seme {seed})",
+                                      "tipo": "Axis=hard,Allies=hard", "piano": "", "seme": seed})
+                  else:
+                      axis, allies = g.split("/")
+                      include.append({"id": f"{i}-Asse-{axis}-Alleati-{allies}-seme{seed}",
+                                      "nome": f"Asse {axis} / Alleati {allies} (seme {seed})",
+                                      "tipo": "Axis=proplus,Allies=proplus",
+                                      "piano": f"Axis={axis},Allies={allies}", "seme": seed})
           print("matrix=" + json.dumps({"include": include}))
           print(f"round={rounds}")
           EOF

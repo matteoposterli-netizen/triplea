@@ -15,6 +15,8 @@ import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.EndRoundDelegate;
+import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.OriginalOwnerTracker;
 import games.strategy.triplea.delegate.data.BattleRecord;
 import games.strategy.triplea.delegate.data.BattleRecords;
 import games.strategy.triplea.util.TuvCostsCalculator;
@@ -40,6 +42,39 @@ import org.triplea.java.collections.IntegerMap;
  * JSON, so {@link Riepilogo} can write it from any thread (also from a shutdown hook).
  */
 final class Monitor {
+  /**
+   * Allied nations whose landings in Europe are tracked (the French start on the continent, the
+   * Soviets reach it by land). Names of WW2 Europe 1940.
+   */
+  static final Set<String> WESTERN_ALLIES = Set.of("British", "Americans");
+
+  /** Land territories of continental Europe for "first Allied landing" (WW2 Europe 1940). */
+  static final Set<String> EUROPE =
+      Set.of(
+          "Normandy Bordeaux",
+          "France",
+          "Southern France",
+          "Holland Belgium",
+          "Western Germany",
+          "Germany",
+          "Greater Southern Germany",
+          "Denmark",
+          "Norway",
+          "Finland",
+          "Northern Italy",
+          "Southern Italy",
+          "Sicily",
+          "Sardinia",
+          "Albania",
+          "Greece",
+          "Crete",
+          "Yugoslavia",
+          "Bulgaria",
+          "Romania",
+          "Slovakia Hungary",
+          "Poland",
+          "Baltic States");
+
   private final GameData data;
 
   /** Alliance -> its nations (configurable alliances only, eg. Axis and Allies). */
@@ -182,6 +217,7 @@ final class Monitor {
     final JsonObject nations = new JsonObject();
     final Map<String, Integer> tuv = tuvByNation();
     final Map<String, Integer> land = landByNation();
+    final Map<String, Integer> transports = transportsByNation();
     for (final List<String> members : alliances.values()) {
       for (final String name : members) {
         final GamePlayer p = data.getPlayerList().getPlayerId(name);
@@ -190,12 +226,14 @@ final class Monitor {
         n.addProperty("reddito", (int) Math.round(ProUtils.getPlayerProduction(p, data)));
         n.addProperty("tuv", tuv.getOrDefault(name, 0));
         n.addProperty("territori", land.getOrDefault(name, 0));
+        n.addProperty("trasporti", transports.getOrDefault(name, 0));
         nations.add(name, n);
       }
     }
     json.add("nazioni", nations);
     json.add("vc", victoryCities());
     json.add("stato_maggiore", generalStaff(round));
+    json.add("alleati_in_europa", westernAlliesInEurope());
     if (complete) {
       rounds.put(round, json);
       partialRound = null;
@@ -217,6 +255,45 @@ final class Monitor {
       }
     }
     return tuv;
+  }
+
+  private Map<String, Integer> transportsByNation() {
+    final Map<String, Integer> transports = new HashMap<>();
+    for (final Territory t : data.getMap().getTerritories()) {
+      for (final Unit u : t.getMatches(Matches.unitIsSeaTransport())) {
+        transports.merge(u.getOwner().getName(), 1, Integer::sum);
+      }
+    }
+    return transports;
+  }
+
+  /**
+   * European territories, not originally of the Allies, with British/American land units now:
+   * territory -> nations (moving into a French territory is not a landing).
+   */
+  private JsonObject westernAlliesInEurope() {
+    final JsonObject json = new JsonObject();
+    for (final String name : new TreeSet<>(EUROPE)) {
+      final Territory t = data.getMap().getTerritoryOrNull(name);
+      if (t == null
+          || OriginalOwnerTracker.getOriginalOwner(t)
+              .map(o -> allianceOf(o.getName()).equals(allianceOf("British")))
+              .orElse(false)) {
+        continue;
+      }
+      final Set<String> nations = new TreeSet<>();
+      for (final Unit u : t.getMatches(Matches.unitIsLand())) {
+        if (WESTERN_ALLIES.contains(u.getOwner().getName())) {
+          nations.add(u.getOwner().getName());
+        }
+      }
+      if (!nations.isEmpty()) {
+        final JsonArray list = new JsonArray();
+        nations.forEach(list::add);
+        json.add(name, list);
+      }
+    }
+    return json;
   }
 
   private Map<String, Integer> landByNation() {
