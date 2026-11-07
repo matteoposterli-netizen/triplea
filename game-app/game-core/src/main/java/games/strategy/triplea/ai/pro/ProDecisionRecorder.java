@@ -119,4 +119,13 @@ public interface ProDecisionRecorder {
    * capital), just before the moves are made.
    */
   default void capitalGuard(ProData proData, List<ProCapitalGuard.Result> results) {}
+
+  /** The politics phase followed a plan's war orders for {@code enemy}. */
+  default void warDecision(ProData proData, GamePlayer enemy, ProWarDecision decision) {}
+
+  /**
+   * The non-combat move kept the minimum garrisons of a plan ({@code results}, one per territory),
+   * just before the moves are made.
+   */
+  default void minimumGarrisons(ProData proData, List<ProCapitalGuard.GarrisonResult> results) {}
 }

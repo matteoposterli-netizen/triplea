@@ -220,6 +220,14 @@ class ProNonCombatMoveAi {
           new ProCapitalGuard(proData, calc).apply(moveMap, capitalThreshold.getAsDouble());
       proData.getRecorder().capitalGuard(proData, guard);
     }
+    // Pro+: minimum garrisons of a plan (coasts exposed to landings)
+    final Map<String, Integer> garrisons = proData.getTuning().minimumGarrisons(proData);
+    if (!garrisons.isEmpty()) {
+      proData
+          .getRecorder()
+          .minimumGarrisons(
+              proData, new ProCapitalGuard(proData, calc).minimumGarrisons(moveMap, garrisons));
+    }
 
     // Determine where to move infra units
     factoryMoveMap = moveInfraUnits(isCombatMove, factoryMoveMap, infraUnitMoveMap);
@@ -2397,26 +2405,52 @@ class ProNonCombatMoveAi {
       final double scale,
       final Map<Territory, Integer> distanceCache) {
     final int distance = airStagingDistance(t, distanceCache);
-    if (distance < 0 || distance > ProStagingOrders.RANGE) {
+    if (distance < 0) {
       return airValue;
     }
-    return airValue + airStaging.strength() * scale / (1.0 + distance);
+    return airValue + airStaging.strength() * scale * airPull(t);
   }
 
-  /** Distance by air from {@code t} to the nearest land gathering territory; -1 if none. */
+  /** Best {@code weight / (1 + distance by air)} among the land gathering territories. */
+  private double airPull(final Territory from) {
+    double pull = 0;
+    for (final Territory target : airTargets()) {
+      final int d =
+          data.getMap()
+              .getDistance(from, target, ProMatches.territoryCanMoveAirUnits(data, player, true));
+      if (d >= 0 && d <= ProStagingOrders.RANGE) {
+        pull = Math.max(pull, airStaging.weight(target.getName()) / (1.0 + d));
+      }
+    }
+    return pull;
+  }
+
+  private List<Territory> airTargets() {
+    final List<Territory> targets = new ArrayList<>();
+    for (final String name : airStaging.territories()) {
+      final Territory target = data.getMap().getTerritoryOrNull(name);
+      if (target != null && !target.isWater()) {
+        targets.add(target);
+      }
+    }
+    return targets;
+  }
+
+  /**
+   * Distance by air from {@code t} to the nearest land gathering territory (within {@link
+   * ProStagingOrders#RANGE}); -1 if none.
+   */
   private int airStagingDistance(final Territory t, final Map<Territory, Integer> cache) {
     return cache.computeIfAbsent(
         t,
         from -> {
-          final List<Territory> targets = new ArrayList<>();
-          for (final String name : airStaging.territories()) {
-            final Territory target = data.getMap().getTerritoryOrNull(name);
-            if (target != null && !target.isWater()) {
-              targets.add(target);
-            }
-          }
-          return ProStaging.distance(
-              data, from, targets, ProMatches.territoryCanMoveAirUnits(data, player, true));
+          final int d =
+              ProStaging.distance(
+                  data,
+                  from,
+                  airTargets(),
+                  ProMatches.territoryCanMoveAirUnits(data, player, true));
+          return d > ProStagingOrders.RANGE ? -1 : d;
         });
   }
 

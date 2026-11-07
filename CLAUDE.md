@@ -424,6 +424,40 @@ Italia in B) ⇒ acquisti e movimenti di Hard.
   tetto" negli acquisti; "aerei verso la raccolta" nell'ammassamento. JSON `capitale`,
   `quota_piano`, `ammassamento_aerei`.
 
+### Politica, linea del fronte, presidi, imbarco, obiettivi critici (step 3c)
+
+- **Politica**: `fasi[].dichiarazioni` [{`da`, `a`, `dal_round`}] (unione di tutte le fasi del piano,
+  `Piano.dichiarazione`). `ProTuning.warDecision(proData, nemico)` → `ProWarDecision` (HARD default;
+  FORBIDDEN / DECLARE). `ProPoliticsAi.politicalActions`: le azioni di guerra verso un nemico
+  FORBIDDEN sono tolte, DECLARE è eseguita senza il tiro casuale di Hard; nemici non nominati dal
+  piano = regola casuale di Hard (anche il ramo "guerra ai neutrali" resta solo se Hard non aveva
+  opzioni contro nemici). Pronta (`Staging.readiness`) = TUV di terra propria sui territori di raccolta
+  del round (punti del file) ≥ TUV di terra del nemico nei territori confinanti; senza ammassamento =
+  pronta. Dati: A dal R3 (variante A1 = mettere 2), B/C/D dal R4; Germania e Italia verso l'URSS.
+  Diario: "Politica: guerra a URSS vietata prima del round 3 ..." / "dichiarata: ..., ammassamento
+  X TUV in ... contro Y TUV nemici confinanti" / "rinviata: ..." (JSON `politica`), scritta in testa
+  agli acquisti del turno (la fase politica viene prima dell'apertura del turno nel diario).
+- **Obiettivi critici**: `obiettivi[].critico` (France R1, capitali nemiche: Russia, United Kingdom,
+  Southern Italy, ...) ⇒ desiderata ≥ `ProPlusTuning.CRITICAL_OBJECTIVE_DESIRED` = 80 con qualunque
+  cursore (la minima resta del fronte).
+- **Raccolta**: `ammassamento.modo` = `linea_del_fronte` ⇒ ogni turno `Staging.frontLine`: territori
+  di terra propri del fronte confinanti con terra di un nemico in guerra delle alleanze principali
+  (non neutrali), peso 0.5 + 0.5/(1 + distanza dall'obiettivo del piano più vicino); senza linea
+  (non ancora in guerra) ripiego sui `territori` del file. `ammassamento.peso` + `altre_raccolte`
+  [{fronte, peso, territori, modo}]: peso di ogni territorio × peso del gruppo / peso massimo.
+  `ProStagingOrders.weights`; `ProStaging` e gli aerei usano il miglior peso/(1 + distanza).
+- **Presidio**: `presidio_minimo` {territori, unita} ⇒ `ProTuning.minimumGarrisons`;
+  `ProCapitalGuard.minimumGarrisons` dopo la guarnigione della capitale: unità di terra più economiche
+  che possono arrivarci, mai prese da una capitale o da un altro presidio sotto il minimo. Diario
+  "Presidio X: minimo N unita' di terra, a -> b (portate: ...)".
+- **Imbarco**: `imbarco` [territorio, zona] ⇒ se nessun territorio di raccolta è raggiungibile via
+  terra **su terre proprie/alleate** dalla capitale (`Staging.isOverseas`), i punti d'imbarco entrano
+  nella raccolta (peso 1); se i trasporti propri entro 2 zone trasportano meno delle unità di terra
+  in attesa (sull'imbarco e confinanti; minimo 2) ⇒ +1 trasporto obbligato (categoria `trasporti`,
+  etichetta "+ trasporto per l'imbarco").
+- **Quote**: Germania 50%, Italia 40% in tutti i piani (oltre a USA 70%, UK 40%).
+- Russi: raccolta `linea_del_fronte` (Est) in tutti i piani alleati, ripiego "Russia".
+
 ## Log degli step
 
 ### Step 0 — setup e build (2026-11-06)
@@ -942,4 +976,40 @@ nell'ammassamento B (Germania R1-3) e D (Italia).
 - Aerei (B): R1 12 su 12 verso Western Germany; R2 8 aerei finiti a Libya/Tobruk ("allontanati"):
   la scelta per valore aereo di Hard (attacchi possibili nel Mediterraneo) supera il bonus quando la
   raccolta più vicina (Holland Belgium appena presa) non è sicura. Da rivedere.
+
+### Step 3c — correzioni dalla partita di Matteo (7 round, Asse A Spericolato, Alleati 1) (2026-11-07)
+
+Vedi "Politica, linea del fronte, presidi, imbarco, obiettivi critici". Classi Pro toccate (solo
+agganci, default = Hard): `ProTuning` (+ `warDecision`, `minimumGarrisons`), `ProPoliticsAi`,
+`ProStagingOrders` (+ `weights`), `ProStaging`, `ProNonCombatMoveAi` (pesi aerei, presidi),
+`ProCapitalGuard` (+ `minimumGarrisons`), `ProDecisionRecorder` (+ 2 hook). Nuove: `ProWarDecision`,
+`proplus/Staging`. Barbarossa: logistica tedesca divisa in R1-2 (preparazione, punti fissi), R3 e R4+
+(linea del fronte Est peso 80 + coste della Manica peso 20, presidio 2 su Normandy Bordeaux,
+Holland Belgium, Denmark); stessi ordini per B R4+ e C R3+.
+
+#### Test
+- `PlanStep3cTest` (guerra vietata/dichiarata/rinviata, Hard e N invariati; Francia ≥ 80 con
+  Spericolato; linea del fronte e pesi; ripiego prima della guerra; Italia oltremare con imbarco e
+  trasporto, anche in guerra con l'URSS), `StrategiaFileTest.ordersOfStep3c` +
+  dichiarazione senza `dal_round` rifiutata; `StrategyTuningTest` aggiornato (Francia critica).
+- Golden Hard, `DiaryNeutralityTest`: verdi (318 test `ai.*` + `:ai:test`).
+- Spotless: il passo `expandwildcardimports` fallisce con un errore interno di Java-Parser su
+  `CapitalGuardTest` (file invariato e già formattato); formattazione applicata al resto.
+
+#### Banco Europe 1940 (1 partita, 4 round, dadi seed 1, tutti Pro+ Equilibrato, Asse A / Alleati 1; 157 s)
+- Politica: R1-R2 "vietata prima del round 3"; R3 dichiarata (116 TUV in Poland/Slovakia
+  Hungary/Romania contro 61). Germania-URSS in pace fino al turno tedesco del R3.
+- Quote: Germania 100% al piano R1-R4 (nessuna difesa urgente); Italia 100%. USA: Central United
+  States risulta a rischio 100% (fabbrica) ⇒ difesa senza tetto 12/15/25 PU ai R1-R3 (al piano
+  66/57/29%), R4 100%: rischio probabilmente sovrastimato dalla stima del massimo attacco di Hard
+  (da verificare). UK: Quebec 100% al R1-R2.
+- Raccolta tedesca R3/R4 sulla linea del fronte (R4: Belarus, Karelia, Baltic States, Vyborg,
+  Bessarabia, Western Ukraine + Manica): R4 88 unità mosse, 66 avvicinate, 11 allontanate (Matteo R7:
+  56 su 82 allontanate). Presidi: Normandy 0→2, Denmark 0→2 al R3 e al R4, Holland Belgium 3.
+- Italia: trasporto obbligato in più ogni turno R1-R2 (3 → 5 trasporti), unità in Africa: R1 8,
+  R2 6 (Egitto 3, Alexandria 2), R4 8 (Egypt 4, Tobruk 3, Tunisia 1). Al R3 l'imbarco era sparito
+  (la via di terra attraverso l'URSS in guerra contava come "raggiungibile"): corretto dopo il banco
+  (solo terre proprie/alleate) e coperto da test, non ripetuto nel banco.
+- Russi: linea del fronte formata dal R3; al R4 32 unità su 49 "allontanate" dalla linea (la difesa
+  di Hard le ritira verso l'interno): da valutare.
 

@@ -5,6 +5,7 @@ import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Properties;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 
@@ -154,5 +155,21 @@ public interface ProTuning {
    */
   default OptionalDouble capitalGuardThreshold(final ProData proData) {
     return OptionalDouble.empty();
+  }
+
+  /**
+   * Whether the politics phase declares war on {@code enemy} (step 3c). {@link ProWarDecision#HARD}
+   * by default: the Pro AI's own random rule.
+   */
+  default ProWarDecision warDecision(final ProData proData, final GamePlayer enemy) {
+    return ProWarDecision.HARD;
+  }
+
+  /**
+   * Own territories that keep at least this many land units after the non-combat move (territory
+   * name → units). None by default.
+   */
+  default Map<String, Integer> minimumGarrisons(final ProData proData) {
+    return Map.of();
   }
 }

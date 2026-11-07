@@ -149,6 +149,11 @@ public final class PianoAttivo {
     return obiettivi.stream().anyMatch(o -> matches(o, t));
   }
 
+  /** Whether {@code t} is a critical objective of this nation's phase (step 3c). */
+  public boolean isCritico(final Territory t) {
+    return obiettivi.stream().anyMatch(o -> o.critico() && matches(o, t));
+  }
+
   /** Priority bonus of {@code t}: the highest weight among the objectives it matches, else 0. */
   public double peso(final Territory t) {
     return obiettivi.stream()

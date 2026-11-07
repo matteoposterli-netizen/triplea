@@ -94,7 +94,7 @@ class PlanLogisticsTest extends AbstractClientSettingTestCase {
     final Purchase barbarossa = purchase("A");
 
     final ProPurchaseOrders.Result result = barbarossa.result();
-    assertThat(barbarossa.orders().label()).isEqualTo("A Barbarossa, Germans R1-3");
+    assertThat(barbarossa.orders().label()).isEqualTo("A Barbarossa, Germans R1-2");
     assertThat(result.budget()).isPositive();
     // each category within one unit of its target
     assertThat((double) result.spent().get("fanteria"))
@@ -190,7 +190,7 @@ class PlanLogisticsTest extends AbstractClientSettingTestCase {
         .isGreaterThan(unitsEndingIn(neutral, "Poland", "Slovakia Hungary", "Romania"));
     final String text = diaryText();
     assertThat(text)
-        .contains("Ammassamento (A Barbarossa, Germans R1-3) verso il fronte Est")
+        .contains("Ammassamento (A Barbarossa, Germans R1-2) verso il fronte Est")
         .contains("unita' mosse")
         .contains("Perche': dopo i movimenti di difesa");
   }
@@ -209,7 +209,7 @@ class PlanLogisticsTest extends AbstractClientSettingTestCase {
         StandardCharsets.UTF_8);
     assertThat(text)
         .contains("mix del piano dello stato maggiore")
-        .contains("Mix del piano (A Barbarossa, Germans R1-3)")
+        .contains("Mix del piano (A Barbarossa, Germans R1-2)")
         .contains("- fanteria: obiettivo 35% = ")
         .contains("reale nel turno")
         .contains("Piazzamento del piano: Germany");

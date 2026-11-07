@@ -10,6 +10,7 @@ import games.strategy.engine.data.Territory;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -177,6 +178,17 @@ public final class Strategia {
       return fasi.stream().filter(f -> f.covers(round)).findFirst();
     }
 
+    /**
+     * The war declarations of the plan (every phase's), for {@code nation} declaring war on {@code
+     * enemy}: the latest "from round" wins if several phases name the pair.
+     */
+    public Optional<Dichiarazione> dichiarazione(final String nation, final String enemy) {
+      return fasi.stream()
+          .flatMap(f -> f.dichiarazioni().stream())
+          .filter(d -> d.da().equals(nation) && d.a().equals(enemy))
+          .max(Comparator.comparingInt(Dichiarazione::dalRound));
+    }
+
     /** The orders of {@code nation} for {@code round}, if any. */
     public Optional<Logistica> logistica(final String nation, final int round) {
       return logistica.getOrDefault(nation, List.of()).stream()
@@ -195,7 +207,11 @@ public final class Strategia {
    * plan: risk modifier per front (a front not listed: 0) and objectives.
    */
   public record Fase(
-      int daRound, int aRound, Map<String, Integer> fronti, List<Obiettivo> obiettivi) {
+      int daRound,
+      int aRound,
+      Map<String, Integer> fronti,
+      List<Obiettivo> obiettivi,
+      List<Dichiarazione> dichiarazioni) {
     public boolean covers(final int round) {
       return round >= daRound && round <= aRound;
     }
@@ -219,7 +235,11 @@ public final class Strategia {
    * nation. {@code nazioni} empty = for every nation of the alliance.
    */
   public record Obiettivo(
-      @Nullable String territorio, @Nullable String flotta, double peso, Set<String> nazioni) {
+      @Nullable String territorio,
+      @Nullable String flotta,
+      double peso,
+      Set<String> nazioni,
+      boolean critico) {
     public boolean appliesTo(final String nation) {
       return nazioni.isEmpty() || nazioni.contains(nation);
     }
@@ -257,7 +277,12 @@ public final class Strategia {
       List<String> territoriAmmassamento,
       double forza,
       boolean aerei,
-      double quotaMinimaPiano) {
+      double quotaMinimaPiano,
+      boolean lineaDelFronte,
+      double pesoAmmassamento,
+      List<Raccolta> altreRaccolte,
+      Map<String, Integer> presidioMinimo,
+      List<String> imbarco) {
     public boolean covers(final int round) {
       return round >= daRound && round <= aRound;
     }
@@ -273,9 +298,25 @@ public final class Strategia {
     List<String> territoriNominati() {
       final List<String> names = new ArrayList<>(piazzamento);
       names.addAll(territoriAmmassamento);
+      altreRaccolte.forEach(r -> names.addAll(r.territori()));
+      names.addAll(presidioMinimo.keySet());
+      names.addAll(imbarco);
       return names;
     }
   }
+
+  /**
+   * War declaration of the plan (step 3c): nation {@code da} may declare war on {@code a} only from
+   * round {@code dalRound} ("never before"), and does it from then on when ready.
+   */
+  public record Dichiarazione(String da, String a, int dalRound) {}
+
+  /**
+   * An extra gathering group of the staging orders (step 3c): {@code peso} relative to the main
+   * one; {@code lineaDelFronte} = the front line of {@code fronte}, computed each turn.
+   */
+  public record Raccolta(
+      @Nullable String fronte, List<String> territori, double peso, boolean lineaDelFronte) {}
 
   /** At least {@code minimo} units of {@code categoria}, bought before the mix. */
   public record Obbligo(String categoria, int minimo) {}
@@ -471,6 +512,22 @@ public final class Strategia {
     if (quota < 0 || quota > 100) {
       throw new IllegalArgumentException("quota_minima_piano fuori da 0-100: " + where);
     }
+    final List<Raccolta> extra = new ArrayList<>();
+    for (final JsonElement e : array(l, "altre_raccolte")) {
+      final JsonObject r = e.getAsJsonObject();
+      extra.add(
+          new Raccolta(
+              string(r, "fronte"),
+              strings(r, "territori"),
+              r.has("peso") ? r.get("peso").getAsDouble() : 100,
+              "linea_del_fronte".equals(string(r, "modo"))));
+    }
+    final Map<String, Integer> presidio = new LinkedHashMap<>();
+    if (l.has("presidio_minimo")) {
+      final JsonObject g = l.getAsJsonObject("presidio_minimo");
+      final int units = g.has("unita") ? g.get("unita").getAsInt() : 1;
+      strings(g, "territori").forEach(t -> presidio.put(t, units));
+    }
     return new Logistica(
         from,
         to,
@@ -481,7 +538,12 @@ public final class Strategia {
         strings(staging, "territori"),
         staging.has("forza") ? staging.get("forza").getAsDouble() : 1,
         staging.has("aerei") && staging.get("aerei").getAsBoolean(),
-        quota);
+        quota,
+        "linea_del_fronte".equals(string(staging, "modo")),
+        staging.has("peso") ? staging.get("peso").getAsDouble() : 100,
+        List.copyOf(extra),
+        Collections.unmodifiableMap(presidio),
+        strings(l, "imbarco"));
   }
 
   private static void checkCategory(
@@ -523,9 +585,21 @@ public final class Strategia {
               territorio,
               flotta,
               o.has("peso") ? o.get("peso").getAsDouble() : 0,
-              Set.copyOf(strings(o, "nazioni"))));
+              Set.copyOf(strings(o, "nazioni")),
+              o.has("critico") && o.get("critico").getAsBoolean()));
     }
-    return new Fase(from, to, Map.copyOf(fronti), List.copyOf(obiettivi));
+    final List<Dichiarazione> dichiarazioni = new ArrayList<>();
+    for (final JsonElement e : array(f, "dichiarazioni")) {
+      final JsonObject d = e.getAsJsonObject();
+      final String da = string(d, "da");
+      final String a = string(d, "a");
+      if (da == null || a == null || !d.has("dal_round")) {
+        throw new IllegalArgumentException("dichiarazione: servono 'da', 'a', 'dal_round': " + d);
+      }
+      dichiarazioni.add(new Dichiarazione(da, a, d.get("dal_round").getAsInt()));
+    }
+    return new Fase(
+        from, to, Map.copyOf(fronti), List.copyOf(obiettivi), List.copyOf(dichiarazioni));
   }
 
   private static JsonArray array(final JsonObject o, final String key) {

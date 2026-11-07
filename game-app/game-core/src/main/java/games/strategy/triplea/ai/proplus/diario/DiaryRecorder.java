@@ -17,6 +17,7 @@ import games.strategy.triplea.ai.pro.ProDecisionRecorder;
 import games.strategy.triplea.ai.pro.ProPurchaseOrders;
 import games.strategy.triplea.ai.pro.ProStagingOrders;
 import games.strategy.triplea.ai.pro.ProTuning;
+import games.strategy.triplea.ai.pro.ProWarDecision;
 import games.strategy.triplea.ai.pro.data.ProBattleResult;
 import games.strategy.triplea.ai.pro.data.ProPlaceTerritory;
 import games.strategy.triplea.ai.pro.data.ProPurchaseTerritory;
@@ -97,6 +98,10 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   private @Nullable ProPurchaseOrders planOrders;
   private @Nullable ProPurchaseOrders.Result planResult;
   private @Nullable ProPurchaseOrders.DefenseShare defenseShare;
+
+  /** Politics lines of the coming turn (politics comes before the turn opens), by player. */
+  private final List<String[]> pendingPolitics = new ArrayList<>();
+
   private Map<String, Double> unitCosts = Map.of();
 
   // combat plan
@@ -487,6 +492,17 @@ public final class DiaryRecorder implements ProDecisionRecorder {
         sb.append('\n');
       }
     }
+    for (final String[] p : pendingPolitics) {
+      if (p[0].equals(playerName) && p[1].equals(String.valueOf(round))) {
+        sb.insert(0, "  Politica: " + p[2] + "\n");
+        final JsonObject json = event("politica");
+        json.addProperty("nemico", p[3]);
+        json.addProperty("decisione", p[4]);
+        json.addProperty("motivo", p[2]);
+        diary.json(json);
+      }
+    }
+    pendingPolitics.clear();
     if (defenseShare != null) {
       sb.append(defenseShareText(defenseShare));
     }
@@ -871,6 +887,61 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           result.units().forEach((t, units) -> dest.add(t, counts(units)));
           json.add("destinazioni", dest);
           diary.json(json);
+        });
+  }
+
+  // ---------------------------------------------------------------- politics, garrisons
+
+  @Override
+  public void warDecision(
+      final ProData proData, final GamePlayer enemy, final ProWarDecision decision) {
+    guard(
+        () ->
+            pendingPolitics.add(
+                new String[] {
+                  proData.getPlayer().getName(),
+                  String.valueOf(proData.getData().getSequence().getRound()),
+                  "guerra a " + Italian.nation(enemy.getName()) + " " + decision.reason(),
+                  enemy.getName(),
+                  decision.kind().name().toLowerCase(Locale.ROOT)
+                }));
+  }
+
+  @Override
+  public void minimumGarrisons(
+      final ProData proData, final List<ProCapitalGuard.GarrisonResult> results) {
+    guard(
+        () -> {
+          if (!active || !"noncombat".equals(phase)) {
+            return;
+          }
+          final StringBuilder sb = new StringBuilder();
+          for (final ProCapitalGuard.GarrisonResult r : results) {
+            sb.append(
+                String.format(
+                    "  Presidio %s: minimo %d unita' di terra, %d -> %d%s%n",
+                    r.territory().getName(),
+                    r.required(),
+                    r.before(),
+                    r.after(),
+                    r.moved().isEmpty()
+                        ? (r.after() < r.required() ? " (nessuna unita' disponibile)" : "")
+                        : " (portate: "
+                            + r.moved().entrySet().stream()
+                                .map(e -> Italian.units(e.getValue()) + " da " + e.getKey())
+                                .collect(Collectors.joining(", "))
+                            + ")"));
+            final JsonObject json = event("presidio");
+            json.addProperty("territorio", r.territory().getName());
+            json.addProperty("minimo", r.required());
+            json.addProperty("prima", r.before());
+            json.addProperty("dopo", r.after());
+            final JsonObject moved = new JsonObject();
+            r.moved().forEach((t, units) -> moved.add(t, counts(units)));
+            json.add("portate", moved);
+            diary.json(json);
+          }
+          diary.text(sb.toString());
         });
   }
 

@@ -15,12 +15,13 @@ import lombok.experimental.UtilityClass;
 
 /**
  * Applies a strategy plan's {@link ProStagingOrders} to the non-combat move: each destination gets
- * a bonus on the value the move ranks destinations by, {@code strength × scale / (1 + distance)},
- * where distance is to the nearest gathering territory (land territories by land, sea zones by sea,
- * up to {@link ProStagingOrders#RANGE}) and scale the best destination value of the turn (land or
- * sea). Defense comes first: the moves that defend threatened territories are planned before and
- * don't read these values. Only used when the tuning gives orders ({@link
- * ProTuning#stagingOrders}); Hard never gets here.
+ * a bonus on the value the move ranks destinations by, {@code strength × scale × weight / (1 +
+ * distance)} (the best among the gathering territories; weight 1 unless the orders weigh them),
+ * where distance is to a gathering territory (land territories by land, sea zones by sea, up to
+ * {@link ProStagingOrders#RANGE}) and scale the best destination value of the turn (land or sea).
+ * Defense comes first: the moves that defend threatened territories are planned before and don't
+ * read these values. Only used when the tuning gives orders ({@link ProTuning#stagingOrders}); Hard
+ * never gets here.
  */
 @UtilityClass
 class ProStaging {
@@ -57,11 +58,22 @@ class ProStaging {
       if (!values.containsKey(t)) {
         continue;
       }
-      final int distance = distance(data, t, water ? sea : land, water ? seaPath : landPath);
-      if (distance < 0 || distance > ProStagingOrders.RANGE) {
+      final List<Territory> targets = water ? sea : land;
+      final Predicate<Territory> path = water ? seaPath : landPath;
+      int distance = -1;
+      double pull = 0;
+      for (final Territory target : targets) {
+        final int d = data.getMap().getDistance(t, target, path);
+        if (d < 0 || d > ProStagingOrders.RANGE) {
+          continue;
+        }
+        distance = distance < 0 ? d : Math.min(distance, d);
+        pull = Math.max(pull, orders.weight(target.getName()) / (1.0 + d));
+      }
+      if (distance < 0 || pull <= 0) {
         continue;
       }
-      final double bonus = orders.strength() * (water ? seaScale : landScale) / (1.0 + distance);
+      final double bonus = orders.strength() * (water ? seaScale : landScale) * pull;
       values.put(t, values.get(t) + bonus);
       distances.put(t, distance);
       bonuses.put(t, bonus);

@@ -10,6 +10,7 @@ import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.ProPurchaseOrders;
 import games.strategy.triplea.ai.pro.ProStagingOrders;
 import games.strategy.triplea.ai.pro.ProTuning;
+import games.strategy.triplea.ai.pro.ProWarDecision;
 import games.strategy.triplea.ai.pro.util.ProNationalObjectiveUtils;
 import games.strategy.triplea.ai.pro.util.ProUtils;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
@@ -58,6 +59,12 @@ public final class ProPlusTuning implements ProTuning {
    * defense of a factory or the capital. Hard has no such guard.
    */
   public static final double CAPITAL_GUARD_THRESHOLD = 25;
+
+  /**
+   * Desired win% of a critical objective of the plan (step 3c: France in round 1, enemy capitals),
+   * whatever the risk slider.
+   */
+  public static final double CRITICAL_OBJECTIVE_DESIRED = 80;
 
   /** {@link #keepsAttackNotWorthIt}: kept by the risk level's tolerance. */
   public static final String KEPT_BY_RISK = "risk";
@@ -124,7 +131,14 @@ public final class ProPlusTuning implements ProTuning {
     final double desired = riskLevel(proData, target).desiredWinPercentage(lowLuck);
     return planOf(proData)
         .filter(p -> !ProUtils.isNeutralLand(target) && p.isObiettivo(target))
-        .map(p -> Math.max(desired, p.getLivelloBase().desiredWinPercentage(lowLuck)))
+        .map(
+            p -> {
+              final double objective =
+                  Math.max(desired, p.getLivelloBase().desiredWinPercentage(lowLuck));
+              return p.isCritico(target)
+                  ? Math.max(objective, CRITICAL_OBJECTIVE_DESIRED)
+                  : objective;
+            })
         .orElse(desired);
   }
 
@@ -165,8 +179,46 @@ public final class ProPlusTuning implements ProTuning {
             plan ->
                 plan.getLogistica()
                     .filter(l -> !l.mix().isEmpty() || !l.obbligati().isEmpty())
-                    .map(l -> purchaseOrders(plan, l)));
+                    .map(
+                        l ->
+                            Staging.needsTransport(proData, plan, l)
+                                ? withTransport(purchaseOrders(plan, l), plan)
+                                : purchaseOrders(plan, l)));
   }
+
+  /**
+   * Step 3c: the gathering is overseas and the transports near the embarkation point can't carry
+   * the units waiting there: one transport more among the mandatory purchases.
+   */
+  private static ProPurchaseOrders withTransport(
+      final ProPurchaseOrders orders, final PianoAttivo plan) {
+    final List<String> types =
+        plan.getStrategia().getCategorie().getOrDefault(TRANSPORTS, List.of("transport"));
+    final List<ProPurchaseOrders.Mandatory> mandatory = new ArrayList<>();
+    boolean found = false;
+    for (final ProPurchaseOrders.Mandatory m : orders.mandatory()) {
+      if (m.category().equals(TRANSPORTS)) {
+        mandatory.add(
+            new ProPurchaseOrders.Mandatory(m.category(), m.unitTypes(), m.minimum() + 1));
+        found = true;
+      } else {
+        mandatory.add(m);
+      }
+    }
+    if (!found) {
+      mandatory.add(new ProPurchaseOrders.Mandatory(TRANSPORTS, types, 1));
+    }
+    return new ProPurchaseOrders(
+        orders.label() + " + trasporto per l'imbarco",
+        orders.mix(),
+        mandatory,
+        orders.preferredPlacement(),
+        orders.stagingTerritories(),
+        orders.minimumShare());
+  }
+
+  /** Category of the transports in the strategy file. */
+  static final String TRANSPORTS = "trasporti";
 
   static ProPurchaseOrders purchaseOrders(final PianoAttivo plan, final Strategia.Logistica l) {
     final Map<String, List<String>> categories = plan.getStrategia().getCategorie();
@@ -197,7 +249,10 @@ public final class ProPlusTuning implements ProTuning {
 
   /**
    * The plan's staging orders for this nation and round (step 3b): the gathering territories (or
-   * the front's land territories) and the pull strength. Empty without orders or with strength 0.
+   * the front's land territories) and the pull strength. Step 3c: a group in "linea_del_fronte"
+   * mode gathers on the front line computed this turn ({@link Staging#frontLine}), extra groups are
+   * weighed against the main one, and gathering overseas adds the embarkation points. Empty without
+   * orders or with strength 0.
    */
   @Override
   public Optional<ProStagingOrders> stagingOrders(final ProData proData) {
@@ -205,15 +260,55 @@ public final class ProPlusTuning implements ProTuning {
         .flatMap(
             plan ->
                 plan.getLogistica()
-                    .filter(l -> l.forza() > 0 && !plan.territoriAmmassamento(l).isEmpty())
-                    .map(
-                        l ->
-                            new ProStagingOrders(
-                                ordersLabel(plan, l),
-                                Optional.ofNullable(l.fronteAmmassamento()).orElse(""),
-                                plan.territoriAmmassamento(l),
-                                l.forza(),
-                                l.aerei())));
+                    .filter(l -> l.forza() > 0)
+                    .flatMap(l -> Staging.orders(proData, plan, l, ordersLabel(plan, l))));
+  }
+
+  /** The plan's minimum garrisons (step 3c): own territory → land units. */
+  @Override
+  public Map<String, Integer> minimumGarrisons(final ProData proData) {
+    return planOf(proData)
+        .flatMap(PianoAttivo::getLogistica)
+        .map(Strategia.Logistica::presidioMinimo)
+        .orElse(Map.of());
+  }
+
+  /**
+   * War orders of the plan (step 3c): a declaration of this nation on {@code enemy} is forbidden
+   * before its round; from that round it is made once the staging is done ({@link
+   * Staging#readiness}). Hard's own rule for enemies the plan doesn't name.
+   */
+  @Override
+  public ProWarDecision warDecision(final ProData proData, final GamePlayer enemy) {
+    final Optional<PianoAttivo> plan = planOf(proData);
+    if (plan.isEmpty()) {
+      return ProWarDecision.HARD;
+    }
+    final Optional<Strategia.Dichiarazione> order =
+        plan.get().getPiano().dichiarazione(proData.getPlayer().getName(), enemy.getName());
+    if (order.isEmpty()) {
+      return ProWarDecision.HARD;
+    }
+    final int round = proData.getData().getSequence().getRound();
+    final int from = order.get().dalRound();
+    if (round < from) {
+      return new ProWarDecision(
+          ProWarDecision.Kind.FORBIDDEN,
+          "vietata prima del round " + from + " (piano " + plan.get().getPiano().label() + ")");
+    }
+    final Staging.Readiness ready = Staging.readiness(proData, plan.get(), enemy);
+    return ready.ready()
+        ? new ProWarDecision(
+            ProWarDecision.Kind.DECLARE,
+            "dichiarata: dal round "
+                + from
+                + " (piano "
+                + plan.get().getPiano().label()
+                + "), "
+                + ready.text())
+        : new ProWarDecision(
+            ProWarDecision.Kind.FORBIDDEN,
+            "rinviata: dal round " + from + " ma l'ammassamento non e' fatto, " + ready.text());
   }
 
   /** Eg: "A Barbarossa, Germans R1-3". */

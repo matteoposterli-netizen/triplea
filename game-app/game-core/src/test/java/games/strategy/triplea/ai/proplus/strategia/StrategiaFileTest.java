@@ -181,7 +181,8 @@ class StrategiaFileTest {
                 4,
                 Integer.MAX_VALUE,
                 axis.piano("A").orElseThrow().fase(3).orElseThrow().fronti(),
-                axis.piano("A").orElseThrow().fase(3).orElseThrow().obiettivi()));
+                axis.piano("A").orElseThrow().fase(3).orElseThrow().obiettivi(),
+                List.of()));
     assertThat(axis.piano("B").orElseThrow().fase(3).orElseThrow().label()).isEqualTo("R2-3");
   }
 
@@ -192,7 +193,7 @@ class StrategiaFileTest {
     final Strategia.Logistica barbarossa =
         axis.piano("A").orElseThrow().logistica("Germans", 2).orElseThrow();
 
-    assertThat(barbarossa.label()).isEqualTo("R1-3");
+    assertThat(barbarossa.label()).isEqualTo("R1-2");
     assertThat(barbarossa.mix())
         .containsExactly(
             java.util.Map.entry("fanteria", 35.0),
@@ -212,19 +213,9 @@ class StrategiaFileTest {
         .containsExactly(new Strategia.Obbligo("trasporti", 3), new Strategia.Obbligo("scorta", 1));
     assertThat(seaLion.piazzamento()).startsWith("114 Sea Zone", "113 Sea Zone");
     assertThat(s.getCategorie().get("scorta")).containsExactly("carrier", "destroyer");
+    // Sea Lion from round 4 = Barbarossa from round 4
     assertThat(axis.piano("B").orElseThrow().logistica("Germans", 5).orElseThrow())
-        .isEqualTo(
-            new Strategia.Logistica(
-                4,
-                Integer.MAX_VALUE,
-                barbarossa.mix(),
-                List.of(),
-                barbarossa.piazzamento(),
-                "Est",
-                barbarossa.territoriAmmassamento(),
-                1,
-                false,
-                0));
+        .isEqualTo(axis.piano("A").orElseThrow().logistica("Germans", 4).orElseThrow());
     // the neutral plans give no orders: Hard's purchase and moves
     assertThat(axis.piano("N").orElseThrow().logistica()).isEmpty();
     assertThat(axis.piano("B").orElseThrow().logistica("Italians", 1)).isEmpty();
@@ -342,5 +333,76 @@ class StrategiaFileTest {
     assertThatThrownBy(() -> Strategia.parse(new StringReader(json)))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("quota_minima_piano");
+  }
+
+  @Test
+  void ordersOfStep3c() throws IOException {
+    final Strategia s = europe();
+    final Strategia.Alleanza axis = s.alleanza("Axis").orElseThrow();
+    // war on the USSR: never before the plan's round
+    assertThat(axis.piano("A").orElseThrow().dichiarazione("Germans", "Russians"))
+        .hasValue(new Strategia.Dichiarazione("Germans", "Russians", 3));
+    for (final String plan : List.of("B", "C", "D")) {
+      assertThat(axis.piano(plan).orElseThrow().dichiarazione("Germans", "Russians"))
+          .hasValue(new Strategia.Dichiarazione("Germans", "Russians", 4));
+    }
+    assertThat(axis.piano("N").orElseThrow().dichiarazione("Germans", "Russians")).isEmpty();
+    // critical objectives: France and the enemy capitals
+    assertThat(axis.piano("A").orElseThrow().fase(1).orElseThrow().obiettivi())
+        .filteredOn(o -> "France".equals(o.territorio()))
+        .allMatch(Strategia.Obiettivo::critico);
+    assertThat(axis.piano("A").orElseThrow().fase(3).orElseThrow().obiettivi())
+        .filteredOn(Strategia.Obiettivo::critico)
+        .extracting(Strategia.Obiettivo::territorio)
+        .containsExactly("Russia");
+    // plan share of Germany and Italy
+    for (final Strategia.Piano plan : axis.piani()) {
+      plan.logistica()
+          .forEach(
+              (nation, orders) ->
+                  orders.forEach(
+                      l ->
+                          assertThat(l.quotaMinimaPiano())
+                              .isEqualTo(nation.equals("Germans") ? 50.0 : 40.0)));
+    }
+    // offensive phases: front line in the East, 20 to the Channel coast, garrisons there
+    final Strategia.Logistica attack =
+        axis.piano("A").orElseThrow().logistica("Germans", 3).orElseThrow();
+    assertThat(attack.lineaDelFronte()).isTrue();
+    assertThat(attack.pesoAmmassamento()).isEqualTo(80);
+    assertThat(attack.altreRaccolte())
+        .containsExactly(
+            new Strategia.Raccolta(
+                "Ovest", List.of("Normandy Bordeaux", "Holland Belgium", "Denmark"), 20, false));
+    assertThat(attack.presidioMinimo())
+        .containsEntry("Normandy Bordeaux", 2)
+        .containsEntry("Holland Belgium", 2)
+        .containsEntry("Denmark", 2);
+    assertThat(axis.piano("A").orElseThrow().logistica("Germans", 1).orElseThrow().lineaDelFronte())
+        .isFalse();
+    // Italy gathers overseas from an embarkation point
+    assertThat(axis.piano("A").orElseThrow().logistica("Italians", 1).orElseThrow().imbarco())
+        .containsExactly("Southern Italy", "96 Sea Zone");
+    // the USSR gathers on its front line
+    assertThat(
+            s.alleanza("Allies")
+                .orElseThrow()
+                .piano("1")
+                .orElseThrow()
+                .logistica("Russians", 1)
+                .orElseThrow()
+                .lineaDelFronte())
+        .isTrue();
+  }
+
+  @Test
+  void aDeclarationNeedsWhoWhomAndRound() {
+    final String json =
+        "{\"alleanze\":{\"Axis\":{\"piani\":[{\"id\":\"X\",\"fasi\":[{\"dichiarazioni\":"
+            + "[{\"da\":\"Germans\",\"a\":\"Russians\"}]}]}]}}}";
+
+    assertThatThrownBy(() -> Strategia.parse(new StringReader(json)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("dal_round");
   }
 }

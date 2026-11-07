@@ -203,6 +203,114 @@ public class ProCapitalGuard {
         hopeless);
   }
 
+  /**
+   * What the minimum garrison of one territory found and did (step 3c).
+   *
+   * @param territory the territory
+   * @param required land units it must keep
+   * @param before land units (not infrastructure) with the moves of the non-combat move
+   * @param after land units after the changes
+   * @param moved units that stay or are brought in, per territory they were going to (name → type →
+   *     count)
+   */
+  public record GarrisonResult(
+      Territory territory,
+      int required,
+      int before,
+      int after,
+      Map<String, Map<String, Integer>> moved) {}
+
+  /**
+   * Keeps at least the required land units in each own territory of {@code garrisons} (name →
+   * units): cheapest land units that can reach it first, never taken from an own capital nor from
+   * another garrisoned territory below its minimum. Territories not owned are skipped.
+   */
+  List<GarrisonResult> minimumGarrisons(
+      final Map<Territory, ProTerritory> moveMap, final Map<String, Integer> garrisons) {
+    final List<GarrisonResult> results = new ArrayList<>();
+    final Set<Territory> capitals =
+        new HashSet<>(
+            TerritoryAttachment.getAllCurrentlyOwnedCapitals(player, proData.getData().getMap()));
+    final Map<Territory, Integer> required = new LinkedHashMap<>();
+    garrisons.forEach(
+        (name, n) -> {
+          final Territory t = proData.getData().getMap().getTerritoryOrNull(name);
+          if (t != null && !t.isWater() && t.isOwnedBy(player) && moveMap.get(t) != null) {
+            required.put(t, n);
+          }
+        });
+    for (final Map.Entry<Territory, Integer> e : required.entrySet()) {
+      final ProTerritory pt = moveMap.get(e.getKey());
+      final Map<Unit, ProTerritory> assignedTo = assignments(moveMap);
+      final Set<Unit> defenders = defenders(pt, assignedTo);
+      final int before = landCount(defenders);
+      final Map<String, Map<String, Integer>> moved = new TreeMap<>();
+      if (before < e.getValue()) {
+        final Set<Unit> cargo = cargo(moveMap);
+        final List<Unit> candidates = new ArrayList<>();
+        for (final Unit u : pt.getMaxUnits()) {
+          final ProTerritory from = assignedTo.get(u);
+          if (from == null
+              || from == pt
+              || from.getTerritory().isWater()
+              || capitals.contains(from.getTerritory())
+              || cargo.contains(u)
+              || !u.isOwnedBy(player)
+              || !Matches.unitIsLand().test(u)
+              || Matches.unitIsInfrastructure().test(u)) {
+            continue;
+          }
+          final Integer min = required.get(from.getTerritory());
+          if (min != null && landCount(defenders(from, assignedTo)) <= min) {
+            continue;
+          }
+          candidates.add(u);
+        }
+        candidates.sort(
+            Comparator.comparingDouble(
+                    (Unit u) -> TuvUtils.getTuv(List.of(u), proData.getUnitValueMap()))
+                .thenComparing(u -> u.getType().getName())
+                .thenComparing(u -> assignedTo.get(u).getTerritory().getName()));
+        int count = before;
+        for (final Unit u : candidates) {
+          if (count >= e.getValue()) {
+            break;
+          }
+          final ProTerritory from = assignedTo.get(u);
+          final Integer min = required.get(from.getTerritory());
+          if (min != null && landCount(defenders(from, assignments(moveMap))) <= min) {
+            continue;
+          }
+          from.getUnits().remove(u);
+          pt.addUnit(u);
+          count++;
+          moved
+              .computeIfAbsent(from.getTerritory().getName(), k -> new TreeMap<>())
+              .merge(u.getType().getName(), 1, Integer::sum);
+        }
+      }
+      final int after = landCount(defenders(pt, assignments(moveMap)));
+      ProLogger.info(
+          "[Pro+] Minimum garrison: "
+              + pt.getTerritory()
+              + " "
+              + before
+              + " -> "
+              + after
+              + " (required "
+              + e.getValue()
+              + "), moved "
+              + moved);
+      results.add(new GarrisonResult(pt.getTerritory(), e.getValue(), before, after, moved));
+    }
+    return results;
+  }
+
+  private static int landCount(final Collection<Unit> units) {
+    return (int)
+        units.stream().filter(Matches.unitIsLand().and(Matches.unitIsNotInfrastructure())).count();
+  }
+
   /** Enemy win% of its maximum attack on the capital against {@code defenders}. */
   private double risk(final ProTerritory cap, final Collection<Unit> defenders) {
     if (cap.getMaxEnemyUnits().isEmpty()) {

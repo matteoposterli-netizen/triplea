@@ -88,7 +88,36 @@ class ProPoliticsAi {
     ProLogger.debug("Neutral options: " + neutralMap);
     ProLogger.debug("Enemy options: " + enemyMap);
     final List<PoliticalActionAttachment> results = new ArrayList<>();
-    if (!enemyMap.isEmpty()) {
+
+    // A variant's war orders (Pro+ strategy plans): forbid or declare; Hard always decides below
+    final boolean hadEnemyOptions = !enemyMap.isEmpty();
+    PoliticalActionAttachment ordered = null;
+    final Map<GamePlayer, ProWarDecision> decisions = new HashMap<>();
+    for (final PoliticalActionAttachment action : new ArrayList<>(enemyMap.keySet())) {
+      boolean forbidden = false;
+      boolean declare = false;
+      for (final GamePlayer enemy : enemyMap.get(action)) {
+        final ProWarDecision decision =
+            decisions.computeIfAbsent(enemy, e -> proData.getTuning().warDecision(proData, e));
+        forbidden |= decision.kind() == ProWarDecision.Kind.FORBIDDEN;
+        declare |= decision.kind() == ProWarDecision.Kind.DECLARE;
+      }
+      if (forbidden) {
+        enemyMap.remove(action);
+      } else if (declare && ordered == null) {
+        ordered = action;
+      }
+    }
+    decisions.forEach(
+        (enemy, decision) -> {
+          if (decision.kind() != ProWarDecision.Kind.HARD) {
+            proData.getRecorder().warDecision(proData, enemy, decision);
+          }
+        });
+    if (ordered != null) {
+      results.add(ordered);
+      ProLogger.debug("---Declared war by the plan on " + enemyMap.get(ordered));
+    } else if (!enemyMap.isEmpty()) {
 
       // Find all attack options
       territoryManager.populatePotentialAttackOptions();
@@ -134,7 +163,7 @@ class ProPoliticsAi {
           break;
         }
       }
-    } else if (!neutralMap.isEmpty()) {
+    } else if (!hadEnemyOptions && !neutralMap.isEmpty()) {
 
       // Decide whether to declare war on a neutral
       final List<PoliticalActionAttachment> options = new ArrayList<>(neutralMap.keySet());

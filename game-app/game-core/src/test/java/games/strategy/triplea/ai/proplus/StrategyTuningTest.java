@@ -80,10 +80,10 @@ class StrategyTuningTest {
     assertThat(equilibrato.getAttackMinWinPercentage(france)).isEqualTo(52);
     assertThat(equilibrato.getAttackWinPercentage(france)).isEqualTo(80);
     assertThat(ProPlusTuning.check(equilibrato, notWorthIn(france)).desired()).isEqualTo(80);
-    // a base level the front can't raise (Spericolato): the same level for both
+    // Spericolato: France is a critical objective (step 3c), planned to at least 80
     final ProData spericolato = proPlus(RiskLevel.SPERICOLATO, "A");
     assertThat(spericolato.getAttackWinPercentage(france))
-        .isEqualTo(RiskLevel.SPERICOLATO.desiredWinPercentage(lowLuck));
+        .isEqualTo(ProPlusTuning.CRITICAL_OBJECTIVE_DESIRED);
     // Prudente + Ovest +1 = Cauto: tried from Cauto's minimum, planned to Prudente's desired
     final ProData prudente = proPlus(RiskLevel.PRUDENTE, "A");
     assertThat(prudente.getAttackMinWinPercentage(france))
