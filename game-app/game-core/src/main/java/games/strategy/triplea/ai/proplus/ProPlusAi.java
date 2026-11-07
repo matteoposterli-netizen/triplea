@@ -8,6 +8,9 @@ import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.logging.ProLogUi;
 import games.strategy.triplea.ai.pro.logging.ProLogger;
 import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
+import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
+import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
+import games.strategy.triplea.ai.proplus.strategia.Strategie;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
@@ -74,18 +77,65 @@ public class ProPlusAi extends ProAi {
     ProLogUi.notifyStartOfRound(round, player.getName());
     if (round != loggedRound) {
       loggedRound = round;
+      fixPlan(data, player);
+      if (getProData().getTuning() instanceof ProPlusTuning tuning) {
+        tuning.forgetPlan();
+      }
       ProLogger.info(turnStartLine(data, player));
     }
     ProLogger.info(LOG_PREFIX + player.getName() + " " + phase);
   }
 
   /**
+   * Fixes the alliance's plan in the game the first time one of its Pro+ players plays (real game,
+   * not a simulation copy: the phases get the real game data). It never changes afterwards.
+   */
+  static void fixPlan(final GameState data, final GamePlayer player) {
+    ProPlusSettings.allianceOf(data, player)
+        .ifPresent(
+            alliance ->
+                Strategie.forGame(data)
+                    .ifPresent(strategia -> StatoMaggiore.fix(data, alliance, strategia)));
+  }
+
+  /**
    * Eg: "[Pro+] Germans round 3, alliance Axis, risk 3 Equilibrato, attack win% desired 80 /
-   * minimum 60 (normal dice)".
+   * minimum 60 (normal dice), plan A Barbarossa, fase R3+ (fixed in round 1), fronts Ovest 2 Cauto,
+   * Est 4 Audace, ...".
    */
   static String turnStartLine(final GameState data, final GamePlayer player) {
     final RiskLevel risk = ProPlusSettings.riskLevelFor(data, player);
     final boolean lowLuck = ProPlusTuning.isLowLuck(data);
+    return baseLine(data, player, risk, lowLuck)
+        + PianoAttivo.of(data, player).map(ProPlusAi::planText).orElse(", no plan");
+  }
+
+  private static String planText(final PianoAttivo plan) {
+    final StringBuilder sb = new StringBuilder(", plan ").append(plan.label());
+    plan.getRoundInizio().ifPresent(r -> sb.append(" (fixed in round ").append(r).append(')'));
+    sb.append(", fronts");
+    plan.livelliPerFronte()
+        .forEach(
+            (front, level) ->
+                sb.append(' ')
+                    .append(front)
+                    .append(' ')
+                    .append(level.getLevel())
+                    .append(' ')
+                    .append(level.getLabel())
+                    .append(','));
+    sb.setLength(sb.length() - 1);
+    if (!plan.getObiettivi().isEmpty()) {
+      sb.append(", objectives ");
+      sb.append(
+          String.join(
+              ", ", plan.getObiettivi().stream().map(o -> o.label() + " " + o.peso()).toList()));
+    }
+    return sb.toString();
+  }
+
+  private static String baseLine(
+      final GameState data, final GamePlayer player, final RiskLevel risk, final boolean lowLuck) {
     return String.format(
         Locale.ROOT,
         "%s%s round %d, alliance %s, risk %d %s, attack win%% desired %.0f / minimum %.0f (%s)",

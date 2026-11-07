@@ -107,6 +107,11 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `keepsLandingWithExposedTransports`). `ai/pro/ProAttackWorth.java` (step 2d) — numeri del
   controllo finale "conviene con le unità assegnate". `RiskLevel.java` — i 5 livelli. `ProPlusSettings.java` — alleanze configurabili e
   lettura/scrittura dei livelli nelle proprietà della partita.
+- `ai/proplus/strategia/` (step 3a) — stato maggiore: `Strategia` (modello + parsing del file
+  JSON), `Strategie` (indice gioco→file, cache, avvisi), `StatoMaggiore` (scelta e stato salvati
+  nelle proprietà della partita, `fix`), `PianoAttivo` (ordini per nazione/round: fase, rischio per
+  fronte, obiettivi). Dati: `game-core/src/main/resources/proplus/strategia/indice.json` +
+  `ww2eur40_2nd_edition.json`. Vedi "Stato maggiore e piani".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -268,6 +273,16 @@ stessa fase acquisti) sono ignorati.
 
 Campo JSON `priorita_vc` (eventi `attacco` e `obiettivi.top`) = quota VC della priorità.
 
+Dallo step 3a (Pro+ con piano): dopo l'intestazione del turno, "Stato maggiore <alleanza>: piano X
+(fissato al round N | non ancora fissato), fase Rx", riga "Fronti -> rischio effettivo" (modificatore,
+livello, soglie), obiettivi del piano per la nazione con peso, ruolo. Per ogni attacco tag
+"[fronte F, rischio L, OBIETTIVO DEL PIANO]" e "quota piano" nella priorità; regola "obiettivo del
+piano" al posto di "VC/obiettivo" nei testi. JSON: `inizio_turno.piano` {alleanza, id, nome,
+round_inizio, fase, fronti{modificatore, rischio_livello, rischio, soglie}, obiettivi};
+`attacco.fronte`, `rischio_effettivo`, `obiettivo_piano`, `priorita_piano`, `soglia_desiderata`/
+`soglia_minima` ora del bersaglio; `controllo_finale.pro_plus.regola_obiettivo` = `piano` |
+`vc_obiettivo_nazionale`. Senza file: riga "Stato maggiore: nessun piano".
+
 `decisioni.jsonl`: una riga JSON per evento, campi comuni `round`, `nazione` (nome XML), `ai`,
 `fase` (purchase/combat/noncombat/place), `evento`: `inizio_partita`, `inizio_turno` (alleanza,
 rischio, soglie, low_luck, pu), `acquisto` (passo, motivo, unita), `acquisti_totale`, `attacco`
@@ -284,6 +299,54 @@ dell'ultimo round dispari/pari, `autosaveBefore<Delegate>`/`autosaveAfter<Delega
 round, nazione e piano; caricando il `.tsvg` (stesso round) si ricrea la situazione e con il log AI
 (Debug > Show Logs) si ripete la scelta. Le win% sono simulazioni: rigiocando cambiano di qualche
 punto (dadi della simulazione non fissati).
+
+## Stato maggiore e piani (dallo step 3a)
+
+Tre livelli: **stato maggiore** (uno per alleanza: piano, fasi, rischio per fronte, obiettivi, ruoli)
+→ **nazione** (applica il piano nel suo turno) → **tattica** (ProAi con `ProPlusTuning`, che riceve
+rischio effettivo e obiettivi per bersaglio).
+- File: `proplus/strategia/indice.json` mappa il nome del gioco (`<info name>` dell'XML,
+  `GameData.getGameName()`) al file della mappa. Mappa senza file ⇒ nessun piano, Pro+ = step 2d,
+  avviso `[Pro+] Nessun file di strategia` nel log AI. Avvisi una volta per gioco: nomi del file che
+  non sono territori della mappa, territori in nessun fronte (⇒ fronte "Altro", modificatore 0;
+  Europe 1940: Americhe, India e dintorni, territori fittizi `GermanyWar*`).
+- Schema per piano: `id`, `nome`, `descrizione`, `fasi` [`da_round`, `a_round` (assente = fino a
+  fine partita), `fronti` {fronte: -1/0/+1, assente = 0}, `obiettivi` [{`territorio` | `flotta`
+  (zone di mare con navi di quella nazione), `peso`, `nazioni` opzionale}]], `ruoli` {nazione:
+  compito}, `tappe` [{`territorio`, `entro_round`}], `firma` [{`indizio`, `tipo`, `territori`,
+  `zone`, `unita`, `nazione`, `peso`}], `punti_critici` [{`descrizione`, `tipo`, `territori`,
+  `zone`, `unita`, `nazione`}]. Nello step 3a sono usati solo `fasi` (rischio, obiettivi); `ruoli`
+  appare nel diario; `tappe`/`firma`/`punti_critici` sono letti ma non usati.
+- Fronti Europe 1940: Ovest, Est, Mediterraneo-Africa, Mari (`zone_di_mare: true` = tutte le zone
+  di mare), Altro. Piani: Asse A Barbarossa (Automatico), B Sea Lion, C Finta Sea Lion,
+  D Sud/Mediterraneo, N Neutro (tutti 0, nessun obiettivo: per confronti); Alleati 1 Germania prima
+  (Automatico; "Est −1 fino al R4 poi 0" interpretato come R1-3 −1, R4+ 0, obiettivi di sbarco dal
+  R4), 2 Italia prima, 3 Pressione economica (tutti 0).
+- Persistenza (solo `String` JDK ⇒ salvataggio apribile dalla TripleA ufficiale):
+  `"Pro+ piano: <alleanza>"` = id scelto o `auto`; `"Pro+ stato maggiore: <alleanza>"` =
+  `{"piano":"A","round_inizio":1,"storico":[]}`. Il piano si **fissa** (`StatoMaggiore.fix`) al
+  primo turno Pro+ dell'alleanza (`ProPlusAi.logPhase`, sui dati reali) e poi non cambia: il
+  pannello mostra la tendina bloccata "fissato al round N". `storico` = per round, vuoto nello
+  step 3a (avanzamento, ipotesi sull'avversario, postura negli step successivi). Fase = round di
+  gioco assoluto (non relativo a `round_inizio`).
+- Rischio effettivo di un attacco = cursore dell'alleanza + modificatore della fase per il fronte
+  del bersaglio, limitato a -1..+1 e a 1..5 (`RiskLevel.withModifier`). Usato per: soglie
+  desiderata/minima per bersaglio (`ProTuning.targetAttackWinPercentage`/`targetAttackMinWin…`,
+  letti da `ProData.getAttackWinPercentage(Territory)`), regola "rischio" e regola "obiettivo"
+  dello step 2d (`ProPlusTuning.riskLevel(proData, territorio)`). I punti del combat move che
+  cercano "l'attacco più sotto la soglia" partono da `ProData.getAttackWinPercentageCeiling()`
+  (= la soglia del fronte più prudente) e confrontano ogni bersaglio con la sua soglia
+  (`ProCombatMoveAi.belowAttackTarget`); per Hard identico (una sola soglia).
+  `ProData.getAttackWinPercentage()` senza bersaglio resta il livello del cursore (diario/log).
+- Obiettivi: bonus di priorità = peso dell'obiettivo (il massimo se più obiettivi coincidono)
+  sommato come il bonus VC, prima dei moltiplicatori (capitale ×5, vicino alla mia capitale ×3);
+  mai per neutrali; escluso dal controllo "postura difensiva" come la quota VC. La regola fissa
+  "VC/obiettivo nazionale" dello step 2d è **sostituita** da "obiettivo del piano attivo" (anche
+  zone di mare per gli obiettivi `flotta`), con i limiti TUV del livello effettivo del fronte.
+  Senza file di strategia resta la regola dello step 2d.
+- Peso VC di priorità dello step 2c: **invariato a 10** (vedi report step 3a).
+- Cache: `ProPlusTuning.plan` per (GameData, giocatore, round); il livello del cursore è letto a
+  ogni uso. `ProPlusAi` svuota la cache dopo aver fissato il piano.
 
 ## Log degli step
 

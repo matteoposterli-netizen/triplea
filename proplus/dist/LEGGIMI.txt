@@ -7,15 +7,18 @@ Data build      : @DATE@
 Sorgente        : https://github.com/@REPO@/tree/@COMMIT@
 
 
-STATO ATTUALE (step 2bis)
--------------------------
+STATO ATTUALE (step 3a)
+-----------------------
 Nella scelta dei giocatori c'e' il tipo "Pro+ (AI)": e' l'AI "Hard (AI)"
-con due differenze:
+con queste differenze:
   - valuta le victory city (le considera piu' preziose da prendere/tenere);
-  - attacca secondo la "Propensione al rischio" scelta per la sua alleanza.
+  - attacca secondo la "Propensione al rischio" scelta per la sua alleanza;
+  - (step 3a) segue il PIANO dello "stato maggiore" della sua alleanza
+    (vedi sotto): il rischio cambia per fronte e gli obiettivi del piano
+    hanno la precedenza.
 "Hard (AI)" e "Hard Beta (AI)" restano identiche all'originale.
-Novita' dello step 2bis: il DIARIO DELLE DECISIONI (vedi sotto) racconta
-in italiano cosa ha deciso l'AI in ogni turno e perche'.
+Il DIARIO DELLE DECISIONI (vedi sotto) racconta in italiano cosa ha deciso
+l'AI in ogni turno e perche'.
 Il codice di base e' il ramo principale (main) di triplea-game/triplea al
 momento della build: puo' contenere correzioni piu' recenti della versione
 ufficiale installata (es. 2026-11.16.15870).
@@ -45,6 +48,38 @@ IMPOSTAZIONI PRO+ (propensione al rischio)
    "[Pro+] ... risk ..." con alleanza, livello e soglie in uso.
 6. Nello stesso pannello: casella "Scrivi il diario delle decisioni
    dell'AI" (attiva di serie) e pulsante "Apri cartella diario".
+7. Il pannello si adatta allo schermo (anche con scala >100%): si puo'
+   ridimensionare, i pulsanti OK/Annulla restano sempre visibili,
+   Invio = OK, Esc = Annulla.
+
+
+STATO MAGGIORE E PIANO  (novita' step 3a, solo Europe 1940 2nd Edition)
+------------------------------------------------------------------------
+Ogni alleanza ha uno "stato maggiore" che sceglie un PIANO per la partita.
+Nel pannello "Impostazioni Pro+", sotto il cursore di ogni alleanza, c'e'
+la tendina "Piano":
+  Asse:    Automatico (= A), A Barbarossa, B Sea Lion, C Finta Sea Lion,
+           D Sud/Mediterraneo, N Neutro (nessuna preferenza, per confronti)
+  Alleati: Automatico (= 1), 1 Germania prima, 2 Italia prima,
+           3 Pressione economica
+Il piano si FISSA al primo turno Pro+ dell'alleanza e poi non cambia piu'
+(ricaricando il salvataggio la tendina e' bloccata: "fissato al round N").
+Cosa fa il piano, round per round (fasi):
+  - ogni FRONTE (Ovest, Est, Mediterraneo-Africa, Mari; il resto = Altro)
+    ha un modificatore -1, 0 o +1 che sposta il livello del cursore di un
+    passo: es. cursore Equilibrato, fronte +1 = Audace, fronte -1 = Cauto.
+    Vale per le soglie d'attacco e per le regole "tenuto da Pro+";
+  - gli OBIETTIVI del piano (es. France, la flotta britannica) salgono
+    nella classifica degli attacchi e possono essere attaccati anche se
+    poi non si tengono, entro un limite di perdite (TUV) del livello.
+Con il piano N/3 (tutti i fronti 0) e il cursore a Prudente le soglie e le
+regole d'attacco sono quelle di Hard.
+Il diario, a inizio turno, scrive piano, fase, rischio per fronte e
+obiettivi; per ogni attacco il fronte, il rischio usato e se e' un
+obiettivo del piano. Su mappe senza file di strategia Pro+ gioca come
+nello step 2d (nessun piano, avviso nel log).
+I piani sono nel file proplus/strategia/ww2eur40_2nd_edition.json dentro
+il programma: i numeri si possono cambiare in una build successiva.
 
 
 DIARIO DELLE DECISIONI  (novita' step 2bis)

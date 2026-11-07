@@ -122,6 +122,60 @@ class DiaryNeutralityTest extends AbstractClientSettingTestCase {
     assertThat(executed.getAsJsonObject("valore").has("victory_city")).isTrue();
   }
 
+  @Test
+  void withAStrategyPlanDecisionsAreTheSameWithAndWithoutDiaryAndTheDiaryShowsThePlan()
+      throws IOException {
+    data.setGameName("World War II Europe 1940 2nd Edition");
+    final String off = germanTurn(false);
+    final String on = germanTurn(true);
+
+    assertThat(on).isEqualTo(off);
+    final String text =
+        Files.readString(diaryFiles().get(0).resolve("diario.txt"), StandardCharsets.UTF_8);
+    Files.writeString(
+        Path.of("build", "proplus", "diario-esempio", "diario-con-piano.txt"),
+        text,
+        StandardCharsets.UTF_8);
+    assertThat(text)
+        .contains("Stato maggiore Asse: piano A Barbarossa (non ancora fissato), fase R1-2")
+        .contains(
+            "Fronti -> rischio effettivo (soglie desiderata/minima): Ovest +1 = Audace 72/52;")
+        .contains("Est -1 = Cauto 85/62")
+        .contains("Obiettivi del piano per Germania: France (peso 15), flotta British (peso 10)")
+        .contains("Ruolo: ")
+        .contains("fronte Ovest, rischio Audace")
+        .contains("OBIETTIVO DEL PIANO")
+        .contains("quota piano ");
+    final List<JsonObject> events =
+        Files.readAllLines(diaryFiles().get(0).resolve("decisioni.jsonl"), StandardCharsets.UTF_8)
+            .stream()
+            .map(l -> JsonParser.parseString(l).getAsJsonObject())
+            .toList();
+    final JsonObject turn =
+        events.stream()
+            .filter(e -> "inizio_turno".equals(e.get("evento").getAsString()))
+            .findFirst()
+            .orElseThrow();
+    assertThat(turn.getAsJsonObject("piano").get("id").getAsString()).isEqualTo("A");
+    assertThat(
+            turn.getAsJsonObject("piano")
+                .getAsJsonObject("fronti")
+                .getAsJsonObject("Ovest")
+                .get("rischio")
+                .getAsString())
+        .isEqualTo("Audace");
+    final JsonObject france =
+        events.stream()
+            .filter(e -> "attacco".equals(e.get("evento").getAsString()))
+            .filter(e -> "France".equals(e.get("territorio").getAsString()))
+            .findFirst()
+            .orElseThrow();
+    assertThat(france.get("fronte").getAsString()).isEqualTo("Ovest");
+    assertThat(france.get("rischio_effettivo").getAsString()).isEqualTo("Audace");
+    assertThat(france.get("obiettivo_piano").getAsBoolean()).isTrue();
+    assertThat(france.get("soglia_desiderata").getAsDouble()).isEqualTo(72);
+  }
+
   /** One German turn: phase hooks, purchase (with its attack plan) and combat move. */
   private String germanTurn(final boolean diary) {
     final ProData proData = new ProData(false, new ProPlusTuning());

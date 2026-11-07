@@ -10,8 +10,10 @@ import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.ProTuning;
 import games.strategy.triplea.ai.pro.util.ProNationalObjectiveUtils;
 import games.strategy.triplea.ai.pro.util.ProUtils;
+import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import java.util.Optional;
+import javax.annotation.Nullable;
 
 /**
  * Pro+ numbers. Changes only:
@@ -25,7 +27,10 @@ import java.util.Optional;
  *   <li>attack priority: a victory city adds {@link #ATTACK_PRIORITY_VICTORY_CITY_WEIGHT} to the
  *       score the combat move ranks its targets by;
  *   <li>last check of the planned attacks: some attacks Hard drops as not worth it are kept, by the
- *       risk level ({@link #keepsAttackNotWorthIt}).
+ *       risk level ({@link #keepsAttackNotWorthIt});
+ *   <li>strategy (step 3a): with a strategy file for the map, the alliance's plan in force ({@link
+ *       PianoAttivo}) sets the risk level per target (base level + the front's modifier) and its
+ *       objectives get a priority bonus and replace the victory city / national objective rule.
  * </ul>
  */
 public final class ProPlusTuning implements ProTuning {
@@ -45,6 +50,77 @@ public final class ProPlusTuning implements ProTuning {
 
   /** {@link #keepsAttackNotWorthIt}: kept by the victory city / national objective rule. */
   public static final String KEPT_BY_OBJECTIVE = "objective";
+
+  /** Cache of {@link #plan}: the orders are the same for one game state, player and round. */
+  private @Nullable GameState planData;
+
+  private @Nullable GamePlayer planPlayer;
+  private int planRound = -1;
+  private Optional<PianoAttivo> plan = Optional.empty();
+
+  /** The general staff's orders for {@code player} now; empty without a strategy for the map. */
+  public Optional<PianoAttivo> plan(final GameState data, final GamePlayer player) {
+    final int round = data.getSequence().getRound();
+    if (data != planData || player != planPlayer || round != planRound) {
+      plan = PianoAttivo.of(data, player);
+      planData = data;
+      planPlayer = player;
+      planRound = round;
+    }
+    return plan;
+  }
+
+  /** Forgets the cached orders (the plan was just fixed in the game). */
+  void forgetPlan() {
+    planData = null;
+  }
+
+  /** {@link #plan} of {@code proData}'s player, also when its tuning is not this class. */
+  public static Optional<PianoAttivo> planOf(final ProData proData) {
+    return proData.getTuning() instanceof ProPlusTuning tuning
+        ? tuning.plan(proData.getData(), proData.getPlayer())
+        : PianoAttivo.of(proData.getData(), proData.getPlayer());
+  }
+
+  /**
+   * Risk level of an attack on {@code target}: the alliance's level moved by the plan's modifier
+   * for the target's front; the alliance's level without a plan.
+   */
+  public static RiskLevel riskLevel(final ProData proData, final Territory target) {
+    return planOf(proData)
+        .map(p -> p.livelloEffettivo(target))
+        .orElseGet(() -> ProPlusSettings.riskLevelFor(proData.getData(), proData.getPlayer()));
+  }
+
+  @Override
+  public double targetAttackWinPercentage(
+      final ProData proData, final Territory target, final double attackWinPercentage) {
+    return riskLevel(proData, target).desiredWinPercentage(isLowLuck(proData.getData()));
+  }
+
+  @Override
+  public double targetAttackMinWinPercentage(
+      final ProData proData, final Territory target, final double attackMinWinPercentage) {
+    return riskLevel(proData, target).minimumWinPercentage(isLowLuck(proData.getData()));
+  }
+
+  @Override
+  public double attackWinPercentageCeiling(
+      final ProData proData, final double attackWinPercentage) {
+    final boolean lowLuck = isLowLuck(proData.getData());
+    return Math.max(
+        attackWinPercentage,
+        planOf(proData).map(p -> p.maxDesiredWinPercentage(lowLuck)).orElse(attackWinPercentage));
+  }
+
+  /** The plan's objective weight for {@code target} (never for neutrals); 0 without a plan. */
+  @Override
+  public double attackPriorityPlanBonus(final ProData proData, final Territory target) {
+    if (ProUtils.isNeutralLand(target)) {
+      return 0;
+    }
+    return planOf(proData).map(p -> p.peso(target)).orElse(0.0);
+  }
 
   @Override
   public double attackWinPercentage(
@@ -76,17 +152,17 @@ public final class ProPlusTuning implements ProTuning {
 
   /**
    * Keeps an attack "Hard (AI)" drops only because its value is negative with the units assigned,
-   * by one of two rules of the alliance's {@link RiskLevel} (never at {@link RiskLevel#PRUDENTE};
-   * never for neutrals, nor below the desired win%):
+   * by one of two rules of the {@linkplain #riskLevel risk level of the target} (never at {@link
+   * RiskLevel#PRUDENTE}; never for neutrals, nor below the desired win%):
    *
    * <ul>
    *   <li>{@value #KEPT_BY_RISK}: the attack {@linkplain #takesSomething takes something} and its
    *       value, with the level's counter-attack weight in place of Hard's 2/3, is at least minus
    *       the level's tolerance;
-   *   <li>{@value #KEPT_BY_OBJECTIVE}: the target is an enemy land territory with a victory city or
-   *       a national objective at stake that gives the enemy production or a victory city, the
-   *       attack wins at least {@link RiskLevel#objectiveRuleMinWin} and the TUV expected to be
-   *       lost ({@link ProAttackWorth#expectedTuvCost}) is at most the level's limit.
+   *   <li>{@value #KEPT_BY_OBJECTIVE}: the target is an {@linkplain #isObjectiveTarget objective
+   *       target}, the attack wins at least {@link RiskLevel#objectiveRuleMinWin} and the TUV
+   *       expected to be lost ({@link ProAttackWorth#expectedTuvCost}) is at most the level's
+   *       limit.
    * </ul>
    */
   @Override
@@ -110,7 +186,7 @@ public final class ProPlusTuning implements ProTuning {
       final double enemyTuvSwing,
       final double attackValue) {
     final GameState data = proData.getData();
-    final RiskLevel level = ProPlusSettings.riskLevelFor(data, proData.getPlayer());
+    final RiskLevel level = riskLevel(proData, territory);
     final boolean kept =
         level.keepsAttacksNotWorthIt()
             && winPercentage >= level.objectiveRuleMinWin(isLowLuck(data))
@@ -127,7 +203,7 @@ public final class ProPlusTuning implements ProTuning {
   /** The numbers of {@link #keepsAttackNotWorthIt}, also for the decision diary. */
   public static UnworthAttackCheck check(final ProData proData, final ProAttackWorth worth) {
     final GameState data = proData.getData();
-    final RiskLevel level = ProPlusSettings.riskLevelFor(data, proData.getPlayer());
+    final RiskLevel level = riskLevel(proData, worth.territory());
     final boolean lowLuck = isLowLuck(data);
     final double riskValue = worth.attackValue(level.getCounterAttackWeight());
     final boolean objectiveTarget = isObjectiveTarget(proData, worth.territory());
@@ -150,6 +226,7 @@ public final class ProPlusTuning implements ProTuning {
         level.desiredWinPercentage(lowLuck),
         riskValue,
         objectiveTarget,
+        planOf(proData).isPresent(),
         objectiveMinWin,
         Optional.ofNullable(keptBy));
   }
@@ -164,11 +241,20 @@ public final class ProPlusTuning implements ProTuning {
   }
 
   /**
-   * Enemy land with a victory city, or with national objectives at stake for my side, that gives
-   * the enemy production or a victory city (taking it removes them from the enemy).
+   * Target of the objective rule. With a strategy plan: an objective of the plan's current phase
+   * for this nation (land or, for a fleet objective, a sea zone; never a neutral). Without a plan
+   * (no strategy file for the map, step 2d rule): enemy land with a victory city, or with national
+   * objectives at stake for my side, that gives the enemy production or a victory city.
    */
   static boolean isObjectiveTarget(final ProData proData, final Territory t) {
-    if (t.isWater() || ProUtils.isNeutralLand(t)) {
+    if (ProUtils.isNeutralLand(t)) {
+      return false;
+    }
+    final Optional<PianoAttivo> plan = planOf(proData);
+    if (plan.isPresent()) {
+      return plan.get().isObiettivo(t);
+    }
+    if (t.isWater()) {
       return false;
     }
     final int victoryCities =
@@ -184,6 +270,8 @@ public final class ProPlusTuning implements ProTuning {
    * @param desired the level's desired win% (both rules need it)
    * @param riskValue the attack value with the level's counter-attack weight
    * @param objectiveTarget whether the target counts for the objective rule
+   * @param planRule whether the objective rule is the plan's ({@code false}: step 2d victory city /
+   *     national objective rule, no strategy for the map)
    * @param objectiveMinWin win% the objective rule needs
    * @param keptBy {@value #KEPT_BY_RISK}, {@value #KEPT_BY_OBJECTIVE} or empty (dropped)
    */
@@ -192,6 +280,7 @@ public final class ProPlusTuning implements ProTuning {
       double desired,
       double riskValue,
       boolean objectiveTarget,
+      boolean planRule,
       double objectiveMinWin,
       Optional<String> keptBy) {}
 

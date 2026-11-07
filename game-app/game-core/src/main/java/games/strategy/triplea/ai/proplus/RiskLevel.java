@@ -104,6 +104,18 @@ public enum RiskLevel {
     return lowLuck ? Math.min(LOW_LUCK_CAP, minimum + LOW_LUCK_BONUS) : minimum;
   }
 
+  /**
+   * This level moved by a strategy plan's front modifier: {@code modifier} limited to -1..+1, the
+   * result to {@link #PRUDENTE}..{@link #SPERICOLATO}.
+   */
+  public RiskLevel withModifier(final int modifier) {
+    final int bounded = Math.max(-1, Math.min(1, modifier));
+    final RiskLevel[] levels = values();
+    final int moved =
+        Math.max(levels[0].level, Math.min(levels[levels.length - 1].level, level + bounded));
+    return fromLevel(moved).orElse(this);
+  }
+
   public static Optional<RiskLevel> fromLevel(final int level) {
     return Arrays.stream(values()).filter(r -> r.level == level).findAny();
   }

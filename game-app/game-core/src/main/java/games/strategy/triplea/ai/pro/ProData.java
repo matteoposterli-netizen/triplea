@@ -81,6 +81,30 @@ public final class ProData {
     attackMinWinPercentage = minWinPercentage;
   }
 
+  /**
+   * Win% the combat move plans the attack on {@code target} to reach: {@link
+   * #getAttackWinPercentage()} unless the tuning sets it per target.
+   */
+  public double getAttackWinPercentage(final Territory target) {
+    return tuning.targetAttackWinPercentage(this, target, attackWinPercentage);
+  }
+
+  /**
+   * Lowest win% at which the combat move keeps the attack on {@code target}: {@link
+   * #getAttackMinWinPercentage()} unless the tuning sets it per target.
+   */
+  public double getAttackMinWinPercentage(final Territory target) {
+    return tuning.targetAttackMinWinPercentage(this, target, attackMinWinPercentage);
+  }
+
+  /**
+   * Highest {@link #getAttackWinPercentage(Territory)} any target can have: the starting point of
+   * the combat move's searches for the attack furthest below its desired win%.
+   */
+  public double getAttackWinPercentageCeiling() {
+    return tuning.attackWinPercentageCeiling(this, attackWinPercentage);
+  }
+
   public void setRecorder(final ProDecisionRecorder recorder) {
     this.recorder = recorder;
   }

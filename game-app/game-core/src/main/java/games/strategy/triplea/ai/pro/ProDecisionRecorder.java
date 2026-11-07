@@ -41,9 +41,11 @@ public interface ProDecisionRecorder {
 
   /**
    * The combat move ranked {@code patd} with priority {@code patd.getValue()}, of which {@code
-   * victoryCityPart} comes from its victory cities (0 unless the tuning weighs them).
+   * victoryCityPart} comes from its victory cities (0 unless the tuning weighs them) and {@code
+   * planPart} from the strategy plan's objectives (0 unless the tuning follows a plan).
    */
-  default void attackPriority(ProData proData, ProTerritory patd, double victoryCityPart) {}
+  default void attackPriority(
+      ProData proData, ProTerritory patd, double victoryCityPart, double planPart) {}
 
   /**
    * The combat move checked whether the attack on {@code patd} is worth it with the units assigned

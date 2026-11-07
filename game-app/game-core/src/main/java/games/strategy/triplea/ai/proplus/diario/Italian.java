@@ -8,7 +8,7 @@ import lombok.experimental.UtilityClass;
 
 /** Italian names for the diary text: nations, alliances, units, reasons. Unknown names stay. */
 @UtilityClass
-final class Italian {
+public final class Italian {
   private static final Map<String, String> NATIONS =
       Map.ofEntries(
           Map.entry("Germans", "Germania"),
@@ -131,7 +131,7 @@ final class Italian {
     return NATIONS.getOrDefault(player, player);
   }
 
-  static String alliance(final String alliance) {
+  public static String alliance(final String alliance) {
     return ALLIANCES.getOrDefault(alliance, alliance);
   }
 

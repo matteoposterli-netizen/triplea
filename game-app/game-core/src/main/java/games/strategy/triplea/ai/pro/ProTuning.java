@@ -42,6 +42,41 @@ public interface ProTuning {
     return minWinPercentage;
   }
 
+  /**
+   * Win% the combat move plans the attack on {@code target} to reach. Defaults to {@code
+   * attackWinPercentage}, the same for every target ({@link #attackWinPercentage}).
+   */
+  default double targetAttackWinPercentage(
+      final ProData proData, final Territory target, final double attackWinPercentage) {
+    return attackWinPercentage;
+  }
+
+  /**
+   * Lowest win% at which the combat move keeps the attack on {@code target}. Defaults to {@code
+   * attackMinWinPercentage}, the same for every target ({@link #attackMinWinPercentage}).
+   */
+  default double targetAttackMinWinPercentage(
+      final ProData proData, final Territory target, final double attackMinWinPercentage) {
+    return attackMinWinPercentage;
+  }
+
+  /**
+   * Highest {@link #targetAttackWinPercentage} of any target. Must be at least every value it can
+   * return. Defaults to {@code attackWinPercentage}.
+   */
+  default double attackWinPercentageCeiling(
+      final ProData proData, final double attackWinPercentage) {
+    return attackWinPercentage;
+  }
+
+  /**
+   * Points the strategy plan adds to the combat move's priority of {@code target} (before the
+   * priority's multipliers). 0 by default: Hard and Hard Beta follow no plan.
+   */
+  default double attackPriorityPlanBonus(final ProData proData, final Territory target) {
+    return 0;
+  }
+
   /** Whether territories are worth more for their victory cities. Only Hard Beta by default. */
   default boolean valuesVictoryCities(final boolean beta) {
     return beta;

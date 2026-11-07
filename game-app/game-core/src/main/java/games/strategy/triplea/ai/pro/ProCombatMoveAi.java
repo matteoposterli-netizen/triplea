@@ -297,18 +297,22 @@ public class ProCombatMoveAi {
       // 0 unless the tuning weighs victory cities (Pro+): Hard computes exactly as before
       final double victoryCityBonus =
           ProTerritoryValueUtils.victoryCityAttackPriority(proData, t, patd.isCanHold());
+      // 0 unless the tuning follows a strategy plan with this target as objective (Pro+)
+      final double planBonus = proData.getTuning().attackPriorityPlanBonus(proData, t);
       double victoryCityPart = victoryCityBonus * multiplier;
+      double planPart = planBonus * multiplier;
       double attackValue =
-          victoryCityBonus == 0
+          victoryCityBonus == 0 && planBonus == 0
               ? (tuvSwing + territoryValue)
                   * (1 + 4.0 * isCapital)
                   * (1 + 2.0 * isNotNeutralAdjacentToMyCapital)
                   * (1 - 0.9 * isNeutral)
-              : (tuvSwing + territoryValue + victoryCityBonus) * multiplier;
+              : (tuvSwing + territoryValue + victoryCityBonus + planBonus) * multiplier;
 
       // Check if a negative value neutral territory should be attacked
       if (attackValue <= 0 && !patd.isNeedAmphibUnits() && ProUtils.isNeutralLand(t)) {
         victoryCityPart = 0;
+        planPart = 0;
 
         // Determine enemy neighbor territory production value for neutral land territories
         double nearbyEnemyValue = 0;
@@ -368,11 +372,11 @@ public class ProCombatMoveAi {
 
       // Remove negative value territories
       patd.setValue(attackValue);
-      proData.getRecorder().attackPriority(proData, patd, victoryCityPart);
-      // a victory city doesn't overrule the defensive stance: checked without its part
+      proData.getRecorder().attackPriority(proData, patd, victoryCityPart, planPart);
+      // a victory city or a plan objective doesn't overrule the defensive stance: checked without
       if (attackValue <= 0
           || (isDefensive
-              && attackValue - victoryCityPart <= 8
+              && attackValue - victoryCityPart - planPart <= 8
               && data.getMap().getDistance(proData.getMyCapital(), t) <= 3)) {
         proData
             .getRecorder()
@@ -487,7 +491,7 @@ public class ProCombatMoveAi {
       final ProBattleResult result = patd.getBattleResult();
       if (!patd.isStrafing()
           && estimate < patd.getStrengthEstimate()
-          && capturesTooRarely(result)) {
+          && capturesTooRarely(patd.getTerritory(), result)) {
         areSuccessful = false;
       }
     }
@@ -495,14 +499,25 @@ public class ProCombatMoveAi {
   }
 
   /**
+   * Whether {@code result} is below both {@code runningMin} (the lowest win% found so far) and the
+   * win% the attack on {@code t} should reach. With one threshold for every target (Hard) this is
+   * the plain {@code win% < runningMin}, since the running minimum starts at that threshold.
+   */
+  private boolean belowAttackTarget(
+      final Territory t, final ProBattleResult result, final double runningMin) {
+    return result.getWinPercentage() < runningMin
+        && result.getWinPercentage() < proData.getAttackWinPercentage(t);
+  }
+
+  /**
    * Whether an attack wins too rarely to plan. Hard Beta counts only wins that keep a land unit to
    * take the territory; the average survivors can include one when the capture is a coin flip.
    */
-  private boolean capturesTooRarely(final ProBattleResult result) {
+  private boolean capturesTooRarely(final Territory t, final ProBattleResult result) {
     if (proData.isBeta()) {
-      return result.getCapturePercentage() < proData.getAttackMinWinPercentage();
+      return result.getCapturePercentage() < proData.getAttackMinWinPercentage(t);
     }
-    return result.getWinPercentage() < proData.getAttackMinWinPercentage()
+    return result.getWinPercentage() < proData.getAttackMinWinPercentage(t)
         || !result.isHasLandUnitRemaining();
   }
 
@@ -722,7 +737,7 @@ public class ProCombatMoveAi {
       zone.estimateBattleResult(calc, player);
     }
     final ProBattleResult result = zone.getBattleResult();
-    return result.getWinPercentage() >= proData.getAttackWinPercentage()
+    return result.getWinPercentage() >= proData.getAttackWinPercentage(z)
         && result.isHasLandUnitRemaining();
   }
 
@@ -1357,7 +1372,7 @@ public class ProCombatMoveAi {
             + scramblers.size()
             + ", win%="
             + result.getWinPercentage());
-    return result.getWinPercentage() < proData.getAttackWinPercentage();
+    return result.getWinPercentage() < proData.getAttackWinPercentage(target);
   }
 
   public static class ProductionAndIsCapital {
@@ -1695,7 +1710,7 @@ public class ProCombatMoveAi {
                 t,
                 result.getWinPercentage(),
                 result.isHasLandUnitRemaining(),
-                capturesTooRarely(result),
+                capturesTooRarely(t, result),
                 isNeutral,
                 canHold,
                 enemyCounterWinPercentage,
@@ -2012,7 +2027,8 @@ public class ProCombatMoveAi {
                   without,
                   defenders,
                   from.getBombardTerritoryMap().keySet());
-          if (withoutResult.getWinPercentage() >= proData.getAttackWinPercentage()
+          if (withoutResult.getWinPercentage()
+                  >= proData.getAttackWinPercentage(from.getTerritory())
               || withoutResult.getWinPercentage() >= with.getWinPercentage() - 1) {
             bestShip = u;
             bestZone = blockZone.get();
@@ -2125,7 +2141,7 @@ public class ProCombatMoveAi {
     final ProBattleResult without =
         calc.estimateAttackBattleResults(
             proData, t, withoutBomber, defenders, from.getBombardTerritoryMap().keySet());
-    if (!canSpareBomberForRaid(with, without, proData.getAttackWinPercentage(), maxDamage)) {
+    if (!canSpareBomberForRaid(with, without, proData.getAttackWinPercentage(t), maxDamage)) {
       ProLogger.trace(
           "Keep bomber in attack on "
               + t
@@ -2347,7 +2363,7 @@ public class ProCombatMoveAi {
         continue; // skip air units
       }
       Territory minWinTerritory = null;
-      double minWinPercentage = proData.getAttackWinPercentage();
+      double minWinPercentage = proData.getAttackWinPercentageCeiling();
       for (final Territory t : sortedUnitAttackOptions.get(unit)) {
         final ProTerritory patd = attackMap.get(t);
         if (!patd.isCurrentlyWins() && patd.isCanHold()) {
@@ -2355,7 +2371,7 @@ public class ProCombatMoveAi {
             patd.estimateBattleResult(calc, player);
           }
           final ProBattleResult result = patd.getBattleResult();
-          if (result.getWinPercentage() < minWinPercentage
+          if (belowAttackTarget(t, result, minWinPercentage)
               || (!result.isHasLandUnitRemaining() && minWinTerritory == null)) {
             minWinPercentage = result.getWinPercentage();
             minWinTerritory = t;
@@ -2384,7 +2400,7 @@ public class ProCombatMoveAi {
         continue; // skip non-air units
       }
       Territory minWinTerritory = null;
-      double minWinPercentage = proData.getAttackWinPercentage();
+      double minWinPercentage = proData.getAttackWinPercentageCeiling();
       final List<ProTerritory> unsure = new ArrayList<>();
       for (final Territory t : sortedUnitAttackOptions.get(unit)) {
         final ProTerritory patd = attackMap.get(t);
@@ -2417,7 +2433,7 @@ public class ProCombatMoveAi {
           if (proData.isBeta() && canAirTipAttack(t, patd)) {
             unsure.add(patd);
           }
-          if (result.getWinPercentage() < minWinPercentage
+          if (belowAttackTarget(t, result, minWinPercentage)
               || (!result.isHasLandUnitRemaining() && minWinTerritory == null)) {
             final List<Unit> defendingUnits = patd.getMaxEnemyDefenders(player);
             final boolean hasNoDefenders =
@@ -2427,7 +2443,7 @@ public class ProCombatMoveAi {
             final boolean hasAa = defendingUnits.stream().anyMatch(Matches.unitIsAaForAnything());
             if (!hasNoDefenders
                 && !isOverwhelmingWin
-                && (!hasAa || result.getWinPercentage() < minWinPercentage)) {
+                && (!hasAa || belowAttackTarget(t, result, minWinPercentage))) {
               minWinPercentage = result.getWinPercentage();
               minWinTerritory = t;
               if (patd.isStrafing()) {
@@ -2458,7 +2474,7 @@ public class ProCombatMoveAi {
       }
       final boolean isAirUnit = unit.getUnitAttachment().isAir();
       Territory minWinTerritory = null;
-      double minWinPercentage = proData.getAttackWinPercentage();
+      double minWinPercentage = proData.getAttackWinPercentageCeiling();
       for (final Territory t : sortedUnitAttackOptions.get(unit)) {
         final ProTerritory patd = attackMap.get(t);
         if (!patd.isCurrentlyWins()) {
@@ -2489,7 +2505,7 @@ public class ProCombatMoveAi {
             patd.estimateBattleResult(calc, player);
           }
           final ProBattleResult result = patd.getBattleResult();
-          if (result.getWinPercentage() < minWinPercentage
+          if (belowAttackTarget(t, result, minWinPercentage)
               || (!result.isHasLandUnitRemaining() && minWinTerritory == null)) {
             final List<Unit> defendingUnits = patd.getMaxEnemyDefenders(player);
             final boolean hasNoDefenders =
@@ -2500,7 +2516,7 @@ public class ProCombatMoveAi {
             if (!isAirUnit
                 || (!hasNoDefenders
                     && !isOverwhelmingWin
-                    && (!hasAa || result.getWinPercentage() < minWinPercentage))) {
+                    && (!hasAa || belowAttackTarget(t, result, minWinPercentage)))) {
               minWinPercentage = result.getWinPercentage();
               minWinTerritory = t;
             }
@@ -2558,7 +2574,7 @@ public class ProCombatMoveAi {
               patd.estimateBattleResult(calc, player);
             }
             final ProBattleResult result = patd.getBattleResult();
-            if (result.getWinPercentage() < proData.getAttackWinPercentage()
+            if (result.getWinPercentage() < proData.getAttackWinPercentage(t)
                 || !result.isHasLandUnitRemaining()) {
               patd.addUnit(transport);
               patd.setBattleResult(null);
@@ -2599,7 +2615,7 @@ public class ProCombatMoveAi {
       final Unit transport = amphibAttackOptionsEntry.getKey();
       // Find current land battle results for territories that unit can amphib attack
       Territory minWinTerritory = null;
-      double minWinPercentage = proData.getAttackWinPercentage();
+      double minWinPercentage = proData.getAttackWinPercentageCeiling();
       List<Unit> minAmphibUnitsToAdd = null;
       Territory minUnloadFromTerritory = null;
       for (final Territory t : amphibAttackOptionsEntry.getValue()) {
@@ -2609,7 +2625,7 @@ public class ProCombatMoveAi {
             patd.estimateBattleResult(calc, player);
           }
           final ProBattleResult result = patd.getBattleResult();
-          if (result.getWinPercentage() < minWinPercentage
+          if (belowAttackTarget(t, result, minWinPercentage)
               || (!result.isHasLandUnitRemaining() && minWinTerritory == null)) {
 
             // Find units that haven't attacked and can be transported

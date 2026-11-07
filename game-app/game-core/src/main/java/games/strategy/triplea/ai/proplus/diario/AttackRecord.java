@@ -31,6 +31,18 @@ final class AttackRecord {
   /** Part of {@link #priority} from victory cities (0 unless the AI's tuning weighs them). */
   double priorityVictoryCity;
 
+  /** Part of {@link #priority} from the strategy plan's objectives (0 without a plan). */
+  double priorityPlan;
+
+  /** Pro+ with a strategy plan: front of the target, null otherwise. */
+  @Nullable String front;
+
+  /** Pro+: risk level of the attack (with a plan: the front's effective level), null for Hard. */
+  @Nullable String risk;
+
+  /** Pro+ with a strategy plan: whether the target is an objective of the plan's phase. */
+  boolean planObjective;
+
   double value;
   double valueProduction;
   double valueVictoryCity;
@@ -103,6 +115,7 @@ final class AttackRecord {
       double riskValue,
       double desired,
       boolean objectiveTarget,
+      boolean planRule,
       double objectiveMinWin,
       double costLimit) {}
 

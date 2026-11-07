@@ -25,6 +25,8 @@ import games.strategy.triplea.ai.pro.util.ProUtils;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.ProPlusTuning;
 import games.strategy.triplea.ai.proplus.RiskLevel;
+import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
+import games.strategy.triplea.ai.proplus.strategia.Strategia;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.battle.BattleTracker;
@@ -200,7 +202,16 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     final double minimum;
     final String risk;
     final JsonObject json = event("inizio_turno");
-    if (ai.getProData().getTuning() instanceof ProPlusTuning) {
+    String planText = "";
+    if (ai.getProData().getTuning() instanceof ProPlusTuning tuning) {
+      final Optional<PianoAttivo> plan = tuning.plan(data, player);
+      planText =
+          plan.map(p -> planText(p, lowLuck))
+              .orElse(
+                  String.format(
+                      "  Stato maggiore: nessun piano (nessun file di strategia per questa"
+                          + " mappa)%n"));
+      plan.ifPresent(p -> json.add("piano", planJson(p, lowLuck)));
       final RiskLevel level = ProPlusSettings.riskLevelFor(data, player);
       desired = level.desiredWinPercentage(lowLuck);
       minimum = level.minimumWinPercentage(lowLuck);
@@ -232,6 +243,90 @@ public final class DiaryRecorder implements ProDecisionRecorder {
             Italian.number(minimum),
             lowLuck ? ", Low Luck" : "",
             pusAtStart));
+    if (!planText.isEmpty()) {
+      diary.text(planText);
+    }
+  }
+
+  /**
+   * Eg: "Stato maggiore Asse: piano A Barbarossa (fissato al round 1), fase R1-2", the fronts with
+   * modifier and effective risk, the nation's objectives and role.
+   */
+  private String planText(final PianoAttivo plan, final boolean lowLuck) {
+    final StringBuilder sb = new StringBuilder();
+    sb.append("  Stato maggiore ")
+        .append(Italian.alliance(plan.getAlleanza()))
+        .append(": piano ")
+        .append(plan.getPiano().label());
+    plan.getRoundInizio()
+        .ifPresentOrElse(
+            r -> sb.append(" (fissato al round ").append(r).append(')'),
+            () -> sb.append(" (non ancora fissato)"));
+    final Strategia.Fase fase = plan.getFase();
+    sb.append(", fase ").append(fase == null ? "nessuna (tutti i fronti 0)" : fase.label());
+    sb.append(String.format("%n  Fronti -> rischio effettivo (soglie desiderata/minima):"));
+    plan.livelliPerFronte()
+        .forEach(
+            (front, level) ->
+                sb.append(' ')
+                    .append(front)
+                    .append(' ')
+                    .append(plan.modificatore(front) == 0 ? "0" : signed(plan.modificatore(front)))
+                    .append(" = ")
+                    .append(level.getLabel())
+                    .append(' ')
+                    .append(Italian.number(level.desiredWinPercentage(lowLuck)))
+                    .append('/')
+                    .append(Italian.number(level.minimumWinPercentage(lowLuck)))
+                    .append(';'));
+    sb.setLength(sb.length() - 1);
+    sb.append(String.format("%n  Obiettivi del piano per %s: ", Italian.nation(playerName)));
+    sb.append(
+        plan.getObiettivi().isEmpty()
+            ? "nessuno"
+            : String.join(
+                ", ",
+                plan.getObiettivi().stream()
+                    .map(o -> o.label() + " (peso " + Italian.number(o.peso()) + ")")
+                    .toList()));
+    final String role = plan.getPiano().ruoli().get(playerName);
+    if (role != null) {
+      sb.append(String.format("%n  Ruolo: %s", role));
+    }
+    return sb.append(String.format("%n")).toString();
+  }
+
+  private static JsonObject planJson(final PianoAttivo plan, final boolean lowLuck) {
+    final JsonObject json = new JsonObject();
+    json.addProperty("alleanza", plan.getAlleanza());
+    json.addProperty("id", plan.getPiano().id());
+    json.addProperty("nome", plan.getPiano().nome());
+    plan.getRoundInizio().ifPresent(r -> json.addProperty("round_inizio", r));
+    json.addProperty("fase", plan.getFase() == null ? null : plan.getFase().label());
+    final JsonObject fronts = new JsonObject();
+    plan.livelliPerFronte()
+        .forEach(
+            (front, level) -> {
+              final JsonObject f = new JsonObject();
+              f.addProperty("modificatore", plan.modificatore(front));
+              f.addProperty("rischio_livello", level.getLevel());
+              f.addProperty("rischio", level.getLabel());
+              f.addProperty("soglia_desiderata", level.desiredWinPercentage(lowLuck));
+              f.addProperty("soglia_minima", level.minimumWinPercentage(lowLuck));
+              fronts.add(front, f);
+            });
+    json.add("fronti", fronts);
+    final JsonArray objectives = new JsonArray();
+    plan.getObiettivi()
+        .forEach(
+            o -> {
+              final JsonObject j = new JsonObject();
+              j.addProperty("obiettivo", o.label());
+              j.addProperty("peso", o.peso());
+              objectives.add(j);
+            });
+    json.add("obiettivi", objectives);
+    return json;
   }
 
   private void closeTurn(final GameState data) {
@@ -433,7 +528,10 @@ public final class DiaryRecorder implements ProDecisionRecorder {
 
   @Override
   public void attackPriority(
-      final ProData proData, final ProTerritory patd, final double victoryCityPart) {
+      final ProData proData,
+      final ProTerritory patd,
+      final double victoryCityPart,
+      final double planPart) {
     guard(
         () -> {
           if (ignorePlan) {
@@ -443,6 +541,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           update(rec, patd);
           rec.priority = patd.getValue();
           rec.priorityVictoryCity = victoryCityPart;
+          rec.priorityPlan = planPart;
         });
   }
 
@@ -486,6 +585,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
                     check.riskValue(),
                     check.desired(),
                     check.objectiveTarget(),
+                    check.planRule(),
                     check.objectiveMinWin(),
                     level.getObjectiveCostLimit());
           }
@@ -646,8 +746,17 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     rec.owner = t.getOwner().getName();
     rec.water = t.isWater();
     rec.neutral = isNeutral(proData.getData(), t);
-    rec.desired = proData.getAttackWinPercentage();
-    rec.minimum = proData.getAttackMinWinPercentage();
+    rec.desired = proData.getAttackWinPercentage(t);
+    rec.minimum = proData.getAttackMinWinPercentage(t);
+    if (proData.getTuning() instanceof ProPlusTuning) {
+      rec.risk = ProPlusTuning.riskLevel(proData, t).getLabel();
+      final Optional<PianoAttivo> plan = ProPlusTuning.planOf(proData);
+      plan.ifPresent(
+          p -> {
+            rec.front = p.fronte(t);
+            rec.planObjective = !isNeutral(proData.getData(), t) && p.isObiettivo(t);
+          });
+    }
     final ProBattleResult max = patd.getMaxBattleResult();
     if (max != null) {
       rec.maxWin = max.getWinPercentage();
@@ -937,7 +1046,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
       sb.append("; ").append(keptText(r.worth));
     }
     if ("kept_transports_exposed".equals(r.clearedReason)) {
-      sb.append("; trasporti esposti ma tenuto da Pro+ (regola VC/obiettivo): ")
+      sb.append("; trasporti esposti ma tenuto da Pro+ (regola obiettivo): ")
           .append(transportsText(r));
     }
     sb.append("; attaccanti: ").append(Italian.units(r.attackers));
@@ -1054,9 +1163,9 @@ public final class DiaryRecorder implements ProDecisionRecorder {
         .append(" < -")
         .append(Italian.number(p.tolerance()))
         .append(" (tolleranza)");
-    sb.append("; regola VC/obiettivo: ");
+    sb.append(p.planRule() ? "; regola obiettivo del piano: " : "; regola VC/obiettivo: ");
     if (!p.objectiveTarget()) {
-      sb.append("non e' VC ne' obiettivo nazionale");
+      sb.append(p.planRule() ? "non e' obiettivo del piano" : "non e' VC ne' obiettivo nazionale");
     } else if (w.win() < p.objectiveMinWin()) {
       sb.append("win% ")
           .append(Italian.percent(w.win()))
@@ -1091,7 +1200,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           .append(" >= -")
           .append(Italian.number(p.tolerance()));
     } else if (ProPlusTuning.KEPT_BY_OBJECTIVE.equals(w.keptBy()) && p != null) {
-      sb.append("regola VC/obiettivo: win% ")
+      sb.append(p.planRule() ? "regola obiettivo del piano: win% " : "regola VC/obiettivo: win% ")
           .append(Italian.percent(w.win()))
           .append(" >= ")
           .append(Italian.percent(p.objectiveMinWin()))
@@ -1121,7 +1230,11 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     final StringBuilder sb = new StringBuilder();
     if (!Double.isNaN(r.priority)) {
       sb.append("priorita' ").append(Italian.number(r.priority));
-      sb.append(" (quota VC ").append(Italian.number(r.priorityVictoryCity)).append("), ");
+      sb.append(" (quota VC ").append(Italian.number(r.priorityVictoryCity));
+      if (r.priorityPlan != 0) {
+        sb.append(", quota piano ").append(Italian.number(r.priorityPlan));
+      }
+      sb.append("), ");
     }
     sb.append("valore ").append(Italian.number(r.value));
     sb.append(" (di cui VC ").append(Italian.number(r.valueVictoryCity));
@@ -1134,6 +1247,15 @@ public final class DiaryRecorder implements ProDecisionRecorder {
 
   private static String tags(final AttackRecord r) {
     final List<String> tags = new ArrayList<>();
+    if (r.front != null) {
+      tags.add("fronte " + r.front);
+    }
+    if (r.risk != null && r.front != null) {
+      tags.add("rischio " + r.risk);
+    }
+    if (r.planObjective) {
+      tags.add("OBIETTIVO DEL PIANO");
+    }
     if (r.amphib) {
       tags.add("anfibio");
     }
@@ -1359,6 +1481,14 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     json.addProperty("soglia_minima", r.minimum);
     json.addProperty("priorita", round1(r.priority));
     json.addProperty("priorita_vc", round1(r.priorityVictoryCity));
+    json.addProperty("priorita_piano", round1(r.priorityPlan));
+    if (r.front != null) {
+      json.addProperty("fronte", r.front);
+    }
+    if (r.risk != null) {
+      json.addProperty("rischio_effettivo", r.risk);
+    }
+    json.addProperty("obiettivo_piano", r.planObjective);
     final JsonObject value = new JsonObject();
     value.addProperty("totale", round1(r.value));
     value.addProperty("produzione", round1(r.valueProduction));
@@ -1411,6 +1541,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
       pp.addProperty("tolleranza", p.tolerance());
       pp.addProperty("valore_rischio", round1(p.riskValue()));
       pp.addProperty("obiettivo", p.objectiveTarget());
+      pp.addProperty("regola_obiettivo", p.planRule() ? "piano" : "vc_obiettivo_nazionale");
       pp.addProperty("win_min_obiettivo", p.objectiveMinWin());
       pp.addProperty("limite_tuv_obiettivo", p.costLimit());
       json.add("pro_plus", pp);

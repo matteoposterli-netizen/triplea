@@ -1,0 +1,348 @@
+{
+  "_nota": "Strategia Pro+ per World War II Europe 1940 2nd Edition. Valori modificabili. Modificatore di un fronte: -1, 0, +1 (rischio effettivo = livello del cursore dell'alleanza + modificatore, tra 1 e 5). Fronte non indicato in una fase = 0. 'a_round' assente = fino a fine partita. Obiettivo: 'territorio' (nome reale) oppure 'flotta' (zone di mare con navi di quella nazione); 'nazioni' assente = per tutta l'alleanza. 'peso' = punti aggiunti alla priorita' d'attacco (prima dei moltiplicatori capitale x5 / vicino alla mia capitale x3). Campi 'tappe', 'firma', 'punti_critici', 'ruoli' non usati in gioco nello step 3a.",
+  "gioco": "World War II Europe 1940 2nd Edition",
+  "fronti": [
+    {
+      "nome": "Ovest",
+      "territori": [
+        "France", "Normandy Bordeaux", "Southern France", "Holland Belgium", "Western Germany",
+        "Germany", "Greater Southern Germany", "Denmark", "Norway", "Sweden", "Switzerland",
+        "United Kingdom", "Scotland", "Eire", "Iceland", "Greenland", "Spain", "Portugal"
+      ]
+    },
+    {
+      "nome": "Est",
+      "territori": [
+        "Poland", "Eastern Poland", "Baltic States", "Finland", "Karelia", "Vyborg", "Belarus",
+        "Pripet Marshes", "Western Ukraine", "Ukraine", "Bessarabia", "Romania", "Slovakia Hungary",
+        "Smolensk", "Bryansk", "Novgorod", "Russia", "Tambov", "Rostov", "Volgograd", "Caucasus",
+        "Archangel", "Vologda", "Nenetsia", "Samara", "Urals", "Novosibirsk", "Timguska",
+        "Kazakhstan", "Turkmenistan"
+      ]
+    },
+    {
+      "nome": "Mediterraneo-Africa",
+      "territori": [
+        "Gibraltar", "Morocco", "Algeria", "Tunisia", "Libya", "Tobruk", "Egypt", "Alexandria",
+        "Anglo Egyptian Sudan", "Trans-Jordan", "Syria", "Iraq", "Persia", "Northwest Persia",
+        "Eastern Persia", "Saudi Arabia", "Turkey", "Cyprus", "Crete", "Malta", "Sicily", "Sardinia",
+        "Southern Italy", "Northern Italy", "Albania", "Greece", "Yugoslavia", "Bulgaria",
+        "Ethiopia", "Italian Somaliland", "British Somaliland", "Kenya", "Rio de Oro",
+        "French West Africa", "Portuguese Guinea", "Sierra Leone", "Liberia", "Gold Coast", "Nigeria",
+        "French Equatorial Africa", "French Central Africa", "Belgian Congo", "Tanganyika Territory",
+        "Angola", "Rhodesia", "Mozambique", "South West Africa", "Union of South Africa",
+        "French Madagascar"
+      ]
+    },
+    {
+      "nome": "Mari",
+      "zone_di_mare": true
+    }
+  ],
+  "alleanze": {
+    "Axis": {
+      "automatico": "A",
+      "piani": [
+        {
+          "id": "A",
+          "nome": "Barbarossa",
+          "descrizione": "Prima la Francia e la flotta britannica, poi tutto a Est contro l'URSS; l'Italia punta all'Egitto.",
+          "fasi": [
+            {
+              "da_round": 1,
+              "a_round": 2,
+              "fronti": { "Ovest": 1, "Est": -1, "Mediterraneo-Africa": 0, "Mari": 0 },
+              "obiettivi": [
+                { "territorio": "France", "peso": 15 },
+                { "flotta": "British", "peso": 10 }
+              ]
+            },
+            {
+              "da_round": 3,
+              "fronti": { "Est": 1, "Ovest": -1, "Mediterraneo-Africa": 0, "Mari": 0 },
+              "obiettivi": [
+                { "territorio": "Novgorod", "peso": 15 },
+                { "territorio": "Russia", "peso": 15 },
+                { "territorio": "Volgograd", "peso": 15 },
+                { "territorio": "Ukraine", "peso": 10 },
+                { "territorio": "Egypt", "peso": 15, "nazioni": ["Italians"] }
+              ]
+            }
+          ],
+          "ruoli": {
+            "Germans": "prende la Francia, colpisce la flotta britannica, poi guida l'invasione dell'URSS",
+            "Italians": "tiene il Mediterraneo e chiude l'Egitto"
+          },
+          "tappe": [
+            { "territorio": "France", "entro_round": 1 },
+            { "territorio": "Novgorod", "entro_round": 5 },
+            { "territorio": "Volgograd", "entro_round": 6 },
+            { "territorio": "Russia", "entro_round": 7 },
+            { "territorio": "Egypt", "entro_round": 4 }
+          ],
+          "firma": [
+            { "indizio": "ammassamento di unita' tedesche sul confine russo (Poland, Slovakia Hungary, Romania)", "tipo": "ammassamento", "territori": ["Poland", "Slovakia Hungary", "Romania"], "nazione": "Germans", "peso": 3 },
+            { "indizio": "acquisti tedeschi di carri e fanteria meccanizzata, pochi trasporti", "tipo": "acquisti", "unita": ["armour", "mech_infantry"], "nazione": "Germans", "peso": 2 },
+            { "indizio": "dichiarazione di guerra all'URSS entro il round 3", "tipo": "politica", "nazione": "Germans", "peso": 3 }
+          ],
+          "punti_critici": [
+            { "descrizione": "la difesa russa di Moscow regge e contrattacca", "tipo": "territorio", "territori": ["Russia"] },
+            { "descrizione": "sbarco alleato in Francia mentre il grosso e' a Est", "tipo": "territorio", "territori": ["Normandy Bordeaux", "France", "Holland Belgium"] },
+            { "descrizione": "perdita dell'Egitto e del Nord Africa italiano", "tipo": "territorio", "territori": ["Egypt", "Libya", "Tobruk"] }
+          ]
+        },
+        {
+          "id": "B",
+          "nome": "Sea Lion",
+          "descrizione": "Francia e flotte britanniche al round 1, poi invasione del Regno Unito nei round 2-3.",
+          "fasi": [
+            {
+              "da_round": 1,
+              "a_round": 1,
+              "fronti": { "Ovest": 1, "Mari": 1, "Est": -1, "Mediterraneo-Africa": -1 },
+              "obiettivi": [
+                { "territorio": "France", "peso": 15 },
+                { "flotta": "British", "peso": 10 }
+              ]
+            },
+            {
+              "da_round": 2,
+              "a_round": 3,
+              "fronti": { "Ovest": 1, "Mari": 0, "Est": -1, "Mediterraneo-Africa": -1 },
+              "obiettivi": [
+                { "territorio": "United Kingdom", "peso": 20 }
+              ]
+            }
+          ],
+          "ruoli": {
+            "Germans": "distrugge la flotta britannica e sbarca nel Regno Unito",
+            "Italians": "tiene impegnata la flotta britannica nel Mediterraneo"
+          },
+          "tappe": [
+            { "territorio": "France", "entro_round": 1 },
+            { "territorio": "United Kingdom", "entro_round": 3 }
+          ],
+          "firma": [
+            { "indizio": "trasporti tedeschi nel Mare del Nord / Baltico (112, 113, 114 Sea Zone)", "tipo": "unita_in_zona", "zone": ["112 Sea Zone", "113 Sea Zone", "114 Sea Zone"], "unita": ["transport"], "nazione": "Germans", "peso": 4 },
+            { "indizio": "acquisti tedeschi di trasporti e navi nel round 1-2", "tipo": "acquisti", "unita": ["transport", "destroyer", "cruiser"], "nazione": "Germans", "peso": 3 },
+            { "indizio": "aerei tedeschi concentrati in Western Germany / Holland Belgium / Normandy Bordeaux", "tipo": "ammassamento", "territori": ["Western Germany", "Holland Belgium", "Normandy Bordeaux"], "nazione": "Germans", "peso": 2 }
+          ],
+          "punti_critici": [
+            { "descrizione": "trasporti tedeschi nel Mare del Nord: se affondati lo sbarco salta", "tipo": "unita", "zone": ["112 Sea Zone", "110 Sea Zone"], "unita": ["transport"] },
+            { "descrizione": "difesa del Regno Unito rinforzata (fanteria, caccia)", "tipo": "territorio", "territori": ["United Kingdom"] },
+            { "descrizione": "fronte Est sguarnito: l'URSS puo' attaccare per prima", "tipo": "territorio", "territori": ["Poland", "Eastern Poland"] }
+          ]
+        },
+        {
+          "id": "C",
+          "nome": "Finta Sea Lion",
+          "descrizione": "Come Sea Lion nei round 1-2 (minaccia senza sbarco), poi Barbarossa dal round 3.",
+          "fasi": [
+            {
+              "da_round": 1,
+              "a_round": 1,
+              "fronti": { "Ovest": 1, "Mari": 1, "Est": -1, "Mediterraneo-Africa": -1 },
+              "obiettivi": [
+                { "territorio": "France", "peso": 15 },
+                { "flotta": "British", "peso": 10 }
+              ]
+            },
+            {
+              "da_round": 2,
+              "a_round": 2,
+              "fronti": { "Ovest": 1, "Mari": 0, "Est": -1, "Mediterraneo-Africa": -1 },
+              "obiettivi": []
+            },
+            {
+              "da_round": 3,
+              "fronti": { "Est": 1, "Ovest": -1, "Mediterraneo-Africa": 0, "Mari": 0 },
+              "obiettivi": [
+                { "territorio": "Novgorod", "peso": 15 },
+                { "territorio": "Russia", "peso": 15 },
+                { "territorio": "Volgograd", "peso": 15 },
+                { "territorio": "Ukraine", "peso": 10 },
+                { "territorio": "Egypt", "peso": 15, "nazioni": ["Italians"] }
+              ]
+            }
+          ],
+          "ruoli": {
+            "Germans": "minaccia lo sbarco per tenere ferme le difese britanniche, poi attacca l'URSS",
+            "Italians": "tiene il Mediterraneo e chiude l'Egitto"
+          },
+          "tappe": [
+            { "territorio": "France", "entro_round": 1 },
+            { "territorio": "Novgorod", "entro_round": 5 },
+            { "territorio": "Russia", "entro_round": 7 }
+          ],
+          "firma": [
+            { "indizio": "trasporti tedeschi nel Mare del Nord senza sbarco entro il round 3", "tipo": "unita_in_zona", "zone": ["112 Sea Zone", "113 Sea Zone"], "unita": ["transport"], "nazione": "Germans", "peso": 3 },
+            { "indizio": "ammassamento a Est dal round 2", "tipo": "ammassamento", "territori": ["Poland", "Slovakia Hungary", "Romania"], "nazione": "Germans", "peso": 3 }
+          ],
+          "punti_critici": [
+            { "descrizione": "gli Alleati non abboccano e sbarcano in Francia", "tipo": "territorio", "territori": ["Normandy Bordeaux", "France"] },
+            { "descrizione": "la difesa russa di Moscow regge", "tipo": "territorio", "territori": ["Russia"] }
+          ]
+        },
+        {
+          "id": "D",
+          "nome": "Sud/Mediterraneo",
+          "descrizione": "Francia, poi chiusura del Mediterraneo (Egitto, Gibilterra, Grecia) e da li' Medio Oriente e Caucaso.",
+          "fasi": [
+            {
+              "da_round": 1,
+              "a_round": 2,
+              "fronti": { "Ovest": 1, "Mediterraneo-Africa": 1, "Est": -1, "Mari": 0 },
+              "obiettivi": [
+                { "territorio": "France", "peso": 15 },
+                { "territorio": "Egypt", "peso": 15 },
+                { "territorio": "Gibraltar", "peso": 10 },
+                { "territorio": "Greece", "peso": 10 }
+              ]
+            },
+            {
+              "da_round": 3,
+              "fronti": { "Mediterraneo-Africa": 1, "Est": 0, "Ovest": 0, "Mari": 0 },
+              "obiettivi": [
+                { "territorio": "Egypt", "peso": 15 },
+                { "territorio": "Trans-Jordan", "peso": 10 },
+                { "territorio": "Iraq", "peso": 10 },
+                { "territorio": "Caucasus", "peso": 15 },
+                { "territorio": "Volgograd", "peso": 10 }
+              ]
+            }
+          ],
+          "ruoli": {
+            "Germans": "indebolisce: prende la Francia e manda aerei e carri in Nord Africa",
+            "Italians": "chiude: Egitto, Grecia, poi Medio Oriente"
+          },
+          "tappe": [
+            { "territorio": "France", "entro_round": 1 },
+            { "territorio": "Egypt", "entro_round": 3 },
+            { "territorio": "Gibraltar", "entro_round": 3 },
+            { "territorio": "Caucasus", "entro_round": 7 }
+          ],
+          "firma": [
+            { "indizio": "trasporti dell'Asse tra Italia e Libia (95, 96, 97 Sea Zone)", "tipo": "unita_in_zona", "zone": ["95 Sea Zone", "96 Sea Zone", "97 Sea Zone"], "unita": ["transport"], "nazione": "Italians", "peso": 3 },
+            { "indizio": "unita' tedesche in Libya / Tobruk", "tipo": "ammassamento", "territori": ["Libya", "Tobruk"], "nazione": "Germans", "peso": 4 },
+            { "indizio": "pressione su Gibraltar e Malta", "tipo": "ammassamento", "territori": ["Southern France", "Sicily"], "nazione": "Germans", "peso": 2 }
+          ],
+          "punti_critici": [
+            { "descrizione": "flotta italiana: senza di lei i rinforzi in Africa si fermano", "tipo": "flotta", "nazione": "Italians", "zone": ["95 Sea Zone", "96 Sea Zone", "97 Sea Zone"] },
+            { "descrizione": "tenuta britannica dell'Egitto", "tipo": "territorio", "territori": ["Egypt", "Alexandria"] }
+          ]
+        },
+        {
+          "id": "N",
+          "nome": "Neutro",
+          "descrizione": "Nessuna preferenza: tutti i fronti 0, nessun obiettivo (per confronti con Hard).",
+          "fasi": [
+            { "da_round": 1, "fronti": {}, "obiettivi": [] }
+          ],
+          "ruoli": {},
+          "tappe": [],
+          "firma": [],
+          "punti_critici": []
+        }
+      ]
+    },
+    "Allies": {
+      "automatico": "1",
+      "piani": [
+        {
+          "id": "1",
+          "nome": "Germania prima",
+          "descrizione": "Tutto sull'Ovest: sbarchi in Francia/Norvegia/Benelux dal round 4; Est e Mediterraneo in difesa.",
+          "fasi": [
+            {
+              "da_round": 1,
+              "a_round": 3,
+              "fronti": { "Ovest": 1, "Mediterraneo-Africa": -1, "Est": -1, "Mari": 0 },
+              "obiettivi": []
+            },
+            {
+              "da_round": 4,
+              "fronti": { "Ovest": 1, "Mediterraneo-Africa": -1, "Est": 0, "Mari": 0 },
+              "obiettivi": [
+                { "territorio": "Normandy Bordeaux", "peso": 15 },
+                { "territorio": "Norway", "peso": 10 },
+                { "territorio": "Holland Belgium", "peso": 15 }
+              ]
+            }
+          ],
+          "ruoli": {
+            "Americans": "costruisce la flotta di sbarco e sbarca in Francia dal round 4",
+            "British": "tiene il Regno Unito e la Manica, sbarca con gli americani",
+            "Russians": "regge a Est senza attacchi rischiosi",
+            "French": "difende quel che resta"
+          },
+          "tappe": [
+            { "territorio": "Normandy Bordeaux", "entro_round": 5 },
+            { "territorio": "Holland Belgium", "entro_round": 6 },
+            { "territorio": "Norway", "entro_round": 6 }
+          ],
+          "firma": [
+            { "indizio": "trasporti alleati in 106, 109, 110 Sea Zone", "tipo": "unita_in_zona", "zone": ["106 Sea Zone", "109 Sea Zone", "110 Sea Zone"], "unita": ["transport"], "nazione": "Americans", "peso": 4 },
+            { "indizio": "acquisti americani di trasporti e fanteria", "tipo": "acquisti", "unita": ["transport", "infantry"], "nazione": "Americans", "peso": 3 }
+          ],
+          "punti_critici": [
+            { "descrizione": "flotta di sbarco nella Manica esposta a aerei e U-boot tedeschi", "tipo": "unita", "zone": ["110 Sea Zone", "109 Sea Zone"], "unita": ["transport"] },
+            { "descrizione": "crollo russo se l'Asse spinge tutto a Est", "tipo": "territorio", "territori": ["Russia", "Volgograd"] }
+          ]
+        },
+        {
+          "id": "2",
+          "nome": "Italia prima",
+          "descrizione": "Mediterraneo: Nord Africa italiano, poi Italia; Ovest ed Est in difesa.",
+          "fasi": [
+            {
+              "da_round": 1,
+              "fronti": { "Mediterraneo-Africa": 1, "Ovest": -1, "Est": -1, "Mari": 0 },
+              "obiettivi": [
+                { "territorio": "Tobruk", "peso": 10 },
+                { "territorio": "Libya", "peso": 10 },
+                { "territorio": "Southern Italy", "peso": 15 },
+                { "territorio": "Northern Italy", "peso": 15 }
+              ]
+            }
+          ],
+          "ruoli": {
+            "Americans": "porta truppe nel Mediterraneo",
+            "British": "chiude il Nord Africa italiano dall'Egitto",
+            "Russians": "regge a Est",
+            "French": "difende quel che resta"
+          },
+          "tappe": [
+            { "territorio": "Tobruk", "entro_round": 3 },
+            { "territorio": "Libya", "entro_round": 4 },
+            { "territorio": "Southern Italy", "entro_round": 6 }
+          ],
+          "firma": [
+            { "indizio": "trasporti alleati in 91, 92, 93 Sea Zone (Gibilterra)", "tipo": "unita_in_zona", "zone": ["91 Sea Zone", "92 Sea Zone", "93 Sea Zone"], "unita": ["transport"], "nazione": "Americans", "peso": 3 },
+            { "indizio": "rinforzi britannici in Egypt", "tipo": "ammassamento", "territori": ["Egypt", "Alexandria"], "nazione": "British", "peso": 3 }
+          ],
+          "punti_critici": [
+            { "descrizione": "Gibraltar: se cade il Mediterraneo si chiude", "tipo": "territorio", "territori": ["Gibraltar"] },
+            { "descrizione": "Egypt come base di partenza", "tipo": "territorio", "territori": ["Egypt"] }
+          ]
+        },
+        {
+          "id": "3",
+          "nome": "Pressione economica",
+          "descrizione": "Nessun fronte privilegiato: tutti 0, nessun obiettivo (guerra di logoramento).",
+          "fasi": [
+            { "da_round": 1, "fronti": {}, "obiettivi": [] }
+          ],
+          "ruoli": {
+            "Americans": "produce e rinforza dove serve",
+            "British": "tiene le rotte e l'economia",
+            "Russians": "regge a Est",
+            "French": "difende quel che resta"
+          },
+          "tappe": [],
+          "firma": [],
+          "punti_critici": []
+        }
+      ]
+    }
+  }
+}

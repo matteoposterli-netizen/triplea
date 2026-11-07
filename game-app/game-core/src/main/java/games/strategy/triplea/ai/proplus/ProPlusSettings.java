@@ -7,6 +7,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 import lombok.experimental.UtilityClass;
 
@@ -30,8 +31,8 @@ public final class ProPlusSettings {
    */
   public static List<String> configurableAlliances(final GameState data) {
     final var tracker = data.getAllianceTracker();
-    final TreeSet<String> withRequiredPlayers = new TreeSet<>();
-    final TreeSet<String> all = new TreeSet<>();
+    final Set<String> withRequiredPlayers = new TreeSet<>();
+    final Set<String> all = new TreeSet<>();
     for (final String alliance : tracker.getAlliances()) {
       final var players = tracker.getPlayersInAlliance(alliance);
       if (players.stream().allMatch(GamePlayer::isHidden)) {

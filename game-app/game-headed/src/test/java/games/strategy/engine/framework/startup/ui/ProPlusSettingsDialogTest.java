@@ -6,6 +6,8 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.RiskLevel;
+import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
+import games.strategy.triplea.ai.proplus.strategia.Strategie;
 import org.junit.jupiter.api.Test;
 
 class ProPlusSettingsDialogTest {
@@ -48,5 +50,40 @@ class ProPlusSettingsDialogTest {
         .isEqualTo(RiskLevel.CAUTO);
     assertThat(ProPlusSettings.getRiskLevel(data.getProperties(), "Allies"))
         .isEqualTo(RiskLevel.AUDACE);
+  }
+
+  @Test
+  void withoutAStrategyFileThereIsNoPlanChoice() {
+    final var form = new ProPlusSettingsDialog.Form(data);
+
+    assertThat(form.getPlans()).isEmpty();
+  }
+
+  @Test
+  void planChoicePerAllianceStartsAtAutomaticoAndIsWrittenBack() {
+    data.setGameName("World War II Europe 1940 2nd Edition");
+    final var form = new ProPlusSettingsDialog.Form(data);
+
+    assertThat(form.getPlans()).containsOnlyKeys("Allies", "Axis");
+    final var axis = form.getPlans().get("Axis");
+    assertThat(axis.getSelectedItem()).hasToString("Automatico (= A Barbarossa)");
+    assertThat(axis.getItemCount()).isEqualTo(6);
+    axis.setSelectedIndex(2); // B Sea Lion
+    form.apply(data.getProperties());
+
+    assertThat(StatoMaggiore.getChoice(data.getProperties(), "Axis")).isEqualTo("B");
+    assertThat(StatoMaggiore.getChoice(data.getProperties(), "Allies"))
+        .isEqualTo(StatoMaggiore.AUTOMATICO);
+  }
+
+  @Test
+  void aFixedPlanCannotBeChangedAnyMore() {
+    data.setGameName("World War II Europe 1940 2nd Edition");
+    StatoMaggiore.setChoice(data.getProperties(), "Axis", "D");
+    StatoMaggiore.fix(data, "Axis", Strategie.forGame(data).orElseThrow());
+
+    final var form = new ProPlusSettingsDialog.Form(data);
+
+    assertThat(form.getPlans()).containsOnlyKeys("Allies");
   }
 }

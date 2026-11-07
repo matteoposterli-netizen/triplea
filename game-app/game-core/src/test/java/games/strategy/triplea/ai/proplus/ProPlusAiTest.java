@@ -38,9 +38,27 @@ class ProPlusAiTest {
     assertThat(ProPlusAi.turnStartLine(data, data.getPlayerList().getPlayerId("Germans")))
         .isEqualTo(
             "[Pro+] Germans round 1, alliance Axis, risk 4 Audace,"
-                + " attack win% desired 72 / minimum 52 (normal dice)");
+                + " attack win% desired 72 / minimum 52 (normal dice), no plan");
     assertThat(ProPlusAi.turnStartLine(data, data.getPlayerList().getPlayerId("British")))
         .contains("alliance Allies, risk 3 Equilibrato, attack win% desired 80 / minimum 60");
+  }
+
+  @Test
+  void firstTurnFixesThePlanAndTheLineShowsIt() {
+    final GameData data = TestMapGameData.GLOBAL1940.getGameData();
+    data.setGameName("World War II Europe 1940 2nd Edition");
+    final var germans = data.getPlayerList().getPlayerId("Germans");
+
+    ProPlusAi.fixPlan(data, germans);
+
+    assertThat(ProPlusAi.turnStartLine(data, germans))
+        .contains(
+            ", plan A Barbarossa, fase R1-2 (fixed in round 1), fronts Ovest 4 Audace,"
+                + " Est 2 Cauto, Mediterraneo-Africa 3 Equilibrato, Mari 3 Equilibrato,"
+                + " Altro 3 Equilibrato, objectives France 15.0, flotta British 10.0");
+    assertThat(data.getProperties().get("Pro+ stato maggiore: Axis"))
+        .isEqualTo("{\"piano\":\"A\",\"round_inizio\":1,\"storico\":[]}");
+    assertThat(data.getProperties().get("Pro+ stato maggiore: Allies")).isNull();
   }
 
   @Test

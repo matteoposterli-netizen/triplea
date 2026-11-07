@@ -135,7 +135,9 @@ final class GameDiary {
             + CRLF
             + "Legenda: win% = probabilita' di vittoria stimata dall'AI (simulazione); soglie"
             + " desiderata/minima = rischio; priorita' = punteggio con cui l'AI ordina i bersagli"
-            + " (quota VC = parte dovuta alle victory city, 0 per Hard);"
+            + " (quota VC = parte dovuta alle victory city, 0 per Hard;"
+            + " quota piano = parte dovuta agli obiettivi del piano dello stato maggiore);"
+            + " fronte/rischio = fronte del bersaglio e rischio effettivo (cursore + piano);"
             + " valore = valore strategico del territorio (produzione + victory city)."
             + CRLF
             + "Dettagli completi (una riga per evento) in "

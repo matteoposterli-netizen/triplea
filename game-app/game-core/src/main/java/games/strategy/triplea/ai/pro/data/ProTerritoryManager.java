@@ -178,7 +178,7 @@ public class ProTerritoryManager {
           calc.estimateAttackBattleResults(proData, t, patd.getMaxUnits(), defenders, Set.of()));
 
       // Add in amphib units if I can't win without them
-      if (patd.getMaxBattleResult().getWinPercentage() < proData.getAttackWinPercentage()
+      if (patd.getMaxBattleResult().getWinPercentage() < proData.getAttackWinPercentage(t)
           && !patd.getMaxAmphibUnits().isEmpty()) {
         final Set<Unit> combinedUnits = new HashSet<>(patd.getMaxUnits());
         combinedUnits.addAll(patd.getMaxAmphibUnits());
@@ -193,7 +193,7 @@ public class ProTerritoryManager {
           !ProUtils.isNeutralLand(t)
               && (TerritoryAttachment.get(t).map(TerritoryAttachment::isCapital).orElse(false)
                   || ProMatches.territoryHasInfraFactoryAndIsLand().test(t));
-      if (patd.getMaxBattleResult().getWinPercentage() < proData.getAttackMinWinPercentage()
+      if (patd.getMaxBattleResult().getWinPercentage() < proData.getAttackMinWinPercentage(t)
           && isEnemyCapitalOrFactory
           && alliedAttackOptions.getMax(t) != null) {
 
@@ -234,7 +234,7 @@ public class ProTerritoryManager {
                     new ArrayList<>(alliedUnits),
                     new ArrayList<>(enemyDefendersBeforeStrafe),
                     alliedAttack.getMaxBombardUnits());
-            if (result.getWinPercentage() < proData.getAttackWinPercentage()) {
+            if (result.getWinPercentage() < proData.getAttackWinPercentage(t)) {
               patd.setStrafing(true);
 
               // Try to strafe to allow allies to conquer territory
@@ -272,9 +272,9 @@ public class ProTerritoryManager {
         }
       }
 
-      if (patd.getMaxBattleResult().getWinPercentage() < proData.getAttackMinWinPercentage()
+      if (patd.getMaxBattleResult().getWinPercentage() < proData.getAttackMinWinPercentage(t)
           || (patd.isStrafing()
-              && (patd.getMaxBattleResult().getWinPercentage() < proData.getAttackWinPercentage()
+              && (patd.getMaxBattleResult().getWinPercentage() < proData.getAttackWinPercentage(t)
                   || !patd.getMaxBattleResult().isHasLandUnitRemaining()))) {
         territoriesToRemove.add(t);
       }
