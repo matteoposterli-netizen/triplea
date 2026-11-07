@@ -29,8 +29,9 @@ gioco su Windows (engine ufficiale 2026-11.16.15870, Java 25.0.3) usando lo zip 
 - Compatibilità salvataggi: non rinominare/cancellare campi privati delle classi
   `GameDataComponent` né cambiarne i package (serializzazione Java); non cambiare le firme dei
   metodi `@RemoteActionCode`. Vale anche per le classi Pro+ che finissero in un salvataggio.
-- File specifici Pro+ fuori dal codice di gioco: `proplus/` e
-  `.github/workflows/proplus-release.yml`.
+- File specifici Pro+ fuori dal codice di gioco: `proplus/`,
+  `.github/workflows/proplus-release.yml`, `.github/workflows/proplus-autoplay.yml`, modulo
+  `game-app/proplus-autoplay` (+ 2 righe in `settings.gradle.kts`).
 - Upstream: `https://github.com/triplea-game/triplea` (branch `main`). Il fork `main` va tenuto
   identico all'upstream; `proplus` si aggiorna con merge da `main`.
 
@@ -163,11 +164,61 @@ Tutte le nazioni Pro+ Equilibrato. Comando: `./gradlew :smoke-testing:test --tes
 '*ProPlusBenchTest' --rerun` (senza `--rerun` Gradle salta il test se il codice non è cambiato).
 Nella CI e in `:smoke-testing:test` normale è saltato.
 
-Non esiste un runner CLI. Il modo supportato è `AiGameTest` in `:smoke-testing`
-(`GameTestUtils.setUpGameWithAis(xml)` mette `PlayerTypes.PRO_AI` su tutti i giocatori e chiama
-`game.runNextStep()` fino a vittoria/100 round). Le XML di test stanno in
-`game-app/smoke-testing/src/test/resources/map-xmls/`. Per WW2 Europe 1940 servirà aggiungere un
-test analogo che carichi `ww2eur40_2nd_edition.xml` (va reperita la mappa: non è nel repo).
+**Runner autoplay (dallo step AUTOPLAY, al posto del banco)**: modulo `:proplus-autoplay`
+(`game-app/proplus-autoplay`, main `org.triplea.proplus.autoplay.AutoplayRunner`), stesso set-up del
+banco (XML letto direttamente, niente risorse della mappa, niente autosave, pause AI 0, dadi di gioco
+con seme; le simulazioni dell'AI restano casuali). Mappa: `git clone --depth 1
+https://github.com/triplea-maps/world_war_ii_europe` → `map/games/ww2eur40_2nd_edition.xml`.
+
+```bash
+# da Gradle (percorsi relativi alla radice del repo)
+./gradlew :proplus-autoplay:run --args="--mappa /percorso/ww2eur40_2nd_edition.xml --round 2 \
+  --piano Axis=A,Allies=1 --seme 1 --output build/autoplay/prova"
+# da riga di comando (dopo ./gradlew :proplus-autoplay:installDist)
+game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --mappa ... --round 8 \
+  --piano Axis=D,Allies=2 --rischio Axis=Audace,Allies=3 --tipo Axis=proplus,Allies=hard \
+  --seme 4 --output out/partita --minuti 55 --nome "D / 2"
+# confronto di piu' partite (una sottocartella per partita) -> <cartella>/riepilogo-generale.md
+.../bin/proplus-autoplay confronto out --titolo "Prova"
+```
+- Parametri (per alleanza = nome XML dell'alleanza: `Axis`, `Allies`): `--mappa` (obbligatorio),
+  `--round` (8), `--piano` (id del piano, default `auto`), `--rischio` (1-5 o nome, default
+  Equilibrato), `--tipo` (`proplus` | `hard`, default proplus; Hard = `PlayerTypes.PRO_AI`, col diario),
+  `--seme` (1), `--output` (`autoplay-output`), `--minuti` (55: oltre, la partita si ferma e il
+  riepilogo è "parziale"), `--nome`. Nazioni fuori dalle alleanze configurabili: Pro+ (Hard se tutte
+  Hard). Uscita 0 = ok (anche parziale), 1 = errore della partita, 2 = parametri errati.
+- Output: `<output>/diario/<data>_<mappa>/{diario.txt,decisioni.jsonl}` (stesso diario di Pro+, anche
+  per Hard) + `<output>/riepilogo.json` e `riepilogo.md`, **riscritti a ogni fine round** (e da uno
+  shutdown hook se il processo viene ucciso) ⇒ un riepilogo parziale c'è sempre.
+- Riepilogo (`Monitor` legge il tabellone tra uno step e l'altro, `Riepilogo` scrive): per round e
+  nazione PU (cassa a fine round), reddito (`ProUtils.getPlayerProduction`), PU difesa (passi
+  `defend_land` + `capital_emergency` del diario, valorizzati con i costi TUV), PU piano (passo
+  `plan`), PU spesi (`acquisti_totale`), TUV, territori di terra; VC per alleanza con i nomi; per le
+  alleanze Pro+ piano, stato (`storico` dello stato maggiore) e lettura dell'avversario (più probabile,
+  reale, probabilità del reale, corretta); dichiarazioni di guerra (coppie che passano in guerra, con
+  la nazione di turno); capitali cadute/liberate; top 5 battaglie per TUV perso (attaccante+difensore,
+  da `BattleRecordsList`, campi letti per riflessione) con win% stimata ed esito del diario
+  (`esito_battaglia`); esito (vincitori dell'`EndRoundDelegate` ⇒ "vittoria Asse/Alleati", altrimenti
+  "nessuna entro N round") e VC finali.
+- **D'ora in poi niente banchi lunghi in sandbox**: verifica breve locale (UNA partita da 2 round,
+  ~1 min) + autoplay in CI (sotto). Il banco `ProPlusBenchTest` resta per compatibilità.
+- Test: `:proplus-autoplay:test` (`AutoplayTest`: parametri, PU dal diario, markdown, confronto).
+
+## Autoplay in CI (`.github/workflows/proplus-autoplay.yml`)
+
+- Trigger: `workflow_run` di "ProPlus Release" riuscita su proplus **e** `workflow_dispatch`. GitHub
+  esegue `workflow_run` solo per workflow presenti sul branch di default (`main` = upstream, non si
+  tocca), quindi il job finale `start-autoplay` di `proplus-release.yml` (dopo `build`,
+  `continue-on-error`, permesso `actions: write`) lo avvia con `gh workflow run`.
+- Manuale (Actions → ProPlus Autoplay → Run workflow): `round` (8), `partite` (prime N di A/1, A/2,
+  D/1, D/2, C/1, Hard), `piani` (sostituisce la lista, es. `A/1,B/2,hard`).
+- Job: `prepare` (installDist + XML della mappa + matrice, artefatto `autoplay-kit`), `play` (matrice,
+  max-parallel 6, fail-fast off, timeout 60 min, `--minuti 52`, semi 1..6, rischio Equilibrato per
+  entrambe, artefatto `partita-<id>`), `publish` (anche se qualche partita fallisce: cartella vuota =
+  "FALLITA" nel confronto; `riepilogo-generale.md` con VC ai round 4/6/8, PU finali, esito, lettura
+  per round, PU difesa/piano/spesi; `autoplay.zip`; release **`autoplay-latest`** ricreata sul commit
+  testato, prerelease, note con commit/data/run). `proplus-latest` mai toccata.
+- Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Release Pro+ (GitHub Action)
 
@@ -175,13 +226,16 @@ test analogo che carichi `ww2eur40_2nd_edition.xml` (va reperita la mappa: non �
 0. job `powershell-tests` (runner **windows-latest**, gate del job `build`): esegue
    `proplus/ci/test-aggiorna.ps1`, che testa la logica di `aggiorna.ps1` con un server HTTP
    locale (`System.Net.HttpListener`) che simula la GitHub API + download (nessuna rete reale);
+   `Start-MockServer` attende il server con ping ogni 250 ms fino a 90 s e riavvia il job (max 3)
+   se termina prima di rispondere (step AUTOPLAY: una volta era fallito "Mock server non pronto");
 1. test: `:game-core:test :ai:test :game-headed:test` (smoke-testing escluso: scarica salvataggi
    esterni ed è lento; `./verify` escluso: include PMD/spotless/check custom non necessari qui);
 2. scrive la versione (`set-game-headed-build-number`), `:game-headed:shadowJar`;
 3. zip `TripleA-ProPlus.zip` = `TripleA-ProPlus.jar` + `avvia.bat` + `aggiorna.ps1` +
    `build-info.txt` + `LEGGIMI.txt` + `.triplea-root` (marcatore vuoto cercato da
    `ClientFileSystemHelper.getRootFolder()`);
-4. sposta il tag `proplus-latest` sul commit e sostituisce l'asset nella release (prerelease).
+4. sposta il tag `proplus-latest` sul commit e sostituisce l'asset nella release (prerelease);
+5. job `start-autoplay` (dopo la release, non bloccante): avvia "ProPlus Autoplay".
 
 Sorgenti dei file dello zip: `proplus/dist/{avvia.bat,aggiorna.ps1,LEGGIMI.txt,build-info.txt}`.
 Placeholder `@VERSION@ @COMMIT@ @DATE@ @REPO@` sostituiti in CI in `LEGGIMI.txt` e
@@ -1168,3 +1222,14 @@ gioco; le simulazioni dell'AI sono casuali, quindi le partite divergono dopo poc
   Egitto/Sud Africa; (Alleati) "unità/aerei tedeschi in Italia/Africa" oscilla (aerei che atterrano
   e ripartono) e la quota TUV dell'Asse nel Mediterraneo crolla quando l'Italia perde unità ⇒ servono
   indizi stabili (unità di terra tedesche in Africa, trasporti italiani carichi, acquisti italiani).
+
+### Step AUTOPLAY — partite AI vs AI automatiche in CI (2026-11-07)
+
+Vedi "Partita headless AI vs AI" (runner) e "Autoplay in CI". Nessuna classe di gioco toccata
+(nuovo modulo `:proplus-autoplay`, 2 righe in `settings.gradle.kts`, job `start-autoplay` in
+`proplus-release.yml`, attesa del mock server in `proplus/ci/test-aggiorna.ps1`; `aggiorna.ps1` e
+`avvia.bat` invariati).
+- Verifica locale (sandbox, 4 core): 1 partita Pro+ A/1, 2 round, seme 1: 47 s, riepilogo corretto
+  (Francia caduta al R2, VC Asse 3→4, lettura Alleati R2 = A 48% corretta); Hard vs Hard 1 round 37 s;
+  confronto con una cartella vuota ⇒ "FALLITA".
+

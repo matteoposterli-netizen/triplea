@@ -44,6 +44,8 @@ include(":game-relay-server")
 project(":game-relay-server").projectDir = file("game-app/game-relay-server")
 include(":map-data")
 project(":map-data").projectDir = file("game-app/map-data")
+include(":proplus-autoplay")
+project(":proplus-autoplay").projectDir = file("game-app/proplus-autoplay")
 include(":smoke-testing")
 project(":smoke-testing").projectDir = file("game-app/smoke-testing")
 

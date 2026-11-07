@@ -152,22 +152,35 @@ $serverScript = {
 
 function Start-MockServer {
   param([int]$Port, [string]$Json, [string]$ZipPath)
-  $job = Start-Job -ScriptBlock $serverScript -ArgumentList $Port, $Json, $ZipPath, 60
-  # Attendi che il server risponda prima di procedere.
-  $ready = $false
-  for ($i = 0; $i -lt 50 -and -not $ready; $i++) {
-    Start-Sleep -Milliseconds 200
+  # Attesa attiva del server: sul runner Windows l'avvio di un job (nuovo processo
+  # PowerShell) puo' richiedere decine di secondi. Ping ogni 250 ms fino a 90 s; se il
+  # job termina prima di rispondere (es. porta occupata) lo si riavvia, fino a 3 avvii.
+  # Il server resta vivo 180 s (la deadline parte quando il job e' davvero partito).
+  $deadline = (Get-Date).AddSeconds(90)
+  $starts = 0
+  $job = $null
+  while ((Get-Date) -lt $deadline) {
+    if (-not $job -or $job.State -in @('Failed', 'Completed', 'Stopped')) {
+      if ($job) {
+        Receive-Job $job -ErrorAction SilentlyContinue | Out-Host
+        Remove-Job $job -Force -ErrorAction SilentlyContinue
+        $job = $null
+      }
+      if ($starts -ge 3) { break }
+      $starts++
+      $job = Start-Job -ScriptBlock $serverScript -ArgumentList $Port, $Json, $ZipPath, 180
+    }
     try {
-      $r = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/ping" -TimeoutSec 3 -UseBasicParsing
-      if ($r.StatusCode -eq 200) { $ready = $true }
+      $r = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/ping" -TimeoutSec 5 -UseBasicParsing
+      if ($r.StatusCode -eq 200) { return $job }
     } catch { }
+    Start-Sleep -Milliseconds 250
   }
-  if (-not $ready) {
+  if ($job) {
     Receive-Job $job -ErrorAction SilentlyContinue | Out-Host
     Stop-Job $job -ErrorAction SilentlyContinue; Remove-Job $job -Force -ErrorAction SilentlyContinue
-    throw "Mock server non pronto sulla porta $Port"
   }
-  return $job
+  throw "Mock server non pronto sulla porta $Port (avvii del job: $starts, attesa max 90 s)"
 }
 
 function Stop-MockServer {
