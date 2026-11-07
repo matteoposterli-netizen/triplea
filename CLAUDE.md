@@ -783,6 +783,67 @@ default vuoti), piano N senza operazioni.
   non resta. Il diario ora scrive "(spesi X di Y PU, riparazioni fabbriche R PU, avanzati A PU)" e JSON
   `pu_riparazioni`, `pu_avanzati`; colonna "PU riparazioni" nel riepilogo.
 
+## Coordinamento alleato (step OPERAZIONI ANFIBIE-BIS, solo Pro+)
+
+`ai/proplus/TestaDiPonte` + agganci in `OperazioniAnfibie`, `ProPlusTuning`, `PianoAttivo`. Hard identica:
+nuovo hook `ProTuning.keepsBridgehead` (default vuoto) chiamato in `ProCombatMoveAi` solo dopo che
+`keepsAttackNotWorthIt` non ha tenuto uno sbarco che Hard scarta.
+- **Coppia** (`TestaDiPonte.coppie`, `PianoAttivo.operazioniCombinate`): operazioni dello stesso piano, in
+  vigore nel round, di nazioni diverse e alleate con una zona di raccolta in comune (piano 1: Overlord USA
+  + Overlord UK, raccolta comune 110). Chi muove prima: ordine degli step della sequenza (Europe 1940:
+  Germans, Russians, **Americans, British**, Italians, French; nessun turno dell'Asse tra USA e UK).
+  Bersagli comuni nell'ordine dell'operazione di chi muove per primo.
+- **Flotta combinata**: la sicurezza di una zona conta già le navi alleate presenti; per chi muove per
+  primo si aggiungono le navi da guerra del partner che possono raggiungere la zona comune nel suo turno
+  (entro 2 zone e il loro movimento, non portaerei, non da zone con trasporti del partner). Nel turno del
+  partner (`joinCombinedFleet`) le sue navi entro 2 zone raggiungono la zona dove ci sono trasporti
+  dell'altra nazione finché la flotta combinata è sicura (diario "scorta alla flotta combinata").
+- **Soglia di sicurezza della flotta** (tutte le operazioni, anche D/B/2): nemico ≤ 100 − **minima** del
+  livello effettivo della zona (Equilibrato 40%, Audace 48%), prima 100 − desiderata (20%). Piano 1: fasi
+  R1-2 (Mari 0), R3 (Mari +1), R4+ (Mari +1).
+- **Truppe a terra nel porto di raccolta** (scoperta dello step): il combattimento di Hard non sa usare
+  trasporti caricati in un turno precedente (`ProTerritoryManager.findAmphibMoveOptions` toglie le
+  opzioni senza territori da cui caricare: `transportMap.values().removeIf(Collection::isEmpty)`), per
+  questo in 28681cd gli USA con 11 truppe a bordo in 110 e stima 100% non valutavano nemmeno Normandy
+  ("bersaglio troppo forte" il turno dopo). Ora, se la zona di raccolta è anche zona di un porto amico
+  dell'operazione con un bersaglio nemico in raggio (Overlord: 110/United Kingdom; Leone marino:
+  112/Western Germany), un trasporto che vi arriva carico mette subito le truppe a terra nel porto e i
+  trasporti vuoti aspettano lì (quanti ne servono: 2 truppe per trasporto; gli altri fanno la spola verso
+  gli altri porti con truppe): il combattimento successivo di Hard carica e sbarca nello stesso turno.
+  Nessun imbarco "in attesa" nella zona di raccolta-porto.
+- **Testa di ponte a due tempi**: chi muove per primo sbarca su un bersaglio comune solo-via-mare con
+  minima = **desiderata del livello effettivo** del bersaglio (Normandy con Ovest +1 = Audace 72; prima 80;
+  la desiderata con cui Hard assegna le unità resta 80 per gli obiettivi). Se Hard scarta lo sbarco per
+  valore (non tenibile) `ProPlusTuning.keepsBridgehead` lo tiene (`KEPT_BY_BRIDGEHEAD` = "bridgehead")
+  quando win ≥ desiderata effettiva e il contrattacco nemico massimo (unità max nemiche di Hard) contro
+  superstiti + **rinforzi del partner** ha win% ≤ 100 − minima del livello del bersaglio (Audace 48%).
+  Rinforzi (`TestaDiPonte.rinforzi`, distanze solo marittime, flotte nemiche ignorate): truppe del partner
+  a bordo di suoi trasporti in raggio di una zona adiacente al bersaglio + truppe nei porti della sua
+  operazione caricabili da un suo trasporto vuoto (porto + zona adiacente entro il movimento), dalla
+  capitale solo finché la win% nemica sulla capitale resta ≤ 25%. Anche il controllo "trasporti esposti"
+  tiene lo sbarco (`keepsLandingWithExposedTransports`) se è un bersaglio comune di chi muove per primo con
+  win ≥ desiderata effettiva (la tenuta si verifica dopo). Se Hard tiene già lo sbarco per valore non si
+  scarta nulla. Il partner nel suo non combattimento (`reinforceBridgehead`): primo bersaglio comune del
+  partner con sue truppe di terra ⇒ i suoi trasporti (carichi, o vuoti che caricano in un porto in raggio)
+  scaricano lì tutte le truppe. Senza testa di ponte il partner segue la regola normale (80).
+- **Diario**: righe "flotta combinata: 110 Sea Zone: navi Americans N, British M (+K in arrivo nel turno di
+  British)" e testa di ponte ("testa di ponte di Americans su X, rinforzo di British nel suo turno: win%
+  sbarco W% (desiderata D%), tenuta stimata dopo il rinforzo di British (N unita'): contrattacco nemico
+  C% (senza rinforzo C0%) <= soglia S%"; per il partner "testa di ponte di Americans su X, rinforzo di
+  British: N unita'"; teste di ponte valutate nel combattimento e scartate). La tenuta del primo è
+  ricalcolata nel suo non combattimento con i superstiti reali; win% sbarco dalla valutazione del
+  combattimento o dal record dell'attacco. JSON `operazione_anfibia`: `flotta_combinata`,
+  `testa_di_ponte`, `valutazione_testa_di_ponte` {territorio, testa_di_ponte, rinforzo, win_sbarco,
+  desiderata, contrattacco_senza_rinforzo, contrattacco_dopo_rinforzo, soglia, rinforzi, tenuta}.
+  Riga dell'attacco tenuto: "tenuto da Pro+ ... - testa di ponte: ...".
+- **Autoplay**: `Monitor.WEST_EUROPE` (Normandy Bordeaux, France, Southern France, Holland Belgium,
+  Norway, Denmark, Western Germany, Germany, Greater Southern Germany), `ovest_alleato` per round
+  (territori di WEST_EUROPE degli Alleati a fine round); riepilogo `usa_sbarcate_ovest` (unità americane
+  di sbarchi veri in WEST_EUROPE per round) e `prima_testa_di_ponte` (primo sbarco vero britannico/
+  americano in WEST_EUROPE il cui territorio è alleato a fine del suo round e del successivo);
+  `riepilogo-generale.md` sezione "Coordinamento alleato: sbarchi USA e teste di ponte" (per partita e
+  per configurazione: sbarco USA entro R7, teste di ponte ≥ 2 round, round medio, unità USA per round).
+
 ## Log degli step
 
 ### Step 0 — setup e build (2026-11-06)

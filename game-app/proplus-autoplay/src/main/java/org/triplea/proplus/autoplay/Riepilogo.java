@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -96,6 +97,8 @@ final class Riepilogo {
     json.add("sbarchi", landings);
     firstLandingInEurope(landings).ifPresent(l -> json.add("primo_sbarco_europa", l));
     json.add("primo_sbarco_vero", firstLandings(landings, monitor.alliances().keySet()));
+    json.add("usa_sbarcate_ovest", usLandedInWestEurope(landings, rounds.size()));
+    firstHeldBridgehead(landings, rounds).ifPresent(b -> json.add("prima_testa_di_ponte", b));
     json.add("operazioni", diaryData.operations);
     json.add("attacchi_regno_unito", diaryData.attacksOnBritain);
     json.add("esito", outcome(o, monitor, rounds, winner, gameOver));
@@ -161,6 +164,59 @@ final class Riepilogo {
     return Optional.ofNullable(best);
   }
 
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS: American land units of real landings in {@link
+   * Monitor#WEST_EUROPE}, per round ("1".."N", 0 in a round without).
+   */
+  static JsonObject usLandedInWestEurope(final JsonArray landings, final int rounds) {
+    final JsonObject json = new JsonObject();
+    for (int r = 1; r <= rounds; r++) {
+      json.addProperty(String.valueOf(r), 0);
+    }
+    for (final JsonElement e : landings) {
+      final JsonObject l = e.getAsJsonObject();
+      if ("Americans".equals(l.get("nazione").getAsString())
+          && Monitor.WEST_EUROPE.contains(l.get("territorio").getAsString())) {
+        final String r = String.valueOf(l.get("round").getAsInt());
+        json.addProperty(r, (json.has(r) ? json.get(r).getAsInt() : 0) + l.get("unita").getAsInt());
+      }
+    }
+    return json;
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS: the first real British/American landing in {@link
+   * Monitor#WEST_EUROPE} whose territory the Allies still hold at the end of its round and of the
+   * next one (held for at least 2 rounds). Rounds without the "ovest_alleato" list never count.
+   */
+  static Optional<JsonObject> firstHeldBridgehead(
+      final JsonArray landings, final JsonArray rounds) {
+    final Map<Integer, Set<String>> held = new HashMap<>();
+    for (final JsonElement e : rounds) {
+      final JsonObject r = e.getAsJsonObject();
+      if (r.has("ovest_alleato")) {
+        held.put(
+            r.get("round").getAsInt(), new HashSet<>(strings(r.getAsJsonArray("ovest_alleato"))));
+      }
+    }
+    JsonObject best = null;
+    for (final JsonElement e : landings) {
+      final JsonObject l = e.getAsJsonObject();
+      final int round = l.get("round").getAsInt();
+      final String territory = l.get("territorio").getAsString();
+      if (!Monitor.WESTERN_ALLIES.contains(l.get("nazione").getAsString())
+          || !Monitor.WEST_EUROPE.contains(territory)
+          || !held.getOrDefault(round, Set.of()).contains(territory)
+          || !held.getOrDefault(round + 1, Set.of()).contains(territory)) {
+        continue;
+      }
+      if (best == null || round < best.get("round").getAsInt()) {
+        best = landingJson(l);
+      }
+    }
+    return Optional.ofNullable(best);
+  }
+
   /** Alliance -> its first real landing anywhere (round, territory, nation, units), if any. */
   static JsonObject firstLandings(final JsonArray landings, final Collection<String> alliances) {
     final JsonObject json = new JsonObject();
@@ -198,6 +254,24 @@ final class Riepilogo {
                 : "assalto anfibio")
             + ")");
     return j;
+  }
+
+  /** Eg "R6 4, R7 2 (totale 6)", or "nessuna". */
+  static String usLandedText(final JsonObject json) {
+    if (!json.has("usa_sbarcate_ovest")) {
+      return "n/d";
+    }
+    final List<String> parts = new ArrayList<>();
+    int total = 0;
+    for (final Map.Entry<String, JsonElement> e :
+        json.getAsJsonObject("usa_sbarcate_ovest").entrySet()) {
+      final int n = e.getValue().getAsInt();
+      if (n > 0) {
+        parts.add("R" + e.getKey() + " " + n);
+        total += n;
+      }
+    }
+    return parts.isEmpty() ? "nessuna" : String.join(", ", parts) + " (totale " + total + ")";
   }
 
   /** Eg "R5 Normandy Bordeaux (Americans, 6 unita' sbarcate (assalto anfibio))", or "nessuno". */
@@ -326,6 +400,17 @@ final class Riepilogo {
         .append(duration(json.get("durata_s").getAsLong()))
         .append('\n');
     md.append("- Primo sbarco alleato in Europa: ").append(firstLandingText(json)).append('\n');
+    md.append("- Prima testa di ponte in Europa occidentale tenuta almeno 2 round: ")
+        .append(
+            landingText(
+                json.has("prima_testa_di_ponte")
+                    ? json.getAsJsonObject("prima_testa_di_ponte")
+                    : null))
+        .append('\n');
+    md.append("- Unita' USA sbarcate in Europa occidentale (Francia/Benelux/Norvegia/Danimarca/")
+        .append("Germania) per round: ")
+        .append(usLandedText(json))
+        .append('\n');
     if (json.has("primo_sbarco_vero")) {
       final JsonObject first = json.getAsJsonObject("primo_sbarco_vero");
       md.append("- Primo sbarco vero: ")

@@ -152,6 +152,42 @@ class AutoplayTest {
   }
 
   @Test
+  void usLandingsInWesternEuropeAndTheFirstHeldBridgehead() {
+    final JsonArray landings =
+        JsonParser.parseString(
+                "[{\"round\":4,\"nazione\":\"Americans\",\"alleanza\":\"Allies\","
+                    + "\"territorio\":\"Normandy Bordeaux\",\"unita\":4,\"fase\":\"combattimento\"},"
+                    + "{\"round\":5,\"nazione\":\"Americans\",\"alleanza\":\"Allies\","
+                    + "\"territorio\":\"Holland Belgium\",\"unita\":3,\"fase\":\"combattimento\"},"
+                    + "{\"round\":5,\"nazione\":\"Americans\",\"alleanza\":\"Allies\","
+                    + "\"territorio\":\"Greece\",\"unita\":2,\"fase\":\"combattimento\"},"
+                    + "{\"round\":6,\"nazione\":\"British\",\"alleanza\":\"Allies\","
+                    + "\"territorio\":\"Norway\",\"unita\":2,\"fase\":\"combattimento\"}]")
+            .getAsJsonArray();
+    // Normandy lost in round 5; Holland held at the end of rounds 5 and 6
+    final JsonArray rounds =
+        JsonParser.parseString(
+                "[{\"round\":4,\"ovest_alleato\":[\"Normandy Bordeaux\"]},"
+                    + "{\"round\":5,\"ovest_alleato\":[\"Holland Belgium\"]},"
+                    + "{\"round\":6,\"ovest_alleato\":[\"Holland Belgium\",\"Norway\"]},"
+                    + "{\"round\":7,\"ovest_alleato\":[\"Holland Belgium\"]}]")
+            .getAsJsonArray();
+
+    final JsonObject us = Riepilogo.usLandedInWestEurope(landings, 7);
+    assertThat(us.get("4").getAsInt()).isEqualTo(4);
+    assertThat(us.get("5").getAsInt()).isEqualTo(3); // Greece is not western Europe
+    assertThat(us.get("6").getAsInt()).isZero();
+    final JsonObject head = Riepilogo.firstHeldBridgehead(landings, rounds).orElseThrow();
+    assertThat(Riepilogo.landingText(head))
+        .isEqualTo("R5 Holland Belgium (Americans, 3 unita' sbarcate (assalto anfibio))");
+    final JsonObject game = new JsonObject();
+    game.add("usa_sbarcate_ovest", us);
+    assertThat(Riepilogo.usLandedText(game)).isEqualTo("R4 4, R5 3 (totale 7)");
+    assertThat(RiepilogoGenerale.usWestRound(game)).isEqualTo(4);
+    assertThat(Riepilogo.firstHeldBridgehead(landings, new JsonArray())).isEmpty();
+  }
+
+  @Test
   void blockedOperationsAreCountedWithTheirReasons() {
     final JsonObject game =
         JsonParser.parseString(

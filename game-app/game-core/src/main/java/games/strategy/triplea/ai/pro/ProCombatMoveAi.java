@@ -1606,6 +1606,7 @@ public class ProCombatMoveAi {
         boolean canHold = true;
         double enemyCounterTuvSwing = 0;
         double enemyCounterWinPercentage = Double.NaN;
+        List<Unit> holders = List.of();
         if (enemyAttackOptions.getMax(t) != null
             && !ProMatches.territoryIsWaterAndAdjacentToOwnedFactory(player).test(t)) {
           List<Unit> remainingUnitsToDefendWith =
@@ -1632,6 +1633,7 @@ public class ProCombatMoveAi {
             }
           }
           canHold = canHoldAgainstCounterAttack(t, result2);
+          holders = remainingUnitsToDefendWith;
           enemyCounterWinPercentage = result2.getWinPercentage();
           if (result2.getTuvSwing() > 0) {
             enemyCounterTuvSwing = result2.getTuvSwing();
@@ -1733,6 +1735,13 @@ public class ProCombatMoveAi {
           // only an attack Hard drops for its value alone may be kept (Hard: never)
           if (!worth.capturesTooRarely() && !(isNeutral && !canHold)) {
             keptBy = proData.getTuning().keepsAttackNotWorthIt(proData, worth).orElse(null);
+            if (keptBy == null && !patd.getAmphibAttackMap().isEmpty()) {
+              keptBy =
+                  proData
+                      .getTuning()
+                      .keepsBridgehead(proData, calc, patd, worth, holders)
+                      .orElse(null);
+            }
           }
           if (keptBy == null) {
             territoryToRemove = patd;

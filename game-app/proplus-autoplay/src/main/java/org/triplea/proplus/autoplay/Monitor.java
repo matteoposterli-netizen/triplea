@@ -75,6 +75,22 @@ final class Monitor {
           "Poland",
           "Baltic States");
 
+  /**
+   * Western Europe for the US landings and the bridgeheads of step OPERAZIONI ANFIBIE-BIS: France,
+   * Benelux, Norway, Denmark, Germany (WW2 Europe 1940).
+   */
+  static final Set<String> WEST_EUROPE =
+      Set.of(
+          "Normandy Bordeaux",
+          "France",
+          "Southern France",
+          "Holland Belgium",
+          "Norway",
+          "Denmark",
+          "Western Germany",
+          "Germany",
+          "Greater Southern Germany");
+
   private final GameData data;
 
   /** Alliance -> its nations (configurable alliances only, eg. Axis and Allies). */
@@ -361,6 +377,7 @@ final class Monitor {
     json.add("vc", victoryCities());
     json.add("stato_maggiore", generalStaff(round));
     json.add("alleati_in_europa", westernAlliesInEurope());
+    json.add("ovest_alleato", westEuropeHeldByWesternAllies());
     final JsonObject landed = new JsonObject();
     alliances.keySet().forEach(a -> landed.addProperty(a, 0));
     for (final JsonElement e : landings) {
@@ -431,6 +448,19 @@ final class Monitor {
       }
     }
     return json;
+  }
+
+  /** Territories of {@link #WEST_EUROPE} owned by the alliance of the British now. */
+  private JsonArray westEuropeHeldByWesternAllies() {
+    final JsonArray list = new JsonArray();
+    final String allies = allianceOf("British");
+    for (final String name : new TreeSet<>(WEST_EUROPE)) {
+      final Territory t = data.getMap().getTerritoryOrNull(name);
+      if (t != null && allianceOf(t.getOwner().getName()).equals(allies)) {
+        list.add(name);
+      }
+    }
+    return list;
   }
 
   private Map<String, Integer> landByNation() {

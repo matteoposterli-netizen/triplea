@@ -6,6 +6,9 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Properties;
+import games.strategy.triplea.ai.pro.data.ProTerritory;
+import games.strategy.triplea.ai.pro.util.ProOddsCalculator;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -139,6 +142,22 @@ public interface ProTuning {
       final double winPercentage,
       final double enemyTuvSwing,
       final double attackValue) {
+    return Optional.empty();
+  }
+
+  /**
+   * Whether the combat move keeps a landing that "Hard (AI)" drops in its last check (called after
+   * {@link #keepsAttackNotWorthIt} found no reason) because allies are expected to reinforce the
+   * territory before the enemy's counter-attack. {@code holders} are the land units left after the
+   * battle, {@code attack} the planned attack (its max enemy units are the counter-attack). Returns
+   * why it is kept, or empty to drop it as Hard does. Empty by default.
+   */
+  default Optional<String> keepsBridgehead(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final ProTerritory attack,
+      final ProAttackWorth worth,
+      final Collection<Unit> holders) {
     return Optional.empty();
   }
 

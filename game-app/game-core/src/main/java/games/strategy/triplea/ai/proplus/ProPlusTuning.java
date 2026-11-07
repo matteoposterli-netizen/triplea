@@ -12,7 +12,9 @@ import games.strategy.triplea.ai.pro.ProPurchaseOrders;
 import games.strategy.triplea.ai.pro.ProStagingOrders;
 import games.strategy.triplea.ai.pro.ProTuning;
 import games.strategy.triplea.ai.pro.ProWarDecision;
+import games.strategy.triplea.ai.pro.data.ProTerritory;
 import games.strategy.triplea.ai.pro.util.ProNationalObjectiveUtils;
+import games.strategy.triplea.ai.pro.util.ProOddsCalculator;
 import games.strategy.triplea.ai.pro.util.ProUtils;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.Strategia;
@@ -72,6 +74,9 @@ public final class ProPlusTuning implements ProTuning {
 
   /** {@link #keepsAttackNotWorthIt}: kept by the victory city / national objective rule. */
   public static final String KEPT_BY_OBJECTIVE = "objective";
+
+  /** {@link #keepsBridgehead}: kept as the first step of a two-step bridgehead. */
+  public static final String KEPT_BY_BRIDGEHEAD = "bridgehead";
 
   /** Cache of {@link #plan}: the orders are the same for one game state, player and round. */
   private @Nullable GameState planData;
@@ -148,9 +153,16 @@ public final class ProPlusTuning implements ProTuning {
       final ProData proData, final Territory target, final double attackMinWinPercentage) {
     final double minimum =
         riskLevel(proData, target).minimumWinPercentage(isLowLuck(proData.getData()));
-    return isLandingOnlyTarget(proData, target)
-        ? Math.max(minimum, desiredWinPercentage(proData, target))
-        : minimum;
+    if (!isLandingOnlyTarget(proData, target)) {
+      return minimum;
+    }
+    // step OPERAZIONI ANFIBIE-BIS: the first nation of a combined operation lands at the desired
+    // win% of the target's effective level (the partner reinforces the bridgehead)
+    if (TestaDiPonte.primaSu(proData, target).isPresent()) {
+      return Math.max(
+          minimum, riskLevel(proData, target).desiredWinPercentage(isLowLuck(proData.getData())));
+    }
+    return Math.max(minimum, desiredWinPercentage(proData, target));
   }
 
   /**
@@ -598,7 +610,105 @@ public final class ProPlusTuning implements ProTuning {
             && winPercentage >= level.objectiveRuleMinWin(isLowLuck(data))
             && exposedTransportsCost(enemyTuvSwing, attackValue) <= level.getObjectiveCostLimit()
             && isObjectiveTarget(proData, territory);
-    return kept ? Optional.of(KEPT_BY_OBJECTIVE) : Optional.empty();
+    if (kept) {
+      return Optional.of(KEPT_BY_OBJECTIVE);
+    }
+    // step OPERAZIONI ANFIBIE-BIS: the partner's warships join the fleet in its turn; whether the
+    // bridgehead holds is checked in the last check of the attacks (keepsBridgehead)
+    final boolean bridgehead =
+        level.keepsAttacksNotWorthIt()
+            && winPercentage >= level.desiredWinPercentage(isLowLuck(data))
+            && TestaDiPonte.primaSu(proData, territory).isPresent();
+    return bridgehead ? Optional.of(KEPT_BY_BRIDGEHEAD) : Optional.empty();
+  }
+
+  // ------------------------------------------------------------- two-step bridgehead (ANFIBIE-BIS)
+
+  private String bridgeheadKey = "";
+  private final Map<String, TestaDiPonte.Valutazione> bridgeheads = new java.util.TreeMap<>();
+  private final Map<String, List<Unit>> reinforcements = new java.util.HashMap<>();
+  private @Nullable GameState reinforcementsData;
+
+  /**
+   * Keeps a landing Hard drops when it is the first step of a two-step bridgehead ({@link
+   * TestaDiPonte}): a common target of a combined operation where I move first, a landing at the
+   * desired win% of the target's effective level and a counter-attack, after the partner's
+   * reinforcements of this round, at most {@code 100 - minimum win%} of that level. Never at {@link
+   * RiskLevel#PRUDENTE}.
+   */
+  @Override
+  public Optional<String> keepsBridgehead(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final ProTerritory attack,
+      final ProAttackWorth worth,
+      final java.util.Collection<Unit> holders) {
+    final Territory target = worth.territory();
+    if (worth.capturesTooRarely() || worth.neutral()) {
+      return Optional.empty();
+    }
+    final Optional<TestaDiPonte.Coppia> pair = TestaDiPonte.primaSu(proData, target);
+    if (pair.isEmpty()) {
+      return Optional.empty();
+    }
+    final RiskLevel level = riskLevel(proData, target);
+    if (!level.keepsAttacksNotWorthIt()
+        || worth.winPercentage() < level.desiredWinPercentage(isLowLuck(proData.getData()))) {
+      return Optional.empty();
+    }
+    final TestaDiPonte.Valutazione v =
+        TestaDiPonte.valuta(
+            proData,
+            calc,
+            target,
+            attack.getMaxEnemyUnits(),
+            attack.getMaxBombardUnits(),
+            worth.winPercentage(),
+            worth.counterWinPercentage(),
+            holders,
+            pair.get(),
+            reinforcementsFor(proData, calc, target, pair.get()));
+    noteBridgehead(proData, v);
+    return v.tenuta() ? Optional.of(KEPT_BY_BRIDGEHEAD) : Optional.empty();
+  }
+
+  /** The partner's reinforcements for {@code target}, once per game state, player and round. */
+  List<Unit> reinforcementsFor(
+      final ProData proData,
+      final @Nullable ProOddsCalculator calc,
+      final Territory target,
+      final TestaDiPonte.Coppia pair) {
+    syncBridgeheads(proData);
+    return reinforcements.computeIfAbsent(
+        target.getName(), k -> TestaDiPonte.rinforzi(proData, calc, target, pair));
+  }
+
+  void noteBridgehead(final ProData proData, final TestaDiPonte.Valutazione v) {
+    syncBridgeheads(proData);
+    bridgeheads.put(v.territorio(), v);
+  }
+
+  /** The bridgehead estimates of {@code player}'s last combat move planning this round. */
+  public Map<String, TestaDiPonte.Valutazione> bridgeheads(
+      final GamePlayer player, final int round) {
+    return bridgeheadKey.equals(player.getName() + "|" + round)
+        ? Map.copyOf(bridgeheads)
+        : Map.of();
+  }
+
+  /** A new turn or game state (eg the purchase's simulation, then the real game) starts afresh. */
+  private void syncBridgeheads(final ProData proData) {
+    final String key = turnKey(proData);
+    if (!key.equals(bridgeheadKey) || reinforcementsData != proData.getData()) {
+      bridgeheadKey = key;
+      reinforcementsData = proData.getData();
+      bridgeheads.clear();
+      reinforcements.clear();
+    }
+  }
+
+  private static String turnKey(final ProData proData) {
+    return proData.getPlayer().getName() + "|" + proData.getData().getSequence().getRound();
   }
 
   /** TUV expected to be lost by a landing with exposed transports (Hard's own weights). */

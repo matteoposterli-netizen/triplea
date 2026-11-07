@@ -86,6 +86,18 @@ public final class PianoAttivo {
     this.obiettivi = List.copyOf(list);
   }
 
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS: the operations of the same plan, in force this round, of another
+   * nation whose gathering zones share one with {@code mine} (eg Overlord UK for Overlord USA):
+   * they form a combined fleet with it.
+   */
+  public List<Strategia.Operazione> operazioniCombinate(final Strategia.Operazione mine) {
+    return piano.operazioni().stream()
+        .filter(o -> !o.equals(mine) && o.covers(round) && !o.riguarda(nazione))
+        .filter(o -> o.raccolta().stream().anyMatch(mine.raccolta()::contains))
+        .toList();
+  }
+
   /** Whether {@code t} is a landing target of an operation whose units are mine. */
   public boolean isBersaglioOperazione(final Territory t) {
     return operazioni.stream()

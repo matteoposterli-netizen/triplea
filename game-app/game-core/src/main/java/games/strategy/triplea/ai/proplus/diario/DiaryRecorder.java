@@ -32,6 +32,7 @@ import games.strategy.triplea.ai.proplus.OperazioniAnfibie;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.ProPlusTuning;
 import games.strategy.triplea.ai.proplus.RiskLevel;
+import games.strategy.triplea.ai.proplus.TestaDiPonte;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.Strategia;
 import games.strategy.triplea.ai.proplus.strategia.Valutazione;
@@ -968,7 +969,8 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           }
           final StringBuilder sb = new StringBuilder("  Operazioni anfibie:\n");
           pendingOperationsJson.clear();
-          for (final OperazioniAnfibie.Rapporto r : reports) {
+          for (final OperazioniAnfibie.Rapporto r0 : reports) {
+            final OperazioniAnfibie.Rapporto r = withLandingWin(r0);
             sb.append(operationText(r));
             final List<OperazioniAnfibie.Acquisto> bought =
                 purchases.stream().filter(a -> a.operazione().equals(r.operazione())).toList();
@@ -1002,6 +1004,32 @@ public final class DiaryRecorder implements ProDecisionRecorder {
             if (r.winStimata() >= 0) {
               json.addProperty("win_stimata", round1(r.winStimata()));
             }
+            if (!r.flottaCombinata().isEmpty()) {
+              json.addProperty("flotta_combinata", r.flottaCombinata());
+            }
+            if (!r.testaDiPonte().isEmpty()) {
+              json.addProperty("testa_di_ponte", r.testaDiPonte());
+            }
+            r.valutazione()
+                .ifPresent(
+                    v -> {
+                      final JsonObject b = new JsonObject();
+                      b.addProperty("territorio", v.territorio());
+                      b.addProperty("testa_di_ponte", v.primo());
+                      b.addProperty("rinforzo", v.secondo());
+                      if (!Double.isNaN(v.winSbarco())) {
+                        b.addProperty("win_sbarco", round1(v.winSbarco()));
+                      }
+                      b.addProperty("desiderata", round1(v.desiderata()));
+                      if (!Double.isNaN(v.contrattaccoSenza())) {
+                        b.addProperty("contrattacco_senza_rinforzo", round1(v.contrattaccoSenza()));
+                      }
+                      b.addProperty("contrattacco_dopo_rinforzo", round1(v.contrattaccoDopo()));
+                      b.addProperty("soglia", round1(v.soglia()));
+                      b.addProperty("rinforzi", v.rinforzi());
+                      b.addProperty("tenuta", v.tenuta());
+                      json.add("valutazione_testa_di_ponte", b);
+                    });
             final JsonArray asked = new JsonArray();
             for (final OperazioniAnfibie.Acquisto a : bought) {
               final JsonObject o = new JsonObject();
@@ -1015,6 +1043,37 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           }
           pendingOperationsText = sb.toString();
         });
+  }
+
+  /** The landing's win% from this turn's combat records when the estimate has none. */
+  private OperazioniAnfibie.Rapporto withLandingWin(final OperazioniAnfibie.Rapporto r) {
+    if (r.valutazione().isEmpty() || !Double.isNaN(r.valutazione().get().winSbarco())) {
+      return r;
+    }
+    final TestaDiPonte.Valutazione v = r.valutazione().get();
+    final AttackRecord rec = attacks.get(v.territorio());
+    if (rec == null || Double.isNaN(rec.win)) {
+      return r;
+    }
+    final TestaDiPonte.Valutazione withWin = v.withWin(rec.win);
+    final String text = r.testaDiPonte().replace(v.testo(), withWin.testo());
+    return new OperazioniAnfibie.Rapporto(
+        r.operazione(),
+        r.nazione(),
+        r.stato(),
+        r.trasporti(),
+        r.truppeABordo(),
+        r.scorta(),
+        r.sbarcate(),
+        r.sbarcateSu(),
+        r.prossimoPasso(),
+        r.motivo(),
+        r.mosse(),
+        r.bersaglio(),
+        r.winStimata(),
+        r.flottaCombinata(),
+        text,
+        Optional.of(withWin));
   }
 
   /**
@@ -1041,6 +1100,12 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     }
     sb.append("; prossimo passo: ").append(r.prossimoPasso());
     sb.append("; motivo: ").append(r.motivo().isEmpty() ? "-" : r.motivo()).append('\n');
+    if (!r.flottaCombinata().isEmpty()) {
+      sb.append("      flotta combinata: ").append(r.flottaCombinata()).append('\n');
+    }
+    if (!r.testaDiPonte().isEmpty()) {
+      sb.append("      ").append(r.testaDiPonte()).append('\n');
+    }
     if (!r.mosse().isEmpty()) {
       sb.append("      mosse: ").append(String.join("; ", r.mosse())).append('\n');
     }
@@ -1440,7 +1505,18 @@ public final class DiaryRecorder implements ProDecisionRecorder {
                   worth.attackValue(),
                   worth.hardDrops(),
                   keptBy,
-                  proPlus);
+                  proPlus,
+                  ProPlusTuning.KEPT_BY_BRIDGEHEAD.equals(keptBy)
+                          && proData.getTuning() instanceof ProPlusTuning tuning
+                      ? Optional.ofNullable(
+                              tuning
+                                  .bridgeheads(
+                                      proData.getPlayer(),
+                                      proData.getData().getSequence().getRound())
+                                  .get(worth.territory().getName()))
+                          .map(TestaDiPonte.Valutazione::testo)
+                          .orElse(null)
+                      : null);
         });
   }
 
@@ -1924,7 +2000,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
       sb.append("; ").append(keptText(r.worth));
     }
     if ("kept_transports_exposed".equals(r.clearedReason)) {
-      sb.append("; trasporti esposti ma tenuto da Pro+ (regola obiettivo): ")
+      sb.append("; trasporti esposti ma tenuto da Pro+ (regola obiettivo o testa di ponte): ")
           .append(transportsText(r));
     }
     sb.append("; attaccanti: ").append(Italian.units(r.attackers));
@@ -2077,6 +2153,10 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           .append(signed(p.riskValue()))
           .append(" >= -")
           .append(Italian.number(p.tolerance()));
+    } else if (ProPlusTuning.KEPT_BY_BRIDGEHEAD.equals(w.keptBy())) {
+      sb.append("testa di ponte: ")
+          .append(
+              w.testaDiPonte() == null ? "rinforzo alleato nello stesso round" : w.testaDiPonte());
     } else if (ProPlusTuning.KEPT_BY_OBJECTIVE.equals(w.keptBy()) && p != null) {
       sb.append(p.planRule() ? "regola obiettivo del piano: win% " : "regola VC/obiettivo: win% ")
           .append(Italian.percent(w.win()))

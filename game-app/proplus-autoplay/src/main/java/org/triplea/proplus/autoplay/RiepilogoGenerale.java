@@ -138,6 +138,7 @@ final class RiepilogoGenerale {
 
     configurations(md, games, alliances, vcRounds, maxRound);
     landingsAndTransports(md, games, alliances, maxRound);
+    alliedCoordination(md, games, alliances, maxRound);
 
     md.append(
 """
@@ -546,6 +547,122 @@ Operazioni bloccate per configurazione (turni bloccati, motivi piu' frequenti):
           .append(blockedText(c.getValue(), 4))
           .append('\n');
     }
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS: American landings in western Europe and the first bridgehead held
+   * for 2 rounds, per game and per configuration.
+   */
+  private static void alliedCoordination(
+      final StringBuilder md,
+      final List<Game> games,
+      final List<String> alliances,
+      final int maxRound) {
+    md.append(
+"""
+
+## Coordinamento alleato: sbarchi USA e teste di ponte
+
+""");
+    md.append(
+"""
+Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benelux, Norvegia, Danimarca, Germania. Testa di ponte tenuta = territorio dello sbarco vero britannico/americano ancora degli Alleati a fine del suo round e del successivo.
+
+| Partita | Primo sbarco USA in Europa occ. | Unita' USA sbarcate per round | Prima testa di ponte tenuta >= 2 round |
+|---|---|---|---|
+""");
+    for (final Game g : games) {
+      if (g.json() == null) {
+        continue;
+      }
+      final JsonObject j = g.json();
+      final int first = usWestRound(j);
+      md.append("| ")
+          .append(g.folder())
+          .append(" | ")
+          .append(first > 0 ? "R" + first : "nessuno")
+          .append(" | ")
+          .append(Riepilogo.usLandedText(j))
+          .append(" | ")
+          .append(
+              Riepilogo.landingText(
+                  j.has("prima_testa_di_ponte") ? j.getAsJsonObject("prima_testa_di_ponte") : null))
+          .append(" |\n");
+    }
+    final Map<String, List<JsonObject>> byConfig = new LinkedHashMap<>();
+    for (final Game g : games) {
+      if (g.json() != null) {
+        byConfig
+            .computeIfAbsent(configuration(g.json(), alliances), k -> new ArrayList<>())
+            .add(g.json());
+      }
+    }
+    md.append(
+        "\nPer configurazione: partite con sbarco USA in Europa occidentale entro R7, partite con"
+            + " testa di ponte tenuta >= 2 round (round medio), unita' USA sbarcate in Europa"
+            + " occidentale per round (media dei semi).\n\n| Configurazione | Sbarco USA entro R7 |"
+            + " Testa di ponte >= 2 round | Round medio |");
+    for (int r = 1; r <= maxRound; r++) {
+      md.append(" R").append(r).append(" |");
+    }
+    md.append("\n|---|---|---|---|");
+    for (int r = 1; r <= maxRound; r++) {
+      md.append("---|");
+    }
+    md.append('\n');
+    for (final Map.Entry<String, List<JsonObject>> c : byConfig.entrySet()) {
+      final List<JsonObject> list = c.getValue();
+      final long byR7 =
+          list.stream().filter(j -> usWestRound(j) > 0 && usWestRound(j) <= 7).count();
+      final List<Double> heads =
+          list.stream()
+              .filter(j -> j.has("prima_testa_di_ponte"))
+              .map(j -> j.getAsJsonObject("prima_testa_di_ponte").get("round").getAsDouble())
+              .toList();
+      md.append("| ")
+          .append(c.getKey())
+          .append(" | ")
+          .append(byR7)
+          .append('/')
+          .append(list.size())
+          .append(" | ")
+          .append(heads.size())
+          .append('/')
+          .append(list.size())
+          .append(" | ")
+          .append(mean(heads))
+          .append(" |");
+      for (int r = 1; r <= maxRound; r++) {
+        final String key = String.valueOf(r);
+        md.append(' ')
+            .append(
+                mean(
+                    list.stream()
+                        .filter(j -> j.has("usa_sbarcate_ovest"))
+                        .map(
+                            j ->
+                                j.getAsJsonObject("usa_sbarcate_ovest").has(key)
+                                    ? j.getAsJsonObject("usa_sbarcate_ovest").get(key).getAsDouble()
+                                    : 0.0)
+                        .toList()))
+            .append(" |");
+      }
+      md.append('\n');
+    }
+  }
+
+  /** Round of the first American landing in western Europe, 0 if none. */
+  static int usWestRound(final JsonObject json) {
+    if (!json.has("usa_sbarcate_ovest")) {
+      return 0;
+    }
+    for (final Map.Entry<String, JsonElement> e :
+        json.getAsJsonObject("usa_sbarcate_ovest").entrySet()) {
+      if (e.getValue().getAsInt() > 0) {
+        return Integer.parseInt(e.getKey());
+      }
+    }
+    return 0;
   }
 
   /** Round of the first real British/American landing in Europe, 0 if none. */

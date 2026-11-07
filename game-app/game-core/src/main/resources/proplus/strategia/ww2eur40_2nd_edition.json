@@ -565,13 +565,19 @@
           "fasi": [
             {
               "da_round": 1,
-              "a_round": 3,
+              "a_round": 2,
               "fronti": {"Ovest": 1, "Mediterraneo-Africa": -1, "Est": -1, "Mari": 0},
               "obiettivi": []
             },
             {
+              "da_round": 3,
+              "a_round": 3,
+              "fronti": {"Ovest": 1, "Mediterraneo-Africa": -1, "Est": -1, "Mari": 1},
+              "obiettivi": []
+            },
+            {
               "da_round": 4,
-              "fronti": {"Ovest": 1, "Mediterraneo-Africa": -1, "Est": 0, "Mari": 0},
+              "fronti": {"Ovest": 1, "Mediterraneo-Africa": -1, "Est": 0, "Mari": 1},
               "obiettivi": [
                 {"territorio": "Normandy Bordeaux", "peso": 15},
                 {"territorio": "Norway", "peso": 10},

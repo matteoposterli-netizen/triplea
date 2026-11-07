@@ -99,7 +99,8 @@ final class AttackRecord {
       double attackValue,
       boolean hardDrops,
       @Nullable String keptBy,
-      @Nullable ProPlusInfo proPlus) {
+      @Nullable ProPlusInfo proPlus,
+      @Nullable String testaDiPonte) {
 
     double expectedTuvCost() {
       return counterTuv - tuvSwing;

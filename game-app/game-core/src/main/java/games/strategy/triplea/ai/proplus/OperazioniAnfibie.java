@@ -118,7 +118,10 @@ public final class OperazioniAnfibie {
       String motivo,
       List<String> mosse,
       Optional<String> bersaglio,
-      double winStimata) {}
+      double winStimata,
+      String flottaCombinata,
+      String testaDiPonte,
+      Optional<TestaDiPonte.Valutazione> valutazione) {}
 
   /** The units the operations keep in place, and the reports. */
   public record Esito(Set<Unit> tenute, List<Rapporto> rapporti) {
@@ -139,6 +142,12 @@ public final class OperazioniAnfibie {
 
   private final Map<Unit, Territory> where = new HashMap<>();
   private @Nullable ProTerritoryManager enemy;
+
+  /** Step OPERAZIONI ANFIBIE-BIS: my operations paired with an ally's sharing a gathering zone. */
+  private List<TestaDiPonte.Coppia> coppie = List.of();
+
+  /** What the bridgehead / reinforcement step did, per operation name (diary). */
+  private final Map<String, String> bridgeheadText = new HashMap<>();
 
   private OperazioniAnfibie(
       final ProData proData,
@@ -164,6 +173,7 @@ public final class OperazioniAnfibie {
       return Esito.NESSUNO;
     }
     final OperazioniAnfibie o = new OperazioniAnfibie(proData, calc, moveDel);
+    o.coppie = TestaDiPonte.coppie(proData.getData(), plan, proData.getPlayer());
     final List<Rapporto> reports = new ArrayList<>();
     final Map<Strategia.Operazione, List<Unit>> transports = o.assignTransports(ops);
     transports.values().stream()
@@ -193,6 +203,12 @@ public final class OperazioniAnfibie {
       playCargoNation(op, moves, reasons);
     }
     if (carrier) {
+      for (final TestaDiPonte.Coppia c : coppie) {
+        if (c.mia().equals(op) && !c.primaIo()) {
+          reinforceBridgehead(op, c, transports, moves);
+          joinCombinedFleet(op, c, moves, reasons);
+        }
+      }
       // loaded first, then the empty ones at a port, then the others
       final List<Unit> ordered = new ArrayList<>(transports);
       ordered.sort(
@@ -229,25 +245,23 @@ public final class OperazioniAnfibie {
         holdIfSafe(op, List.of(transport), zone, reasons, "attende le truppe alleate al porto");
         return;
       }
-      if (land != null
-          && op.raccolta().contains(zone.getName())
-          && !waiting(land, player).isEmpty()) {
-        // the troops would wait aboard here: only if the fleet is safe
-        final Safety safety = makeSafe(op, zone, List.of(transport));
-        if (!safety.safe()) {
-          reasons.add(
-              String.format(
-                  Locale.ROOT,
-                  "nessun imbarco a %s: %s non e' sicura (win%% nemica %.0f%% > soglia %.0f%%,"
-                      + " scorta %d)",
-                  land.getName(),
-                  zone.getName(),
-                  safety.enemyWin(),
-                  safety.threshold(),
-                  safety.warships()));
+      if (land != null && isGatheringPort(op, zone, land)) {
+        // step OPERAZIONI ANFIBIE-BIS: the troops wait ashore in the port, the combat move of the
+        // Pro AI loads and lands them in one go (it can't use transports loaded a turn earlier).
+        // The transports their number needs stay; the others fetch troops from the other ports.
+        final long keptHere =
+            held.stream().filter(u -> isTransport(u) && zone.equals(territory(u))).count();
+        if (waiting(land, player).size() > 2 * keptHere || !troopsWaitElsewhere(op, land)) {
+          holdIfSafe(
+              op,
+              List.of(transport),
+              zone,
+              reasons,
+              "trasporto vuoto alla raccolta (truppe in attesa a " + land.getName() + ")");
           return;
         }
-        safety.escortsMoved().forEach(held::add);
+        shuttle(op, transport, zone, moves, reasons, zone);
+        return;
       }
       final List<Unit> loaded = land == null ? List.of() : load(op, transport, land, zone, moves);
       if (!loaded.isEmpty()) {
@@ -255,7 +269,220 @@ public final class OperazioniAnfibie {
         return;
       }
     }
-    shuttle(op, transport, zone, moves, reasons);
+    shuttle(op, transport, zone, moves, reasons, null);
+  }
+
+  /**
+   * Whether {@code land} is a friendly port of {@code op} on {@code zone}, a gathering zone with an
+   * enemy target in reach: the troops wait there ashore (step OPERAZIONI ANFIBIE-BIS).
+   */
+  private boolean isGatheringPort(
+      final Strategia.Operazione op, final Territory zone, final Territory land) {
+    return op.raccolta().contains(zone.getName())
+        && op.porti().stream()
+            .anyMatch(p -> p.zona().equals(zone.getName()) && p.territorio().equals(land.getName()))
+        && isFriendlyLand(land)
+        && firstEnemyTargetInReach(op, zone).isPresent();
+  }
+
+  /** Whether units of the operation's nations wait in a port other than {@code here}. */
+  private boolean troopsWaitElsewhere(final Strategia.Operazione op, final Territory here) {
+    for (final Strategia.Porto p : op.porti()) {
+      final Territory land = map.getTerritoryOrNull(p.territorio());
+      if (land == null || land.equals(here) || !isFriendlyLand(land)) {
+        continue;
+      }
+      for (final String nation : op.nazioni()) {
+        final GamePlayer owner = data.getPlayerList().getPlayerId(nation);
+        if (owner != null && !waiting(land, owner).isEmpty()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Arrived loaded at a gathering zone that is also a port of the operation (eg Overlord at 110 Sea
+   * Zone, port United Kingdom): the own troops go ashore in the port at once, so the next combat
+   * move of the Pro AI loads and lands them in one go.
+   */
+  private void unloadAtGatheringPort(
+      final Strategia.Operazione op,
+      final Unit transport,
+      final Territory zone,
+      final List<String> moves) {
+    final List<Unit> mine = ownCargo(transport);
+    if (mine.isEmpty() || !transport.getUnloaded().isEmpty()) {
+      return;
+    }
+    for (final Strategia.Porto p : op.porti()) {
+      final Territory land = map.getTerritoryOrNull(p.territorio());
+      if (land == null || !p.zona().equals(zone.getName()) || !isGatheringPort(op, zone, land)) {
+        continue;
+      }
+      if (move(mine, new Route(zone, land), moves, "a terra nel porto di raccolta")) {
+        held.add(transport);
+        held.addAll(mine);
+      }
+      return;
+    }
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS, the nation moving second: its transports put their troops ashore
+   * on the bridgehead the partner took (a common target owned by the partner, with its land units),
+   * loading first at a port on the way when empty.
+   */
+  private void reinforceBridgehead(
+      final Strategia.Operazione op,
+      final TestaDiPonte.Coppia c,
+      final List<Unit> transports,
+      final List<String> moves) {
+    Territory head = null;
+    for (final String name : c.bersagliComuni()) {
+      final Territory t = map.getTerritoryOrNull(name);
+      if (t != null
+          && !t.isWater()
+          && t.isOwnedBy(c.alleato())
+          && t.anyUnitsMatch(Matches.unitIsOwnedBy(c.alleato()).and(Matches.unitIsLand()))) {
+        head = t;
+        break;
+      }
+    }
+    if (head == null) {
+      return;
+    }
+    final Set<Territory> adjacent = map.getNeighbors(head, Matches.territoryIsWater());
+    final List<Unit> landed = new ArrayList<>();
+    for (final Unit t : transports) {
+      if (!t.getUnloaded().isEmpty() || t.getMovementLeft().signum() < 0) {
+        continue;
+      }
+      if (ownCargo(t).isEmpty()) {
+        loadForBridgehead(op, t, adjacent, moves);
+      }
+      final List<Unit> mine = ownCargo(t);
+      if (mine.isEmpty()) {
+        continue;
+      }
+      final Territory from = territory(t);
+      Territory unloadZone = adjacent.contains(from) ? from : null;
+      if (unloadZone == null) {
+        Route best = null;
+        for (final Territory a : adjacent) {
+          final Optional<Route> r = seaRoute(from, a, withCargo(t));
+          if (r.isPresent()
+              && r.get().numberOfSteps() <= t.getMovementLeft().intValue()
+              && (best == null || r.get().numberOfSteps() < best.numberOfSteps())) {
+            best = r.get();
+          }
+        }
+        if (best == null || !move(withCargo(t), best, moves, "verso la testa di ponte")) {
+          continue;
+        }
+        unloadZone = best.getEnd();
+      }
+      if (move(mine, new Route(unloadZone, head), moves, "rinforzo della testa di ponte")) {
+        held.add(t);
+        held.addAll(mine);
+        landed.addAll(mine);
+      }
+    }
+    bridgeheadText.put(
+        op.nome(),
+        landed.isEmpty()
+            ? String.format(
+                Locale.ROOT,
+                "testa di ponte di %s su %s: nessun rinforzo di %s (nessun trasporto con truppe in"
+                    + " raggio)",
+                c.alleato().getName(),
+                head.getName(),
+                player.getName())
+            : String.format(
+                Locale.ROOT,
+                "testa di ponte di %s su %s, rinforzo di %s: %d unita' (%s)",
+                c.alleato().getName(),
+                head.getName(),
+                player.getName(),
+                landed.size(),
+                unitsText(landed)));
+  }
+
+  /** An empty transport: to a port in reach of the bridgehead and load the troops waiting there. */
+  private void loadForBridgehead(
+      final Strategia.Operazione op,
+      final Unit transport,
+      final Set<Territory> adjacent,
+      final List<String> moves) {
+    final Territory zone = territory(transport);
+    final int movesLeft = transport.getMovementLeft().intValue();
+    for (final Strategia.Porto p : op.porti()) {
+      final Territory portZone = map.getTerritoryOrNull(p.zona());
+      final Territory land = map.getTerritoryOrNull(p.territorio());
+      if (portZone == null
+          || land == null
+          || !isFriendlyLand(land)
+          || waiting(land, player).stream().allMatch(held::contains)) {
+        continue;
+      }
+      final int toHead = TestaDiPonte.distance(map, portZone, adjacent);
+      if (portZone.equals(zone)) {
+        if (toHead <= movesLeft) {
+          load(op, transport, land, zone, moves);
+          return;
+        }
+        continue;
+      }
+      final Optional<Route> r = seaRoute(zone, portZone, List.of(transport));
+      if (r.isPresent()
+          && toHead != Integer.MAX_VALUE
+          && r.get().numberOfSteps() + toHead <= movesLeft
+          && move(List.of(transport), r.get(), moves, "al porto per il rinforzo")) {
+        load(op, transport, land, portZone, moves);
+        return;
+      }
+    }
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS, the nation moving second: its warships join the partner's fleet at
+   * a shared gathering zone until the combined fleet is safe.
+   */
+  private void joinCombinedFleet(
+      final Strategia.Operazione op,
+      final TestaDiPonte.Coppia c,
+      final List<String> moves,
+      final List<String> reasons) {
+    for (final String name : c.raccoltaComune()) {
+      final Territory zone = map.getTerritoryOrNull(name);
+      if (zone == null
+          || !zone.anyUnitsMatch(
+              Matches.unitIsOwnedBy(c.alleato()).and(OperazioniAnfibie::isTransport))) {
+        continue;
+      }
+      final Safety safety = makeSafe(op, zone, List.of());
+      if (safety.safe()) {
+        held.addAll(safety.escortsMoved());
+        held.addAll(warships(zone));
+        if (!safety.escortsMoved().isEmpty()) {
+          moves.add(
+              "scorta alla flotta combinata in "
+                  + zone.getName()
+                  + ": "
+                  + unitsText(safety.escortsMoved()));
+        }
+      } else {
+        reasons.add(
+            String.format(
+                Locale.ROOT,
+                "flotta combinata in %s non sicura: win%% nemica %.0f%% > soglia %.0f%% (navi %d)",
+                zone.getName(),
+                safety.enemyWin(),
+                safety.threshold(),
+                safety.warships()));
+      }
+    }
   }
 
   /** A loaded transport: to the gathering zone, wait there, or put the troops ashore. */
@@ -275,6 +502,7 @@ public final class OperazioniAnfibie {
       }
       if (!waited) {
         unloadOnFriendlyTarget(op, transport, zone, moves);
+        unloadAtGatheringPort(op, transport, zone, moves);
         if (ownCargo(transport).isEmpty() && cargo(op, transport).isEmpty()) {
           holdIfSafe(op, List.of(transport), zone, reasons, "trasporto scaricato");
           return;
@@ -310,6 +538,7 @@ public final class OperazioniAnfibie {
           held.addAll(warships(end));
           if (op.raccolta().contains(end.getName())) {
             unloadOnFriendlyTarget(op, transport, end, moves);
+            unloadAtGatheringPort(op, transport, end, moves);
           }
         }
         return;
@@ -405,7 +634,8 @@ public final class OperazioniAnfibie {
       final Unit transport,
       final Territory zone,
       final List<String> moves,
-      final List<String> reasons) {
+      final List<String> reasons,
+      final @Nullable Territory excluded) {
     final int movesLeft = transport.getMovementLeft().intValue();
     final List<Strategia.Porto> ports = portsToGo(op, zone);
     if (ports.isEmpty() || movesLeft <= 0) {
@@ -414,7 +644,7 @@ public final class OperazioniAnfibie {
     final List<String> unsafe = new ArrayList<>();
     for (final Strategia.Porto target : ports) {
       final Territory portZone = map.getTerritoryOrNull(target.zona());
-      if (portZone == null) {
+      if (portZone == null || portZone.equals(excluded)) {
         continue;
       }
       if (portZone.equals(zone)) {
@@ -612,6 +842,10 @@ public final class OperazioniAnfibie {
   }
 
   /** Land units of {@code owner} in {@code land} that can still board a transport. */
+  static List<Unit> waitingFor(final Territory land, final GamePlayer owner) {
+    return waiting(land, owner);
+  }
+
   private static List<Unit> waiting(final Territory land, final GamePlayer owner) {
     return land.getMatches(
         Matches.unitIsOwnedBy(owner)
@@ -688,7 +922,12 @@ public final class OperazioniAnfibie {
               }
             });
         return new Safety(
-            true, safety.enemyWin(), safety.threshold(), safety.warships(), List.copyOf(moved));
+            true,
+            safety.enemyWin(),
+            safety.threshold(),
+            safety.warships(),
+            List.copyOf(moved),
+            safety.arriving());
       }
     }
     return safety;
@@ -696,15 +935,18 @@ public final class OperazioniAnfibie {
 
   private Safety safety(
       final Strategia.Operazione op, final Territory zone, final Collection<Unit> escorts) {
+    // step OPERAZIONI ANFIBIE-BIS: the risk the zone's level accepts (Equilibrato: 40%)
     final double threshold =
-        100 - ProPlusTuning.riskLevel(proData, zone).desiredWinPercentage(lowLuck);
+        100 - ProPlusTuning.riskLevel(proData, zone).minimumWinPercentage(lowLuck);
     final List<Unit> defenders =
         new ArrayList<>(zone.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsNotLand())));
     defenders.addAll(escorts);
+    final List<Unit> arriving = combinedArrivals(zone);
+    defenders.addAll(arriving);
     final int warships = (int) defenders.stream().filter(OperazioniAnfibie::isWarship).count();
     final ProTerritory max = enemyMax(zone);
     if (max == null || max.getMaxUnits().isEmpty()) {
-      return new Safety(true, 0, threshold, warships, List.of());
+      return new Safety(true, 0, threshold, warships, List.of(), arriving.size());
     }
     final double win =
         defenders.stream().noneMatch(OperazioniAnfibie::isWarship)
@@ -713,7 +955,42 @@ public final class OperazioniAnfibie {
                     proData, zone, max.getMaxUnits(), defenders, max.getMaxBombardUnits())
                 .getWinPercentage();
     final boolean enoughEscort = warships >= Math.min(op.scortaMinima(), 1) || win <= 0;
-    return new Safety(win <= threshold && enoughEscort, win, threshold, warships, List.of());
+    return new Safety(
+        win <= threshold && enoughEscort, win, threshold, warships, List.of(), arriving.size());
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS: warships of the partner of a combined operation that can join
+   * {@code zone} (a shared gathering zone) in the partner's turn later this round: within 2 sea
+   * zones and their movement, not carriers, not from zones where the partner's transports are. None
+   * when I move after the partner (its ships are already where they are).
+   */
+  private List<Unit> combinedArrivals(final Territory zone) {
+    final List<Unit> list = new ArrayList<>();
+    for (final TestaDiPonte.Coppia c : coppie) {
+      if (!c.primaIo() || !c.raccoltaComune().contains(zone.getName())) {
+        continue;
+      }
+      final GamePlayer partner = c.alleato();
+      for (final Territory t : map.getNeighbors(zone, 2, Matches.territoryIsWater())) {
+        if (t.equals(zone)
+            || t.anyUnitsMatch(
+                Matches.unitIsOwnedBy(partner).and(OperazioniAnfibie::isTransport))) {
+          continue;
+        }
+        final int d = map.getDistance(t, zone, Matches.territoryIsWater());
+        for (final Unit u :
+            t.getMatches(
+                Matches.unitIsOwnedBy(partner)
+                    .and(OperazioniAnfibie::isWarship)
+                    .and(Matches.unitIsCarrier().negate()))) {
+          if (d >= 0 && u.getUnitAttachment().getMovement(partner) >= d && !list.contains(u)) {
+            list.add(u);
+          }
+        }
+      }
+    }
+    return list;
   }
 
   /**
@@ -723,7 +1000,12 @@ public final class OperazioniAnfibie {
    * @param escortsMoved warships moved there as escort
    */
   private record Safety(
-      boolean safe, double enemyWin, double threshold, int warships, List<Unit> escortsMoved) {}
+      boolean safe,
+      double enemyWin,
+      double threshold,
+      int warships,
+      List<Unit> escortsMoved,
+      int arriving) {}
 
   /** Own warships that may join a fleet in {@code zone}, nearest then cheapest. */
   private List<Unit> escortCandidates(final Territory zone, final List<Unit> arriving) {
@@ -781,6 +1063,9 @@ public final class OperazioniAnfibie {
       for (final String name : op.raccolta()) {
         Optional.ofNullable(map.getTerritoryOrNull(name)).ifPresent(check::add);
       }
+      for (final String name : op.bersagli()) {
+        Optional.ofNullable(map.getTerritoryOrNull(name)).ifPresent(check::add);
+      }
       for (final Strategia.Porto p : op.porti()) {
         Optional.ofNullable(map.getTerritoryOrNull(p.zona())).ifPresent(check::add);
         Optional.ofNullable(map.getTerritoryOrNull(p.territorio())).ifPresent(check::add);
@@ -834,7 +1119,7 @@ public final class OperazioniAnfibie {
     if (fleetZones.isEmpty()) {
       op.raccolta().stream()
           .map(map::getTerritoryOrNull)
-          .filter(java.util.Objects::nonNull)
+          .filter(Objects::nonNull)
           .forEach(fleetZones::add);
     }
     int escort = 0;
@@ -865,6 +1150,20 @@ public final class OperazioniAnfibie {
     }
     final String next =
         nextStep(op, stato, carrier, fleet, aboard, gatherWithCargo.isPresent(), targetName, win);
+    final Optional<TestaDiPonte.Valutazione> estimate = bridgeheadEstimate(op, landed);
+    final List<String> bridgehead = new ArrayList<>();
+    Optional.ofNullable(bridgeheadText.get(op.nome())).ifPresent(bridgehead::add);
+    estimate.ifPresent(
+        v ->
+            bridgehead.add(
+                String.format(
+                    Locale.ROOT,
+                    "testa di ponte di %s su %s, rinforzo di %s nel suo turno: %s",
+                    v.primo(),
+                    v.territorio(),
+                    v.secondo(),
+                    v.testo())));
+    combatEstimates(op, landed).forEach(bridgehead::add);
     return new Rapporto(
         op.nome(),
         player.getName(),
@@ -878,7 +1177,125 @@ public final class OperazioniAnfibie {
         String.join("; ", reasons),
         List.copyOf(moves),
         targetName,
-        win);
+        win,
+        combinedFleetText(op),
+        String.join("; ", bridgehead),
+        estimate);
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS: the combined fleet at the shared gathering zones, eg "110 Sea
+   * Zone: Americans 2 navi, British 3 (+1 in arrivo nel turno di British)"; empty without a pair.
+   */
+  private String combinedFleetText(final Strategia.Operazione op) {
+    final List<String> parts = new ArrayList<>();
+    for (final TestaDiPonte.Coppia c : coppie) {
+      if (!c.mia().equals(op)) {
+        continue;
+      }
+      for (final String name : c.raccoltaComune()) {
+        final Territory zone = map.getTerritoryOrNull(name);
+        if (zone == null) {
+          continue;
+        }
+        final Map<String, Integer> ships = new TreeMap<>();
+        ships.put(player.getName(), 0);
+        ships.put(c.alleato().getName(), 0);
+        zone.getMatches(Matches.isUnitAllied(player).and(OperazioniAnfibie::isWarship))
+            .forEach(u -> ships.merge(u.getOwner().getName(), 1, Integer::sum));
+        final int arriving = c.primaIo() ? combinedArrivals(zone).size() : 0;
+        final List<String> byNation = new ArrayList<>();
+        ships.forEach((n, k) -> byNation.add(n + " " + k));
+        parts.add(
+            zone.getName()
+                + ": navi "
+                + String.join(", ", byNation)
+                + (arriving > 0
+                    ? " (+" + arriving + " in arrivo nel turno di " + c.alleato().getName() + ")"
+                    : ""));
+      }
+    }
+    return String.join("; ", parts);
+  }
+
+  /**
+   * The bridgehead rule on a common target I landed on in this turn's combat move, with the units
+   * that survived and the partner's reinforcements (the nation moving first only).
+   */
+  private Optional<TestaDiPonte.Valutazione> bridgeheadEstimate(
+      final Strategia.Operazione op, final Map<String, Integer> landed) {
+    if (calc == null) {
+      return Optional.empty();
+    }
+    for (final TestaDiPonte.Coppia c : coppie) {
+      if (!c.mia().equals(op) || !c.primaIo()) {
+        continue;
+      }
+      for (final String name : c.bersagliComuni()) {
+        final Territory t = map.getTerritoryOrNull(name);
+        if (t == null || !landed.containsKey(name) || !t.isOwnedBy(player)) {
+          continue;
+        }
+        final List<Unit> holders =
+            t.getMatches(Matches.unitIsOwnedBy(player).and(Matches.unitIsLand()));
+        final ProTerritory max = enemyMax(t);
+        final List<Unit> enemyUnits = max == null ? List.of() : new ArrayList<>(max.getMaxUnits());
+        final List<Unit> bombard =
+            max == null ? List.of() : new ArrayList<>(max.getMaxBombardUnits());
+        final double without =
+            enemyUnits.isEmpty()
+                ? 0
+                : calc.calculateBattleResults(proData, t, enemyUnits, holders, bombard)
+                    .getWinPercentage();
+        final double win =
+            proData.getTuning() instanceof ProPlusTuning tuning
+                ? Optional.ofNullable(
+                        tuning.bridgeheads(player, data.getSequence().getRound()).get(t.getName()))
+                    .map(TestaDiPonte.Valutazione::winSbarco)
+                    .orElse(Double.NaN)
+                : Double.NaN;
+        return Optional.of(
+            TestaDiPonte.valuta(
+                proData,
+                calc,
+                t,
+                enemyUnits,
+                bombard,
+                win,
+                without,
+                holders,
+                c,
+                TestaDiPonte.rinforzi(proData, calc, t, c)));
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** The combat move's bridgehead estimates on common targets not landed on (dropped ones). */
+  private List<String> combatEstimates(
+      final Strategia.Operazione op, final Map<String, Integer> landed) {
+    final List<String> list = new ArrayList<>();
+    if (!(proData.getTuning() instanceof ProPlusTuning tuning)) {
+      return list;
+    }
+    final Map<String, TestaDiPonte.Valutazione> estimates =
+        tuning.bridgeheads(player, data.getSequence().getRound());
+    for (final TestaDiPonte.Coppia c : coppie) {
+      if (!c.mia().equals(op) || !c.primaIo()) {
+        continue;
+      }
+      for (final String name : c.bersagliComuni()) {
+        final TestaDiPonte.Valutazione v = estimates.get(name);
+        if (v != null && !landed.containsKey(name)) {
+          list.add(
+              "testa di ponte su "
+                  + name
+                  + (v.tenuta() ? " ammessa ma non sbarcata: " : " scartata: ")
+                  + v.testo());
+        }
+      }
+    }
+    return list;
   }
 
   private String nextStep(
