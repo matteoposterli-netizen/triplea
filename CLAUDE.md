@@ -1536,3 +1536,43 @@ obbligati in più dentro gli ordini del piano (`ProPlanPurchase`, quota del pian
   UK distrutta al R1, chiede 1 cacciatorpediniere); USA R3 carica a 101 e va in 104; lo "sbarco" del
   diario contava anche sbarchi di Hard fuori bersaglio (Gibraltar, Iraq): ora solo i bersagli.
 
+
+#### Autoplay in CI (run 42396636390, commit 3a02889, tutto verde: test 8 min 40 s, 14 partite da 12 round)
+Nessuna vittoria entro 12 round. Primo sbarco vero alleato **in Europa** (British/Americans, unità
+scaricate su terra nemica) per partita, seme 1 / seme 2:
+
+| Config | Europa | USA: unità sbarcate (tutta la partita) | Trasporti inattivi Alleati (somma round) | VC R12 Asse/Alleati |
+|---|---|---|---|---|
+| A/1 | R7 Normandy (UK) / R6 Holland (UK) | 12 / 7 | 85 / 82 | 6/5, 8/3 |
+| A/2 | R7 Denmark (USA) / R7 Greece (UK) | 38 / 38 | 99 / 102 | 6/5, 7/4 |
+| D/1 | R9 Holland (UK) / R6 Normandy (UK) | 22 / 28 | 85 / 61 | 7/4, 6/5 |
+| D/2 | R8 Normandy (USA) / R6 Greece (UK) | 42 / 12 | 107 / 119 | 4/7, 4/7 |
+| C/1 | R7 Normandy (UK) / R5 Holland (UK) | 5 / 2 | 33 / 82 | 7/4, 5/6 |
+| Hard | R6 Yugoslavia (UK) / R6 Holland (UK) | 30 / 40 | 173 / 185 | 7/4, 3/8 |
+| B/1 | R8 Holland (UK) / R6 Greece (UK) | 4 / 4 | 54 / 64 | 8/3, 7/4 |
+
+- **Alleati 1 (criterio: sbarco entro R6 in almeno metà)**: 4 partite su 8 con piano 1 (A/1, D/1, C/1,
+  B/1, ognuna col seme 2) = metà, al limite; sempre britannici, mai l'Overlord USA. Hard: 2/2 al R6.
+  Overlord USA bloccata quasi ogni turno dal R3-R4 ("scorta insufficiente per 110/109: win% nemica >
+  20%", fino a 51 turni-motivo in D/1) e "bersaglio troppo forte" su Normandy (truppe rimesse a terra in
+  UK, 6-13 volte): la flotta USA arriva in UK ma lo sbarco all'80% non c'è. Gli USA sbarcano **meno** di
+  Hard nel piano 1 (2-28 unità contro 30-40). Il criterio "trasporti inattivi in calo rispetto a 68f095c"
+  non è verificabile (la metrica non esisteva); rispetto a Hard nella stessa run gli Alleati Pro+ hanno
+  33-119 turni-trasporto inattivi contro 173-185 (ma anche meno trasporti: USA 9-21 a fine partita
+  contro 19-25).
+- **Asse D (criterio: unità di terra tedesche in Nord Africa entro R5)**: 2 partite su 4. D/1 seme 2:
+  1 carro in Libia al R3 (caricato al R2 a Northern Italy su trasporto italiano in 97), poi ondate fino a
+  18 unità al R11; D/1 seme 1: 6 unità in Egypt (già dell'Asse) al R5. D/2 seme 1: carico tedesco al R2
+  rimasto a bordo (trasporto italiano mai arrivato in 96: zona non sicura); D/2 seme 2: nessun imbarco
+  ("porto 97 esposto": flotta britannica). La regola dei trasporti alleati funziona nel gioco reale.
+- **Sea Lion (B, sperimentale)**: nessun tentativo sul Regno Unito (win% max 0% ogni round); Scotland
+  attaccata al R3 (seme 2, 100%) e candidata al R4 (seme 1, 100%, scartata). "Leone marino" bloccata
+  10-15 turni: trasporti vuoti fermi perché 112/113 non sono sicure.
+- Hard identica: golden e `DiaryNeutralityTest` verdi in locale e in CI. `PlanLogisticsTest.theNeutral
+  PlanBuysAsWithoutAStrategyFile` è fallito 1 volta su 5 in locale (passa 3/3 da solo): gli acquisti di
+  Hard usano `Math.random` (`ProPurchaseUtils.randomizePurchaseOption`), instabilità preesistente.
+- Correzione dopo la run: la colonna per configurazione "Alleati entro R6" usava il primo sbarco ovunque
+  (sempre R1 Ethiopia, sbarco britannico di Hard in Africa orientale) ⇒ ora "Alleati in Europa entro R6".
+- Da decidere (non tarato, per regola): soglia di sicurezza della flotta (Equilibrato: nemico ≤ 20%) e
+  desiderata 80% sui bersagli solo via mare sono troppo prudenti per Overlord; il coordinamento UK+USA
+  sullo stesso bersaglio non esiste (ognuno da solo non arriva all'80% su Normandy).

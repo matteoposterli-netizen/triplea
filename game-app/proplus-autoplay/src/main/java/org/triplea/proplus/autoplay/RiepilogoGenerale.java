@@ -443,9 +443,9 @@ final class RiepilogoGenerale {
       }
     }
     md.append(
-        "\nPer configurazione: partite con primo sbarco vero alleato entro R6, round medio del"
+        "\nPer configurazione: partite con primo sbarco vero alleato in Europa entro R6, round medio del"
             + " primo sbarco vero (partite con sbarco), unita' sbarcate e trasporti inattivi per"
-            + " round (media dei semi, Asse / Alleati).\n\n| Configurazione | Alleati entro R6 |"
+            + " round (media dei semi, Asse / Alleati).\n\n| Configurazione | Alleati in Europa entro R6 |"
             + " Primo sbarco medio |");
     for (int r = 1; r <= maxRound; r++) {
       md.append(" R").append(r).append(" sbarcate | R").append(r).append(" inattivi |");
@@ -455,13 +455,10 @@ final class RiepilogoGenerale {
       md.append("---|---|");
     }
     md.append('\n');
-    final String allies = alliances.isEmpty() ? "Allies" : alliances.get(alliances.size() - 1);
     for (final Map.Entry<String, List<JsonObject>> c : byConfig.entrySet()) {
       final List<JsonObject> list = c.getValue();
       final long byR6 =
-          list.stream()
-              .filter(j -> firstRound(j, allies) > 0 && firstRound(j, allies) <= 6)
-              .count();
+          list.stream().filter(j -> europeRound(j) > 0 && europeRound(j) <= 6).count();
       md.append("| ")
           .append(c.getKey())
           .append(" | ")
@@ -549,6 +546,13 @@ Operazioni bloccate per configurazione (turni bloccati, motivi piu' frequenti):
           .append(blockedText(c.getValue(), 4))
           .append('\n');
     }
+  }
+
+  /** Round of the first real British/American landing in Europe, 0 if none. */
+  static int europeRound(final JsonObject json) {
+    return json.has("primo_sbarco_europa")
+        ? json.getAsJsonObject("primo_sbarco_europa").get("round").getAsInt()
+        : 0;
   }
 
   /** Round of the alliance's first real landing, 0 if none. */
