@@ -20,6 +20,7 @@ import games.strategy.triplea.ai.proplus.ProPlusTuning;
 import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.ai.proplus.TestaDiPonte;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
+import games.strategy.triplea.ai.proplus.strategia.StalloOperazioni;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.MoveDelegate;
@@ -93,8 +94,9 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
 
     assertThat(americans.getOperazioni()).extracting(o -> o.nome()).containsExactly("Overlord USA");
     assertThat(americans.peso(territory("Normandy Bordeaux"))).isEqualTo(15);
-    assertThat(americans.peso(territory("Holland Belgium"))).isEqualTo(12, within());
-    assertThat(americans.peso(territory("Norway"))).isEqualTo(9.6, within());
+    // Holland Belgium only from round 8 (or a weakened Germany): Norway is second
+    assertThat(americans.peso(territory("Holland Belgium"))).isZero();
+    assertThat(americans.peso(territory("Norway"))).isEqualTo(12, within());
     assertThat(americans.isBersaglioOperazione(territory("Normandy Bordeaux"))).isTrue();
 
     // round 2: the American operation starts in round 3
@@ -309,8 +311,7 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
     assertThat(pair.alleato()).isEqualTo(british);
     assertThat(pair.primaIo()).isTrue();
     assertThat(pair.raccoltaComune()).containsExactly("110 Sea Zone");
-    assertThat(pair.bersagliComuni())
-        .containsExactly("Normandy Bordeaux", "Holland Belgium", "Norway");
+    assertThat(pair.bersagliComuni()).containsExactly("Normandy Bordeaux", "Norway");
     // the British see the same pair from the other side
     data.getSequence().setRoundAndStep(3, "Combat Move", british);
     assertThat(TestaDiPonte.coppie(data, PianoAttivo.of(data, british).orElseThrow(), british))
@@ -474,30 +475,31 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
     final ProTerritory onNormandy = new ProTerritory(normandy, proData);
     final ProTerritory onHolland = new ProTerritory(holland, proData);
 
-    // Normandy still planned: no landing on Holland Belgium
-    assertThat(
-            proData
-                .getTuning()
-                .dropsLanding(
-                    proData,
-                    ai.getCalc(),
-                    onHolland,
-                    worth(holland, 95),
-                    List.of(),
-                    List.of(onHolland, onNormandy)))
+    final ProTerritory onNorway = new ProTerritory(territory("Norway"), proData);
+
+    // Normandy still German: the Americans wait for it (accumulo), no landing elsewhere, also not
+    // on Holland Belgium (a target of the operation not active before round 8)
+    assertThat(drop(proData, ai, onHolland, List.of(onHolland, onNormandy)))
         .contains(ProPlusTuning.DROP_OTHER_TARGET);
-    // Normandy dropped (unreachable or below the minimum): Holland Belgium is the pair's target
-    assertThat(
-            proData
-                .getTuning()
-                .dropsLanding(
-                    proData,
-                    ai.getCalc(),
-                    onHolland,
-                    worth(holland, 95),
-                    List.of(),
-                    List.of(onHolland)))
-        .isEmpty();
+    assertThat(drop(proData, ai, onNorway, List.of(onNorway)))
+        .contains(ProPlusTuning.DROP_OTHER_TARGET);
+    // Normandy taken: Norway is the pair's target, Holland Belgium is still not active
+    removeLand("Normandy Bordeaux", germans);
+    ownedBy(normandy, americans);
+    assertThat(drop(proData, ai, onNorway, List.of(onNorway))).isEmpty();
+    assertThat(drop(proData, ai, onHolland, List.of(onHolland)))
+        .contains(ProPlusTuning.DROP_OTHER_TARGET);
+  }
+
+  private static Optional<String> drop(
+      final ProData proData,
+      final TestAi ai,
+      final ProTerritory attack,
+      final List<ProTerritory> planned) {
+    return proData
+        .getTuning()
+        .dropsLanding(
+            proData, ai.getCalc(), attack, worth(attack.getTerritory(), 95), List.of(), planned);
   }
 
   @Test
@@ -569,19 +571,105 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
     final ProData proData = proPlus(british);
     final TestAi ai = new TestAi(proData, "British");
     ai.prepareData(data);
-    final ProTerritory onHolland = new ProTerritory(holland, proData);
+    final ProTerritory onNorway = new ProTerritory(territory("Norway"), proData);
 
-    assertThat(
-            proData
-                .getTuning()
-                .dropsLanding(
-                    proData,
-                    ai.getCalc(),
-                    onHolland,
-                    worth(holland, 95),
-                    List.of(),
-                    List.of(onHolland)))
+    assertThat(drop(proData, ai, onNorway, List.of(onNorway)))
         .contains(ProPlusTuning.DROP_OTHER_TARGET);
+    // Holland Belgium is not a target before round 8: Hard's rules
+    assertThat(drop(proData, ai, new ProTerritory(holland, proData), List.of())).isEmpty();
+  }
+
+  // ---------------------------------------------------- targets by phase, accumulo, stall
+
+  @Test
+  void hollandBelgiumIsATargetFromRound8OrWhenGermanyIsWeakened() {
+    data.getSequence().setRoundAndStep(5, "Combat Move", americans);
+    assertThat(op(americans).bersagli()).containsExactly("Normandy Bordeaux", "Norway");
+    data.getSequence().setRoundAndStep(8, "Combat Move", americans);
+    assertThat(op(americans).bersagli())
+        .containsExactly("Normandy Bordeaux", "Holland Belgium", "Norway");
+
+    // before round 8: the reference (German land TUV on Ovest) is saved the first time...
+    data.getSequence().setRoundAndStep(5, "Combat Move", americans);
+    assertThat(data.getProperties().get("Pro+ TUV iniziale: Germans Ovest")).isNotNull();
+    // ... and with less than half of it Holland Belgium is a target
+    for (final Territory t : data.getMap().getTerritories()) {
+      if (!t.isWater()
+          && List.of("Germany", "Western Germany", "Holland Belgium").contains(t.getName())) {
+        removeLand(t.getName(), germans);
+      }
+    }
+    assertThat(op(americans).bersagli()).contains("Holland Belgium");
+  }
+
+  @Test
+  void hollandBelgiumIsATargetWhenGermanyLostItsCapital() {
+    data.getSequence().setRoundAndStep(5, "Combat Move", americans);
+    assertThat(op(americans).bersagli()).doesNotContain("Holland Belgium");
+    ownedBy(territory("Germany"), player("Russians"));
+    assertThat(op(americans).bersagli()).contains("Holland Belgium");
+  }
+
+  @Test
+  void theAmericansAccumulateInTheUnitedKingdomUntilNormandyIsReady() {
+    clearAxisAirAndNavy();
+    clearTransports(americans);
+    clearSea("110 Sea Zone");
+    final Territory normandy = territory("Normandy Bordeaux");
+    removeLand("Normandy Bordeaux", player("French"));
+    ownedBy(normandy, germans);
+    add("Normandy Bordeaux", "infantry", 6, germans);
+    add("110 Sea Zone", "transport", 2, americans);
+    add("United Kingdom", "infantry", 4, americans);
+    nonCombat(americans, 5);
+
+    final OperazioniAnfibie.Rapporto r = report(play(americans), "Overlord USA");
+
+    final OperazioniAnfibie.Accumulo a = r.accumulo().orElseThrow();
+    assertThat(a.bersaglio()).isEqualTo("Normandy Bordeaux");
+    assertThat(a.porto()).isEqualTo("United Kingdom");
+    assertThat(a.unitaPorto()).isEqualTo(4);
+    assertThat(a.imbarcabili()).isEqualTo(4);
+    assertThat(a.soglia()).isEqualTo(72);
+    assertThat(a.pronto()).isFalse();
+    assertThat(a.testo("Overlord USA", "Americans"))
+        .startsWith("Overlord USA: accumulo (Americans 4 unita' in United Kingdom")
+        .contains("win% Normandy Bordeaux")
+        .contains("/ soglia 72%");
+    assertThat(normandy.getOwner()).isEqualTo(germans);
+  }
+
+  @Test
+  void threeRoundsFromRound5WithoutTheThresholdAreAStall() {
+    final var props = data.getProperties();
+    assertThat(StalloOperazioni.aggiorna(props, "Overlord USA", 4, false).stallo()).isFalse();
+    assertThat(StalloOperazioni.aggiorna(props, "Overlord USA", 5, false).roundSenza())
+        .isEqualTo(1);
+    assertThat(StalloOperazioni.aggiorna(props, "Overlord USA", 6, false).stallo()).isFalse();
+    final StalloOperazioni.Stato stall = StalloOperazioni.aggiorna(props, "Overlord USA", 7, false);
+    assertThat(stall.stallo()).isTrue();
+    assertThat(stall.roundSenza()).isEqualTo(3);
+    assertThat(StalloOperazioni.inStallo(props, "Overlord USA")).isTrue();
+    // ready again: no stall, and the count starts over
+    assertThat(StalloOperazioni.aggiorna(props, "Overlord USA", 8, true).stallo()).isFalse();
+    assertThat(StalloOperazioni.aggiorna(props, "Overlord USA", 10, false).stallo()).isFalse();
+    assertThat(StalloOperazioni.aggiorna(props, "Overlord USA", 11, false).stallo()).isTrue();
+  }
+
+  @Test
+  void theOperationsBuyLandUnitsInTheProportionsOfThePlansMix() {
+    data.getSequence().setRoundAndStep(5, "Purchase", americans);
+    final PianoAttivo plan = PianoAttivo.of(data, americans).orElseThrow();
+    // Americans R4+: fanteria 35, artiglieria 20, carri_mech 20 (largest remainder)
+    assertThat(OperazioniAnfibie.landShares(plan, 4))
+        .containsEntry("fanteria", 2)
+        .containsEntry("artiglieria", 1)
+        .containsEntry("carri_mech", 1);
+    assertThat(OperazioniAnfibie.landShares(plan, 0)).isEmpty();
+  }
+
+  private games.strategy.triplea.ai.proplus.strategia.Strategia.Operazione op(final GamePlayer p) {
+    return PianoAttivo.of(data, p).orElseThrow().getOperazioni().get(0);
   }
 
   /** A landing worth Hard keeps (positive value, holdable). */

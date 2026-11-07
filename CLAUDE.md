@@ -839,6 +839,38 @@ nuovo hook `ProTuning.keepsBridgehead` (default vuoto) chiamato in `ProCombatMov
     terrebbe; con contrattacco ≤ soglia decide Hard (o `keepsBridgehead` se Hard lo scarta);
   - chi muove per secondo non sbarca su altri bersagli comuni mentre il partner tiene una testa di
     ponte (`bridgehead_other_target`): rinforza quella nel non combattimento.
+- **Bersagli per fase** (`bersagli_condizionati` dell'operazione, `Strategia.CondizioneBersaglio`,
+  `strategia/CondizioniBersaglio`, applicati in `PianoAttivo` alle operazioni proprie e a quelle
+  combinate; `PianoAttivo.bersagliCompleti` = tutti, anche non attivi): piano 1, Overlord USA e UK
+  `["Normandy Bordeaux", "Holland Belgium", "Norway"]` con Holland Belgium attivo **dal R8**, oppure prima
+  se la Germania ha perso la capitale (un territorio con `capital` = Germans non suo) **o** il suo TUV di
+  terra (senza infrastrutture) sul fronte Ovest è < 50% del riferimento. Riferimento = lo stesso TUV la
+  prima volta che la condizione viene letta nella partita, salvato nella proprietà `"Pro+ TUV iniziale:
+  Germans Ovest"` (stringa); con gli Alleati Pro+ è il primo turno alleato del R1 (dopo quello tedesco).
+  Quindi R1-R7: Normandy, poi Norway. Holland tolto dagli obiettivi di fase R4+ (è obiettivo tramite
+  l'operazione quando è attivo). Overlord USA: `trasporti` 4 → 8.
+- **Bersaglio della coppia per chi muove per primo** (`TestaDiPonte.bersaglioScelto`): il primo bersaglio
+  comune attivo non ancora alleato, senza ripiego: gli USA non sbarcano su nessun altro bersaglio
+  dell'operazione (anche non attivo) finché Normandy è nemica (accumulo); presa Normandy, Norway.
+- **Accumulo** (`OperazioniAnfibie.Accumulo`, nel non combattimento degli USA, chi muove per primo):
+  truppe USA nel porto di raccolta (United Kingdom) + a bordo dei trasporti USA nelle zone di raccolta
+  comuni, imbarcabili sui trasporti USA entro 2 zone (dalla più grande); win% contro i difensori attuali
+  del bersaglio (senza aerei né bombardamento) vs desiderata del livello effettivo (Normandy, Ovest +1:
+  72). Pronto = win% ≥ soglia o sbarco su un bersaglio comune nel turno. Lo sbarco vero resta del
+  combattimento di Hard (minima = desiderata effettiva) con la regola di tenuta. Nel frattempo i
+  trasporti portano le truppe in United Kingdom e gli acquisti dell'operazione per il posto libero sono
+  divisi fanteria/artiglieria/carri_mech in proporzione al mix del piano (`OperazioniAnfibie.landShares`,
+  resti maggiori; prima solo fanteria).
+- **Stallo** (`strategia/StalloOperazioni`, proprietà `"Pro+ operazione: <nome>"` = JSON {ultimo_pronto,
+  round_senza, stallo}): dal R5 (o dal round dopo l'ultimo "pronto") 3 round senza raggiungere la soglia
+  ⇒ "in stallo" finché non torna pronta. `Valutazione`: un'operazione del piano in stallo peggiora lo
+  stato di un livello (IN LINEA → IN RITARDO → IN CRISI), JSON `operazioni_in_stallo`, testo
+  "operazioni in stallo: ...". Nessun cambio di piano (step 3d).
+- Diario a ogni turno USA: "Overlord USA: accumulo (Americans X unita' in United Kingdom, N imbarcabili su
+  T trasporti, win% Normandy Bordeaux Y% / soglia Z%)" (o "pronto"), con " - Overlord USA IN STALLO: N
+  round dal R5 senza raggiungere la soglia"; JSON `accumulo` {bersaglio, porto, unita_porto, imbarcabili,
+  trasporti, win, soglia, pronto, round_senza, stallo}. Autoplay: colonna "Operazione in stallo" per
+  partita, "Sbarco USA entro R9" e "In stallo" per configurazione.
 - **Diario**: righe "flotta combinata: 110 Sea Zone: navi Americans N, British M (+K in arrivo nel turno di
   British)" e testa di ponte ("testa di ponte di Americans su X, rinforzo di British nel suo turno: win%
   sbarco W% (desiderata D%), tenuta stimata dopo il rinforzo di British (N unita'): contrattacco nemico

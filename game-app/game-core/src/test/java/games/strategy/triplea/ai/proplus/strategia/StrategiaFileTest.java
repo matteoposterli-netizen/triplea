@@ -99,7 +99,7 @@ class StrategiaFileTest {
     assertThat(germanyFirst.fase(4).orElseThrow().modificatore("Est")).isZero();
     assertThat(germanyFirst.fase(4).orElseThrow().obiettivi())
         .extracting(Strategia.Obiettivo::territorio)
-        .containsExactly("Normandy Bordeaux", "Norway", "Holland Belgium");
+        .containsExactly("Normandy Bordeaux", "Norway");
     assertThat(allies.piano("3").orElseThrow().fase(5).orElseThrow().fronti()).isEmpty();
   }
 
@@ -422,6 +422,12 @@ class StrategiaFileTest {
     assertThat(overlord.bersagli())
         .containsExactly("Normandy Bordeaux", "Holland Belgium", "Norway");
     assertThat(overlord.vettori()).containsExactly("Americans");
+    // step ANFIBIE-BIS: Holland Belgium from round 8, or earlier with Germany weakened
+    assertThat(overlord.condizionati())
+        .containsOnlyKeys("Holland Belgium")
+        .containsEntry(
+            "Holland Belgium", new Strategia.CondizioneBersaglio(8, "Germans", "Ovest", 0.5));
+    assertThat(overlord.trasporti()).isEqualTo(8);
     assertThat(germanyFirst.operazioni("British", 2))
         .extracting(Strategia.Operazione::nome)
         .containsExactly("Overlord UK");

@@ -688,9 +688,10 @@ public final class ProPlusTuning implements ProTuning {
    *
    * <ul>
    *   <li>the nation moving first lands only on the pair's target ({@link
-   *       TestaDiPonte#bersaglioScelto}: the first common target, in the plan's order, still
-   *       planned), and only if the counter-attack after the partner's reinforcements wins at most
-   *       {@code 100 - minimum win%} of the target's effective level;
+   *       TestaDiPonte#bersaglioScelto}: the first common target active this round and not yet
+   *       allied, in the plan's order), none of the operation's other targets (also those not
+   *       active yet), and only if the counter-attack after the partner's reinforcements wins at
+   *       most {@code 100 - minimum win%} of the target's effective level;
    *   <li>the nation moving second lands on no other common target while the partner holds a
    *       bridgehead (it reinforces that one in its non-combat move).
    * </ul>
@@ -704,16 +705,32 @@ public final class ProPlusTuning implements ProTuning {
       final java.util.Collection<Unit> holders,
       final java.util.Collection<ProTerritory> planned) {
     final Territory target = attack.getTerritory();
-    for (final TestaDiPonte.Coppia pair : TestaDiPonte.coppieSu(proData, target)) {
+    final Optional<PianoAttivo> plan = planOf(proData);
+    if (plan.isEmpty() || target.isWater()) {
+      return Optional.empty();
+    }
+    for (final TestaDiPonte.Coppia pair : TestaDiPonte.coppieDi(proData)) {
       if (!pair.primaIo()) {
+        if (!pair.bersagliComuni().contains(target.getName())) {
+          continue;
+        }
         final Optional<Territory> head = TestaDiPonte.testaDiPonteAlleata(proData.getData(), pair);
         if (head.isPresent() && !head.get().equals(target)) {
           return Optional.of(DROP_OTHER_TARGET);
         }
         continue;
       }
-      final Optional<String> chosen = TestaDiPonte.bersaglioScelto(pair, planned);
-      if (chosen.isPresent() && !chosen.get().equals(target.getName())) {
+      // every target of the pair, also those not active this round (Holland Belgium before R8)
+      final List<String> all = plan.get().bersagliCompleti(pair.mia().nome());
+      if (!all.contains(target.getName())) {
+        continue;
+      }
+      final Optional<Territory> chosen =
+          TestaDiPonte.bersaglioScelto(proData.getData(), pair, proData.getPlayer());
+      if (chosen.isEmpty()) {
+        continue;
+      }
+      if (!chosen.get().equals(target)) {
         return Optional.of(DROP_OTHER_TARGET);
       }
       final TestaDiPonte.Valutazione v =

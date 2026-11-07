@@ -275,9 +275,28 @@ public final class Strategia {
       int trasporti,
       int scortaMinima,
       double peso,
-      boolean critico) {
+      boolean critico,
+      Map<String, CondizioneBersaglio> condizionati) {
     public boolean covers(final int round) {
       return round >= daRound && round <= aRound;
+    }
+
+    /** The same operation with only {@code active} targets (in this operation's order). */
+    public Operazione conBersagli(final List<String> active) {
+      return new Operazione(
+          nome,
+          nazioni,
+          vettori,
+          daRound,
+          aRound,
+          porti,
+          raccolta,
+          bersagli.stream().filter(active::contains).toList(),
+          trasporti,
+          scortaMinima,
+          peso,
+          critico,
+          condizionati);
     }
 
     public boolean riguarda(final String nation) {
@@ -300,6 +319,15 @@ public final class Strategia {
       return names;
     }
   }
+
+  /**
+   * When a conditional target of an operation ({@code bersagli_condizionati}) is active: from round
+   * {@code dalRound}, or earlier when {@code nazione} lost its capital or its land TUV on {@code
+   * fronte} is below {@code quotaTuvTerra} of the reference measured the first time the condition
+   * is read in the game (step OPERAZIONI ANFIBIE-BIS).
+   */
+  public record CondizioneBersaglio(
+      int dalRound, @Nullable String nazione, @Nullable String fronte, double quotaTuvTerra) {}
 
   /** An embarkation point: land territory {@code territorio} and its sea zone {@code zona}. */
   public record Porto(String territorio, String zona) {}
@@ -684,6 +712,32 @@ public final class Strategia {
         throw new IllegalArgumentException("operazione ripetuta nel piano " + plan + ": " + nome);
       }
       final List<String> vettori = strings(o, "vettori");
+      final Map<String, CondizioneBersaglio> condizionati = new LinkedHashMap<>();
+      if (o.has("bersagli_condizionati")) {
+        for (final Map.Entry<String, JsonElement> c :
+            o.getAsJsonObject("bersagli_condizionati").entrySet()) {
+          final JsonObject co = c.getValue().getAsJsonObject();
+          if (!bersagli.contains(c.getKey()) || !co.has("dal_round")) {
+            throw new IllegalArgumentException(
+                "operazione "
+                    + nome
+                    + " del piano "
+                    + plan
+                    + ": bersaglio condizionato non in 'bersagli' o senza 'dal_round': "
+                    + c.getKey());
+          }
+          final JsonObject prima = co.has("prima_se") ? co.getAsJsonObject("prima_se") : null;
+          condizionati.put(
+              c.getKey(),
+              new CondizioneBersaglio(
+                  co.get("dal_round").getAsInt(),
+                  prima == null ? null : string(prima, "nazione"),
+                  prima == null ? null : string(prima, "fronte"),
+                  prima != null && prima.has("quota_tuv_terra")
+                      ? prima.get("quota_tuv_terra").getAsDouble()
+                      : 0));
+        }
+      }
       list.add(
           new Operazione(
               nome,
@@ -699,7 +753,8 @@ public final class Strategia {
               o.has("trasporti") ? o.get("trasporti").getAsInt() : 2,
               o.has("scorta_minima") ? o.get("scorta_minima").getAsInt() : 1,
               o.has("peso") ? o.get("peso").getAsDouble() : 10,
-              o.has("critico") && o.get("critico").getAsBoolean()));
+              o.has("critico") && o.get("critico").getAsBoolean(),
+              Map.copyOf(condizionati)));
     }
     return List.copyOf(list);
   }

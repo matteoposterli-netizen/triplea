@@ -191,14 +191,23 @@ public final class TestaDiPonte {
         .toList();
   }
 
+  /** Every pair of {@code proData}'s player this round. */
+  public static List<Coppia> coppieDi(final ProData proData) {
+    return ProPlusTuning.planOf(proData).stream()
+        .flatMap(p -> coppie(proData.getData(), p, proData.getPlayer()).stream())
+        .toList();
+  }
+
   /**
-   * The pair's target for the nation moving first: the first common target (Normandy Bordeaux,
-   * Holland Belgium, Norway) the combat move still plans to attack; empty if none is planned.
+   * The pair's target for the nation moving first: the first common target active this round
+   * (Normandy Bordeaux, then Holland Belgium when active, then Norway) not yet allied to {@code
+   * me}. The nation moving first waits for it (accumulo) rather than landing on another target.
    */
-  public static Optional<String> bersaglioScelto(
-      final Coppia coppia, final Collection<ProTerritory> planned) {
+  public static Optional<Territory> bersaglioScelto(
+      final GameState data, final Coppia coppia, final GamePlayer me) {
     return coppia.bersagliComuni().stream()
-        .filter(name -> planned.stream().anyMatch(a -> a.getTerritory().getName().equals(name)))
+        .map(name -> data.getMap().getTerritoryOrNull(name))
+        .filter(t -> t != null && !t.isWater() && !Matches.isTerritoryAllied(me).test(t))
         .findFirst();
   }
 

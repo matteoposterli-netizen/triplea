@@ -45,10 +45,17 @@ public final class PianoAttivo {
 
   private final List<Strategia.Obiettivo> obiettivi;
 
+  @Getter(AccessLevel.NONE)
+  private final GameState dataPerCondizioni;
+
+  @Getter(AccessLevel.NONE)
+  private final Map<String, Strategia.Operazione> attivaSalvata = new java.util.HashMap<>();
+
   /** Amphibious operations of the plan in force this round for this nation (step OPERAZIONI). */
   private final List<Strategia.Operazione> operazioni;
 
   private PianoAttivo(
+      final GameState data,
       final Strategia strategia,
       final String alleanza,
       final GamePlayer player,
@@ -64,7 +71,8 @@ public final class PianoAttivo {
     this.fase = piano.fase(round).orElse(null);
     this.roundInizio = roundInizio;
     this.props = props;
-    this.operazioni = piano.operazioni(nazione, round);
+    this.dataPerCondizioni = data;
+    this.operazioni = piano.operazioni(nazione, round).stream().map(o -> attiva(data, o)).toList();
     final List<Strategia.Obiettivo> list = new ArrayList<>();
     if (fase != null) {
       fase.obiettivi().stream().filter(o -> o.appliesTo(nazione)).forEach(list::add);
@@ -93,9 +101,38 @@ public final class PianoAttivo {
    */
   public List<Strategia.Operazione> operazioniCombinate(final Strategia.Operazione mine) {
     return piano.operazioni().stream()
-        .filter(o -> !o.equals(mine) && o.covers(round) && !o.riguarda(nazione))
+        .filter(o -> !o.nome().equals(mine.nome()) && o.covers(round) && !o.riguarda(nazione))
         .filter(o -> o.raccolta().stream().anyMatch(mine.raccolta()::contains))
+        .map(o -> attivaSalvata.computeIfAbsent(o.nome(), k -> attiva(dataPerCondizioni, o)))
         .toList();
+  }
+
+  /** Every target of the operation named {@code nome}, also those not active this round. */
+  public List<String> bersagliCompleti(final String nome) {
+    return piano.operazioni().stream()
+        .filter(o -> o.nome().equals(nome))
+        .findFirst()
+        .map(Strategia.Operazione::bersagli)
+        .orElse(List.of());
+  }
+
+  /**
+   * {@code op} with its active targets this round: a conditional target only from its round or when
+   * its condition holds ({@link CondizioniBersaglio}).
+   */
+  private Strategia.Operazione attiva(final GameState data, final Strategia.Operazione op) {
+    if (op.condizionati().isEmpty()) {
+      return op;
+    }
+    final List<String> active =
+        op.bersagli().stream()
+            .filter(
+                t ->
+                    !op.condizionati().containsKey(t)
+                        || CondizioniBersaglio.attivo(
+                            data, strategia, round, op.condizionati().get(t)))
+            .toList();
+    return op.conBersagli(active);
   }
 
   /** Whether {@code t} is a landing target of an operation whose units are mine. */
@@ -130,6 +167,7 @@ public final class PianoAttivo {
         .map(
             plan ->
                 new PianoAttivo(
+                    data,
                     strategia,
                     alliance,
                     player,

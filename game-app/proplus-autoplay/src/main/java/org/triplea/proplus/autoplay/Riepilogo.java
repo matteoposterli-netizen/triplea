@@ -923,7 +923,8 @@ final class Riepilogo {
                   "scorta",
                   "sbarcate",
                   "motivo",
-                  "prossimo_passo")) {
+                  "prossimo_passo",
+                  "accumulo")) {
             if (e.has(k)) {
               o.add(k, e.get(k));
             }

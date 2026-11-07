@@ -121,7 +121,61 @@ public final class OperazioniAnfibie {
       double winStimata,
       String flottaCombinata,
       String testaDiPonte,
-      Optional<TestaDiPonte.Valutazione> valutazione) {}
+      Optional<TestaDiPonte.Valutazione> valutazione,
+      Optional<Accumulo> accumulo) {}
+
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS: the nation moving first in a combined operation waits until the
+   * landing on the pair's target reaches the desired win% of its effective level.
+   *
+   * @param bersaglio the pair's target
+   * @param porto the gathering port (eg United Kingdom)
+   * @param unitaPorto my land units that can board there or are aboard at the gathering zones
+   * @param imbarcabili those that fit my transports in reach of the gathering zones
+   * @param trasporti those transports
+   * @param win win% of a landing with {@code imbarcabili} on the target's defenders now
+   * @param soglia the desired win% of the target's effective level
+   * @param stato the stall state after this round
+   */
+  public record Accumulo(
+      String bersaglio,
+      String porto,
+      int unitaPorto,
+      int imbarcabili,
+      int trasporti,
+      double win,
+      double soglia,
+      boolean pronto,
+      games.strategy.triplea.ai.proplus.strategia.StalloOperazioni.Stato stato) {
+
+    /** Eg "accumulo (Americans 10 unita' in United Kingdom, ...)". */
+    public String testo(final String operazione, final String nazione) {
+      final String head =
+          String.format(
+              Locale.ROOT,
+              "%s: %s (%s %d unita' in %s, %d imbarcabili su %d trasporti, win%% %s %.0f%% /"
+                  + " soglia %.0f%%)",
+              operazione,
+              pronto ? "pronto" : "accumulo",
+              nazione,
+              unitaPorto,
+              porto,
+              imbarcabili,
+              trasporti,
+              bersaglio,
+              win,
+              soglia);
+      return stato.stallo()
+          ? head
+              + String.format(
+                  Locale.ROOT,
+                  " - %s IN STALLO: %d round dal R%d senza raggiungere la soglia",
+                  operazione,
+                  stato.roundSenza(),
+                  games.strategy.triplea.ai.proplus.strategia.StalloOperazioni.DA_ROUND)
+          : head;
+    }
+  }
 
   /** The units the operations keep in place, and the reports. */
   public record Esito(Set<Unit> tenute, List<Rapporto> rapporti) {
@@ -1180,7 +1234,100 @@ public final class OperazioniAnfibie {
         win,
         combinedFleetText(op),
         String.join("; ", bridgehead),
-        estimate);
+        estimate,
+        accumulo(op, landed));
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS, the nation moving first: whether the landing on the pair's target
+   * is ready (win% of the land units at the gathering port or aboard there, as many as my
+   * transports in reach carry, against the target's defenders now, at least the desired win% of the
+   * target's effective level), noted for the stall rule ({@link
+   * games.strategy.triplea.ai.proplus.strategia.StalloOperazioni}). A landing on a common target
+   * this turn counts as ready.
+   */
+  private Optional<Accumulo> accumulo(
+      final Strategia.Operazione op, final Map<String, Integer> landed) {
+    if (calc == null) {
+      return Optional.empty();
+    }
+    for (final TestaDiPonte.Coppia c : coppie) {
+      if (!c.mia().equals(op) || !c.primaIo()) {
+        continue;
+      }
+      final Optional<Territory> target = TestaDiPonte.bersaglioScelto(data, c, player);
+      final List<Territory> zones =
+          c.raccoltaComune().stream()
+              .map(map::getTerritoryOrNull)
+              .filter(Objects::nonNull)
+              .toList();
+      final Territory port =
+          op.porti().stream()
+              .filter(p -> c.raccoltaComune().contains(p.zona()))
+              .map(p -> map.getTerritoryOrNull(p.territorio()))
+              .filter(Objects::nonNull)
+              .findFirst()
+              .orElse(null);
+      if (target.isEmpty() || zones.isEmpty() || port == null) {
+        return Optional.empty();
+      }
+      final boolean landedNow = c.bersagliComuni().stream().anyMatch(landed::containsKey);
+      // troops: in the port and aboard my transports at the gathering zones
+      final List<Unit> troops = new ArrayList<>(waiting(port, player));
+      final List<Unit> transports = new ArrayList<>();
+      for (final Territory z : map.getTerritories()) {
+        if (!z.isWater() || TestaDiPonte.distance(map, z, zones) > 2) {
+          continue;
+        }
+        for (final Unit t :
+            z.getMatches(Matches.unitIsOwnedBy(player).and(OperazioniAnfibie::isTransport))) {
+          transports.add(t);
+          if (zones.contains(z)) {
+            troops.addAll(ownCargo(t));
+          }
+        }
+      }
+      troops.sort(
+          Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getTransportCost())
+              .thenComparing(u -> u.getType().getName()));
+      final List<Unit> fit = new ArrayList<>();
+      final List<Unit> left = new ArrayList<>(troops);
+      for (final Unit t : transports) {
+        int room = t.getUnitAttachment().getTransportCapacity();
+        for (final Unit u : new ArrayList<>(left)) {
+          final int cost = u.getUnitAttachment().getTransportCost();
+          if (cost > 0 && cost <= room) {
+            fit.add(u);
+            left.remove(u);
+            room -= cost;
+          }
+        }
+      }
+      final Territory t = target.get();
+      final List<Unit> defenders = t.getMatches(Matches.enemyUnit(player));
+      final double win =
+          fit.isEmpty()
+              ? 0
+              : calc.calculateBattleResults(proData, t, fit, defenders, Set.of())
+                  .getWinPercentage();
+      final double threshold = ProPlusTuning.riskLevel(proData, t).desiredWinPercentage(lowLuck);
+      final boolean ready = landedNow || win >= threshold;
+      final var state =
+          games.strategy.triplea.ai.proplus.strategia.StalloOperazioni.aggiorna(
+              data.getProperties(), op.nome(), data.getSequence().getRound(), ready);
+      return Optional.of(
+          new Accumulo(
+              t.getName(),
+              port.getName(),
+              troops.size(),
+              fit.size(),
+              transports.size(),
+              win,
+              threshold,
+              ready,
+              state));
+    }
+    return Optional.empty();
   }
 
   /**
@@ -1475,18 +1622,16 @@ public final class OperazioniAnfibie {
                     mine.size(),
                     op.trasporti())));
       } else if (op.nazioni().contains(player.getName()) && room > waiting) {
-        list.add(
-            new Acquisto(
-                op.nome(),
-                INFANTRY,
-                Math.min(MAX_LAND_PER_TURN, room - waiting),
-                String.format(
-                    Locale.ROOT,
-                    "posto libero per %d sui %d trasporti, %d truppe in attesa (%d a bordo)",
-                    room,
-                    mine.size(),
-                    waiting,
-                    aboard)));
+        final String why =
+            String.format(
+                Locale.ROOT,
+                "posto libero per %d sui %d trasporti, %d truppe in attesa (%d a bordo)",
+                room,
+                mine.size(),
+                waiting,
+                aboard);
+        landShares(plan, Math.min(MAX_LAND_PER_TURN, room - waiting))
+            .forEach((category, n) -> list.add(new Acquisto(op.nome(), category, n, why)));
       }
       int warships = 0;
       final Set<Territory> zones = new HashSet<>();
@@ -1517,6 +1662,52 @@ public final class OperazioniAnfibie {
       }
     }
     return list;
+  }
+
+  /**
+   * Land categories the operations buy, in the proportions of the plan's mix (step ANFIBIE-BIS).
+   */
+  static final List<String> LAND_CATEGORIES = List.of(INFANTRY, "artiglieria", "carri_mech");
+
+  /**
+   * {@code n} land units split among {@link #LAND_CATEGORIES} in the proportions of the plan's
+   * purchase mix (largest remainder; all infantry without a mix of these categories).
+   */
+  public static Map<String, Integer> landShares(final PianoAttivo plan, final int n) {
+    final Map<String, Double> mix =
+        plan.getLogistica().map(Strategia.Logistica::mix).orElse(Map.of());
+    final Map<String, Double> weights = new LinkedHashMap<>();
+    LAND_CATEGORIES.forEach(
+        c -> {
+          final double w = mix.getOrDefault(c, 0.0);
+          if (w > 0) {
+            weights.put(c, w);
+          }
+        });
+    final Map<String, Integer> result = new LinkedHashMap<>();
+    if (weights.isEmpty() || n <= 0) {
+      if (n > 0) {
+        result.put(INFANTRY, n);
+      }
+      return result;
+    }
+    final double total = weights.values().stream().mapToDouble(Double::doubleValue).sum();
+    final Map<String, Double> remainders = new LinkedHashMap<>();
+    int given = 0;
+    for (final Map.Entry<String, Double> e : weights.entrySet()) {
+      final double exact = n * e.getValue() / total;
+      final int whole = (int) Math.floor(exact);
+      result.put(e.getKey(), whole);
+      remainders.put(e.getKey(), exact - whole);
+      given += whole;
+    }
+    final List<String> byRemainder = new ArrayList<>(remainders.keySet());
+    byRemainder.sort(Comparator.comparingDouble((String c) -> -remainders.get(c)));
+    for (int i = 0; given < n; i++, given++) {
+      result.merge(byRemainder.get(i % byRemainder.size()), 1, Integer::sum);
+    }
+    result.values().removeIf(k -> k == 0);
+    return result;
   }
 
   // ------------------------------------------------------------------------------------ helpers

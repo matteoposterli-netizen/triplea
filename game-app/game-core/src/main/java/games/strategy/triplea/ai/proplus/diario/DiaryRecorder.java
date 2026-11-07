@@ -1010,6 +1010,22 @@ public final class DiaryRecorder implements ProDecisionRecorder {
             if (!r.testaDiPonte().isEmpty()) {
               json.addProperty("testa_di_ponte", r.testaDiPonte());
             }
+            r.accumulo()
+                .ifPresent(
+                    a -> {
+                      final JsonObject b = new JsonObject();
+                      b.addProperty("bersaglio", a.bersaglio());
+                      b.addProperty("porto", a.porto());
+                      b.addProperty("unita_porto", a.unitaPorto());
+                      b.addProperty("imbarcabili", a.imbarcabili());
+                      b.addProperty("trasporti", a.trasporti());
+                      b.addProperty("win", round1(a.win()));
+                      b.addProperty("soglia", round1(a.soglia()));
+                      b.addProperty("pronto", a.pronto());
+                      b.addProperty("round_senza", a.stato().roundSenza());
+                      b.addProperty("stallo", a.stato().stallo());
+                      json.add("accumulo", b);
+                    });
             r.valutazione()
                 .ifPresent(
                     v -> {
@@ -1073,7 +1089,8 @@ public final class DiaryRecorder implements ProDecisionRecorder {
         r.winStimata(),
         r.flottaCombinata(),
         text,
-        Optional.of(withWin));
+        Optional.of(withWin),
+        r.accumulo());
   }
 
   /**
@@ -1106,6 +1123,9 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     if (!r.testaDiPonte().isEmpty()) {
       sb.append("      ").append(r.testaDiPonte()).append('\n');
     }
+    r.accumulo()
+        .ifPresent(
+            a -> sb.append("      ").append(a.testo(r.operazione(), r.nazione())).append('\n'));
     if (!r.mosse().isEmpty()) {
       sb.append("      mosse: ").append(String.join("; ", r.mosse())).append('\n');
     }

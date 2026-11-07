@@ -568,8 +568,8 @@ Operazioni bloccate per configurazione (turni bloccati, motivi piu' frequenti):
 """
 Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benelux, Norvegia, Danimarca, Germania. Testa di ponte tenuta = territorio dello sbarco vero britannico/americano ancora degli Alleati a fine del suo round e del successivo.
 
-| Partita | Primo sbarco USA in Europa occ. | Unita' USA sbarcate per round | Prima testa di ponte tenuta >= 2 round |
-|---|---|---|---|
+| Partita | Primo sbarco USA in Europa occ. | Unita' USA sbarcate per round | Prima testa di ponte tenuta >= 2 round | Operazione in stallo |
+|---|---|---|---|---|
 """);
     for (final Game g : games) {
       if (g.json() == null) {
@@ -587,6 +587,8 @@ Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benel
           .append(
               Riepilogo.landingText(
                   j.has("prima_testa_di_ponte") ? j.getAsJsonObject("prima_testa_di_ponte") : null))
+          .append(" | ")
+          .append(stallText(j))
           .append(" |\n");
     }
     final Map<String, List<JsonObject>> byConfig = new LinkedHashMap<>();
@@ -601,11 +603,11 @@ Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benel
         "\nPer configurazione: partite con sbarco USA in Europa occidentale entro R7, partite con"
             + " testa di ponte tenuta >= 2 round (round medio), unita' USA sbarcate in Europa"
             + " occidentale per round (media dei semi).\n\n| Configurazione | Sbarco USA entro R7 |"
-            + " Testa di ponte >= 2 round | Round medio |");
+            + " Sbarco USA entro R9 | Testa di ponte >= 2 round | Round medio | In stallo |");
     for (int r = 1; r <= maxRound; r++) {
       md.append(" R").append(r).append(" |");
     }
-    md.append("\n|---|---|---|---|");
+    md.append("\n|---|---|---|---|---|---|");
     for (int r = 1; r <= maxRound; r++) {
       md.append("---|");
     }
@@ -614,6 +616,9 @@ Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benel
       final List<JsonObject> list = c.getValue();
       final long byR7 =
           list.stream().filter(j -> usWestRound(j) > 0 && usWestRound(j) <= 7).count();
+      final long byR9 =
+          list.stream().filter(j -> usWestRound(j) > 0 && usWestRound(j) <= 9).count();
+      final long stalled = list.stream().filter(j -> stallRound(j) > 0).count();
       final List<Double> heads =
           list.stream()
               .filter(j -> j.has("prima_testa_di_ponte"))
@@ -626,11 +631,19 @@ Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benel
           .append('/')
           .append(list.size())
           .append(" | ")
+          .append(byR9)
+          .append('/')
+          .append(list.size())
+          .append(" | ")
           .append(heads.size())
           .append('/')
           .append(list.size())
           .append(" | ")
           .append(mean(heads))
+          .append(" | ")
+          .append(stalled)
+          .append('/')
+          .append(list.size())
           .append(" |");
       for (int r = 1; r <= maxRound; r++) {
         final String key = String.valueOf(r);
@@ -649,6 +662,30 @@ Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benel
       }
       md.append('\n');
     }
+  }
+
+  /** First round an amphibious operation of the game was in a stall (diary), 0 if never. */
+  static int stallRound(final JsonObject json) {
+    if (!json.has("operazioni")) {
+      return 0;
+    }
+    int first = 0;
+    for (final JsonElement e : json.getAsJsonArray("operazioni")) {
+      final JsonObject o = e.getAsJsonObject();
+      if (o.has("accumulo")
+          && o.getAsJsonObject("accumulo").has("stallo")
+          && o.getAsJsonObject("accumulo").get("stallo").getAsBoolean()) {
+        final int r = o.get("round").getAsInt();
+        first = first == 0 ? r : Math.min(first, r);
+      }
+    }
+    return first;
+  }
+
+  /** Eg "dal R7", or "no". */
+  static String stallText(final JsonObject json) {
+    final int r = stallRound(json);
+    return r > 0 ? "dal R" + r : "no";
   }
 
   /** Round of the first American landing in western Europe, 0 if none. */

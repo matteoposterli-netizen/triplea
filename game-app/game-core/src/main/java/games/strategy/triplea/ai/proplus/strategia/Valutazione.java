@@ -229,13 +229,22 @@ public final class Valutazione {
     json.addProperty("tuv_nemico_distrutto", tuv[1]);
     json.addProperty("bilancio_tuv", tuv[1] - tuv[0]);
     json.addProperty("tappe_in_ritardo", late);
-    final String state;
+    String state;
     if (late >= 2 && falling) {
       state = IN_CRISI;
     } else if (late >= 1 || falling) {
       state = IN_RITARDO;
     } else {
       state = IN_LINEA;
+    }
+    // step OPERAZIONI ANFIBIE-BIS: an operation in a stall makes the progress one level worse
+    final JsonArray stalled = new JsonArray();
+    plan.operazioni().stream()
+        .filter(o -> StalloOperazioni.inStallo(data.getProperties(), o.nome()))
+        .forEach(o -> stalled.add(o.nome()));
+    json.add("operazioni_in_stallo", stalled);
+    if (!stalled.isEmpty()) {
+      state = IN_LINEA.equals(state) ? IN_RITARDO : IN_CRISI;
     }
     json.addProperty("stato", state);
     return json;
@@ -370,19 +379,29 @@ public final class Valutazione {
     }
     final int balance = p.get("bilancio_tuv").getAsInt();
     return String.format(
-        Locale.ROOT,
-        "Avanzamento: %s - tappe: %s; reddito %d PU (R1 %d, nemico %d%s), bilancio TUV %s%d"
-            + " (nemico -%d, noi -%d)",
-        p.get("stato").getAsString(),
-        milestones.isEmpty() ? "nessuna" : String.join(", ", milestones),
-        p.get("reddito").getAsInt(),
-        p.get("reddito_r1").getAsInt(),
-        p.get("reddito_nemico").getAsInt(),
-        p.get("reddito_in_calo_2_round").getAsBoolean() ? "; in calo da 2 round" : "",
-        balance >= 0 ? "+" : "",
-        balance,
-        p.get("tuv_nemico_distrutto").getAsInt(),
-        p.get("tuv_perso").getAsInt());
+            Locale.ROOT,
+            "Avanzamento: %s - tappe: %s; reddito %d PU (R1 %d, nemico %d%s), bilancio TUV %s%d"
+                + " (nemico -%d, noi -%d)",
+            p.get("stato").getAsString(),
+            milestones.isEmpty() ? "nessuna" : String.join(", ", milestones),
+            p.get("reddito").getAsInt(),
+            p.get("reddito_r1").getAsInt(),
+            p.get("reddito_nemico").getAsInt(),
+            p.get("reddito_in_calo_2_round").getAsBoolean() ? "; in calo da 2 round" : "",
+            balance >= 0 ? "+" : "",
+            balance,
+            p.get("tuv_nemico_distrutto").getAsInt(),
+            p.get("tuv_perso").getAsInt())
+        + (p.has("operazioni_in_stallo") && !p.getAsJsonArray("operazioni_in_stallo").isEmpty()
+            ? "; operazioni in stallo: "
+                + String.join(", ", strings(p.getAsJsonArray("operazioni_in_stallo")))
+            : "");
+  }
+
+  private static List<String> strings(final JsonArray array) {
+    final List<String> list = new ArrayList<>();
+    array.forEach(e -> list.add(e.getAsString()));
+    return list;
   }
 
   // ------------------------------------------------------------------------------- reading

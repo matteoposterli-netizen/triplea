@@ -554,12 +554,14 @@
                        {"territorio": "United Kingdom", "zona": "109 Sea Zone"}],
              "raccolta": ["110 Sea Zone", "109 Sea Zone"],
              "bersagli": ["Normandy Bordeaux", "Holland Belgium", "Norway"],
-             "trasporti": 4, "scorta_minima": 2, "peso": 15},
+             "bersagli_condizionati": {"Holland Belgium": {"dal_round": 8, "prima_se": {"nazione": "Germans", "fronte": "Ovest", "quota_tuv_terra": 0.5}}},
+             "trasporti": 8, "scorta_minima": 2, "peso": 15},
             {"nome": "Overlord UK", "nazioni": ["British"], "da_round": 2,
              "porti": [{"territorio": "United Kingdom", "zona": "110 Sea Zone"},
                        {"territorio": "United Kingdom", "zona": "109 Sea Zone"}],
              "raccolta": ["110 Sea Zone"],
              "bersagli": ["Normandy Bordeaux", "Holland Belgium", "Norway"],
+             "bersagli_condizionati": {"Holland Belgium": {"dal_round": 8, "prima_se": {"nazione": "Germans", "fronte": "Ovest", "quota_tuv_terra": 0.5}}},
              "trasporti": 3, "scorta_minima": 2, "peso": 15}
           ],
           "fasi": [
@@ -580,8 +582,7 @@
               "fronti": {"Ovest": 1, "Mediterraneo-Africa": -1, "Est": 0, "Mari": 1},
               "obiettivi": [
                 {"territorio": "Normandy Bordeaux", "peso": 15},
-                {"territorio": "Norway", "peso": 10},
-                {"territorio": "Holland Belgium", "peso": 15}
+                {"territorio": "Norway", "peso": 10}
               ]
             }
           ],
