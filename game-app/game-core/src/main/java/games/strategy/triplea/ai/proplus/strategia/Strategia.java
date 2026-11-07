@@ -130,6 +130,11 @@ public final class Strategia {
               .filter(name -> map.getTerritoryOrNull(name) == null)
               .forEach(unknown::add);
         }
+        for (final Operazione o : piano.operazioni()) {
+          o.territoriNominati().stream()
+              .filter(name -> map.getTerritoryOrNull(name) == null)
+              .forEach(unknown::add);
+        }
         for (final List<Logistica> orders : piano.logistica().values()) {
           for (final Logistica l : orders) {
             for (final String name : l.territoriNominati()) {
@@ -183,6 +188,7 @@ public final class Strategia {
    *     range of rounds (step 3b)
    * @param sperimentale shown as "(sperimentale)" in the settings dialog, never chosen by
    *     "Automatico" (step 3c)
+   * @param operazioni amphibious operations (step OPERAZIONI ANFIBIE)
    */
   public record Piano(
       String id,
@@ -194,7 +200,8 @@ public final class Strategia {
       List<Firma> firma,
       List<PuntoCritico> puntiCritici,
       Map<String, List<Logistica>> logistica,
-      boolean sperimentale) {
+      boolean sperimentale,
+      List<Operazione> operazioni) {
 
     /** Eg: "B Sea Lion (sperimentale)": the label of the settings dialog. */
     public String etichettaPannello() {
@@ -228,7 +235,74 @@ public final class Strategia {
     public String label() {
       return id + " " + nome;
     }
+
+    /**
+     * The amphibious operations in force in {@code round} that concern {@code nation} (its land
+     * units land, or its transports carry them).
+     */
+    public List<Operazione> operazioni(final String nation, final int round) {
+      return operazioni.stream().filter(o -> o.covers(round) && o.riguarda(nation)).toList();
+    }
   }
+
+  /**
+   * An amphibious operation of a plan (step OPERAZIONI ANFIBIE): the land units of {@code nazioni}
+   * embark in the ports, the transports of {@code vettori} carry them to the gathering zones and
+   * the landing goes to the first target the Pro AI can take at the desired win%.
+   *
+   * @param nome eg "Overlord"
+   * @param nazioni nations whose land units land
+   * @param vettori nations whose transports carry them (same as {@code nazioni} if not given):
+   *     another nation's transports carry units loaded in their owner's turn and unloaded in a
+   *     later turn of theirs (map rule: no load and unload of an allied transport in one round)
+   * @param porti embarkation points, rear to front: a land territory and its sea zone
+   * @param raccolta sea zones where the loaded fleet gathers before the landing
+   * @param bersagli landing targets in order of preference
+   * @param trasporti transports per wave (purchase target)
+   * @param scortaMinima warships the fleet wants with it (purchase target)
+   * @param peso priority bonus of the first target in the combat move (then 20% less each)
+   * @param critico the targets' desired win% is never below 80
+   */
+  public record Operazione(
+      String nome,
+      List<String> nazioni,
+      List<String> vettori,
+      int daRound,
+      int aRound,
+      List<Porto> porti,
+      List<String> raccolta,
+      List<String> bersagli,
+      int trasporti,
+      int scortaMinima,
+      double peso,
+      boolean critico) {
+    public boolean covers(final int round) {
+      return round >= daRound && round <= aRound;
+    }
+
+    public boolean riguarda(final String nation) {
+      return nazioni.contains(nation) || vettori.contains(nation);
+    }
+
+    /** Priority bonus of target number {@code index} (0 = the first). */
+    public double pesoBersaglio(final int index) {
+      return peso * Math.pow(0.8, index);
+    }
+
+    List<String> territoriNominati() {
+      final List<String> names = new ArrayList<>(raccolta);
+      names.addAll(bersagli);
+      porti.forEach(
+          p -> {
+            names.add(p.territorio());
+            names.add(p.zona());
+          });
+      return names;
+    }
+  }
+
+  /** An embarkation point: land territory {@code territorio} and its sea zone {@code zona}. */
+  public record Porto(String territorio, String zona) {}
 
   /**
    * Rounds {@code daRound}..{@code aRound} (inclusive; {@link Integer#MAX_VALUE} = to the end) of a
@@ -572,7 +646,62 @@ public final class Strategia {
         List.copyOf(firma),
         List.copyOf(puntiCritici),
         Map.copyOf(logistica),
-        p.has("sperimentale") && p.get("sperimentale").getAsBoolean());
+        p.has("sperimentale") && p.get("sperimentale").getAsBoolean(),
+        operazioni(p, id));
+  }
+
+  private static List<Operazione> operazioni(final JsonObject p, final String plan) {
+    final List<Operazione> list = new ArrayList<>();
+    for (final JsonElement e : array(p, "operazioni_anfibie")) {
+      final JsonObject o = e.getAsJsonObject();
+      final String nome = string(o, "nome");
+      final List<String> nazioni = strings(o, "nazioni");
+      final List<String> raccolta = strings(o, "raccolta");
+      final List<String> bersagli = strings(o, "bersagli");
+      final List<Porto> porti = new ArrayList<>();
+      for (final JsonElement pe : array(o, "porti")) {
+        final JsonObject po = pe.getAsJsonObject();
+        final String territorio = string(po, "territorio");
+        final String zona = string(po, "zona");
+        if (territorio == null || zona == null) {
+          throw new IllegalArgumentException(
+              "operazione " + nome + " del piano " + plan + ": porto senza territorio o zona");
+        }
+        porti.add(new Porto(territorio, zona));
+      }
+      if (nome == null
+          || nazioni.isEmpty()
+          || porti.isEmpty()
+          || raccolta.isEmpty()
+          || bersagli.isEmpty()) {
+        throw new IllegalArgumentException(
+            "operazione del piano "
+                + plan
+                + ": servono 'nome', 'nazioni', 'porti', 'raccolta', 'bersagli': "
+                + o);
+      }
+      if (list.stream().anyMatch(other -> other.nome().equals(nome))) {
+        throw new IllegalArgumentException("operazione ripetuta nel piano " + plan + ": " + nome);
+      }
+      final List<String> vettori = strings(o, "vettori");
+      list.add(
+          new Operazione(
+              nome,
+              nazioni,
+              vettori.isEmpty() ? nazioni : vettori,
+              o.has("da_round") ? o.get("da_round").getAsInt() : 1,
+              o.has("a_round") && !o.get("a_round").isJsonNull()
+                  ? o.get("a_round").getAsInt()
+                  : Integer.MAX_VALUE,
+              List.copyOf(porti),
+              raccolta,
+              bersagli,
+              o.has("trasporti") ? o.get("trasporti").getAsInt() : 2,
+              o.has("scorta_minima") ? o.get("scorta_minima").getAsInt() : 1,
+              o.has("peso") ? o.get("peso").getAsDouble() : 10,
+              o.has("critico") && o.get("critico").getAsBoolean()));
+    }
+    return List.copyOf(list);
   }
 
   private static Tappa tappa(final JsonObject o, final String plan) {

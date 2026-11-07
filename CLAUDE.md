@@ -122,6 +122,10 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
 - Step 3c-bis: `ProTuning.checksLandingScramble` (default = Hard Beta; Pro+ sempre) e
   `ProTuning.dropsAmphibiousStrafe` (default mai; Pro+ sotto la soglia minima del bersaglio), agganci
   in `ProCombatMoveAi`. Vedi "Step 3c-bis".
+- Step OPERAZIONI ANFIBIE: `ai/proplus/OperazioniAnfibie` (esecuzione nel non-combattimento reale +
+  acquisti), `ProTuning.heldUnits` (unità che il non-combattimento di Hard non muove; default vuoto),
+  aggancio in `ProNonCombatMoveAi.findUnitsThatCantMove`, `Strategia.Operazione`/`Porto`,
+  `PianoAttivo.getOperazioni`. Vedi "Operazioni anfibie".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -203,12 +207,17 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
   da `BattleRecordsList`, campi letti per riflessione) con win% stimata ed esito del diario
   (`esito_battaglia`); esito (vincitori dell'`EndRoundDelegate` ⇒ "vittoria Asse/Alleati", altrimenti
   "nessuna entro N round") e VC finali. Step 3c-bis: trasporti per nazione a fine round (colonna
-  "Trasporti") e **primo sbarco alleato in Europa** (`primo_sbarco_europa`): il round più basso tra
-  (a) una battaglia `NORMAL` (non bombardamento) di British/Americans (`Monitor.WESTERN_ALLIES`) in un
-  territorio di `Monitor.EUROPE` (Europa continentale + Italia, isole, Balcani, Norvegia/Finlandia)
-  e (b) unità di terra British/Americans a fine round in un territorio di `EUROPE` non alleato in
-  origine (entrare in un territorio francese non è uno sbarco); a parità vince la battaglia. Limite:
-  (a) conta anche un attacco di soli aerei.
+  "Trasporti"). Dallo step OPERAZIONI ANFIBIE **sbarchi veri** (`Monitor.recordLandings`, dopo ogni
+  passo di movimento): unità di terra della nazione di turno nella lista `unloaded` di un trasporto,
+  in un territorio che a inizio turno della nazione era di un nemico in guerra (assalto anfibio nel
+  combattimento, o territorio preso nel turno se scaricate nel movimento); scaricare su terra propria
+  o alleata non conta. JSON `sbarchi` [{round, nazione, alleanza, territorio, unita, fase}],
+  `unita_sbarcate` per round e alleanza, `primo_sbarco_vero` per alleanza, `primo_sbarco_europa` =
+  primo sbarco vero di British/Americans (`Monitor.WESTERN_ALLIES`) in `Monitor.EUROPE` (prima:
+  battaglie o presenze, sostituito). **Trasporti inattivi** (`trasporti_inattivi` per nazione e
+  round): trasporti puri della nazione fermi (`alreadyMoved` 0), vuoti e senza scarichi a fine del
+  suo movimento non di combattimento. Dal diario: `operazioni` (eventi `operazione_anfibia`),
+  `attacchi_regno_unito` (eventi `attacco` tedeschi su United Kingdom/Scotland), `pu_riparazioni`.
 - **D'ora in poi niente banchi lunghi in sandbox**: verifica breve locale (UNA partita da 2 round,
   ~1 min) + autoplay in CI (sotto). Il banco `ProPlusBenchTest` resta per compatibilità.
 - Test: `:proplus-autoplay:test` (`AutoplayTest`: parametri, PU dal diario, markdown, confronto).
@@ -216,7 +225,9 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
 ## Autoplay in CI (`.github/workflows/proplus-autoplay.yml`)
 
 - Trigger: job `autoplay` di `proplus-release.yml` (dopo `build`, workflow riutilizzabile
-  `workflow_call`, 12 round, 6 configurazioni × 2 semi = 12 partite dallo step 3c-bis): la release è già pubblicata, quindi non la blocca né la
+  `workflow_call`, 12 round, 6 configurazioni × 2 semi = 12 partite dallo step 3c-bis; dallo step
+  OPERAZIONI ANFIBIE 7 configurazioni = 14 partite, aggiunta **B/1** in coda dopo Hard, così gli id
+  delle altre restano uguali): la release è già pubblicata, quindi non la blocca né la
   modifica. `concurrency` di `proplus-release` spostata sul job `build` (un'altra release non aspetta
   le partite). **`workflow_run` e `workflow_dispatch` non funzionano**: GitHub li accetta solo per
   workflow presenti sul branch di default (`main` = upstream, non si tocca): verificato, `gh workflow
@@ -233,7 +244,11 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
   media dei semi: VC, vittorie col round, PU finali) e **lettura per configurazione** (per round:
   probabilità media del piano reale + partite con lettura corretta, colonna "Media" con % OK),
   primo sbarco alleato in Europa e trasporti per nazione a fine partita, lettura per partita e round,
-  PU difesa/piano/spesi; `autoplay.zip`; release **`autoplay-latest`** ricreata sul commit
+  PU difesa/piano/spesi; dallo step OPERAZIONI ANFIBIE sezione "Sbarchi veri e trasporti" (per partita:
+  primo sbarco vero per alleanza, unità sbarcate e trasporti inattivi in tutta la partita, operazioni
+  bloccate; per configurazione: partite con sbarco alleato entro R6, round medio del primo sbarco,
+  sbarcate e inattivi per round; operazioni bloccate con i motivi più frequenti; attacchi tedeschi
+  alle isole britanniche); `autoplay.zip`; release **`autoplay-latest`** ricreata sul commit
   testato, prerelease, note con commit/data/run; non pubblica se `proplus` è già a un commit più nuovo,
 la cui run pubblicherà). `proplus-latest` mai toccata.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
@@ -687,6 +702,86 @@ round N (piano X)" prima del turno della prima nazione (`DiaryRecorder.allianceR
   orientale" e "trasporti UK attorno al Regno Unito" in conteggio assoluto, 2 "marina alleata nel
   Mediterraneo" (sostituiti dalle quote). Northern Italy escluso dalla lista "sud": al R1 la Germania
   in piano A vi parcheggia unità (logica di Hard) ⇒ falso indizio D.
+
+## Operazioni anfibie (step OPERAZIONI ANFIBIE, solo Pro+)
+
+Hard decide gli sbarchi turno per turno; Pro+ con un piano che ha `operazioni_anfibie` pianifica
+porto → zona di raccolta → bersaglio. Hard identica (nessun piano ⇒ nessuna operazione; hook di
+default vuoti), piano N senza operazioni.
+- **Dati** (`operazioni_anfibie` del piano, `Strategia.Operazione`): `nome`, `nazioni` (truppe che
+  sbarcano), `vettori` (nazioni dei trasporti, default = `nazioni`), `da_round`/`a_round`, `porti`
+  [{territorio, zona}] dalla retrovia al fronte, `raccolta` (zone dove la flotta carica aspetta),
+  `bersagli` in ordine, `trasporti` per ondata, `scorta_minima` (navi da guerra), `peso`, `critico`.
+  Europe 1940 (verificati sull'XML; 101→110 = 4 zone = 2 turni; Norway confina solo con 112/113/125/
+  126; Morocco/Algeria/Tunisia sono **francesi (alleati)** a inizio partita):
+  - 1: "Overlord USA" (Americans dal R3, porti Eastern United States/101, United Kingdom/110 e /109,
+    raccolta 110/109, bersagli Normandy Bordeaux, Holland Belgium, Norway, 4 trasporti, scorta 2,
+    peso 15); "Overlord UK" (British dal R2, porti United Kingdom/110 e /109, raccolta 110, stessi
+    bersagli, 3 trasporti).
+  - 2: "Torch" (Americans dal R3, porto Eastern United States/101, raccolta 91/92, bersagli Morocco,
+    Algeria, Tunisia, Sicily, Southern Italy); "Rinforzi Egitto" (British dal R1, porto Union of South
+    Africa/71, raccolta 81 (Mar Rosso, confina con Egypt), bersagli Egypt, Tobruk, Libya).
+  - D: "Afrika Korps" (nazioni Germans + Italians, vettori Italians, porti Southern Italy/97 e /95,
+    Northern Italy/97, raccolta 96, bersagli Libya, Tobruk, Egypt, 4 trasporti, scorta 1). Regola della
+    mappa verificata nel codice (`MoveValidator`, `TransportTracker.getUnitsLoadedOnAlliedTransports
+    ThisTurn`): si possono caricare unità proprie su un trasporto alleato, ma non caricarle e scaricarle
+    nello stesso round, e solo il proprietario muove le sue unità ⇒ i tedeschi salgono sui trasporti
+    italiani nel turno tedesco, l'Italia porta il trasporto in 96 nel suo turno, i tedeschi scendono in
+    Libia/Tobruk nel turno tedesco successivo. Raccolta tedesca di D: Southern Italy + Northern Italy
+    (tolta Greater Southern Germany, che è nel fronte Ovest e non è un porto).
+  - B (sperimentale): "Leone marino" (Germans R1-3, porti Western Germany/112, Denmark/112,
+    Germany/113, raccolta 112, bersagli United Kingdom, Scotland, critico).
+- **Bersagli = obiettivi del piano** (`PianoAttivo`): per le nazioni di `nazioni` ogni bersaglio è un
+  obiettivo con peso `peso × 0.8^posizione` (se non lo è già nella fase) ⇒ bonus di priorità, desiderata
+  ≥ base (≥ 80 se `critico`), regola "obiettivo" dello step 2d. `ProPlusTuning.isLandingOnlyTarget`:
+  bersaglio senza terre proprie/alleate confinanti (solo via mare) ⇒ **minima = desiderata** (sbarco solo
+  alla win% desiderata, Equilibrato 80). Lo sbarco lo fa il combattimento di Hard (trasporti carichi o
+  caricabili in raggio, scramble controllato come Hard Beta dallo step 3c-bis, battaglia navale
+  preliminare già gestita da Hard).
+- **Esecuzione** (`OperazioniAnfibie.esegui`, chiamata da `ProPlusAi.move` nel non-combattimento reale,
+  prima di quello di Hard; mai nelle simulazioni): trasporti puri propri assegnati all'operazione con
+  zone più vicine (≤ 6 zone); in ordine carichi, vuoti in porto, altri:
+  - *carico*: truppe di terra con attacco > 0 (no antiaerei) al porto, le più grandi prima, finché c'è
+    posto; da una capitale propria solo finché la win% nemica sulla capitale resta ≤ 25
+    (`CAPITAL_GUARD_THRESHOLD`); in una zona di raccolta solo se la flotta è sicura; se nel porto
+    aspettano truppe di un'altra nazione dell'operazione il trasporto resta vuoto per loro;
+  - *trasferimento*: verso la zona di raccolta più vicina, fermandosi nella zona più lontana **sicura**:
+    win% del massimo attacco nemico (stima di Hard con i nemici reali dello step 3c) ≤ 100 −
+    desiderata del livello effettivo della zona (Equilibrato: 20%). Se non lo è, navi da guerra proprie
+    entro 2 zone (non portaerei, non da zone con propri trasporti) si aggiungono come scorta, la più
+    vicina/economica prima, max 6, finché lo diventa;
+  - alla raccolta: bersagli in ordine, il primo amico confinante ⇒ sbarco subito (Libia, Marocco,
+    Egitto); il primo nemico raggiungibile (2 zone) ⇒ attesa carichi per il combattimento del turno dopo;
+    flotta già carica dall'inizio del turno senza sbarco ⇒ "bersaglio troppo forte": truppe a terra sul
+    primo bersaglio amico o porto confinante (dal porto Hard le ricarica nel combattimento);
+  - *spola*: trasporto vuoto verso il porto con più truppe in attesa (pari: più vicino; senza truppe: il
+    porto con fabbrica), prova il porto successivo se la rotta non è sicura; in porto resta lì se sicuro;
+  - *nazione con trasporti alleati* (Germania in D): scarica le sue truppe a bordo da un turno precedente
+    sul primo bersaglio amico confinante; carica le truppe in porto sui trasporti alleati con posto se la
+    zona è sicura;
+  - unità mosse o tenute (trasporti, carico, scorta, navi da guerra della zona) ⇒ `ProTuning.heldUnits`
+    ⇒ `ProNonCombatMoveAi` le mette tra le "non muovibili" (il carico solo fuori dalle mosse). Flotta in
+    una zona non sicura ⇒ non tenuta: Hard la porta nella zona più sicura.
+- **Acquisti** (`OperazioniAnfibie.acquisti`, calcolati in `ProPlusAi.purchase` sul tabellone reale prima
+  della simulazione, `ProPlusTuning.prepareOperationPurchases`): obbligati aggiunti agli ordini del piano
+  (al posto della regola "+1 trasporto per l'imbarco" dello step 3b-ter): trasporti (max 2 per turno, fino
+  a `trasporti`) se le truppe in attesa ai porti superano il posto libero (2 unità per trasporto) o non ci
+  sono trasporti; altrimenti fanteria (max 4) se il posto supera le truppe; 1 cacciatorpediniere se le
+  navi da guerra ai porti e alla raccolta sono meno di `scorta_minima`. Etichetta degli ordini
+  "+ operazione X: N categoria (motivo)".
+- **Diario** (scritto all'inizio del movimento, dopo gli esiti delle battaglie): "Operazioni anfibie:" +
+  per operazione "Operazione X: stato (preparazione / in rotta / sbarco / bloccata) - trasporti N, truppe
+  a bordo N, scorta N[, sbarcate nel turno N unità su ...]; prossimo passo: ...; motivo: ..." + "mosse:"
+  + "acquisti chiesti nel turno". Stato: sbarco = unità della nazione scaricate nel combattimento su un
+  bersaglio; bloccata = un motivo (scorta insufficiente, zona non sicura, bersaglio troppo forte, nessuna
+  rotta, porto esposto); in rotta = truppe a bordo; altrimenti preparazione. Il prossimo passo con flotta
+  carica alla raccolta riporta la win% stimata dello sbarco sul primo bersaglio nemico (truppe a bordo +
+  truppe nei porti vicini). JSON `operazione_anfibia`.
+- **Riparazioni** (punto 3 dello step): i "PU non spesi" della Germania in D (40/53, 47/53, 49/56 in
+  68f095c) sono **riparazioni delle fabbriche** bombardate da UK/USA (le differenze coincidono round per
+  round con i bombardamenti su Western Germany del round prima; R3/R4: 6/7 PU). La cassa a fine turno
+  non resta. Il diario ora scrive "(spesi X di Y PU, riparazioni fabbriche R PU, avanzati A PU)" e JSON
+  `pu_riparazioni`, `pu_avanzati`; colonna "PU riparazioni" nel riepilogo.
 
 ## Log degli step
 
@@ -1398,4 +1493,46 @@ round dell'autoplay precedente; 8bfb575 = 1 seme, 68f095c = media di 2 semi):
   territorio tedesco senza battaglia registrata: da verificare), altrimenti R6-R12 (Norway, Denmark,
   Holland Belgium, Greece); D/1 seme 2 nessuno. Trasporti a fine partita: USA 9-22 (Hard 31-35), UK
   1-12 (Hard 14-18), Germania 0 ovunque, Italia 0-22.
+
+### Step OPERAZIONI ANFIBIE — porto, raccolta, sbarco, spola (2026-11-07)
+
+Vedi "Operazioni anfibie". Classi Pro toccate (solo agganci, default = Hard): `ProTuning` (+`heldUnits`),
+`ProNonCombatMoveAi` (unità tenute = non muovibili in `findUnitsThatCantMove`). Pro+: `OperazioniAnfibie`
+(nuova), `ProPlusAi` (acquisti delle operazioni sul tabellone reale, esecuzione prima del
+non-combattimento), `ProPlusTuning` (ordini con le operazioni, minima = desiderata sui bersagli solo via
+mare, `hold`/`heldUnits`), `PianoAttivo` (operazioni, bersagli come obiettivi), `Strategia` (`Operazione`,
+`Porto`, parsing e nomi), `DiaryRecorder` (blocco "Operazioni anfibie", riparazioni), JSON della
+strategia (4 piani, raccolta tedesca di D). Autoplay: `Monitor` (sbarchi veri, trasporti inattivi,
+`beforeStep`), `Riepilogo`, `RiepilogoGenerale`, `AutoplayRunner` (1 riga), workflow (B/1, 14 partite).
+
+Come si aggancia a Hard (cosa è riusato): lo sbarco resta il combattimento di Hard
+(`ProCombatMoveAi` + `ProTransportUtils`/`ProMoveUtils.calculateAmphibRoutes`: trasporti carichi o
+caricabili in raggio), guidato solo da priorità/soglie del piano (bersagli = obiettivi, minima =
+desiderata); la stima della minaccia sulla flotta è quella della difesa di Hard
+(`ProTerritoryManager.populateEnemyAttackOptions`, nemici reali dello step 3c) con
+`ProOddsCalculator`; le mosse passano dal vero `IMoveDelegate` con le stesse `MoveDescription` di Hard
+(carico con mappa unità→trasporto, trasporto + carico sulla rotta, scarico mare→terra); dopo, il
+non-combattimento di Hard (`ProNonCombatMoveAi`: difesa, ammassamento, trasporti verso "best loading
+territory"/"safest territory") muove tutto il resto e lascia ferme le unità tenute. Gli acquisti sono
+obbligati in più dentro gli ordini del piano (`ProPlanPurchase`, quota del piano e piazzamento invariati).
+
+#### Test
+- `ai.pro.AmphibiousOperationsTest` (Global 1940 rinominata Europe, vero `MoveDelegate`, tabellone
+  preparato): bersagli = obiettivi solo per le nazioni dell'operazione e dal round giusto; minima =
+  desiderata per Normandy (solo via mare), Hard invariata (65, nessuna unità tenuta); UK carica a 110 e
+  aspetta lo sbarco (stato "in rotta", stima su Normandy); dopo un turno carico senza sbarco ⇒ truppe a
+  terra in UK ("bersaglio troppo forte"); nessun imbarco con 4 corazzate tedesche in 112 ("bloccata");
+  il non-combattimento di Hard non muove le unità tenute; acquisti: 2 trasporti con 14 truppe in attesa;
+  D: fanteria tedesca su trasporto italiano in 97 → Italia in 96 → Libia nel turno tedesco dopo.
+  Trovato coi test: in Global 1940 "balanced" le corazzate sono trasporti da combattimento
+  (`transportCapacity`) ⇒ l'operazione usa solo trasporti puri (`unitIsSeaTransportButNotCombatSea
+  Transport`), le corazzate contano come scorta.
+- `StrategiaFileTest` (operazioni dei piani, porti obbligatori, peso decrescente, vettori di default),
+  `AutoplayTest` (primo sbarco vero, per alleanza, operazioni bloccate, colonna riparazioni).
+- Verifica locale (1 partita D/1, 3 round, seme 1, 52 s, prima delle ultime correzioni): Italia R2
+  carica in 97 e sbarca in Libia (1 fanteria + 1 antiaereo: corretto, gli antiaerei non salgono più);
+  Germania R2 17 unità in Northern Italy, ma i trasporti italiani restano in 96 perché 97 non è sicura
+  (flotta britannica) ⇒ nessun tedesco a bordo entro R3; UK R2 "bloccata" (110/109 non sicure, flotta
+  UK distrutta al R1, chiede 1 cacciatorpediniere); USA R3 carica a 101 e va in 104; lo "sbarco" del
+  diario contava anche sbarchi di Hard fuori bersaglio (Gibraltar, Iraq): ora solo i bersagli.
 

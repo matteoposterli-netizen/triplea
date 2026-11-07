@@ -92,6 +92,26 @@ final class Monitor {
   @Nullable private JsonObject partialRound;
   private int lastRound;
 
+  /** Step about to run (see {@link #beforeStep}): name and player. */
+  private String runningStep = "";
+
+  private String runningPlayer = "";
+
+  /** Player of the previous step: a new one starts its turn. */
+  private String turnPlayer = "";
+
+  /** Territory -> owner when the current player's turn started. */
+  private final Map<String, String> ownersAtTurnStart = new HashMap<>();
+
+  /** Units already counted as landed (a unit lands once per turn). */
+  private final Set<Unit> landedCounted = new HashSet<>();
+
+  /** Real landings (unloaded from transports on enemy land, or land taken this turn). */
+  private final JsonArray landings = new JsonArray();
+
+  /** Round -> nation -> transports that did nothing in the nation's turn (empty, not moved). */
+  private final Map<Integer, Map<String, Integer>> idleTransports = new TreeMap<>();
+
   Monitor(final GameData data) {
     this.data = data;
     // reverse name order: Axis before Allies, as in the plans (Asse / Alleati)
@@ -124,8 +144,33 @@ final class Monitor {
     return costs;
   }
 
+  /** Called before every game step: notes the step and, at a new player's turn, the owners. */
+  synchronized void beforeStep() {
+    final GameStep step = data.getSequence().getStep();
+    runningStep = step.getName();
+    runningPlayer = Optional.ofNullable(step.getPlayerId()).map(GamePlayer::getName).orElse("-");
+    if (!runningPlayer.equals(turnPlayer)) {
+      turnPlayer = runningPlayer;
+      ownersAtTurnStart.clear();
+      landedCounted.clear();
+      for (final Territory t : data.getMap().getTerritories()) {
+        if (!t.isWater()) {
+          ownersAtTurnStart.put(t.getName(), t.getOwner().getName());
+        }
+      }
+    }
+  }
+
   /** Called after every game step. */
   synchronized void afterStep() {
+    if (GameStep.isNonCombatMoveStepName(runningStep)
+        || GameStep.isCombatMoveStepName(runningStep)) {
+      recordLandings(lastRound);
+    }
+    if (GameStep.isNonCombatMoveStepName(runningStep)) {
+      recordIdleTransports(lastRound);
+    }
+    runningStep = "";
     final int round = data.getSequence().getRound();
     final GameStep step = data.getSequence().getStep();
     final String current =
@@ -205,7 +250,86 @@ final class Monitor {
     final JsonArray b = new JsonArray();
     battles.values().forEach(list -> list.forEach(b::add));
     json.add("battaglie", b);
+    json.add("sbarchi", landings.deepCopy());
     return json;
+  }
+
+  // ----------------------------------------------------------------- landings, idle transports
+
+  /**
+   * Land units of the player in turn that a transport unloaded in this step, on land that was an
+   * enemy's (at war with them) when the turn started: in the combat move an amphibious assault, in
+   * the non-combat move a landing on land taken this turn. Unloading on own or allied land is not a
+   * landing.
+   */
+  private void recordLandings(final int round) {
+    final GamePlayer player = data.getPlayerList().getPlayerId(runningPlayer);
+    if (player == null) {
+      return;
+    }
+    final Map<Unit, Territory> location = new HashMap<>();
+    for (final Territory t : data.getMap().getTerritories()) {
+      if (!t.isWater()) {
+        t.getUnits().forEach(u -> location.put(u, t));
+      }
+    }
+    final Map<String, Integer> byTerritory = new TreeMap<>();
+    final Map<String, String> phase = new HashMap<>();
+    for (final Territory z : data.getMap().getTerritories()) {
+      if (!z.isWater()) {
+        continue;
+      }
+      for (final Unit transport : z.getMatches(Matches.unitIsSeaTransport())) {
+        for (final Unit u : transport.getUnloaded()) {
+          final Territory at = location.get(u);
+          if (!u.isOwnedBy(player) || at == null || landedCounted.contains(u)) {
+            continue;
+          }
+          final GamePlayer ownerAtStart =
+              data.getPlayerList().getPlayerId(ownersAtTurnStart.getOrDefault(at.getName(), ""));
+          if (ownerAtStart == null
+              || !data.getRelationshipTracker().isAtWar(player, ownerAtStart)) {
+            continue;
+          }
+          landedCounted.add(u);
+          byTerritory.merge(at.getName(), 1, Integer::sum);
+          phase.put(at.getName(), u.getWasUnloadedInCombatPhase() ? "combattimento" : "movimento");
+        }
+      }
+    }
+    byTerritory.forEach(
+        (territory, units) -> {
+          final JsonObject l = new JsonObject();
+          l.addProperty("round", round);
+          l.addProperty("nazione", runningPlayer);
+          l.addProperty("alleanza", allianceOf(runningPlayer));
+          l.addProperty("territorio", territory);
+          l.addProperty("unita", units);
+          l.addProperty("fase", phase.get(territory));
+          landings.add(l);
+        });
+  }
+
+  /** Transports of the player in turn that end its non-combat move empty and unmoved. */
+  private void recordIdleTransports(final int round) {
+    final GamePlayer player = data.getPlayerList().getPlayerId(runningPlayer);
+    if (player == null || allianceOf(runningPlayer).equals(runningPlayer)) {
+      return;
+    }
+    int idle = 0;
+    for (final Territory z : data.getMap().getTerritories()) {
+      for (final Unit t :
+          z.getMatches(
+              Matches.unitIsSeaTransportButNotCombatSeaTransport()
+                  .and(Matches.unitIsOwnedBy(player)))) {
+        if (t.getAlreadyMoved().signum() == 0 && !t.isTransporting() && t.getUnloaded().isEmpty()) {
+          idle++;
+        }
+      }
+    }
+    idleTransports
+        .computeIfAbsent(round, k -> new TreeMap<>())
+        .merge(runningPlayer, idle, Integer::sum);
   }
 
   // ------------------------------------------------------------------------------- snapshot
@@ -227,6 +351,9 @@ final class Monitor {
         n.addProperty("tuv", tuv.getOrDefault(name, 0));
         n.addProperty("territori", land.getOrDefault(name, 0));
         n.addProperty("trasporti", transports.getOrDefault(name, 0));
+        n.addProperty(
+            "trasporti_inattivi",
+            idleTransports.getOrDefault(round, Map.of()).getOrDefault(name, 0));
         nations.add(name, n);
       }
     }
@@ -234,6 +361,16 @@ final class Monitor {
     json.add("vc", victoryCities());
     json.add("stato_maggiore", generalStaff(round));
     json.add("alleati_in_europa", westernAlliesInEurope());
+    final JsonObject landed = new JsonObject();
+    alliances.keySet().forEach(a -> landed.addProperty(a, 0));
+    for (final JsonElement e : landings) {
+      final JsonObject l = e.getAsJsonObject();
+      if (l.get("round").getAsInt() == round && landed.has(l.get("alleanza").getAsString())) {
+        final String a = l.get("alleanza").getAsString();
+        landed.addProperty(a, landed.get(a).getAsInt() + l.get("unita").getAsInt());
+      }
+    }
+    json.add("unita_sbarcate", landed);
     if (complete) {
       rounds.put(round, json);
       partialRound = null;

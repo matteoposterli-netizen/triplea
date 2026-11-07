@@ -46,6 +46,14 @@ public class ProPlusAi extends ProAi {
       final GameData data,
       final GamePlayer player) {
     logPhase(data, player, purchaseForBid ? "bid purchase" : "purchase");
+    if (!purchaseForBid && getProData().getTuning() instanceof ProPlusTuning tuning) {
+      try {
+        initializeData();
+        tuning.prepareOperationPurchases(getProData());
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "Amphibious operations purchase check failed: " + e);
+      }
+    }
     super.purchase(purchaseForBid, pusToSpend, purchaseDelegate, data, player);
   }
 
@@ -56,7 +64,59 @@ public class ProPlusAi extends ProAi {
       final GameData data,
       final GamePlayer player) {
     logPhase(data, player, nonCombat ? "non-combat move" : "combat move");
+    if (nonCombat) {
+      playAmphibiousOperations(moveDel, data, player);
+    }
     super.move(nonCombat, moveDel, data, player);
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE: the plan's amphibious operations move first (load, transit, shuttle);
+   * the Pro AI's non-combat move then leaves the units they hold where they are.
+   */
+  private void playAmphibiousOperations(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (!(getProData().getTuning() instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    final var plan = PianoAttivo.of(data, player).filter(p -> !p.getOperazioni().isEmpty());
+    if (plan.isEmpty()) {
+      tuning.hold(data, player, java.util.Set.of());
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      final OperazioniAnfibie.Esito result =
+          OperazioniAnfibie.esegui(getProData(), getCalc(), moveDel, plan.get());
+      tuning.hold(data, player, result.tenute());
+      if (getProData().getRecorder() instanceof DiaryRecorder diary) {
+        diary.amphibiousOperations(
+            getProData(),
+            result.rapporti(),
+            tuning.operationPurchases(player, data.getSequence().getRound()));
+      }
+      result
+          .rapporti()
+          .forEach(
+              r ->
+                  ProLogger.info(
+                      LOG_PREFIX
+                          + "Operation "
+                          + r.operazione()
+                          + ": "
+                          + r.stato().testo()
+                          + ", transports "
+                          + r.trasporti()
+                          + ", aboard "
+                          + r.truppeABordo()
+                          + ", escort "
+                          + r.scorta()
+                          + (r.motivo().isEmpty() ? "" : ", " + r.motivo())));
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "Amphibious operations failed: " + e);
+      tuning.hold(data, player, java.util.Set.of());
+    }
   }
 
   @Override

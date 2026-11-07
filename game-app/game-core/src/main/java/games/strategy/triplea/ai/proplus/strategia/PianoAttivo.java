@@ -7,10 +7,12 @@ import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.delegate.Matches;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import javax.annotation.Nullable;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -43,6 +45,9 @@ public final class PianoAttivo {
 
   private final List<Strategia.Obiettivo> obiettivi;
 
+  /** Amphibious operations of the plan in force this round for this nation (step OPERAZIONI). */
+  private final List<Strategia.Operazione> operazioni;
+
   private PianoAttivo(
       final Strategia strategia,
       final String alleanza,
@@ -59,10 +64,32 @@ public final class PianoAttivo {
     this.fase = piano.fase(round).orElse(null);
     this.roundInizio = roundInizio;
     this.props = props;
-    this.obiettivi =
-        fase == null
-            ? List.of()
-            : fase.obiettivi().stream().filter(o -> o.appliesTo(nazione)).toList();
+    this.operazioni = piano.operazioni(nazione, round);
+    final List<Strategia.Obiettivo> list = new ArrayList<>();
+    if (fase != null) {
+      fase.obiettivi().stream().filter(o -> o.appliesTo(nazione)).forEach(list::add);
+    }
+    // the targets of an operation whose units are mine are objectives too (step OPERAZIONI)
+    for (final Strategia.Operazione op : operazioni) {
+      if (!op.nazioni().contains(nazione)) {
+        continue;
+      }
+      for (int i = 0; i < op.bersagli().size(); i++) {
+        final String target = op.bersagli().get(i);
+        if (list.stream().noneMatch(o -> target.equals(o.territorio()))) {
+          list.add(
+              new Strategia.Obiettivo(
+                  target, null, op.pesoBersaglio(i), Set.of(nazione), op.critico()));
+        }
+      }
+    }
+    this.obiettivi = List.copyOf(list);
+  }
+
+  /** Whether {@code t} is a landing target of an operation whose units are mine. */
+  public boolean isBersaglioOperazione(final Territory t) {
+    return operazioni.stream()
+        .anyMatch(op -> op.nazioni().contains(nazione) && op.bersagli().contains(t.getName()));
   }
 
   /**

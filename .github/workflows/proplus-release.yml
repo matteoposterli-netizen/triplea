@@ -109,5 +109,5 @@ jobs:
     uses: ./.github/workflows/proplus-autoplay.yml
     with:
       round: "12"
-      partite: "6"
+      partite: "7"
       semi: "2"

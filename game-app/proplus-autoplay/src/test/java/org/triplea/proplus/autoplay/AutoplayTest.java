@@ -78,7 +78,7 @@ class AutoplayTest {
         "{\"round\":2,\"nazione\":\"Germans\",\"evento\":\"esito_battaglia\",\"territorio\":\"France\","
             + "\"win_stimata\":90.0,\"esito\":\"VITTORIA\",\"tuv_swing_reale\":20}",
         costs);
-    assertThat(d.spent.get("1|Germans")).containsExactly(9, 18, 33);
+    assertThat(d.spent.get("1|Germans")).containsExactly(9, 18, 33, 0);
     assertThat(d.battles).containsKey("2|France|Germans");
   }
 
@@ -96,7 +96,7 @@ class AutoplayTest {
     assertThat(md)
         .contains("Esito: **vittoria Asse**")
         .contains("| R1 | 3 (Berlin) | 1 (London) |")
-        .contains("| R1 | Germans | 30 | 40 | 9 | 18 | 33 | 500 | 12 |")
+        .contains("| R1 | Germans | 30 | 40 | 9 | 18 | 33 | - | 500 | 12 |")
         .contains("| R1 | Alleati | 1 | IN LINEA | A | A | 60% | si' |")
         .contains("- R1: Germans - Russians (nel turno di Germans)")
         .contains("- R1: London (capitale di British) caduta, ora di Germans")
@@ -115,39 +115,60 @@ class AutoplayTest {
         .contains("| Pro+ A / Pro+ 1 | 1 | 3 / 1 | Asse R1 | 30 / 20 |")
         .contains("| Pro+ A / Pro+ 1 | Alleati | 60% 1/1 | 60% (OK 100%) |")
         .contains(
-            "| 1-A-1 | R1 Normandy Bordeaux (British, attacco (LOST)) | Germans 2, British 3 |");
+            "| 1-A-1 | nessuno | nessuno | R1 Normandy Bordeaux (British, attacco (LOST)) | 0 / 0 |"
+                + " 0 / 0 | Germans 2, British 3 | nessuna |");
     assertThat(md)
         .contains(
             "- Primo sbarco alleato in Europa: R1 Normandy Bordeaux (British, attacco (LOST))")
-        .contains("| R1 | Germans | 30 | 40 | 9 | 18 | 33 | 500 | 12 | 2 |");
+        .contains("| R1 | Germans | 30 | 40 | 9 | 18 | 33 | - | 500 | 12 | 2 |");
   }
 
   @Test
-  void firstLandingInEuropeIsTheEarliestBattleOrPresence() {
-    final JsonArray battles =
+  void firstLandingIsTheEarliestRealLanding() {
+    final JsonArray landings =
         JsonParser.parseString(
-                "[{\"round\":3,\"territorio\":\"Norway\",\"attaccante\":\"British\","
-                    + "\"tipo\":\"NORMAL\",\"risultato\":\"CONQUERED\"},"
-                    + "{\"round\":2,\"territorio\":\"Germany\",\"attaccante\":\"Americans\","
-                    + "\"tipo\":\"BOMBING_RAID\",\"risultato\":\"BOMBED\"},"
-                    + "{\"round\":2,\"territorio\":\"Libya\",\"attaccante\":\"British\","
-                    + "\"tipo\":\"NORMAL\",\"risultato\":\"CONQUERED\"}]")
+                "[{\"round\":3,\"nazione\":\"British\",\"alleanza\":\"Allies\","
+                    + "\"territorio\":\"Norway\",\"unita\":4,\"fase\":\"combattimento\"},"
+                    + "{\"round\":2,\"nazione\":\"British\",\"alleanza\":\"Allies\","
+                    + "\"territorio\":\"Libya\",\"unita\":2,\"fase\":\"combattimento\"},"
+                    + "{\"round\":1,\"nazione\":\"Italians\",\"alleanza\":\"Axis\","
+                    + "\"territorio\":\"Egypt\",\"unita\":3,\"fase\":\"combattimento\"},"
+                    + "{\"round\":3,\"nazione\":\"Americans\",\"alleanza\":\"Allies\","
+                    + "\"territorio\":\"Normandy Bordeaux\",\"unita\":6,"
+                    + "\"fase\":\"combattimento\"}]")
             .getAsJsonArray();
-    final JsonArray rounds =
+
+    // in Europe: round 3, the bigger landing on a tie; Libya is not Europe
+    final JsonObject europe = Riepilogo.firstLandingInEurope(landings).orElseThrow();
+    assertThat(europe.get("round").getAsInt()).isEqualTo(3);
+    assertThat(europe.get("territorio").getAsString()).isEqualTo("Normandy Bordeaux");
+    assertThat(Riepilogo.landingText(europe))
+        .isEqualTo("R3 Normandy Bordeaux (Americans, 6 unita' sbarcate (assalto anfibio))");
+    // per alliance, anywhere
+    final JsonObject first = Riepilogo.firstLandings(landings, List.of("Axis", "Allies"));
+    assertThat(first.getAsJsonObject("Allies").get("territorio").getAsString()).isEqualTo("Libya");
+    assertThat(first.getAsJsonObject("Axis").get("round").getAsInt()).isEqualTo(1);
+    assertThat(Riepilogo.firstLandingInEurope(new JsonArray())).isEmpty();
+  }
+
+  @Test
+  void blockedOperationsAreCountedWithTheirReasons() {
+    final JsonObject game =
         JsonParser.parseString(
-                "[{\"round\":1,\"alleati_in_europa\":{}},"
-                    + "{\"round\":2,\"alleati_in_europa\":{\"Sicily\":[\"Americans\"]}}]")
-            .getAsJsonArray();
-    final JsonObject landing = Riepilogo.firstLandingInEurope(battles, rounds).orElseThrow();
-    assertThat(landing.get("round").getAsInt()).isEqualTo(2);
-    assertThat(landing.get("territorio").getAsString()).isEqualTo("Sicily");
-    // a battle in Europe in an earlier round wins
-    assertThat(
-            Riepilogo.firstLandingInEurope(battles, JsonParser.parseString("[]").getAsJsonArray())
-                .orElseThrow()
-                .get("territorio")
-                .getAsString())
-        .isEqualTo("Norway");
+                "{\"operazioni\":[{\"round\":3,\"nazione\":\"Americans\","
+                    + "\"operazione\":\"Overlord USA\",\"stato\":\"bloccata\","
+                    + "\"motivo\":\"scorta insufficiente per 110 Sea Zone: win% nemica 90%\"},"
+                    + "{\"round\":4,\"nazione\":\"Americans\",\"operazione\":\"Overlord USA\","
+                    + "\"stato\":\"bloccata\",\"motivo\":\"scorta insufficiente per 110 Sea"
+                    + " Zone: win% nemica 75%\"},"
+                    + "{\"round\":5,\"nazione\":\"Americans\",\"operazione\":\"Overlord USA\","
+                    + "\"stato\":\"in rotta\",\"motivo\":\"\"}]}")
+            .getAsJsonObject();
+
+    assertThat(RiepilogoGenerale.blockedText(List.of(game), 3))
+        .isEqualTo(
+            "Americans Overlord USA 2 (scorta insufficiente per N Sea Zone: win% nemica N 2)");
+    assertThat(RiepilogoGenerale.blockedText(List.of(new JsonObject()), 3)).isEqualTo("nessuna");
   }
 
   private static final String SAMPLE =

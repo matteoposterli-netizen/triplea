@@ -405,4 +405,85 @@ class StrategiaFileTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("dal_round");
   }
+
+  @Test
+  void amphibiousOperationsOfThePlans() throws IOException {
+    final Strategia.Alleanza allies = europe().alleanza("Allies").orElseThrow();
+    final Strategia.Alleanza axis = europe().alleanza("Axis").orElseThrow();
+
+    final Strategia.Piano germanyFirst = allies.piano("1").orElseThrow();
+    assertThat(germanyFirst.operazioni("Americans", 2)).isEmpty();
+    final Strategia.Operazione overlord = germanyFirst.operazioni("Americans", 3).get(0);
+    assertThat(overlord.nome()).isEqualTo("Overlord USA");
+    assertThat(overlord.porti())
+        .extracting(Strategia.Porto::territorio)
+        .containsExactly("Eastern United States", "United Kingdom", "United Kingdom");
+    assertThat(overlord.raccolta()).containsExactly("110 Sea Zone", "109 Sea Zone");
+    assertThat(overlord.bersagli())
+        .containsExactly("Normandy Bordeaux", "Holland Belgium", "Norway");
+    assertThat(overlord.vettori()).containsExactly("Americans");
+    assertThat(germanyFirst.operazioni("British", 2))
+        .extracting(Strategia.Operazione::nome)
+        .containsExactly("Overlord UK");
+
+    final Strategia.Piano italyFirst = allies.piano("2").orElseThrow();
+    assertThat(italyFirst.operazioni("Americans", 3))
+        .extracting(Strategia.Operazione::nome)
+        .containsExactly("Torch");
+    assertThat(italyFirst.operazioni("British", 1))
+        .extracting(Strategia.Operazione::nome)
+        .containsExactly("Rinforzi Egitto");
+
+    final Strategia.Operazione afrika =
+        axis.piano("D").orElseThrow().operazioni("Germans", 1).get(0);
+    assertThat(afrika.nazioni()).containsExactly("Germans", "Italians");
+    assertThat(afrika.vettori()).containsExactly("Italians");
+    assertThat(axis.piano("D").orElseThrow().operazioni("Italians", 1)).containsExactly(afrika);
+    assertThat(afrika.bersagli()).containsExactly("Libya", "Tobruk", "Egypt");
+
+    final Strategia.Piano seaLion = axis.piano("B").orElseThrow();
+    assertThat(seaLion.operazioni("Germans", 3)).hasSize(1);
+    assertThat(seaLion.operazioni("Germans", 4)).isEmpty();
+    assertThat(seaLion.operazioni("Germans", 1).get(0).critico()).isTrue();
+    // no operation in A, C, N, 3
+    for (final String id : List.of("A", "C", "N")) {
+      assertThat(axis.piano(id).orElseThrow().operazioni()).isEmpty();
+    }
+    assertThat(allies.piano("3").orElseThrow().operazioni()).isEmpty();
+  }
+
+  @Test
+  void anOperationNeedsPortsGatheringAndTargets() {
+    final String json =
+        "{\"alleanze\":{\"Allies\":{\"piani\":[{\"id\":\"X\",\"operazioni_anfibie\":"
+            + "[{\"nome\":\"O\",\"nazioni\":[\"British\"],\"raccolta\":[\"110 Sea Zone\"],"
+            + "\"bersagli\":[\"Norway\"]}]}]}}}";
+
+    assertThatThrownBy(() -> Strategia.parse(new StringReader(json)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("porti");
+  }
+
+  @Test
+  void theFirstTargetWeighsMostAndTheCarrierDefaultsToTheNations() {
+    final String json =
+        "{\"alleanze\":{\"Allies\":{\"piani\":[{\"id\":\"X\",\"operazioni_anfibie\":"
+            + "[{\"nome\":\"O\",\"nazioni\":[\"British\"],\"porti\":[{\"territorio\":"
+            + "\"United Kingdom\",\"zona\":\"110 Sea Zone\"}],\"raccolta\":[\"110 Sea Zone\"],"
+            + "\"bersagli\":[\"Normandy Bordeaux\",\"Norway\"],\"peso\":10}]}]}}}";
+
+    final Strategia.Operazione o =
+        Strategia.parse(new StringReader(json))
+            .alleanza("Allies")
+            .orElseThrow()
+            .piano("X")
+            .orElseThrow()
+            .operazioni()
+            .get(0);
+    assertThat(o.vettori()).containsExactly("British");
+    assertThat(o.pesoBersaglio(0)).isEqualTo(10);
+    assertThat(o.pesoBersaglio(1)).isEqualTo(8, org.assertj.core.data.Offset.offset(0.001));
+    assertThat(o.trasporti()).isEqualTo(2);
+    assertThat(o.daRound()).isEqualTo(1);
+  }
 }

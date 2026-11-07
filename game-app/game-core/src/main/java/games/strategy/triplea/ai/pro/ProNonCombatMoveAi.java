@@ -333,6 +333,30 @@ class ProNonCombatMoveAi {
       proTerritory.addCantMoveUnits(cantMoveUnits);
     }
 
+    // Pro+: units a plan's amphibious operation moved or keeps in place (none for Hard)
+    final Set<Unit> held = proData.getTuning().heldUnits(proData);
+    if (!held.isEmpty()) {
+      final Map<Unit, Set<Territory>> transportMoveMap =
+          territoryManager.getDefendOptions().getTransportMoveMap();
+      for (final Unit u : held) {
+        final Territory t = unitTerritoryMap.get(u);
+        final ProTerritory proTerritory = t == null ? null : moveMap.get(t);
+        // cargo is not a defender of its sea zone: only taken out of the moves
+        if (proTerritory != null
+            && Matches.unitIsNotLand().test(u)
+            && (unitMoveMap.containsKey(u) || transportMoveMap.containsKey(u))
+            && !proTerritory.getCantMoveUnits().contains(u)) {
+          proTerritory.addCantMoveUnit(u);
+        }
+        unitMoveMap.remove(u);
+        transportMoveMap.remove(u);
+      }
+      territoryManager
+          .getDefendOptions()
+          .getTransportList()
+          .removeIf(pt -> held.contains(pt.getTransport()));
+    }
+
     // Add all units that only have 1 move option and can't be transported
     for (final Iterator<Unit> it = unitMoveMap.keySet().iterator(); it.hasNext(); ) {
       final Unit u = it.next();

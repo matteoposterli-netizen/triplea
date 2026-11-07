@@ -28,6 +28,7 @@ import games.strategy.triplea.ai.pro.logging.ProLogger;
 import games.strategy.triplea.ai.pro.util.ProMatches;
 import games.strategy.triplea.ai.pro.util.ProTerritoryValueUtils;
 import games.strategy.triplea.ai.pro.util.ProUtils;
+import games.strategy.triplea.ai.proplus.OperazioniAnfibie;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.ProPlusTuning;
 import games.strategy.triplea.ai.proplus.RiskLevel;
@@ -99,6 +100,13 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   private boolean purchaseWritten = true;
   private int pusAtStart;
   private int purchaseSpent;
+  private int repairSpent;
+  private int pusLeft;
+
+  /** Amphibious operations of the turn (text, JSON), written when the non-combat move starts. */
+  private @Nullable String pendingOperationsText;
+
+  private final List<JsonObject> pendingOperationsJson = new ArrayList<>();
   private @Nullable ProPurchaseOrders planOrders;
   private @Nullable ProPurchaseOrders.Result planResult;
   private @Nullable ProPurchaseOrders.DefenseShare defenseShare;
@@ -159,6 +167,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           } else if ("noncombat".equals(phase) || "place".equals(phase)) {
             writePurchases();
             resolveOutcomes(data);
+            writeOperations();
           }
         });
   }
@@ -201,6 +210,10 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     purchaseSteps.clear();
     purchaseTotal = Map.of();
     purchaseSpent = 0;
+    repairSpent = 0;
+    pusLeft = 0;
+    pendingOperationsText = null;
+    pendingOperationsJson.clear();
     purchaseWritten = false;
     planOrders = null;
     planResult = null;
@@ -418,10 +431,15 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           if ("done".equals(step) || "error".equals(step)) {
             purchaseTotal = new TreeMap<>(now);
             purchaseSpent = cost(proData, now);
+            // the purchase is made: what is not spent on units went to repairs or is left
+            pusLeft = proData.getPlayer().getResources().getQuantity("PUs");
+            repairSpent = Math.max(0, pusAtStart - purchaseSpent - pusLeft);
             final JsonObject json = event("acquisti_totale");
             json.add("unita", counts(now));
             json.addProperty("pu_spesi", purchaseSpent);
             json.addProperty("pu_disponibili", pusAtStart);
+            json.addProperty("pu_riparazioni", repairSpent);
+            json.addProperty("pu_avanzati", pusLeft);
             json.addProperty("esito", step);
             diary.json(json);
             if ("error".equals(step)) {
@@ -489,11 +507,14 @@ public final class DiaryRecorder implements ProDecisionRecorder {
       sb.append("  Acquisti: nessuno\n");
     } else {
       sb.append("  Acquisti: ").append(Italian.units(purchaseTotal));
-      sb.append(" (spesi ")
-          .append(purchaseSpent)
-          .append(" di ")
-          .append(pusAtStart)
-          .append(" PU)\n");
+      sb.append(" (spesi ").append(purchaseSpent).append(" di ").append(pusAtStart).append(" PU");
+      if (repairSpent > 0) {
+        sb.append(", riparazioni fabbriche ").append(repairSpent).append(" PU");
+      }
+      if (pusLeft > 0) {
+        sb.append(", avanzati ").append(pusLeft).append(" PU");
+      }
+      sb.append(")\n");
       for (final String[] step : purchaseSteps) {
         sb.append("    - ").append(Italian.purchaseStep(step[0]));
         if (!step[1].isEmpty()) {
@@ -930,6 +951,110 @@ public final class DiaryRecorder implements ProDecisionRecorder {
                   enemy.getName(),
                   decision.kind().name().toLowerCase(Locale.ROOT)
                 }));
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE: what the plan's amphibious operations did this turn (made before the
+   * non-combat move; written when it starts, after the battle outcomes). Never changes a decision.
+   */
+  public void amphibiousOperations(
+      final ProData proData,
+      final List<OperazioniAnfibie.Rapporto> reports,
+      final List<OperazioniAnfibie.Acquisto> purchases) {
+    guard(
+        () -> {
+          if (!active || reports.isEmpty()) {
+            return;
+          }
+          final StringBuilder sb = new StringBuilder("  Operazioni anfibie:\n");
+          pendingOperationsJson.clear();
+          for (final OperazioniAnfibie.Rapporto r : reports) {
+            sb.append(operationText(r));
+            final List<OperazioniAnfibie.Acquisto> bought =
+                purchases.stream().filter(a -> a.operazione().equals(r.operazione())).toList();
+            if (!bought.isEmpty()) {
+              sb.append("      acquisti chiesti nel turno: ")
+                  .append(
+                      String.join(
+                          "; ",
+                          bought.stream()
+                              .map(a -> a.numero() + " " + a.categoria() + " (" + a.motivo() + ")")
+                              .toList()))
+                  .append('\n');
+            }
+            final JsonObject json = event("operazione_anfibia");
+            json.addProperty("fase", "noncombat");
+            json.addProperty("operazione", r.operazione());
+            json.addProperty("stato", r.stato().testo());
+            json.addProperty("trasporti", r.trasporti());
+            json.addProperty("truppe_a_bordo", r.truppeABordo());
+            json.addProperty("scorta", r.scorta());
+            json.addProperty("sbarcate", r.sbarcate());
+            final JsonArray on = new JsonArray();
+            r.sbarcateSu().forEach(on::add);
+            json.add("sbarcate_su", on);
+            json.addProperty("prossimo_passo", r.prossimoPasso());
+            json.addProperty("motivo", r.motivo());
+            final JsonArray moves = new JsonArray();
+            r.mosse().forEach(moves::add);
+            json.add("mosse", moves);
+            r.bersaglio().ifPresent(b -> json.addProperty("bersaglio", b));
+            if (r.winStimata() >= 0) {
+              json.addProperty("win_stimata", round1(r.winStimata()));
+            }
+            final JsonArray asked = new JsonArray();
+            for (final OperazioniAnfibie.Acquisto a : bought) {
+              final JsonObject o = new JsonObject();
+              o.addProperty("categoria", a.categoria());
+              o.addProperty("numero", a.numero());
+              o.addProperty("motivo", a.motivo());
+              asked.add(o);
+            }
+            json.add("acquisti", asked);
+            pendingOperationsJson.add(json);
+          }
+          pendingOperationsText = sb.toString();
+        });
+  }
+
+  /**
+   * Eg "Operazione Overlord USA: in rotta - trasporti 4, truppe a bordo 8, scorta 3; prossimo
+   * passo: raggiungere 110 Sea Zone; motivo: ...".
+   */
+  static String operationText(final OperazioniAnfibie.Rapporto r) {
+    final StringBuilder sb =
+        new StringBuilder("    - Operazione ")
+            .append(r.operazione())
+            .append(": ")
+            .append(r.stato().testo())
+            .append(" - trasporti ")
+            .append(r.trasporti())
+            .append(", truppe a bordo ")
+            .append(r.truppeABordo())
+            .append(", scorta ")
+            .append(r.scorta());
+    if (r.sbarcate() > 0) {
+      sb.append(", sbarcate nel turno ")
+          .append(r.sbarcate())
+          .append(" unita' su ")
+          .append(String.join("/", r.sbarcateSu()));
+    }
+    sb.append("; prossimo passo: ").append(r.prossimoPasso());
+    sb.append("; motivo: ").append(r.motivo().isEmpty() ? "-" : r.motivo()).append('\n');
+    if (!r.mosse().isEmpty()) {
+      sb.append("      mosse: ").append(String.join("; ", r.mosse())).append('\n');
+    }
+    return sb.toString();
+  }
+
+  private void writeOperations() {
+    if (pendingOperationsText == null || diary == null) {
+      return;
+    }
+    diary.text(pendingOperationsText);
+    pendingOperationsJson.forEach(diary::json);
+    pendingOperationsText = null;
+    pendingOperationsJson.clear();
   }
 
   /**

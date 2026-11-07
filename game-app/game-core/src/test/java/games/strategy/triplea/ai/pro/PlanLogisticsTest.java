@@ -137,7 +137,8 @@ class PlanLogisticsTest extends AbstractClientSettingTestCase {
     final Purchase seaLion = purchase("B");
 
     final ProPurchaseOrders.Result result = seaLion.result();
-    assertThat(seaLion.orders().label()).isEqualTo("B Sea Lion, Germans R2");
+    // step OPERAZIONI ANFIBIE: the operation "Leone marino" may add its purchases to the label
+    assertThat(seaLion.orders().label()).startsWith("B Sea Lion, Germans R2");
     assertThat(result.units().get("trasporti")).containsEntry("transport", 2);
     assertThat(result.units()).containsKey("aerei");
   }

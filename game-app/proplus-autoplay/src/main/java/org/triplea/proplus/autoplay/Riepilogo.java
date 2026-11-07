@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +32,10 @@ final class Riepilogo {
   static final String JSON_FILE = "riepilogo.json";
   static final String MD_FILE = "riepilogo.md";
   static final Set<String> DEFENSE_STEPS = Set.of("defend_land", "capital_emergency");
+
+  /** Targets of Sea Lion (WW2 Europe 1940). */
+  static final Set<String> BRITISH_ISLES = Set.of("United Kingdom", "Scotland");
+
   static final String PLAN_STEP = "plan";
   static final int TOP_BATTLES = 5;
   private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -75,10 +80,11 @@ final class Riepilogo {
       final int n = round.get("round").getAsInt();
       for (final Map.Entry<String, JsonElement> e : round.getAsJsonObject("nazioni").entrySet()) {
         final JsonObject nation = e.getValue().getAsJsonObject();
-        final int[] spent = diaryData.spent.getOrDefault(n + "|" + e.getKey(), new int[3]);
+        final int[] spent = diaryData.spent.getOrDefault(n + "|" + e.getKey(), new int[4]);
         nation.addProperty("pu_difesa", spent[0]);
         nation.addProperty("pu_piano", spent[1]);
         nation.addProperty("pu_spesi", spent[2]);
+        nation.addProperty("pu_riparazioni", spent[3]);
       }
     }
     json.addProperty("round_giocati", rounds.size());
@@ -86,8 +92,12 @@ final class Riepilogo {
     json.add("dichiarazioni_guerra", data.get("dichiarazioni_guerra"));
     json.add("capitali", data.get("capitali"));
     json.add("battaglie_top", topBattles(data.getAsJsonArray("battaglie"), diaryData));
-    firstLandingInEurope(data.getAsJsonArray("battaglie"), rounds)
-        .ifPresent(l -> json.add("primo_sbarco_europa", l));
+    final JsonArray landings = data.getAsJsonArray("sbarchi");
+    json.add("sbarchi", landings);
+    firstLandingInEurope(landings).ifPresent(l -> json.add("primo_sbarco_europa", l));
+    json.add("primo_sbarco_vero", firstLandings(landings, monitor.alliances().keySet()));
+    json.add("operazioni", diaryData.operations);
+    json.add("attacchi_regno_unito", diaryData.attacksOnBritain);
     json.add("esito", outcome(o, monitor, rounds, winner, gameOver));
     return json;
   }
@@ -128,44 +138,82 @@ final class Riepilogo {
   }
 
   /**
-   * The first British/American landing in continental Europe: the earliest round with a battle of
-   * theirs (attack, not a bombing raid) in a European land territory, or with their land units in
-   * one at the end of the round (a landing without battle). A battle wins a tie.
+   * The first real British/American landing in continental Europe (step OPERAZIONI ANFIBIE): land
+   * units unloaded from transports on a European territory an enemy held when the turn started
+   * ({@link Monitor} records them; walking into a French territory or being there is not a
+   * landing). The earliest round, the most units on a tie.
    */
-  static Optional<JsonObject> firstLandingInEurope(
-      final JsonArray battles, final JsonArray rounds) {
+  static Optional<JsonObject> firstLandingInEurope(final JsonArray landings) {
     JsonObject best = null;
-    for (final JsonElement e : battles) {
-      final JsonObject b = e.getAsJsonObject();
-      if (Monitor.WESTERN_ALLIES.contains(b.get("attaccante").getAsString())
-          && Monitor.EUROPE.contains(b.get("territorio").getAsString())
-          && "NORMAL".equals(text(b, "tipo"))
-          && (best == null || b.get("round").getAsInt() < best.get("round").getAsInt())) {
-        best = new JsonObject();
-        best.addProperty("round", b.get("round").getAsInt());
-        best.addProperty("territorio", b.get("territorio").getAsString());
-        best.addProperty("nazione", b.get("attaccante").getAsString());
-        best.addProperty("come", "attacco (" + text(b, "risultato") + ")");
-      }
-    }
-    for (final JsonElement e : rounds) {
-      final JsonObject r = e.getAsJsonObject();
-      final int round = r.get("round").getAsInt();
-      if (!r.has("alleati_in_europa")
-          || r.getAsJsonObject("alleati_in_europa").isEmpty()
-          || (best != null && best.get("round").getAsInt() <= round)) {
+    for (final JsonElement e : landings) {
+      final JsonObject l = e.getAsJsonObject();
+      if (!Monitor.WESTERN_ALLIES.contains(l.get("nazione").getAsString())
+          || !Monitor.EUROPE.contains(l.get("territorio").getAsString())) {
         continue;
       }
-      final Map.Entry<String, JsonElement> first =
-          r.getAsJsonObject("alleati_in_europa").entrySet().iterator().next();
-      best = new JsonObject();
-      best.addProperty("round", round);
-      best.addProperty("territorio", first.getKey());
-      best.addProperty("nazione", strings(first.getValue().getAsJsonArray()).get(0));
-      best.addProperty("come", "unita' presenti a fine round");
-      break;
+      if (best == null
+          || l.get("round").getAsInt() < best.get("round").getAsInt()
+          || (l.get("round").getAsInt() == best.get("round").getAsInt()
+              && l.get("unita").getAsInt() > best.get("unita").getAsInt())) {
+        best = landingJson(l);
+      }
     }
     return Optional.ofNullable(best);
+  }
+
+  /** Alliance -> its first real landing anywhere (round, territory, nation, units), if any. */
+  static JsonObject firstLandings(final JsonArray landings, final Collection<String> alliances) {
+    final JsonObject json = new JsonObject();
+    for (final String a : alliances) {
+      JsonObject best = null;
+      for (final JsonElement e : landings) {
+        final JsonObject l = e.getAsJsonObject();
+        if (a.equals(l.get("alleanza").getAsString())
+            && (best == null
+                || l.get("round").getAsInt() < best.get("round").getAsInt()
+                || (l.get("round").getAsInt() == best.get("round").getAsInt()
+                    && l.get("unita").getAsInt() > best.get("unita").getAsInt()))) {
+          best = landingJson(l);
+        }
+      }
+      if (best != null) {
+        json.add(a, best);
+      }
+    }
+    return json;
+  }
+
+  private static JsonObject landingJson(final JsonObject l) {
+    final JsonObject j = new JsonObject();
+    j.addProperty("round", l.get("round").getAsInt());
+    j.addProperty("territorio", l.get("territorio").getAsString());
+    j.addProperty("nazione", l.get("nazione").getAsString());
+    j.addProperty("unita", l.get("unita").getAsInt());
+    j.addProperty(
+        "come",
+        l.get("unita").getAsInt()
+            + " unita' sbarcate ("
+            + ("movimento".equals(text(l, "fase"))
+                ? "su territorio preso nel turno"
+                : "assalto anfibio")
+            + ")");
+    return j;
+  }
+
+  /** Eg "R5 Normandy Bordeaux (Americans, 6 unita' sbarcate (assalto anfibio))", or "nessuno". */
+  static String landingText(@Nullable final JsonObject l) {
+    if (l == null) {
+      return "nessuno";
+    }
+    return "R"
+        + l.get("round").getAsInt()
+        + " "
+        + l.get("territorio").getAsString()
+        + " ("
+        + l.get("nazione").getAsString()
+        + ", "
+        + l.get("come").getAsString()
+        + ")";
   }
 
   /** Eg: "R5 Normandy Bordeaux (Americans, attacco (CONQUERED))", or "nessuno". */
@@ -278,6 +326,21 @@ final class Riepilogo {
         .append(duration(json.get("durata_s").getAsLong()))
         .append('\n');
     md.append("- Primo sbarco alleato in Europa: ").append(firstLandingText(json)).append('\n');
+    if (json.has("primo_sbarco_vero")) {
+      final JsonObject first = json.getAsJsonObject("primo_sbarco_vero");
+      md.append("- Primo sbarco vero: ")
+          .append(
+              String.join(
+                  "; ",
+                  alliances.stream()
+                      .map(
+                          a ->
+                              allianceLabel(a)
+                                  + " "
+                                  + landingText(first.has(a) ? first.getAsJsonObject(a) : null))
+                      .toList()))
+          .append('\n');
+    }
     md.append("- Mappa: ")
         .append(p.get("gioco").getAsString())
         .append(" (")
@@ -327,12 +390,13 @@ final class Riepilogo {
 """);
     md.append(
         "PU = cassa a fine round; difesa = PU spesi nei passi di difesa (defend_land,"
-            + " capital_emergency); piano = PU spesi nel mix del piano; spesi = totale acquisti;"
-            + " trasporti = trasporti della nazione a fine round.\n\n");
+            + " capital_emergency); piano = PU spesi nel mix del piano; spesi = totale acquisti di"
+            + " unita'; riparazioni = fabbriche riparate; trasporti = trasporti della nazione a fine"
+            + " round.\n\n");
     md.append(
-        "| Round | Nazione | PU | Reddito | PU difesa | PU piano | PU spesi | TUV | Territori |"
-            + " Trasporti |\n");
-    md.append("|---|---|---|---|---|---|---|---|---|---|\n");
+        "| Round | Nazione | PU | Reddito | PU difesa | PU piano | PU spesi | PU riparazioni | TUV |"
+            + " Territori | Trasporti |\n");
+    md.append("|---|---|---|---|---|---|---|---|---|---|---|\n");
     for (final JsonElement e : rounds) {
       final JsonObject r = e.getAsJsonObject();
       for (final Map.Entry<String, JsonElement> n : r.getAsJsonObject("nazioni").entrySet()) {
@@ -345,6 +409,7 @@ final class Riepilogo {
                 "pu_difesa",
                 "pu_piano",
                 "pu_spesi",
+                "pu_riparazioni",
                 "tuv",
                 "territori",
                 "trasporti")) {
@@ -354,6 +419,8 @@ final class Riepilogo {
         md.append('\n');
       }
     }
+
+    md.append(landingsAndOperationsMarkdown(json, alliances));
 
     md.append(
 """
@@ -493,6 +560,142 @@ final class Riepilogo {
     return md.toString();
   }
 
+  /**
+   * Per round: real landings (units per alliance, where), idle transports per alliance (empty and
+   * unmoved at the end of the nation's non-combat move); then the blocked operations of the diary.
+   */
+  static String landingsAndOperationsMarkdown(final JsonObject json, final List<String> alliances) {
+    final StringBuilder md =
+        new StringBuilder(
+"""
+
+## Sbarchi e trasporti per round
+
+""");
+    md.append(
+        "Sbarco vero = unita' di terra scaricate da trasporti su un territorio nemico a inizio"
+            + " turno (assalto anfibio, o territorio preso nel turno); trasporti inattivi = fermi e"
+            + " senza carico a fine movimento della nazione.\n\n| Round |");
+    alliances.forEach(a -> md.append(" Sbarcate ").append(allianceLabel(a)).append(" |"));
+    alliances.forEach(a -> md.append(" Trasporti inattivi ").append(allianceLabel(a)).append(" |"));
+    md.append(" Dove |\n|---|");
+    alliances.forEach(a -> md.append("---|---|"));
+    md.append("---|\n");
+    final JsonArray landings =
+        json.has("sbarchi") ? json.getAsJsonArray("sbarchi") : new JsonArray();
+    for (final JsonElement e : json.getAsJsonArray("round")) {
+      final JsonObject r = e.getAsJsonObject();
+      final int n = r.get("round").getAsInt();
+      md.append("| ").append(roundLabel(r)).append(" |");
+      for (final String a : alliances) {
+        final JsonObject landed =
+            r.has("unita_sbarcate") ? r.getAsJsonObject("unita_sbarcate") : new JsonObject();
+        md.append(' ').append(num(landed, a)).append(" |");
+      }
+      for (final String a : alliances) {
+        md.append(' ').append(idleTransports(json, r, a)).append(" |");
+      }
+      final List<String> where = new ArrayList<>();
+      for (final JsonElement le : landings) {
+        final JsonObject l = le.getAsJsonObject();
+        if (l.get("round").getAsInt() == n) {
+          where.add(
+              l.get("nazione").getAsString()
+                  + " "
+                  + l.get("unita").getAsInt()
+                  + " su "
+                  + l.get("territorio").getAsString());
+        }
+      }
+      md.append(' ').append(where.isEmpty() ? "-" : String.join(", ", where)).append(" |\n");
+    }
+    final JsonArray britain =
+        json.has("attacchi_regno_unito") ? json.getAsJsonArray("attacchi_regno_unito") : null;
+    if (britain != null && !britain.isEmpty()) {
+      md.append(
+"""
+
+### Attacchi tedeschi alle isole britanniche (Sea Lion)
+
+""");
+      md.append(seaLionText(britain)).append('\n');
+    }
+    final JsonArray ops = json.has("operazioni") ? json.getAsJsonArray("operazioni") : null;
+    if (ops != null && !ops.isEmpty()) {
+      md.append(
+"""
+
+### Operazioni anfibie bloccate
+
+""");
+      boolean any = false;
+      for (final JsonElement e : ops) {
+        final JsonObject o = e.getAsJsonObject();
+        if ("bloccata".equals(text(o, "stato"))) {
+          any = true;
+          md.append("- R")
+              .append(o.get("round").getAsInt())
+              .append(' ')
+              .append(text(o, "nazione"))
+              .append(" - ")
+              .append(text(o, "operazione"))
+              .append(": ")
+              .append(text(o, "motivo"))
+              .append('\n');
+        }
+      }
+      if (!any) {
+        md.append("Nessuna.\n");
+      }
+    }
+    return md.toString();
+  }
+
+  /**
+   * Eg "R2 United Kingdom scartato (win% max 0%); R3 Scotland eseguito (win% 84%, max 90%)": the
+   * German attacks on the British isles of the diary, in order.
+   */
+  static String seaLionText(final JsonArray attacks) {
+    final List<String> parts = new ArrayList<>();
+    for (final JsonElement e : attacks) {
+      final JsonObject a = e.getAsJsonObject();
+      final StringBuilder sb =
+          new StringBuilder("R")
+              .append(a.get("round").getAsInt())
+              .append(' ')
+              .append(text(a, "territorio"))
+              .append(' ')
+              .append(text(a, "stato"))
+              .append(" (");
+      if (a.has("win_stimata") && !a.get("win_stimata").isJsonNull()) {
+        sb.append(String.format(Locale.ROOT, "win%% %.0f%%, ", a.get("win_stimata").getAsDouble()));
+      }
+      sb.append(
+              a.has("win_max") && !a.get("win_max").isJsonNull()
+                  ? String.format(Locale.ROOT, "max %.0f%%", a.get("win_max").getAsDouble())
+                  : "max -")
+          .append(')');
+      parts.add(sb.toString());
+    }
+    return parts.isEmpty() ? "nessuno" : String.join("; ", parts);
+  }
+
+  /** Idle transports of the alliance's nations in round {@code r}. */
+  static int idleTransports(final JsonObject json, final JsonObject r, final String alliance) {
+    int idle = 0;
+    final JsonArray members = json.getAsJsonObject("alleanze").getAsJsonArray(alliance);
+    if (members == null) {
+      return 0;
+    }
+    for (final JsonElement m : members) {
+      final JsonObject n = r.getAsJsonObject("nazioni").getAsJsonObject(m.getAsString());
+      if (n != null && n.has("trasporti_inattivi")) {
+        idle += n.get("trasporti_inattivi").getAsInt();
+      }
+    }
+    return idle;
+  }
+
   static String roundLabel(final JsonObject round) {
     return "R"
         + round.get("round").getAsInt()
@@ -544,6 +747,15 @@ final class Riepilogo {
     /** "round|territory|attacker" -> the {@code esito_battaglia} event. */
     final Map<String, JsonObject> battles = new HashMap<>();
 
+    /** The {@code operazione_anfibia} events (round, nation, operation, state, reason...). */
+    final JsonArray operations = new JsonArray();
+
+    /**
+     * German attacks considered on the British isles (Sea Lion): round, territory, state, win% with
+     * the units assigned and the best possible.
+     */
+    final JsonArray attacksOnBritain = new JsonArray();
+
     static DiaryData read(
         @Nullable final Path folder, final Map<String, Map<String, Integer>> costs) {
       final DiaryData d = new DiaryData();
@@ -590,11 +802,49 @@ final class Riepilogo {
             for (final Map.Entry<String, JsonElement> u : e.getAsJsonObject("unita").entrySet()) {
               pus += c.getOrDefault(u.getKey(), 0) * u.getValue().getAsInt();
             }
-            spent.computeIfAbsent(key, k -> new int[3])[index] += pus;
+            spent.computeIfAbsent(key, k -> new int[4])[index] += pus;
           }
         }
-        case "acquisti_totale" ->
-            spent.computeIfAbsent(key, k -> new int[3])[2] = e.get("pu_spesi").getAsInt();
+        case "acquisti_totale" -> {
+          final int[] s = spent.computeIfAbsent(key, k -> new int[4]);
+          s[2] = e.get("pu_spesi").getAsInt();
+          s[3] = e.has("pu_riparazioni") ? e.get("pu_riparazioni").getAsInt() : 0;
+        }
+        case "attacco" -> {
+          if ("Germans".equals(e.get("nazione").getAsString())
+              && e.has("territorio")
+              && BRITISH_ISLES.contains(e.get("territorio").getAsString())) {
+            final JsonObject a = new JsonObject();
+            for (final String k :
+                List.of(
+                    "round", "territorio", "stato", "motivo_codice", "win_stimata", "win_max")) {
+              if (e.has(k)) {
+                a.add(k, e.get(k));
+              }
+            }
+            attacksOnBritain.add(a);
+          }
+        }
+        case "operazione_anfibia" -> {
+          final JsonObject o = new JsonObject();
+          for (final String k :
+              List.of(
+                  "round",
+                  "nazione",
+                  "operazione",
+                  "stato",
+                  "trasporti",
+                  "truppe_a_bordo",
+                  "scorta",
+                  "sbarcate",
+                  "motivo",
+                  "prossimo_passo")) {
+            if (e.has(k)) {
+              o.add(k, e.get(k));
+            }
+          }
+          operations.add(o);
+        }
         case "esito_battaglia" ->
             battles.put(
                 e.get("round").getAsInt()

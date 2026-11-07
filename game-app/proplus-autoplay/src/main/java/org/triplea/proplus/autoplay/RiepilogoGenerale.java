@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
@@ -136,7 +137,7 @@ final class RiepilogoGenerale {
         .append(" (PU = somma della cassa delle nazioni a fine round).\n");
 
     configurations(md, games, alliances, vcRounds, maxRound);
-    landingsAndTransports(md, games, alliances);
+    landingsAndTransports(md, games, alliances, maxRound);
 
     md.append(
 """
@@ -372,26 +373,56 @@ final class RiepilogoGenerale {
     }
   }
 
-  /** First Allied landing in Europe and transports per nation at the end, per game. */
+  /**
+   * Per game: first real landing per alliance and of the Western Allies in Europe, landed units and
+   * idle transports per alliance over the game, transports at the end, blocked operations. Per
+   * configuration: games with an Allied landing by round 6, mean first-landing round, landed units
+   * and idle transports per round (mean of the seeds), blocked operations with their reasons.
+   */
   private static void landingsAndTransports(
-      final StringBuilder md, final List<Game> games, final List<String> alliances) {
+      final StringBuilder md,
+      final List<Game> games,
+      final List<String> alliances,
+      final int maxRound) {
     md.append(
 """
 
-## Primo sbarco alleato in Europa e trasporti a fine partita
+## Sbarchi veri e trasporti
 
-| Partita | Primo sbarco alleato in Europa | Trasporti a fine partita |
-|---|---|---|
 """);
+    md.append(
+        "Sbarco vero = unita' di terra scaricate da trasporti su un territorio nemico a inizio"
+            + " turno (assalto anfibio o territorio preso nel turno). Trasporti inattivi = fermi e"
+            + " senza carico a fine movimento della nazione (somma dei round). Operazioni bloccate"
+            + " = turni con stato \"bloccata\" nel diario.\n\n| Partita |");
+    alliances.forEach(
+        a -> md.append(" Primo sbarco vero ").append(Riepilogo.allianceLabel(a)).append(" |"));
+    md.append(
+        " Primo sbarco alleato in Europa | Unita' sbarcate | Trasporti inattivi |"
+            + " Trasporti a fine partita | Operazioni bloccate |\n|---|");
+    alliances.forEach(a -> md.append("---|"));
+    md.append("---|---|---|---|---|\n");
     for (final Game g : games) {
       if (g.json() == null) {
         continue;
       }
-      final JsonObject last = lastRound(g.json());
+      final JsonObject j = g.json();
+      final JsonObject first =
+          j.has("primo_sbarco_vero") ? j.getAsJsonObject("primo_sbarco_vero") : new JsonObject();
+      md.append("| ").append(g.folder()).append(" |");
+      for (final String a : alliances) {
+        md.append(' ')
+            .append(Riepilogo.landingText(first.has(a) ? first.getAsJsonObject(a) : null))
+            .append(" |");
+      }
+      md.append(' ').append(Riepilogo.firstLandingText(j)).append(" | ");
+      md.append(join(alliances, a -> String.valueOf(landedTotal(j, a)))).append(" | ");
+      md.append(join(alliances, a -> String.valueOf(idleTotal(j, a)))).append(" | ");
+      final JsonObject last = lastRound(j);
       final List<String> transports = new ArrayList<>();
       if (last != null) {
         for (final String a : alliances) {
-          for (final JsonElement m : g.json().getAsJsonObject("alleanze").getAsJsonArray(a)) {
+          for (final JsonElement m : j.getAsJsonObject("alleanze").getAsJsonArray(a)) {
             final JsonObject n = last.getAsJsonObject("nazioni").getAsJsonObject(m.getAsString());
             if (n != null && n.has("trasporti")) {
               transports.add(m.getAsString() + " " + n.get("trasporti").getAsInt());
@@ -399,14 +430,199 @@ final class RiepilogoGenerale {
           }
         }
       }
-      md.append("| ")
-          .append(g.folder())
-          .append(" | ")
-          .append(Riepilogo.firstLandingText(g.json()))
-          .append(" | ")
-          .append(transports.isEmpty() ? "-" : String.join(", ", transports))
-          .append(" |\n");
+      md.append(transports.isEmpty() ? "-" : String.join(", ", transports)).append(" | ");
+      md.append(blockedText(List.of(j), 3)).append(" |\n");
     }
+
+    final Map<String, List<JsonObject>> byConfig = new LinkedHashMap<>();
+    for (final Game g : games) {
+      if (g.json() != null) {
+        byConfig
+            .computeIfAbsent(configuration(g.json(), alliances), k -> new ArrayList<>())
+            .add(g.json());
+      }
+    }
+    md.append(
+        "\nPer configurazione: partite con primo sbarco vero alleato entro R6, round medio del"
+            + " primo sbarco vero (partite con sbarco), unita' sbarcate e trasporti inattivi per"
+            + " round (media dei semi, Asse / Alleati).\n\n| Configurazione | Alleati entro R6 |"
+            + " Primo sbarco medio |");
+    for (int r = 1; r <= maxRound; r++) {
+      md.append(" R").append(r).append(" sbarcate | R").append(r).append(" inattivi |");
+    }
+    md.append("\n|---|---|---|");
+    for (int r = 1; r <= maxRound; r++) {
+      md.append("---|---|");
+    }
+    md.append('\n');
+    final String allies = alliances.isEmpty() ? "Allies" : alliances.get(alliances.size() - 1);
+    for (final Map.Entry<String, List<JsonObject>> c : byConfig.entrySet()) {
+      final List<JsonObject> list = c.getValue();
+      final long byR6 =
+          list.stream()
+              .filter(j -> firstRound(j, allies) > 0 && firstRound(j, allies) <= 6)
+              .count();
+      md.append("| ")
+          .append(c.getKey())
+          .append(" | ")
+          .append(byR6)
+          .append('/')
+          .append(list.size())
+          .append(" | ")
+          .append(
+              join(
+                  alliances,
+                  a ->
+                      mean(
+                          list.stream()
+                              .map(j -> (double) firstRound(j, a))
+                              .filter(x -> x > 0)
+                              .toList())))
+          .append(" |");
+      for (int r = 1; r <= maxRound; r++) {
+        final int rr = r;
+        md.append(' ')
+            .append(
+                join(
+                    alliances,
+                    a ->
+                        mean(
+                            list.stream()
+                                .map(j -> round(j, rr))
+                                .filter(Objects::nonNull)
+                                .map(
+                                    round ->
+                                        round.has("unita_sbarcate")
+                                                && round.getAsJsonObject("unita_sbarcate").has(a)
+                                            ? round
+                                                .getAsJsonObject("unita_sbarcate")
+                                                .get(a)
+                                                .getAsDouble()
+                                            : 0.0)
+                                .toList())))
+            .append(" | ")
+            .append(
+                join(
+                    alliances,
+                    a ->
+                        mean(
+                            list.stream()
+                                .filter(j -> round(j, rr) != null)
+                                .map(j -> (double) Riepilogo.idleTransports(j, round(j, rr), a))
+                                .toList())))
+            .append(" |");
+      }
+      md.append('\n');
+    }
+    md.append(
+"""
+
+Attacchi tedeschi alle isole britanniche (Sea Lion), per partita:
+
+""");
+    boolean anySeaLion = false;
+    for (final Game g : games) {
+      if (g.json() != null
+          && g.json().has("attacchi_regno_unito")
+          && !g.json().getAsJsonArray("attacchi_regno_unito").isEmpty()) {
+        anySeaLion = true;
+        md.append("- ")
+            .append(g.folder())
+            .append(": ")
+            .append(Riepilogo.seaLionText(g.json().getAsJsonArray("attacchi_regno_unito")))
+            .append('\n');
+      }
+    }
+    if (!anySeaLion) {
+      md.append("- nessuno\n");
+    }
+    md.append(
+"""
+
+Operazioni bloccate per configurazione (turni bloccati, motivi piu' frequenti):
+
+""");
+    for (final Map.Entry<String, List<JsonObject>> c : byConfig.entrySet()) {
+      md.append("- ")
+          .append(c.getKey())
+          .append(": ")
+          .append(blockedText(c.getValue(), 4))
+          .append('\n');
+    }
+  }
+
+  /** Round of the alliance's first real landing, 0 if none. */
+  static int firstRound(final JsonObject json, final String alliance) {
+    if (!json.has("primo_sbarco_vero")
+        || !json.getAsJsonObject("primo_sbarco_vero").has(alliance)) {
+      return 0;
+    }
+    return json.getAsJsonObject("primo_sbarco_vero")
+        .getAsJsonObject(alliance)
+        .get("round")
+        .getAsInt();
+  }
+
+  private static int landedTotal(final JsonObject json, final String alliance) {
+    int total = 0;
+    for (final JsonElement e : json.getAsJsonArray("round")) {
+      final JsonObject r = e.getAsJsonObject();
+      if (r.has("unita_sbarcate") && r.getAsJsonObject("unita_sbarcate").has(alliance)) {
+        total += r.getAsJsonObject("unita_sbarcate").get(alliance).getAsInt();
+      }
+    }
+    return total;
+  }
+
+  private static int idleTotal(final JsonObject json, final String alliance) {
+    int total = 0;
+    for (final JsonElement e : json.getAsJsonArray("round")) {
+      total += Riepilogo.idleTransports(json, e.getAsJsonObject(), alliance);
+    }
+    return total;
+  }
+
+  /**
+   * Eg "Overlord USA 5 (scorta insufficiente per 110 Sea Zone 3; ...)": blocked turns per operation
+   * and its most frequent reasons (numbers left out, so the same reason counts once).
+   */
+  static String blockedText(final List<JsonObject> games, final int reasons) {
+    final Map<String, Integer> turns = new TreeMap<>();
+    final Map<String, Map<String, Integer>> why = new TreeMap<>();
+    for (final JsonObject j : games) {
+      if (!j.has("operazioni")) {
+        continue;
+      }
+      for (final JsonElement e : j.getAsJsonArray("operazioni")) {
+        final JsonObject o = e.getAsJsonObject();
+        if (!"bloccata".equals(text(o, "stato"))) {
+          continue;
+        }
+        final String op = text(o, "nazione") + " " + text(o, "operazione");
+        turns.merge(op, 1, Integer::sum);
+        for (final String r : text(o, "motivo").split("; ")) {
+          final String key = r.replaceAll("[0-9]+%?", "N").replaceAll("\\(.*\\)", "").trim();
+          if (!key.isEmpty() && !"-".equals(key)) {
+            why.computeIfAbsent(op, k -> new TreeMap<>()).merge(key, 1, Integer::sum);
+          }
+        }
+      }
+    }
+    if (turns.isEmpty()) {
+      return "nessuna";
+    }
+    final List<String> parts = new ArrayList<>();
+    turns.forEach(
+        (op, n) -> {
+          final List<String> top =
+              why.getOrDefault(op, Map.of()).entrySet().stream()
+                  .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                  .limit(reasons)
+                  .map(e -> e.getKey() + " " + e.getValue())
+                  .toList();
+          parts.add(op + " " + n + (top.isEmpty() ? "" : " (" + String.join("; ", top) + ")"));
+        });
+    return String.join("; ", parts);
   }
 
   private static JsonObject reading(final JsonObject json, final int r, final String alliance) {

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.Set;
 
 /**
  * The Pro AI numbers that a variant of the AI may change. Every default returns exactly the value
@@ -212,5 +213,14 @@ public interface ProTuning {
   default boolean garrisonNeeded(
       final ProData proData, final Territory territory, final List<Unit> landingEnemies) {
     return true;
+  }
+
+  /**
+   * Units the non-combat move must leave where they are: moved or kept in place before it by a
+   * plan's amphibious operations (Pro+, step OPERAZIONI ANFIBIE: transports, their cargo and
+   * escorts). They still count as defenders where they are. None by default.
+   */
+  default Set<Unit> heldUnits(final ProData proData) {
+    return Set.of();
   }
 }

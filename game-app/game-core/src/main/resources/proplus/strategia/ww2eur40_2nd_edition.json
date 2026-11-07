@@ -1,5 +1,5 @@
 {
-  "_nota": "Strategia Pro+ per World War II Europe 1940 2nd Edition. Valori modificabili. Modificatore di un fronte: -1, 0, +1 (rischio effettivo = livello del cursore dell'alleanza + modificatore, tra 1 e 5). Fronte non indicato in una fase = 0. 'a_round' assente = fino a fine partita. Obiettivo: 'territorio' (nome reale) oppure 'flotta' (zone di mare con navi di quella nazione); 'nazioni' assente = per tutta l'alleanza. 'peso' = punti aggiunti alla priorita' d'attacco (prima dei moltiplicatori capitale x5 / vicino alla mia capitale x3). Step 3c (solo osservazione, nessuna decisione cambia): 'tappe' = [{'territorio' oppure 'territori' + 'richiesti' ('tutti' default | 'uno'), 'nome' opzionale, 'entro_round'}] per l'avanzamento del piano; 'firma' = indizi con cui lo stato maggiore nemico riconosce il piano: {'indizio', 'tipo' (quota_tuv_fronte: quota del TUV di terra delle 'nazioni' sul 'fronte'; quota_acquisti: quota dei PU degli ultimi due acquisti delle 'nazioni' spesa in 'unita'/'classi'; unita_in: numero di unita' 'unita'/'classi' delle 'nazioni' in 'territori'/'zone', nessuno = ovunque), 'da' (valore 0) e 'a' (valore 1) della rampa lineare (a < da = piu' basso e' piu' forte), 'peso', 'da_round'/'a_round' opzionali}; classi: terra, aerei, navi, navi_da_guerra, trasporti, trasporti_carichi (3c-bis). Step 3c-bis: 'altrove' (o 'zone_altrove') = per unita_in, piazzamenti e attacchi la misura diventa la quota in 'territori'/'zone' rispetto a 'territori'+'altrove'; tipi nuovi: piazzamenti (TUV piazzato dalle 'nazioni' negli ultimi due piazzamenti in 'territori', quota sul totale o su 'territori'+'altrove'), attacchi (territori di 'territori' dove le 'nazioni' hanno attaccato in questo round o nel precedente, contro 'contro' se indicato; evento: ricordato col massimo e decade piano), in_guerra (1 se una delle 'nazioni' e' in guerra con una di 'contro'). Ogni indizio e' ricordato tra i round (memoria con decadimento, vedi CLAUDE.md); fuori da 'da_round'/'a_round' conta il valore ricordato. Il nome dell'indizio deve essere unico nel piano. 'sperimentale': true = '(sperimentale)' nel pannello, mai scelto da 'Automatico'. Campi 'punti_critici', 'ruoli' non usati in gioco. 'categorie': unita' di ogni categoria degli acquisti, comprate a rotazione nell'ordine scritto (un nome ripetuto = comprato piu' spesso). 'logistica' (step 3b), per nazione e per intervallo di round: 'acquisti.mix' = % dei PU rimasti dopo la difesa urgente per categoria (somma <= 100; il resto lo spende la logica di Hard), 'acquisti.obbligati' = minimi da comprare prima del mix; 'piazzamento' = fabbriche/zone di mare dove piazzare per primi gli acquisti del piano; 'ammassamento' = fronte e territori/zone di raccolta verso cui il movimento non di combattimento sposta le riserve ('forza' 1 = normale, 0 = spento). Nazione o round senza logistica = acquisti e movimenti di Hard. Step 3b-bis: 'quota_minima_piano' = % dei PU del turno riservata al piano (la difesa urgente puo' superare il resto solo per una fabbrica o la capitale a rischio oltre il 25%); 'ammassamento.aerei' true = anche gli aerei atterrano verso la raccolta (tra i territori sicuri); categoria 'scorta' = portaerei se i PU bastano, altrimenti cacciatorpediniere. Step 3c: fasi.'dichiarazioni' [{da, a, dal_round}] = guerra vietata prima di dal_round, poi dichiarata quando l'ammassamento e' fatto (TUV proprio sulla raccolta >= TUV nemico confinante); variante A1 = mettere dal_round 2. obiettivi.'critico' true = desiderata mai sotto 80. ammassamento.'modo' 'linea_del_fronte' = raccolta sui territori propri del fronte confinanti col nemico (pesati verso gli obiettivi), i 'territori' restano come ripiego prima della guerra; ammassamento.'peso' + 'altre_raccolte' [{fronte, peso, territori, modo}] = raccolte su piu' fronti pesate; 'presidio_minimo' {territori, unita} = unita' di terra minime dopo il movimento; 'imbarco' = punti d'imbarco usati quando la raccolta e' oltremare (+1 trasporto obbligato finche' la capacita' non basta).",
+  "_nota": "Strategia Pro+ per World War II Europe 1940 2nd Edition. Valori modificabili. Modificatore di un fronte: -1, 0, +1 (rischio effettivo = livello del cursore dell'alleanza + modificatore, tra 1 e 5). Fronte non indicato in una fase = 0. 'a_round' assente = fino a fine partita. Obiettivo: 'territorio' (nome reale) oppure 'flotta' (zone di mare con navi di quella nazione); 'nazioni' assente = per tutta l'alleanza. 'peso' = punti aggiunti alla priorita' d'attacco (prima dei moltiplicatori capitale x5 / vicino alla mia capitale x3). Step 3c (solo osservazione, nessuna decisione cambia): 'tappe' = [{'territorio' oppure 'territori' + 'richiesti' ('tutti' default | 'uno'), 'nome' opzionale, 'entro_round'}] per l'avanzamento del piano; 'firma' = indizi con cui lo stato maggiore nemico riconosce il piano: {'indizio', 'tipo' (quota_tuv_fronte: quota del TUV di terra delle 'nazioni' sul 'fronte'; quota_acquisti: quota dei PU degli ultimi due acquisti delle 'nazioni' spesa in 'unita'/'classi'; unita_in: numero di unita' 'unita'/'classi' delle 'nazioni' in 'territori'/'zone', nessuno = ovunque), 'da' (valore 0) e 'a' (valore 1) della rampa lineare (a < da = piu' basso e' piu' forte), 'peso', 'da_round'/'a_round' opzionali}; classi: terra, aerei, navi, navi_da_guerra, trasporti, trasporti_carichi (3c-bis). Step 3c-bis: 'altrove' (o 'zone_altrove') = per unita_in, piazzamenti e attacchi la misura diventa la quota in 'territori'/'zone' rispetto a 'territori'+'altrove'; tipi nuovi: piazzamenti (TUV piazzato dalle 'nazioni' negli ultimi due piazzamenti in 'territori', quota sul totale o su 'territori'+'altrove'), attacchi (territori di 'territori' dove le 'nazioni' hanno attaccato in questo round o nel precedente, contro 'contro' se indicato; evento: ricordato col massimo e decade piano), in_guerra (1 se una delle 'nazioni' e' in guerra con una di 'contro'). Ogni indizio e' ricordato tra i round (memoria con decadimento, vedi CLAUDE.md); fuori da 'da_round'/'a_round' conta il valore ricordato. Il nome dell'indizio deve essere unico nel piano. 'sperimentale': true = '(sperimentale)' nel pannello, mai scelto da 'Automatico'. Campi 'punti_critici', 'ruoli' non usati in gioco. 'categorie': unita' di ogni categoria degli acquisti, comprate a rotazione nell'ordine scritto (un nome ripetuto = comprato piu' spesso). 'logistica' (step 3b), per nazione e per intervallo di round: 'acquisti.mix' = % dei PU rimasti dopo la difesa urgente per categoria (somma <= 100; il resto lo spende la logica di Hard), 'acquisti.obbligati' = minimi da comprare prima del mix; 'piazzamento' = fabbriche/zone di mare dove piazzare per primi gli acquisti del piano; 'ammassamento' = fronte e territori/zone di raccolta verso cui il movimento non di combattimento sposta le riserve ('forza' 1 = normale, 0 = spento). Nazione o round senza logistica = acquisti e movimenti di Hard. Step 3b-bis: 'quota_minima_piano' = % dei PU del turno riservata al piano (la difesa urgente puo' superare il resto solo per una fabbrica o la capitale a rischio oltre il 25%); 'ammassamento.aerei' true = anche gli aerei atterrano verso la raccolta (tra i territori sicuri); categoria 'scorta' = portaerei se i PU bastano, altrimenti cacciatorpediniere. Step 3c: fasi.'dichiarazioni' [{da, a, dal_round}] = guerra vietata prima di dal_round, poi dichiarata quando l'ammassamento e' fatto (TUV proprio sulla raccolta >= TUV nemico confinante); variante A1 = mettere dal_round 2. obiettivi.'critico' true = desiderata mai sotto 80. ammassamento.'modo' 'linea_del_fronte' = raccolta sui territori propri del fronte confinanti col nemico (pesati verso gli obiettivi), i 'territori' restano come ripiego prima della guerra; ammassamento.'peso' + 'altre_raccolte' [{fronte, peso, territori, modo}] = raccolte su piu' fronti pesate; 'presidio_minimo' {territori, unita} = unita' di terra minime dopo il movimento; 'imbarco' = punti d'imbarco usati quando la raccolta e' oltremare (+1 trasporto obbligato finche' la capacita' non basta). Step OPERAZIONI ANFIBIE: 'operazioni_anfibie' del piano = [{'nome', 'nazioni' (truppe che sbarcano), 'vettori' (nazioni dei trasporti; assente = 'nazioni'; truppe su trasporti alleati: imbarco nel turno del proprietario delle truppe, sbarco in un suo turno successivo), 'da_round'/'a_round', 'porti' [{'territorio', 'zona'}] dalla retrovia al fronte, 'raccolta' (zone di mare dove la flotta carica aspetta lo sbarco), 'bersagli' in ordine di preferenza (obiettivi del piano per 'nazioni' con 'peso' -20% per posizione; raggiungibili solo via mare = attaccati solo alla win% desiderata; amico = sbarco diretto all'arrivo), 'trasporti' (per ondata, obiettivo degli acquisti), 'scorta_minima' (navi da guerra), 'peso', 'critico'}].",
   "gioco": "World War II Europe 1940 2nd Edition",
   "fronti": [
     {
@@ -180,6 +180,15 @@
           "nome": "Sea Lion",
           "sperimentale": true,
           "descrizione": "Francia e flotte britanniche al round 1, invasione del Regno Unito nei round 2-3, poi (R4+) come Barbarossa a Est.",
+          "operazioni_anfibie": [
+            {"nome": "Leone marino", "nazioni": ["Germans"], "da_round": 1, "a_round": 3,
+             "porti": [{"territorio": "Western Germany", "zona": "112 Sea Zone"},
+                       {"territorio": "Denmark", "zona": "112 Sea Zone"},
+                       {"territorio": "Germany", "zona": "113 Sea Zone"}],
+             "raccolta": ["112 Sea Zone"],
+             "bersagli": ["United Kingdom", "Scotland"],
+             "trasporti": 4, "scorta_minima": 2, "peso": 20, "critico": true}
+          ],
           "fasi": [
             {
               "da_round": 1,
@@ -419,6 +428,16 @@
           "id": "D",
           "nome": "Sud/Mediterraneo",
           "descrizione": "Francia, poi chiusura del Mediterraneo (Egitto, Gibilterra, Grecia) e da li' Medio Oriente e Caucaso.",
+          "operazioni_anfibie": [
+            {"nome": "Afrika Korps", "nazioni": ["Germans", "Italians"], "vettori": ["Italians"],
+             "da_round": 1,
+             "porti": [{"territorio": "Southern Italy", "zona": "97 Sea Zone"},
+                       {"territorio": "Southern Italy", "zona": "95 Sea Zone"},
+                       {"territorio": "Northern Italy", "zona": "97 Sea Zone"}],
+             "raccolta": ["96 Sea Zone"],
+             "bersagli": ["Libya", "Tobruk", "Egypt"],
+             "trasporti": 4, "scorta_minima": 1, "peso": 15}
+          ],
           "fasi": [
             {
               "da_round": 1,
@@ -455,7 +474,7 @@
                 "piazzamento": ["Germany"],
                 "ammassamento": {
                   "fronte": "Mediterraneo-Africa",
-                  "territori": ["Greater Southern Germany", "Northern Italy", "Southern Italy"]
+                  "territori": ["Southern Italy", "Northern Italy"]
                 },
                 "quota_minima_piano": 50
               }
@@ -528,6 +547,21 @@
           "id": "1",
           "nome": "Germania prima",
           "descrizione": "Tutto sull'Ovest: sbarchi in Francia/Norvegia/Benelux dal round 4; Est e Mediterraneo in difesa.",
+          "operazioni_anfibie": [
+            {"nome": "Overlord USA", "nazioni": ["Americans"], "da_round": 3,
+             "porti": [{"territorio": "Eastern United States", "zona": "101 Sea Zone"},
+                       {"territorio": "United Kingdom", "zona": "110 Sea Zone"},
+                       {"territorio": "United Kingdom", "zona": "109 Sea Zone"}],
+             "raccolta": ["110 Sea Zone", "109 Sea Zone"],
+             "bersagli": ["Normandy Bordeaux", "Holland Belgium", "Norway"],
+             "trasporti": 4, "scorta_minima": 2, "peso": 15},
+            {"nome": "Overlord UK", "nazioni": ["British"], "da_round": 2,
+             "porti": [{"territorio": "United Kingdom", "zona": "110 Sea Zone"},
+                       {"territorio": "United Kingdom", "zona": "109 Sea Zone"}],
+             "raccolta": ["110 Sea Zone"],
+             "bersagli": ["Normandy Bordeaux", "Holland Belgium", "Norway"],
+             "trasporti": 3, "scorta_minima": 2, "peso": 15}
+          ],
           "fasi": [
             {
               "da_round": 1,
@@ -623,6 +657,18 @@
           "id": "2",
           "nome": "Italia prima",
           "descrizione": "Mediterraneo: Nord Africa italiano, poi Italia; Ovest ed Est in difesa.",
+          "operazioni_anfibie": [
+            {"nome": "Torch", "nazioni": ["Americans"], "da_round": 3,
+             "porti": [{"territorio": "Eastern United States", "zona": "101 Sea Zone"}],
+             "raccolta": ["91 Sea Zone", "92 Sea Zone"],
+             "bersagli": ["Morocco", "Algeria", "Tunisia", "Sicily", "Southern Italy"],
+             "trasporti": 4, "scorta_minima": 2, "peso": 15},
+            {"nome": "Rinforzi Egitto", "nazioni": ["British"], "da_round": 1,
+             "porti": [{"territorio": "Union of South Africa", "zona": "71 Sea Zone"}],
+             "raccolta": ["81 Sea Zone"],
+             "bersagli": ["Egypt", "Tobruk", "Libya"],
+             "trasporti": 2, "scorta_minima": 1, "peso": 10}
+          ],
           "fasi": [
             {
               "da_round": 1,

@@ -133,6 +133,7 @@ public final class AutoplayRunner {
           status = "parziale: superato il limite di " + options.minuti() + " minuti";
           break;
         }
+        monitor.beforeStep();
         game.runNextStep();
         monitor.afterStep();
         if (monitor.currentRound() != round) {

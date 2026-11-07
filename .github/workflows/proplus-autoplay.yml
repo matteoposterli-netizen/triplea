@@ -15,7 +15,7 @@ on:
         default: "12"
       partite:
         type: string
-        default: "6"
+        default: "7"
       semi:
         type: string
         default: "2"
@@ -28,8 +28,8 @@ on:
         description: "Round per partita"
         default: "12"
       partite:
-        description: "Numero di configurazioni (le prime N della lista: A/1, A/2, D/1, D/2, C/1, Hard)"
-        default: "6"
+        description: "Numero di configurazioni (le prime N della lista: A/1, A/2, D/1, D/2, C/1, Hard, B/1)"
+        default: "7"
       semi:
         description: "Semi dei dadi per configurazione (1..N): partite = configurazioni x semi"
         default: "2"
@@ -72,7 +72,7 @@ jobs:
         id: matrix
         env:
           ROUND: ${{ inputs.round || '12' }}
-          PARTITE: ${{ inputs.partite || '6' }}
+          PARTITE: ${{ inputs.partite || '7' }}
           SEMI: ${{ inputs.semi || '2' }}
           PIANI: ${{ inputs.piani || '' }}
         run: |
@@ -80,9 +80,9 @@ jobs:
           import json, os, re
           rounds = int(os.environ["ROUND"])
           seeds = max(1, min(4, int(os.environ["SEMI"])))
-          default = ["A/1", "A/2", "D/1", "D/2", "C/1", "hard"]
+          default = ["A/1", "A/2", "D/1", "D/2", "C/1", "hard", "B/1"]
           custom = [p.strip() for p in os.environ["PIANI"].split(",") if p.strip()]
-          configs = custom or default[: max(1, min(6, int(os.environ["PARTITE"])))]
+          configs = custom or default[: max(1, min(7, int(os.environ["PARTITE"])))]
           # every configuration with the same seeds 1..N, so the configurations are comparable
           include = []
           for i, g in enumerate(configs, 1):

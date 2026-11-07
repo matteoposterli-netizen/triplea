@@ -146,7 +146,34 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public double targetAttackMinWinPercentage(
       final ProData proData, final Territory target, final double attackMinWinPercentage) {
-    return riskLevel(proData, target).minimumWinPercentage(isLowLuck(proData.getData()));
+    final double minimum =
+        riskLevel(proData, target).minimumWinPercentage(isLowLuck(proData.getData()));
+    return isLandingOnlyTarget(proData, target)
+        ? Math.max(minimum, desiredWinPercentage(proData, target))
+        : minimum;
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE: a target of an operation of mine that only a landing can reach (no own
+   * or allied land next to it) is attacked only at the desired win%: the minimum is the desired.
+   */
+  static boolean isLandingOnlyTarget(final ProData proData, final Territory target) {
+    if (target.isWater()) {
+      return false;
+    }
+    final Optional<PianoAttivo> plan = planOf(proData);
+    if (plan.isEmpty() || !plan.get().isBersaglioOperazione(target)) {
+      return false;
+    }
+    return proData
+        .getData()
+        .getMap()
+        .getNeighbors(
+            target,
+            games.strategy.triplea.delegate.Matches.territoryIsLand()
+                .and(
+                    games.strategy.triplea.delegate.Matches.isTerritoryAllied(proData.getPlayer())))
+        .isEmpty();
   }
 
   @Override
@@ -180,11 +207,124 @@ public final class ProPlusTuning implements ProTuning {
             plan ->
                 plan.getLogistica()
                     .filter(l -> !l.mix().isEmpty() || !l.obbligati().isEmpty())
-                    .map(
-                        l ->
-                            Staging.needsTransport(proData, plan, l)
-                                ? withTransport(purchaseOrders(plan, l), plan)
-                                : purchaseOrders(plan, l)));
+                    .map(l -> ordersWithOperations(proData, plan, l)));
+  }
+
+  /**
+   * The plan's orders; the amphibious operations of the nation (step OPERAZIONI ANFIBIE) add their
+   * transports / land units / escort to the mandatory purchases and replace the step 3b-ter
+   * "transport for the embarkation" rule.
+   */
+  private ProPurchaseOrders ordersWithOperations(
+      final ProData proData, final PianoAttivo plan, final Strategia.Logistica l) {
+    final GameState data = proData.getData();
+    final String key = proData.getPlayer().getName() + "|" + data.getSequence().getRound();
+    // computed on the real board at the start of the purchase (the purchase plans on a copy
+    // where the Pro AI's own moves of the turn are already simulated)
+    final List<OperazioniAnfibie.Acquisto> extra =
+        key.equals(lastOperationPurchasesKey)
+            ? lastOperationPurchases
+            : OperazioniAnfibie.acquisti(proData, plan);
+    lastOperationPurchases = extra;
+    lastOperationPurchasesKey = key;
+    if (plan.getOperazioni().isEmpty()) {
+      return Staging.needsTransport(proData, plan, l)
+          ? withTransport(purchaseOrders(plan, l), plan)
+          : purchaseOrders(plan, l);
+    }
+    final ProPurchaseOrders orders = purchaseOrders(plan, l);
+    if (extra.isEmpty()) {
+      return orders;
+    }
+    final Map<String, List<String>> categories = plan.getStrategia().getCategorie();
+    final Map<String, Integer> added = new java.util.LinkedHashMap<>();
+    extra.forEach(a -> added.merge(a.categoria(), a.numero(), Integer::sum));
+    // the plan's own mandatory purchases already serve the operation: the larger of the two
+    if (orders.mandatory().stream().anyMatch(m -> ESCORTS.contains(m.category()))) {
+      added.remove(OperazioniAnfibie.ESCORT);
+    }
+    final List<ProPurchaseOrders.Mandatory> mandatory = new ArrayList<>();
+    for (final ProPurchaseOrders.Mandatory m : orders.mandatory()) {
+      final int wanted = added.getOrDefault(m.category(), 0);
+      added.remove(m.category());
+      mandatory.add(
+          new ProPurchaseOrders.Mandatory(
+              m.category(), m.unitTypes(), Math.max(m.minimum(), wanted)));
+    }
+    added.forEach(
+        (category, n) ->
+            mandatory.add(
+                new ProPurchaseOrders.Mandatory(
+                    category, categories.getOrDefault(category, List.of()), n)));
+    final StringBuilder label = new StringBuilder(orders.label());
+    for (final OperazioniAnfibie.Acquisto a : extra) {
+      label
+          .append(" + operazione ")
+          .append(a.operazione())
+          .append(": ")
+          .append(a.numero())
+          .append(' ')
+          .append(a.categoria())
+          .append(" (")
+          .append(a.motivo())
+          .append(')');
+    }
+    return new ProPurchaseOrders(
+        label.toString(),
+        orders.mix(),
+        mandatory,
+        orders.preferredPlacement(),
+        orders.stagingTerritories(),
+        orders.minimumShare());
+  }
+
+  /** The last purchases asked by the operations, for the diary of the operations. */
+  private List<OperazioniAnfibie.Acquisto> lastOperationPurchases = List.of();
+
+  private String lastOperationPurchasesKey = "";
+
+  /**
+   * Computes the operations' purchases for {@code proData}'s player on the real board, before the
+   * purchase plans on its copy of the game (see {@link #purchaseOrders}).
+   */
+  void prepareOperationPurchases(final ProData proData) {
+    final Optional<PianoAttivo> plan = plan(proData.getData(), proData.getPlayer());
+    lastOperationPurchasesKey =
+        proData.getPlayer().getName() + "|" + proData.getData().getSequence().getRound();
+    lastOperationPurchases =
+        plan.map(p -> OperazioniAnfibie.acquisti(proData, p)).orElse(List.of());
+  }
+
+  /** What the operations asked to buy in {@code player}'s purchase of this round. */
+  public List<OperazioniAnfibie.Acquisto> operationPurchases(
+      final GamePlayer player, final int round) {
+    return lastOperationPurchasesKey.equals(player.getName() + "|" + round)
+        ? lastOperationPurchases
+        : List.of();
+  }
+
+  // -------------------------------------------------- units held by the amphibious operations
+
+  private @Nullable GameState heldData;
+  private @Nullable GamePlayer heldPlayer;
+  private int heldRound = -1;
+  private java.util.Set<Unit> held = java.util.Set.of();
+
+  /** The operations moved or keep {@code units} this turn (real game only). */
+  public void hold(final GameState data, final GamePlayer player, final java.util.Set<Unit> units) {
+    heldData = data;
+    heldPlayer = player;
+    heldRound = data.getSequence().getRound();
+    held = java.util.Set.copyOf(units);
+  }
+
+  @Override
+  public java.util.Set<Unit> heldUnits(final ProData proData) {
+    return proData.getData() == heldData
+            && proData.getPlayer() == heldPlayer
+            && proData.getData().getSequence().getRound() == heldRound
+        ? held
+        : java.util.Set.of();
   }
 
   /**
@@ -217,6 +357,10 @@ public final class ProPlusTuning implements ProTuning {
         orders.stagingTerritories(),
         orders.minimumShare());
   }
+
+  /** Categories of the strategy file that escort a fleet. */
+  static final java.util.Set<String> ESCORTS =
+      java.util.Set.of("scorta", "cacciatorpediniere", "navi_da_guerra");
 
   /** Category of the transports in the strategy file. */
   static final String TRANSPORTS = "trasporti";
