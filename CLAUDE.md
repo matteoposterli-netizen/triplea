@@ -826,6 +826,19 @@ nuovo hook `ProTuning.keepsBridgehead` (default vuoto) chiamato in `ProCombatMov
   scarta nulla. Il partner nel suo non combattimento (`reinforceBridgehead`): primo bersaglio comune del
   partner con sue truppe di terra ⇒ i suoi trasporti (carichi, o vuoti che caricano in un porto in raggio)
   scaricano lì tutte le truppe. Senza testa di ponte il partner segue la regola normale (80).
+- **Stesso bersaglio e scarto degli sbarchi** (chiusura dello step, hook `ProTuning.dropsLanding`, default
+  vuoto, chiamato in `ProCombatMoveAi` per ogni sbarco pianificato non di logoramento **prima** delle
+  regole di Hard: può togliere sbarchi che Hard terrebbe; motivo nel diario e nel JSON):
+  - chi muove per primo sbarca solo sul **bersaglio della coppia** = il primo bersaglio comune, in
+    ordine Normandy Bordeaux > Holland Belgium > Norway, ancora pianificato dal combattimento (un
+    bersaglio non raggiungibile o sotto la minima non è pianificato ⇒ si passa al successivo); gli
+    sbarchi sugli altri bersagli comuni sono scartati (`bridgehead_other_target`); le unità tornano
+    all'assegnazione di Hard;
+  - sul bersaglio della coppia lo sbarco è scartato se il contrattacco stimato dopo i rinforzi del
+    partner supera 100 − minima del livello effettivo (`bridgehead_not_held`), anche se Hard lo
+    terrebbe; con contrattacco ≤ soglia decide Hard (o `keepsBridgehead` se Hard lo scarta);
+  - chi muove per secondo non sbarca su altri bersagli comuni mentre il partner tiene una testa di
+    ponte (`bridgehead_other_target`): rinforza quella nel non combattimento.
 - **Diario**: righe "flotta combinata: 110 Sea Zone: navi Americans N, British M (+K in arrivo nel turno di
   British)" e testa di ponte ("testa di ponte di Americans su X, rinforzo di British nel suo turno: win%
   sbarco W% (desiderata D%), tenuta stimata dopo il rinforzo di British (N unita'): contrattacco nemico

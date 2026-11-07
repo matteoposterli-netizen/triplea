@@ -78,6 +78,16 @@ public final class ProPlusTuning implements ProTuning {
   /** {@link #keepsBridgehead}: kept as the first step of a two-step bridgehead. */
   public static final String KEPT_BY_BRIDGEHEAD = "bridgehead";
 
+  /**
+   * {@link #dropsLanding}: not the target of the combined operation (both land on the same one).
+   */
+  public static final String DROP_OTHER_TARGET = "bridgehead_other_target";
+
+  /**
+   * {@link #dropsLanding}: the bridgehead would not hold even after the partner's reinforcements.
+   */
+  public static final String DROP_NOT_HELD = "bridgehead_not_held";
+
   /** Cache of {@link #plan}: the orders are the same for one game state, player and round. */
   private @Nullable GameState planData;
 
@@ -670,6 +680,60 @@ public final class ProPlusTuning implements ProTuning {
             reinforcementsFor(proData, calc, target, pair.get()));
     noteBridgehead(proData, v);
     return v.tenuta() ? Optional.of(KEPT_BY_BRIDGEHEAD) : Optional.empty();
+  }
+
+  /**
+   * Step OPERAZIONI ANFIBIE-BIS, rules that also drop landings Hard would keep, on a common target
+   * of a combined operation:
+   *
+   * <ul>
+   *   <li>the nation moving first lands only on the pair's target ({@link
+   *       TestaDiPonte#bersaglioScelto}: the first common target, in the plan's order, still
+   *       planned), and only if the counter-attack after the partner's reinforcements wins at most
+   *       {@code 100 - minimum win%} of the target's effective level;
+   *   <li>the nation moving second lands on no other common target while the partner holds a
+   *       bridgehead (it reinforces that one in its non-combat move).
+   * </ul>
+   */
+  @Override
+  public Optional<String> dropsLanding(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final ProTerritory attack,
+      final ProAttackWorth worth,
+      final java.util.Collection<Unit> holders,
+      final java.util.Collection<ProTerritory> planned) {
+    final Territory target = attack.getTerritory();
+    for (final TestaDiPonte.Coppia pair : TestaDiPonte.coppieSu(proData, target)) {
+      if (!pair.primaIo()) {
+        final Optional<Territory> head = TestaDiPonte.testaDiPonteAlleata(proData.getData(), pair);
+        if (head.isPresent() && !head.get().equals(target)) {
+          return Optional.of(DROP_OTHER_TARGET);
+        }
+        continue;
+      }
+      final Optional<String> chosen = TestaDiPonte.bersaglioScelto(pair, planned);
+      if (chosen.isPresent() && !chosen.get().equals(target.getName())) {
+        return Optional.of(DROP_OTHER_TARGET);
+      }
+      final TestaDiPonte.Valutazione v =
+          TestaDiPonte.valuta(
+              proData,
+              calc,
+              target,
+              attack.getMaxEnemyUnits(),
+              attack.getMaxBombardUnits(),
+              worth.winPercentage(),
+              worth.counterWinPercentage(),
+              holders,
+              pair,
+              reinforcementsFor(proData, calc, target, pair));
+      noteBridgehead(proData, v);
+      if (v.contrattaccoDopo() > v.soglia()) {
+        return Optional.of(DROP_NOT_HELD);
+      }
+    }
+    return Optional.empty();
   }
 
   /** The partner's reinforcements for {@code target}, once per game state, player and round. */

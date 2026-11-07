@@ -1730,6 +1730,18 @@ public class ProCombatMoveAi {
           dropReason = "amphibious_strafe";
           break;
         }
+        if (!patd.isStrafing() && !patd.getAmphibAttackMap().isEmpty()) {
+          final Optional<String> dropLanding =
+              proData
+                  .getTuning()
+                  .dropsLanding(proData, calc, patd, worth, holders, prioritizedTerritories);
+          if (dropLanding.isPresent()) {
+            proData.getRecorder().attackWorth(proData, patd, worth, null);
+            territoryToRemove = patd;
+            dropReason = dropLanding.get();
+            break;
+          }
+        }
         String keptBy = null;
         if (!patd.isStrafing() && worth.hardDrops()) {
           // only an attack Hard drops for its value alone may be kept (Hard: never)

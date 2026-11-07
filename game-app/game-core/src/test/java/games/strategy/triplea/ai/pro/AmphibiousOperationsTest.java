@@ -12,6 +12,7 @@ import games.strategy.engine.data.MoveDescription;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.changefactory.ChangeFactory;
+import games.strategy.triplea.ai.pro.data.ProTerritory;
 import games.strategy.triplea.ai.proplus.OperazioniAnfibie;
 import games.strategy.triplea.ai.proplus.ProPlusAi;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
@@ -462,6 +463,133 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
   }
 
   @Test
+  void theFirstNationLandsOnlyOnThePairsTarget() {
+    clearAxisAirAndNavy();
+    final Territory normandy = territory("Normandy Bordeaux");
+    final Territory holland = territory("Holland Belgium");
+    data.getSequence().setRoundAndStep(4, "Combat Move", americans);
+    final ProData proData = proPlus(americans);
+    final TestAi ai = new TestAi(proData, "Americans");
+    ai.prepareData(data);
+    final ProTerritory onNormandy = new ProTerritory(normandy, proData);
+    final ProTerritory onHolland = new ProTerritory(holland, proData);
+
+    // Normandy still planned: no landing on Holland Belgium
+    assertThat(
+            proData
+                .getTuning()
+                .dropsLanding(
+                    proData,
+                    ai.getCalc(),
+                    onHolland,
+                    worth(holland, 95),
+                    List.of(),
+                    List.of(onHolland, onNormandy)))
+        .contains(ProPlusTuning.DROP_OTHER_TARGET);
+    // Normandy dropped (unreachable or below the minimum): Holland Belgium is the pair's target
+    assertThat(
+            proData
+                .getTuning()
+                .dropsLanding(
+                    proData,
+                    ai.getCalc(),
+                    onHolland,
+                    worth(holland, 95),
+                    List.of(),
+                    List.of(onHolland)))
+        .isEmpty();
+  }
+
+  @Test
+  void theFirstNationDropsABridgeheadThatWouldNotHoldAlsoWhenHardKeepsIt() {
+    clearAxisAirAndNavy();
+    clearTransports(british);
+    final Territory normandy = territory("Normandy Bordeaux");
+    data.getSequence().setRoundAndStep(4, "Combat Move", americans);
+    final ProData proData = proPlus(americans);
+    final TestAi ai = new TestAi(proData, "Americans");
+    ai.prepareData(data);
+    final ProTerritory landing = new ProTerritory(normandy, proData);
+    landing.setMaxEnemyUnits(
+        data.getUnitTypeList().getUnitTypeOrThrow("armour").create(8, germans));
+    final List<Unit> holders =
+        data.getUnitTypeList().getUnitTypeOrThrow("infantry").create(2, americans);
+
+    // no British transport in reach: the counter-attack wins, the landing goes
+    assertThat(
+            proData
+                .getTuning()
+                .dropsLanding(
+                    proData, ai.getCalc(), landing, worth(normandy, 95), holders, List.of(landing)))
+        .contains(ProPlusTuning.DROP_NOT_HELD);
+    // Hard: nothing dropped
+    final ProData hard = new ProData();
+    hard.initializeSimulation(null, data, americans);
+    assertThat(
+            ProTuning.DEFAULT.dropsLanding(
+                hard, null, landing, worth(normandy, 95), holders, List.of(landing)))
+        .isEmpty();
+  }
+
+  @Test
+  void theFirstNationKeepsABridgeheadTheReinforcementsHold() {
+    clearAxisAirAndNavy();
+    clearTransports(british);
+    clearSea("110 Sea Zone");
+    final Territory normandy = territory("Normandy Bordeaux");
+    add("110 Sea Zone", "transport", 2, british);
+    add("United Kingdom", "infantry", 12, british);
+    data.getSequence().setRoundAndStep(4, "Combat Move", americans);
+    final ProData proData = proPlus(americans);
+    final TestAi ai = new TestAi(proData, "Americans");
+    ai.prepareData(data);
+    final ProTerritory landing = new ProTerritory(normandy, proData);
+    landing.setMaxEnemyUnits(
+        data.getUnitTypeList().getUnitTypeOrThrow("infantry").create(3, germans));
+    final List<Unit> holders =
+        data.getUnitTypeList().getUnitTypeOrThrow("infantry").create(2, americans);
+
+    assertThat(
+            proData
+                .getTuning()
+                .dropsLanding(
+                    proData, ai.getCalc(), landing, worth(normandy, 95), holders, List.of(landing)))
+        .isEmpty();
+  }
+
+  @Test
+  void theSecondNationLandsOnNoOtherTargetWhileThePartnerHoldsABridgehead() {
+    clearAxisAirAndNavy();
+    final Territory normandy = territory("Normandy Bordeaux");
+    final Territory holland = territory("Holland Belgium");
+    removeLand("Normandy Bordeaux", germans);
+    ownedBy(normandy, americans);
+    add("Normandy Bordeaux", "infantry", 2, americans);
+    data.getSequence().setRoundAndStep(4, "Combat Move", british);
+    final ProData proData = proPlus(british);
+    final TestAi ai = new TestAi(proData, "British");
+    ai.prepareData(data);
+    final ProTerritory onHolland = new ProTerritory(holland, proData);
+
+    assertThat(
+            proData
+                .getTuning()
+                .dropsLanding(
+                    proData,
+                    ai.getCalc(),
+                    onHolland,
+                    worth(holland, 95),
+                    List.of(),
+                    List.of(onHolland)))
+        .contains(ProPlusTuning.DROP_OTHER_TARGET);
+  }
+
+  /** A landing worth Hard keeps (positive value, holdable). */
+  private static ProAttackWorth worth(final Territory t, final double win) {
+    return new ProAttackWorth(t, win, true, false, false, true, 10, 3, 6, 0, 8, false);
+  }
+
+  @Test
   void hardHasNoBridgeheadRule() {
     final ProData hard = new ProData();
     hard.initializeSimulation(null, data, americans);
@@ -469,8 +597,7 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
             ProTuning.DEFAULT.keepsBridgehead(
                 hard,
                 null,
-                new games.strategy.triplea.ai.pro.data.ProTerritory(
-                    territory("Normandy Bordeaux"), hard),
+                new ProTerritory(territory("Normandy Bordeaux"), hard),
                 null,
                 List.of()))
         .isEmpty();

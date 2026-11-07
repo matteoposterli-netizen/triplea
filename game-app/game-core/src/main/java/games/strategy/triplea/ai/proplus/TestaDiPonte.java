@@ -180,6 +180,45 @@ public final class TestaDiPonte {
         .findFirst();
   }
 
+  /** The pairs of {@code proData}'s player in which {@code target} is a common target. */
+  public static List<Coppia> coppieSu(final ProData proData, final Territory target) {
+    if (target.isWater()) {
+      return List.of();
+    }
+    return ProPlusTuning.planOf(proData).stream()
+        .flatMap(p -> coppie(proData.getData(), p, proData.getPlayer()).stream())
+        .filter(c -> c.bersagliComuni().contains(target.getName()))
+        .toList();
+  }
+
+  /**
+   * The pair's target for the nation moving first: the first common target (Normandy Bordeaux,
+   * Holland Belgium, Norway) the combat move still plans to attack; empty if none is planned.
+   */
+  public static Optional<String> bersaglioScelto(
+      final Coppia coppia, final Collection<ProTerritory> planned) {
+    return coppia.bersagliComuni().stream()
+        .filter(name -> planned.stream().anyMatch(a -> a.getTerritory().getName().equals(name)))
+        .findFirst();
+  }
+
+  /**
+   * The partner's bridgehead, for the nation moving second: the first common target the partner
+   * owns with land units of its own there.
+   */
+  public static Optional<Territory> testaDiPonteAlleata(final GameState data, final Coppia coppia) {
+    for (final String name : coppia.bersagliComuni()) {
+      final Territory t = data.getMap().getTerritoryOrNull(name);
+      if (t != null
+          && !t.isWater()
+          && t.isOwnedBy(coppia.alleato())
+          && t.anyUnitsMatch(Matches.unitIsOwnedBy(coppia.alleato()).and(Matches.unitIsLand()))) {
+        return Optional.of(t);
+      }
+    }
+    return Optional.empty();
+  }
+
   /**
    * The bridgehead rule for a landing of mine on {@code target} with {@code holders} (my land units
    * left after the battle): the partner's reinforcements join them against the enemy's strongest

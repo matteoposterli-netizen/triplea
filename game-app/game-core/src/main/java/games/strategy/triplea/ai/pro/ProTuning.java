@@ -152,6 +152,22 @@ public interface ProTuning {
    * battle, {@code attack} the planned attack (its max enemy units are the counter-attack). Returns
    * why it is kept, or empty to drop it as Hard does. Empty by default.
    */
+  /**
+   * Whether the combat move drops a planned landing (not a strafe) in its last check, also one
+   * "Hard (AI)" would keep. {@code holders} are the land units left after the battle, {@code
+   * planned} the attacks still planned. Returns the drop reason (a short code), or empty to go on
+   * as Hard does. Empty by default.
+   */
+  default Optional<String> dropsLanding(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final ProTerritory attack,
+      final ProAttackWorth worth,
+      final Collection<Unit> holders,
+      final Collection<ProTerritory> planned) {
+    return Optional.empty();
+  }
+
   default Optional<String> keepsBridgehead(
       final ProData proData,
       final ProOddsCalculator calc,

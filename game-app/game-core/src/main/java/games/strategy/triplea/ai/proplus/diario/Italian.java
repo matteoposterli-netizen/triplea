@@ -93,6 +93,13 @@ public final class Italian {
           Map.entry(
               "transports_exposed", "sbarco annullato: trasporti esposti al contrattacco nemico"),
           Map.entry(
+              "bridgehead_other_target",
+              "non e' il bersaglio della coppia: l'operazione alleata sbarca su un altro bersaglio"),
+          Map.entry(
+              "bridgehead_not_held",
+              "testa di ponte non tenibile: contrattacco stimato dopo il rinforzo alleato oltre la"
+                  + " soglia"),
+          Map.entry(
               "amphibious_strafe",
               "logoramento con sbarco sotto la soglia minima: le unita' sbarcate non possono"
                   + " ritirarsi"),
