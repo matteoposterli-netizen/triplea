@@ -1,17 +1,24 @@
 # Pro+ autoplay: AI vs AI games on WW2 Europe 1940 2nd Edition after every Pro+ release,
 # in parallel, with the decision diary and a summary per game; everything in autoplay.zip,
 # published to the release 'autoplay-latest' (asset replaced each run). Never touches
-# 'proplus-latest'. See CLAUDE.md "Autoplay".
+# 'proplus-latest'. See CLAUDE.md "Autoplay in CI".
 #
-# Triggers: workflow_run of "ProPlus Release" (GitHub only fires it when this file is also on
-# the default branch, which in this fork is 'main' = upstream), so the release workflow also
-# starts this one with workflow_dispatch at its end; and manual runs.
+# Started by "ProPlus Release" as a reusable workflow (workflow_call), after its release job.
+# workflow_run and workflow_dispatch only work for workflows on the default branch ('main' =
+# upstream in this fork): workflow_dispatch is kept for the day this file is there.
 name: ProPlus Autoplay
 on:
-  workflow_run:
-    workflows: ["ProPlus Release"]
-    types: [completed]
-    branches: [proplus]
+  workflow_call:
+    inputs:
+      round:
+        type: string
+        default: "8"
+      partite:
+        type: string
+        default: "6"
+      piani:
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       round:
@@ -25,12 +32,8 @@ on:
         default: ""
 permissions:
   contents: write
-concurrency:
-  group: proplus-autoplay
-  cancel-in-progress: false
 jobs:
   prepare:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -39,7 +42,7 @@ jobs:
       round: ${{ steps.matrix.outputs.round }}
     steps:
       - id: sha
-        run: echo "sha=${{ github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
+        run: echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           ref: ${{ steps.sha.outputs.sha }}
@@ -62,9 +65,9 @@ jobs:
       - name: Games to play
         id: matrix
         env:
-          ROUND: ${{ github.event.inputs.round || '8' }}
-          PARTITE: ${{ github.event.inputs.partite || '6' }}
-          PIANI: ${{ github.event.inputs.piani || '' }}
+          ROUND: ${{ inputs.round || '8' }}
+          PARTITE: ${{ inputs.partite || '6' }}
+          PIANI: ${{ inputs.piani || '' }}
         run: |
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json, os, re
@@ -145,6 +148,10 @@ jobs:
     if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # one publication at a time; a run for an older commit does not overwrite a newer one
+    concurrency:
+      group: proplus-autoplay-publish
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
         with:
@@ -185,6 +192,13 @@ jobs:
           set -euo pipefail
           tag=autoplay-latest
           sha="${{ needs.prepare.outputs.sha }}"
+          git fetch -q --depth 200 origin proplus || true
+          head=$(git rev-parse -q --verify FETCH_HEAD || true)
+          if [ -n "$head" ] && [ "$head" != "$sha" ] \
+             && git merge-base --is-ancestor "$sha" "$head" 2>/dev/null; then
+            echo "proplus is already at a newer commit ($head): its own autoplay publishes"
+            exit 0
+          fi
           notes="Partite automatiche AI vs AI (Pro+ / Hard) su WW2 Europe 1940 2nd Edition.
           Commit: ${sha} (branch proplus)
           Data: $(date -u +'%Y-%m-%d %H:%M UTC')

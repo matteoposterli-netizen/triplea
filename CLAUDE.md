@@ -206,18 +206,22 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
 
 ## Autoplay in CI (`.github/workflows/proplus-autoplay.yml`)
 
-- Trigger: `workflow_run` di "ProPlus Release" riuscita su proplus **e** `workflow_dispatch`. GitHub
-  esegue `workflow_run` solo per workflow presenti sul branch di default (`main` = upstream, non si
-  tocca), quindi il job finale `start-autoplay` di `proplus-release.yml` (dopo `build`,
-  `continue-on-error`, permesso `actions: write`) lo avvia con `gh workflow run`.
-- Manuale (Actions → ProPlus Autoplay → Run workflow): `round` (8), `partite` (prime N di A/1, A/2,
-  D/1, D/2, C/1, Hard), `piani` (sostituisce la lista, es. `A/1,B/2,hard`).
+- Trigger: job `autoplay` di `proplus-release.yml` (dopo `build`, workflow riutilizzabile
+  `workflow_call`, 8 round, 6 partite): la release è già pubblicata, quindi non la blocca né la
+  modifica. `concurrency` di `proplus-release` spostata sul job `build` (un'altra release non aspetta
+  le partite). **`workflow_run` e `workflow_dispatch` non funzionano**: GitHub li accetta solo per
+  workflow presenti sul branch di default (`main` = upstream, non si tocca): verificato, `gh workflow
+  run` ⇒ "HTTP 404: workflow proplus-autoplay.yml not found on the default branch".
+  `workflow_dispatch` (input `round`, `partite` = prime N di A/1, A/2, D/1, D/2, C/1, Hard, `piani` =
+  es. `A/1,B/2,hard`) resta nel file per quando/se il file sarà su `main`. Ripetere a mano oggi:
+  Actions → run di "ProPlus Release" → "Re-run all jobs" (rifà anche la release).
 - Job: `prepare` (installDist + XML della mappa + matrice, artefatto `autoplay-kit`), `play` (matrice,
   max-parallel 6, fail-fast off, timeout 60 min, `--minuti 52`, semi 1..6, rischio Equilibrato per
   entrambe, artefatto `partita-<id>`), `publish` (anche se qualche partita fallisce: cartella vuota =
   "FALLITA" nel confronto; `riepilogo-generale.md` con VC ai round 4/6/8, PU finali, esito, lettura
   per round, PU difesa/piano/spesi; `autoplay.zip`; release **`autoplay-latest`** ricreata sul commit
-  testato, prerelease, note con commit/data/run). `proplus-latest` mai toccata.
+  testato, prerelease, note con commit/data/run; non pubblica se `proplus` è già a un commit più nuovo,
+la cui run pubblicherà). `proplus-latest` mai toccata.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Release Pro+ (GitHub Action)
@@ -228,14 +232,14 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
    locale (`System.Net.HttpListener`) che simula la GitHub API + download (nessuna rete reale);
    `Start-MockServer` attende il server con ping ogni 250 ms fino a 90 s e riavvia il job (max 3)
    se termina prima di rispondere (step AUTOPLAY: una volta era fallito "Mock server non pronto");
-1. test: `:game-core:test :ai:test :game-headed:test` (smoke-testing escluso: scarica salvataggi
+1. test: `:game-core:test :ai:test :game-headed:test :proplus-autoplay:test` (smoke-testing escluso: scarica salvataggi
    esterni ed è lento; `./verify` escluso: include PMD/spotless/check custom non necessari qui);
 2. scrive la versione (`set-game-headed-build-number`), `:game-headed:shadowJar`;
 3. zip `TripleA-ProPlus.zip` = `TripleA-ProPlus.jar` + `avvia.bat` + `aggiorna.ps1` +
    `build-info.txt` + `LEGGIMI.txt` + `.triplea-root` (marcatore vuoto cercato da
    `ClientFileSystemHelper.getRootFolder()`);
 4. sposta il tag `proplus-latest` sul commit e sostituisce l'asset nella release (prerelease);
-5. job `start-autoplay` (dopo la release, non bloccante): avvia "ProPlus Autoplay".
+5. job `autoplay` (dopo la release, workflow riutilizzabile): partite AI vs AI, vedi "Autoplay in CI".
 
 Sorgenti dei file dello zip: `proplus/dist/{avvia.bat,aggiorna.ps1,LEGGIMI.txt,build-info.txt}`.
 Placeholder `@VERSION@ @COMMIT@ @DATE@ @REPO@` sostituiti in CI in `LEGGIMI.txt` e
@@ -1226,7 +1230,7 @@ gioco; le simulazioni dell'AI sono casuali, quindi le partite divergono dopo poc
 ### Step AUTOPLAY — partite AI vs AI automatiche in CI (2026-11-07)
 
 Vedi "Partita headless AI vs AI" (runner) e "Autoplay in CI". Nessuna classe di gioco toccata
-(nuovo modulo `:proplus-autoplay`, 2 righe in `settings.gradle.kts`, job `start-autoplay` in
+(nuovo modulo `:proplus-autoplay`, 2 righe in `settings.gradle.kts`, job `autoplay` in
 `proplus-release.yml`, attesa del mock server in `proplus/ci/test-aggiorna.ps1`; `aggiorna.ps1` e
 `avvia.bat` invariati).
 - Verifica locale (sandbox, 4 core): 1 partita Pro+ A/1, 2 round, seme 1: 47 s, riepilogo corretto

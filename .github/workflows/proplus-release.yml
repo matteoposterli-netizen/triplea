@@ -8,10 +8,6 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
-  actions: write
-concurrency:
-  group: proplus-release
-  cancel-in-progress: false
 jobs:
   # Tests the PowerShell auto-update logic (aggiorna.ps1) on a real Windows
   # runner: version comparison, offline fallback, download + zip validation,
@@ -33,6 +29,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: powershell-tests
+    # one release at a time (job level: the autoplay games after it never delay the next release)
+    concurrency:
+      group: proplus-release
+      cancel-in-progress: false
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -48,7 +48,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
       - name: Run tests
         # game-core holds the engine and ProAi; ai holds the extra AIs; game-headed the client.
-        run: ./gradlew --no-daemon :game-core:test :ai:test :game-headed:test
+        run: ./gradlew --no-daemon :game-core:test :ai:test :game-headed:test :proplus-autoplay:test
       - name: Set release version
         # Same step the official release uses: writes the version into product.properties
         # (done after tests, which expect the placeholder version).
@@ -101,16 +101,12 @@ jobs:
           fi
           gh release upload "$tag" build/proplus/TripleA-ProPlus.zip --clobber
 
-  # Starts the AI vs AI games (proplus-autoplay.yml) on the released commit. A separate job
-  # after the release: it can never block or change 'proplus-latest'. Needed because
-  # workflow_run only fires for workflows on the default branch ('main' = upstream).
-  start-autoplay:
-    runs-on: ubuntu-latest
+  # AI vs AI games (proplus-autoplay.yml) on the released commit, after the release: they
+  # never block or change 'proplus-latest'. Called as a reusable workflow because
+  # workflow_run / workflow_dispatch need the workflow on the default branch ('main' = upstream).
+  autoplay:
     needs: build
-    timeout-minutes: 5
-    steps:
-      - name: Start ProPlus Autoplay
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run proplus-autoplay.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"
+    uses: ./.github/workflows/proplus-autoplay.yml
+    with:
+      round: "8"
+      partite: "6"
