@@ -1769,3 +1769,36 @@ persi negli attacchi dell'Asse su territori americani di Europa occidentale (anc
   acquisti (Hard usa `Math.random` in `ProPurchaseUtils.randomizePurchaseOption`) solo in un tentativo
   in cui due ripetizioni senza diario comprano uguale (max 4 tentativi). 6/6 verdi in locale.
 
+#### Autoplay in CI (run 42418306952, commit 011a5ac, tutto verde) — chiusura dello step
+Piano 1 = 8 partite (A/1, D/1, C/1, B/1 × 2 semi). Perdite dal diario come sopra.
+
+| Metrica (piano 1) | 1586175 | 315bcc2 | 011a5ac |
+|---|---|---|---|
+| Sbarco USA in Europa occidentale entro R7 | 4/8 | 2/8 | 1/8 |
+| ... entro R9 | 7/8 | 4/8 | 3/8 |
+| Unità USA sbarcate (somma) | 82 | 25 | 49 |
+| Perse nelle battaglie di sbarco | 33 | 10 | 12 |
+| Perse nei contrattacchi su territori USA | 177 | 39 | 38 |
+| Testa di ponte tenuta >= 2 round (di cui USA) | 6/8 (2) | 7/8 (2) | 8/8 (2) |
+| VC Alleati contro Asse A a R12 | 3, 6 | 3, 3 | 3, 3 |
+| Partite con "Overlord in stallo" | - | - | 7/8 |
+
+- **Perché l'accumulo non parte**: le truppe USA non arrivano mai in United Kingdom (righe "Americans 0
+  unita' in United Kingdom" quasi ovunque). I trasporti USA caricano a Eastern United States e si
+  fermano carichi in **104 Sea Zone** (A/1 seme 2: 9 → 27 truppe a bordo dal R4 al R12) perché 110 Sea
+  Zone non è mai sicura ("scorta insufficiente per 110: win% nemica 86-100% > soglia 48%", aviazione e
+  sottomarini tedeschi; la flotta britannica non basta a renderla sicura). La rotta prova solo la zona di
+  raccolta più vicina (110), mai 109. Hard non usa trasporti già carichi (vedi sopra) ⇒ quelle truppe
+  non sbarcano mai. La riga di accumulo conta solo truppe in UK o a bordo nelle zone di raccolta, quindi
+  segna 0 anche con 27 truppe in 104 (corretto per lo sbarco, fuorviante come "accumulo").
+- Stallo segnato in 7 partite su 8 (dal R7, una dal R10): la regola funziona e porta lo stato del piano
+  a IN RITARDO / IN CRISI; nessun cambio di piano (3d).
+- Gli sbarchi USA che avvengono sono pochi e ancora soprattutto fuori Overlord (Norway/Normandy tardi,
+  R8-R12). Holland Belgium attivo dal R8 in A/1 seme 2 (riga "win% Holland Belgium").
+- Piano 2 / D / Hard (VC R12 Asse/Alleati, 315bcc2 → 011a5ac): A/2 7/4, 7/4 → 6/5, 7/4; D/2 4/7, 6/5 →
+  4/7, 3/8; Hard 6/5, 7/4 → 5/6, 7/4. Nessun peggioramento netto.
+- **Step OPERAZIONI ANFIBIE chiuso** (decisione di Matteo). Criteri del piano 1 non raggiunti. Aperto per
+  lo step 3d: la logistica atlantica USA (zona di raccolta 110 mai sicura, nessun ripiego su 109 né su
+  sbarco diretto da 104, flotta di scorta USA/UK insufficiente) e l'uso di "Overlord in stallo" per
+  cambiare piano.
+
