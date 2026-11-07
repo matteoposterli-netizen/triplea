@@ -125,7 +125,7 @@ public final class TestaDiPonte {
           Double.isNaN(contrattaccoSenza)
               ? ""
               : String.format(java.util.Locale.ROOT, " (senza rinforzo %.0f%%)", contrattaccoSenza),
-          tenuta ? "<=" : ">",
+          tenuta ? "<=" : (rinforzi == 0 ? "(nessun rinforzo possibile), soglia" : ">"),
           soglia);
     }
   }

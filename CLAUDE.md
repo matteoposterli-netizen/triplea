@@ -1637,3 +1637,48 @@ scaricate su terra nemica) per partita, seme 1 / seme 2:
 - Da decidere (non tarato, per regola): soglia di sicurezza della flotta (Equilibrato: nemico ≤ 20%) e
   desiderata 80% sui bersagli solo via mare sono troppo prudenti per Overlord; il coordinamento UK+USA
   sullo stesso bersaglio non esiste (ognuno da solo non arriva all'80% su Normandy).
+
+### Step OPERAZIONI ANFIBIE-BIS — coordinamento alleato (2026-11-07)
+
+Vedi "Coordinamento alleato". Classi Pro toccate (solo agganci, default = Hard): `ProTuning`
+(+`keepsBridgehead`), `ProCombatMoveAi` (chiamata dopo `keepsAttackNotWorthIt` per gli sbarchi). Pro+:
+`TestaDiPonte` (nuova), `OperazioniAnfibie`, `ProPlusTuning`, `PianoAttivo`, `DiaryRecorder`/`AttackRecord`,
+JSON (piano 1: fasi R1-2 / R3 / R4+, Mari +1 da R3). Autoplay: `Monitor`, `Riepilogo`, `RiepilogoGenerale`.
+Test: `AmphibiousOperationsTest` (coppia USA+UK e ordine dei turni, minima 72 per gli USA su Normandy e 80
+per il UK, Mari +1 da R3, navi UK "in arrivo" contate dagli USA, senza di esse flotta ferma con soglia 48%,
+UK che raggiunge la flotta combinata, UK che rinforza la testa di ponte USA, rinforzi stimati e regola di
+tenuta, Hard senza regola; aggiornati: truppe a terra nel porto di raccolta, flotta carica dal turno prima,
+soglia 40%), `AutoplayTest` (USA in Europa occidentale per round, prima testa di ponte tenuta). Nei test su
+Global 1940 servono USA in guerra con l'Asse e **alleati** del UK (in Europe 1940 USA-UK sono "Neutrality"
+finché gli USA non entrano in guerra: la coppia vale solo da alleati).
+
+#### Autoplay in CI (run 42404200388, commit 1586175, tutto verde)
+Confronto con 28681cd (run 42399119888), seme 1 / seme 2; "USA ovest" = primo round e unità americane
+sbarcate in Europa occidentale (Francia/Benelux/Norvegia/Danimarca/Germania) in tutta la partita:
+
+| Config | USA ovest 28681cd | USA ovest 1586175 | Testa di ponte >= 2 round (1586175) | VC R12 Asse/Alleati 28681cd | 1586175 |
+|---|---|---|---|---|---|
+| A/1 | R9 9 / nessuno | R7 12 / R6 7 | R5 Norway (UK) / R6 Holland (UK) | 8/3, 8/3 | 8/3, 5/6 |
+| D/1 | nessuno / nessuno | nessuno / R8 12 | nessuna / R10 Norway (USA) | 5/6, 5/6 | 5/6, 5/6 |
+| C/1 | R8 6 / R10 9 | R8 13 / R8 17 | R8 Norway (USA) / R7 Norway (UK) | 7/4, 8/3 | 8/3, 8/3 |
+| B/1 | R11 4 / R11 11 | R7 15 / R7 6 | R9 Normandy (UK) / nessuna | 6/5, 8/3 | 7/4, 7/4 |
+| A/2 | R6 32 / R7 28 | R6 35 / R8 24 | | 7/4, 6/5 | 6/5, 7/4 |
+| D/2 | R8 27 / R7 24 | R6 6 / R9 22 | | 5/6, 6/5 | 7/4, 3/8 |
+| Hard | R7 25 / R8 17 | R10 27 / R10 8 | | 5/6, 6/5 | 5/6, 7/4 |
+
+- **Criteri piano 1** (8 partite: A/1, D/1, C/1, B/1): sbarco USA in Europa occidentale entro R7 in 4/8
+  (prima 0/8): metà, al limite (A/1 e B/1 sì, D/1 e C/1 no: R8). Testa di ponte tenuta >= 2 round in 6/8
+  (metrica nuova, non c'è il confronto), ma metà sono sbarchi britannici di 2 unità in Norvegia/Benelux
+  fatti da Hard, non teste di ponte coordinate. VC Alleati contro Asse A a R12: 3 e 6 (prima 3 e 3).
+- **Coordinamento visto nei diari**: la sequenza USA sbarca → UK rinforza nello stesso round avviene (A/1:
+  Normandy 90% con 12 rinforzi UK, contrattacco stimato 1% ⇒ tenuta; Holland/Normandy con 10-18 rinforzi
+  UK in D/1 seme 2, C/1, B/1). Ma la maggior parte degli sbarchi USA su Holland Belgium sono tenuti dalla
+  logica di Hard (valore positivo) anche con contrattacco stimato 96-100% dopo il rinforzo: la regola Pro+
+  aggiunge sbarchi, non ne toglie; quelle teste di ponte vengono distrutte dal contrattacco tedesco.
+- Piano 2 e piano D: nessun peggioramento netto in media (A/2 VC Alleati 4,5 → 5,4; D/2 6,5 → 4,8; Asse D
+  VC medi 4.75 → 5.0; D/2 seme 2 crollo dell'Asse 3/8). Con 2 semi la varianza è alta.
+- Hard identica: golden e `DiaryNeutralityTest` verdi in locale e in CI.
+- Da decidere: scartare gli sbarchi di chi muove per primo su un bersaglio comune quando la tenuta dopo il
+  rinforzo è oltre soglia anche se Hard li terrebbe (oggi non si scarta nulla); bersaglio unico condiviso
+  (oggi il primo bersaglio comune su cui il primo sbarca, spesso Holland per priorità di Hard).
+
