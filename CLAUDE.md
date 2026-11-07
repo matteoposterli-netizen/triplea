@@ -1695,3 +1695,39 @@ sbarcate in Europa occidentale (Francia/Benelux/Norvegia/Danimarca/Germania) in 
   rinforzo è oltre soglia anche se Hard li terrebbe (oggi non si scarta nulla); bersaglio unico condiviso
   (oggi il primo bersaglio comune su cui il primo sbarca, spesso Holland per priorità di Hard).
 
+### Step OPERAZIONI ANFIBIE-BIS, chiusura — stesso bersaglio e scarto delle teste di ponte (2026-11-07)
+
+Hook `ProTuning.dropsLanding` (default vuoto) + `ProPlusTuning.dropsLanding`, `TestaDiPonte.coppieSu` /
+`bersaglioScelto` / `testaDiPonteAlleata`, motivi `bridgehead_other_target` e `bridgehead_not_held`
+(`Italian.REASONS`). Vedi "Coordinamento alleato" (ultimo punto). Test in `AmphibiousOperationsTest`
+(solo il bersaglio della coppia; scarto con contrattacco oltre soglia anche se Hard lo terrebbe, Hard
+niente; tenuto con i rinforzi; il secondo non sbarca altrove con la testa di ponte alleata). Golden e
+`DiaryNeutralityTest` verdi.
+
+#### Autoplay in CI (run 42410637712, commit 315bcc2, tutto verde) contro 1586175 (run 42404200388)
+Piano 1 = 8 partite (A/1, D/1, C/1, B/1, 2 semi). Perdite misurate dal diario: "sbarco" = attaccanti
+americani persi nelle battaglie di sbarco in Europa occidentale; "contrattacchi" = difensori alleati
+persi negli attacchi dell'Asse su territori americani di Europa occidentale (anche britannici di rinforzo).
+
+| Metrica (piano 1) | 1586175 | 315bcc2 |
+|---|---|---|
+| Sbarco USA in Europa occidentale entro R7 | 4/8 | 2/8 |
+| Unità USA sbarcate in Europa occidentale (somma) | 82 | 25 |
+| Perse nelle battaglie di sbarco | 33 | 10 |
+| Perse nei contrattacchi su territori USA | 177 | 39 |
+| Testa di ponte tenuta >= 2 round | 6/8 (2 USA) | 7/8 (2 USA) |
+| VC Alleati contro Asse A a R12 | 3, 6 | 3, 3 |
+| Sbarchi scartati dalle regole nuove | - | 19 "non tenibile", 7 "altro bersaglio" |
+
+- Le regole fanno quello che chiedono: gli sbarchi suicidi spariscono (perdite −80%), ma con essi quasi
+  tutti gli sbarchi USA. Gli scarti "non tenibile" sono quasi tutti su **Holland Belgium** (confina con
+  la Germania): contrattacco stimato 100% anche con 6-20 rinforzi britannici. Normandy Bordeaux è
+  raramente pianificata (sotto la minima 72% o non raggiungibile), quindi il bersaglio della coppia
+  scende a Holland e viene scartato. Criteri del piano 1 non raggiunti (sbarco entro R7 2/8, VC come
+  28681cd); le teste di ponte tenute sono ancora soprattutto britanniche fatte da Hard.
+- Piano 2 / D / Hard (VC R12 Asse/Alleati, 1586175 → 315bcc2): A/2 6/5, 7/4 → 7/4, 7/4; D/2 7/4, 3/8 →
+  4/7, 6/5; Hard 5/6, 7/4 → 6/5, 7/4. Nessun peggioramento netto (2 semi, varianza alta).
+- Lettura: il collo di bottiglia non è più la tenuta ma la forza dello sbarco su Normandy (truppe USA in UK
+  e trasporti nella stessa zona nello stesso turno) e la capacità di rinforzo britannica (trasporti UK
+  pochi o fuori raggio: rinforzi 0 in parte degli scarti).
+
