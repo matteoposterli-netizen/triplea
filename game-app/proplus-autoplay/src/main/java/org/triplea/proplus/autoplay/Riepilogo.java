@@ -105,7 +105,95 @@ final class Riepilogo {
     json.add("attacchi_regno_unito", diaryData.attacksOnBritain);
     json.add("esito", outcome(o, monitor, rounds, winner, gameOver));
     json.add("contratto", contract(diary));
+    json.add("stratega", strategist(diary));
     return json;
+  }
+
+  /**
+   * LLM strategist (and, for comparison, any decider) per alliance, from the general staff events
+   * of decisioni.jsonl: decisions, who decided (fonte), fallbacks with their first reasons, plan
+   * changes, postures, delay tools turned on, operation decisions, calls/tokens/cost of the game.
+   */
+  static JsonObject strategist(@Nullable final Path diary) {
+    final JsonObject out = new JsonObject();
+    if (diary == null || !Files.isRegularFile(diary.resolve("decisioni.jsonl"))) {
+      return out;
+    }
+    try {
+      for (final String line :
+          Files.readAllLines(diary.resolve("decisioni.jsonl"), StandardCharsets.UTF_8)) {
+        if (!line.contains("\"stato_maggiore_round\"")) {
+          continue;
+        }
+        final JsonObject e = com.google.gson.JsonParser.parseString(line).getAsJsonObject();
+        final String alliance = e.has("alleanza") ? e.get("alleanza").getAsString() : "?";
+        if (!out.has(alliance)) {
+          out.add(alliance, new JsonObject());
+        }
+        final JsonObject a = out.getAsJsonObject(alliance);
+        increment(a, "decisioni", 1);
+        final JsonObject who =
+            e.has("decisore") ? e.getAsJsonObject("decisore") : new JsonObject();
+        final String name = who.has("nome") ? who.get("nome").getAsString() : "regole";
+        a.addProperty("decisore", name);
+        final boolean fallback = who.has("ripiego") && who.get("ripiego").getAsBoolean();
+        final String source =
+            who.has("fonte") ? who.get("fonte").getAsString() : fallback ? "regole" : name;
+        increment(child(a, "fonti"), source, 1);
+        if (fallback) {
+          increment(a, "ripieghi", 1);
+          final JsonArray reasons =
+              a.has("motivi_ripiego") ? a.getAsJsonArray("motivi_ripiego") : new JsonArray();
+          if (reasons.size() < 3 && who.has("avvisi") && !who.getAsJsonArray("avvisi").isEmpty()) {
+            reasons.add(
+                "R" + e.get("round").getAsInt() + ": " + who.getAsJsonArray("avvisi").get(0).getAsString());
+          }
+          a.add("motivi_ripiego", reasons);
+        }
+        if (who.has("uso")) {
+          a.add("uso", who.get("uso"));
+        }
+        final String plan = e.has("piano") ? e.get("piano").getAsString() : "";
+        if (a.has("ultimo_piano") && !a.get("ultimo_piano").getAsString().equals(plan)) {
+          increment(a, "cambi_piano", 1);
+        }
+        a.addProperty("ultimo_piano", plan);
+        if (e.has("direttive")) {
+          final JsonObject d = e.getAsJsonObject("direttive");
+          if (d.has("postura")) {
+            increment(child(a, "posture"), d.get("postura").getAsString(), 1);
+          }
+          if (d.has("tattiche")) {
+            for (final JsonElement t : d.getAsJsonArray("tattiche")) {
+              final JsonObject tool = t.getAsJsonObject();
+              if (!tool.has("attiva") || tool.get("attiva").getAsBoolean()) {
+                increment(child(a, "strumenti_accesi"), tool.get("strumento").getAsString(), 1);
+              }
+            }
+          }
+          if (d.has("operazioni")) {
+            for (final JsonElement o : d.getAsJsonArray("operazioni")) {
+              increment(
+                  child(a, "operazioni"), o.getAsJsonObject().get("decisione").getAsString(), 1);
+            }
+          }
+        }
+      }
+    } catch (final IOException | RuntimeException e) {
+      out.addProperty("errore", e.toString());
+    }
+    return out;
+  }
+
+  private static JsonObject child(final JsonObject o, final String key) {
+    if (!o.has(key)) {
+      o.add(key, new JsonObject());
+    }
+    return o.getAsJsonObject(key);
+  }
+
+  private static void increment(final JsonObject o, final String key, final int by) {
+    o.addProperty(key, (o.has(key) ? o.get(key).getAsInt() : 0) + by);
   }
 
   /** Characters per estimated token of the decider's input (rough rule for JSON text). */
@@ -534,6 +622,39 @@ final class Riepilogo {
           .append(" su ")
           .append(c.get("decisioni").getAsInt())
           .append(" decisioni\n");
+    }
+
+    if (json.has("stratega")) {
+      for (final Map.Entry<String, JsonElement> e : json.getAsJsonObject("stratega").entrySet()) {
+        if (!e.getValue().isJsonObject()) {
+          continue;
+        }
+        final JsonObject a = e.getValue().getAsJsonObject();
+        if (!a.has("decisore") || "regole".equals(a.get("decisore").getAsString())) {
+          continue;
+        }
+        md.append("- Stratega ")
+            .append(allianceLabel(e.getKey()))
+            .append(": ")
+            .append(a.has("fonti") ? a.get("fonti").toString() : "{}")
+            .append(", ripieghi ")
+            .append(a.has("ripieghi") ? a.get("ripieghi").getAsInt() : 0)
+            .append('/')
+            .append(a.get("decisioni").getAsInt())
+            .append(", posture ")
+            .append(a.has("posture") ? a.get("posture").toString() : "{}")
+            .append(", strumenti ")
+            .append(a.has("strumenti_accesi") ? a.get("strumenti_accesi").toString() : "{}")
+            .append(", operazioni ")
+            .append(a.has("operazioni") ? a.get("operazioni").toString() : "{}")
+            .append(
+                a.has("uso")
+                    ? "; uso: "
+                        + games.strategy.triplea.ai.proplus.strategia.llm.Uso.testo(
+                            a.getAsJsonObject("uso"))
+                    : "")
+            .append('\n');
+      }
     }
 
     final JsonArray rounds = json.getAsJsonArray("round");

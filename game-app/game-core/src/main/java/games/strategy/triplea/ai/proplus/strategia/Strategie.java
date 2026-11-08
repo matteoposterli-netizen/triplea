@@ -1,6 +1,7 @@
 package games.strategy.triplea.ai.proplus.strategia;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import games.strategy.engine.data.GameState;
 import games.strategy.triplea.ai.pro.logging.ProLogger;
@@ -40,6 +41,26 @@ public final class Strategie {
       warnAboutNames(strategia.get(), data);
     }
     return strategia;
+  }
+
+  /**
+   * LLM strategist: the strategy file of {@code data}'s game as raw JSON (the plans the fixed part
+   * of the prompt describes), empty if the map has none.
+   */
+  public static Optional<JsonObject> json(final GameState data) {
+    final @Nullable String file = data.getGameName() == null ? null : fileFor(data.getGameName());
+    if (file == null) {
+      return Optional.empty();
+    }
+    try (InputStream in = Strategie.class.getClassLoader().getResourceAsStream(FOLDER + file)) {
+      return in == null
+          ? Optional.empty()
+          : Optional.of(
+              JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8))
+                  .getAsJsonObject());
+    } catch (final IOException | RuntimeException e) {
+      return Optional.empty();
+    }
   }
 
   private static Optional<Strategia> load(final String game) {

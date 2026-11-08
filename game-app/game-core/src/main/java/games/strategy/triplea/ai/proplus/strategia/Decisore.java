@@ -21,11 +21,31 @@ public interface Decisore {
   /** Directives read from a JSON file per round and alliance (tests, hand trials). */
   String FILE = "file";
 
-  /** The LLM strategist: only the interface in this step (no network call). */
+  /** The LLM strategist (Claude Code, Claude Haiku, DeepSeek or Groq). */
   String LLM = "llm";
 
   /** {@link #REGOLE}, {@link #FILE} or {@link #LLM}. */
   String nome();
+
+  /**
+   * Who actually decided the last time (diary "Stratega: ..."): "regole", "file", or the LLM
+   * source ("Claude Code", "Haiku", "DeepSeek", "Groq").
+   */
+  default String etichetta() {
+    return nome();
+  }
+
+  /**
+   * The decider could not answer this round (no strategist available, error, timeout, quota, cap of
+   * calls): the rules decide, with this message in the notice. Never contains an API key.
+   */
+  final class NonDisponibile extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
+    public NonDisponibile(final String message) {
+      super(message);
+    }
+  }
 
   /**
    * The directives for the alliance of {@code contesto} at the start of its round; empty = no

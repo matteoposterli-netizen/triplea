@@ -136,6 +136,11 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   (default), `DecisoreFile`, `DecisoreLlm` (vuoto), `Decisori` (scelta per alleanza), `Ingresso` (stato strategico
   JSON), `Direttive` (schema, validazione, paletti); `Valutazione.inizioRound` chiama il decisore, `PianoAttivo` legge
   solo le direttive. Vedi "Contratto strategico" e `proplus/strategia/contratto-v1.md`.
+- Step INTEGRAZIONE LLM: `ai/proplus/strategia/DecisoreLlm` (catena di trasporti), `Decisori` (modalita' per
+  alleanza), pacchetto `ai/proplus/strategia/llm/` (`Modalita`, `Fornitore`, `ProfiloStratega` chiavi nel profilo
+  utente, `ClaudeCode`, `ClientApi` + `Http`, `PromptStratega`, `UscitaLlm`, `Uso`, `Prezzi`), risorse
+  `proplus/strategia/prompt-stratega-v1.md` e `prezzi-stratega.json` (game-core), `ai/proplus/TettoTrasporti`
+  (paletto per alleanza), UI `StrategistPanel` (game-headed). Vedi "Stratega LLM" e "Come configurare lo stratega".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -261,6 +266,14 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
   alle isole britanniche); `autoplay.zip`; release **`autoplay-latest`** ricreata sul commit
   testato, prerelease, note con commit/data/run; non pubblica se `proplus` è già a un commit più nuovo,
 la cui run pubblicherà). `proplus-latest` mai toccata.
+- Dallo step INTEGRAZIONE LLM, **solo se esiste il secret `ANTHROPIC_API_KEY`** (`secrets: inherit` dal job
+  `autoplay` di `proplus-release.yml`; senza secret niente errori, le partite non entrano nella matrice): 4 partite
+  in coda con lo stratega LLM (Claude Haiku, `--decisore <alleanza>=llm`, chiave passata come variabile d'ambiente
+  solo a quei job): `<n+1>-LLM-Alleati-vs-Asse-A-seme1/2` (Alleati LLM, Asse A regole) e
+  `<n+2>-LLM-Asse-vs-Alleati-1-seme1/2` (Asse LLM, Alleati 1 regole), piani di partenza Axis=A, Allies=1 (confronto
+  con A/1). Nel `publish`, dopo il confronto, `proplus-autoplay qualita autoplay --n 30 --output autoplay/qualita`
+  (test di qualita' su 30 stati strategici delle partite, nello zip e nel sommario della run). Le 14 partite
+  solo-regole restano il riferimento.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -270,7 +283,8 @@ Dopo che le Actions del fork si erano fermate (step 3d-1):
   `concurrency` del workflow `proplus-release-<ref>` con `cancel-in-progress: true` ⇒ una run nuova
   annulla quella vecchia dello stesso branch (release e autoplay compresi); job `changes` (ubuntu)
   ⇒ `powershell-tests` (Windows, minuti x2) solo se il push cambia qualcosa sotto `proplus/` (o run
-  manuale/branch nuovo), `build` parte anche se è saltato; job `autoplay` solo con `[autoplay]` nel
+  manuale/branch nuovo; dallo step INTEGRAZIONE LLM solo `proplus/ci/` e `proplus/dist/`, non `proplus/strategia/`),
+  `build` parte anche se è saltato; job `autoplay` solo con `[autoplay]` nel
   messaggio del commit di testa (`github.event.head_commit.message`) o run manuale. Le condizioni di
   `build` e `autoplay` controllano `needs.<job>.result` con `!cancelled()`: il `success()` implicito è
   falso se un job a monte è stato saltato (run 42466240207: build verde, autoplay saltato).
@@ -283,6 +297,9 @@ Dopo che le Actions del fork si erano fermate (step 3d-1):
   `distributionUrl` verso `github.com/gradle/gradle-distributions/releases/download/v<ver>/` (dove
   services.gradle.org reindirizza, stesso zip) e `networkTimeout` a 60 s. Il file nel repo resta
   quello dell'upstream.
+- Attenzione (step INTEGRAZIONE LLM): il prompt dello stratega e' un `.md` dentro le risorse di game-core
+  (`prompt-stratega-v1.md`): per `paths-ignore: '**.md'` un commit che cambia SOLO il prompt non lancia la build ⇒
+  cambiarlo insieme a codice o a `prezzi-stratega.json` (il dispatch manuale non funziona fuori da `main`).
 - Commit raggruppati: 1-2 push per step, l'ultimo con `[autoplay]` nel messaggio; CLAUDE.md dentro
   l'ultimo commit, **niente push di sola documentazione**.
 - La run #38 (42428388452, 4a6660e) è rimasta "queued" senza job e non si può annullare: ignorarla.
@@ -1182,6 +1199,116 @@ creato, **non usato** in questo step). Schema completo, esempi reali e regole di
   acquisti finali: l'ordine delle mosse dipende da HashSet di unita' (UUID diversi a ogni caricamento della mappa, anche
   in Hard) e gli acquisti usano `Math.random`. Test facoltativo `realEurope1940RoundOneReport` con
   `PROPLUS_GOLDEN_EUROPE_XML` (mappa reale, R1): report in `build/proplus/` da confrontare a mano.
+
+## Stratega LLM (step INTEGRAZIONE LLM, solo Pro+)
+
+Decisione di Matteo: lo stratega LLM decide il COSA/PERCHE' (direttive del contratto v1), la parte deterministica
+esegue. Provider scelto: Claude Haiku 5.5. Hard identica, golden Hard e golden Pro+ (`DecisoreRegole`) identici:
+con la modalita' "regole" (default di ogni partita finche' l'utente non sceglie altro nel pannello) nessun codice
+nuovo cambia una decisione.
+- **Modalita'** per alleanza (`Modalita`, proprieta' `Pro+ decisore: <alleanza>` = `auto` | `claude` | `chiave` |
+  `file` | `regole`): Automatico = Claude Code se installato e collegato, poi la chiave API, poi le regole; Claude
+  installato; Chiave API; File (`DecisoreFile`); Solo regole. Partita senza proprieta' = modalita' preferita del
+  profilo utente (`regole` finche' non se ne sceglie una LLM nel pannello). `Decisori.fabbricaLlm` = punto di
+  iniezione dei test (trasporti finti).
+- **Trasporti** (`DecisoreLlm.Trasporto`, provati in ordine; ognuno puo' dire "non disponibile" senza chiamare):
+  1. `ClaudeCode`: comando `claude` cercato nel PATH (come `where`) e in `%USERPROFILE%\.local\bin\claude.exe`
+     (installer nativo), `%APPDATA%\npm\claude.cmd` (npm, cartella di default di npm: non scritta nei documenti di
+     Claude Code), `~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin`; verificato UNA volta per avvio del gioco con
+     una chiamata breve (timeout 60 s). Chiamata: `claude -p --output-format json --model haiku --tools ""
+     --strict-mcp-config --no-session-persistence --max-turns 2 --system-prompt-file <parte fissa>`, stato del round
+     su stdin, cartella temporanea, timeout 120 s; risultato in `result`, token in `usage`, `total_cost_usd` = stima
+     del client (compresa nell'abbonamento). Flag verificati sui documenti ufficiali (code.claude.com, 8 nov):
+     `--json-schema` esiste ma non e' usato (lo schema passato come argomento su Windows/`.cmd` rischia problemi di
+     virgolette: lo schema e' nella parte fissa del prompt). Claude gratuito non include Claude Code ⇒ la verifica
+     fallisce ("non collegato"/"non include Claude Code") e si passa alla chiave.
+  2. `ClientApi` con la chiave del fornitore scelto (`Fornitore`): **Anthropic** `claude-haiku-5-5` (ID e prezzi dalla
+     documentazione ufficiale Anthropic: $0,10/$0,50 per MTok fino a 100K token di prompt; cache letta 0,1x,
+     scrittura 1h 2x), Messages API `anthropic-version: 2026-10-21`, parte fissa in `system` con `cache_control`
+     ephemeral **ttl 1h** (round di una partita umana anche a minuti di distanza), output strutturato
+     `output_config.format` json_schema (`PromptStratega.schema()`, strict: oggetti chiusi, tutti i campi
+     obbligatori), `effort: low`, **niente temperature** (Haiku 5.5 rifiuta i parametri di campionamento ⇒ la
+     Fantasia per Haiku e' solo nel prompt); **DeepSeek** `deepseek-v4-flash` e **Groq** `openai/gpt-oss-120b` via chat
+     completions compatibili OpenAI (`response_format` json_object, `temperature` = 0,2 × Fantasia). DeepSeek/Groq
+     **non verificati sui siti ufficiali** (bloccati dal proxy della sandbox): `deepseek-chat` ritirato il 24/7/2026
+     (nota ufficiale vista nei risultati di ricerca), prezzi da fonti terze, marcati nel file dei prezzi. Timeout 45 s,
+     1 nuovo tentativo su errore di rete, timeout, 429, 5xx. Errori in italiano chiaro (401 chiave rifiutata, 402/400
+     credito esaurito, 429 quota, 404 modello); la chiave e' mascherata in ogni testo d'errore.
+  3. Nessun trasporto riuscito ⇒ `Decisore.NonDisponibile` ⇒ `Valutazione` usa le regole per quel round con
+     l'avviso "stratega non disponibile (<motivi>): decidono le regole". Risposta non JSON ⇒ stesso ripiego
+     (`json_non_validi`). Direttive non valide (piano non ammesso, postura sconosciuta) ⇒ ripiego di `Direttive.valida`.
+     La partita non si blocca mai: il turno AI aspetta al massimo 120 s (Claude Code) + 2 × 45 s (chiave).
+- **Prompt** (`PromptStratega`, risorsa versionata `game-core/src/main/resources/proplus/strategia/prompt-stratega-v1.md`,
+  in italiano; il commento iniziale e' tolto): parte fissa = ruolo, regole chiave della mappa (verificate sull'XML:
+  vittoria Asse 8 VC + una capitale, Alleati Roma + Berlino; obiettivi nazionali con i valori; USA in guerra al R3,
+  URSS dal R4 o se attaccata/Londra presa), piani del file dati senza logistica (`PromptStratega.piani`: fasi,
+  tappe, nomi degli indizi della firma, punti critici, operazioni, subentri, contrasta, ruoli), strumenti (operazioni
+  lancia/attendi/annulla, perdita accettata, strumenti di ritardo SPENTI salvo accenderli, quando servono), paletti
+  (`PromptStratega.paletti()` dai valori di `Direttive`), istruzioni (stato maggiore, rischi calcolati se la corsa lo
+  chiede, cambia piano solo se fallimentare, max 3 frasi) e schema. ~20.000 caratteri, uguale per entrambe le
+  alleanze ⇒ in cache. Parte variabile = livello di Fantasia (testo per 1-5) + stato strategico JSON compatto.
+- **Risposta** (`UscitaLlm`): JSON estratto dal testo (tollera blocchi di codice), schema dello stratega
+  (`rischio`/`ruoli` come liste di coppie, fronte vuoto = tutti) convertito nelle direttive v1, poi
+  `Direttive.valida` + paletti come per ogni decisore. `UscitaLlm.controlla` = controllo offline sullo stato (piano
+  ammesso, postura, fronti, operazioni, pesi, tetto, frasi) usato dal test di qualita'.
+- **Chiamate**: una per alleanza a inizio round (prima nazione Pro+ dell'alleanza, `Valutazione.inizioRound`).
+  **Sincrona**: la richiesta "in background finche' non servono le direttive" non da' vantaggi qui, perche' la prima
+  nazione le usa subito (acquisti) e un anticipo al turno prima userebbe uno stato vecchio di un turno nemico. Tetto
+  per partita `Pro+ stratega tetto chiamate` (default 40, pannello; ogni chiamata a un fornitore conta, anche fallita).
+- **Uso e costo** (`Uso`, proprieta' `Pro+ stratega uso` JSON: chiamate, errori, json_non_validi, token ingresso/
+  uscita/cache letta/scritta, ms, `costo_usd`, `costo_abbonamento_usd` per Claude Code, `per_fonte`). Prezzi in
+  `prezzi-stratega.json` (modificabile, con la fonte di ogni prezzo).
+- **Diario**: ogni round "Stratega: <regole | file | Claude Code | Haiku | DeepSeek | Groq> - postura X, piano Y,
+  <motivazione>" (anche con le regole); con lo stratega LLM "Stratega, uso della partita finora: N chiamate (...),
+  T token (...), costo stimato $C" (l'ultimo round = totale della partita). Voce dello storico: `decisore.fonte`
+  (non regole) e `decisore.uso` (LLM).
+- **Chiavi** (`ProfiloStratega`): `<home>/.triplea-proplus/stratega.properties` (permessi solo proprietario dove il
+  file system li ha; cartella spostabile con `-Dproplus.stratega.cartella`, test), chiave per fornitore, fornitore,
+  modalita' preferita. Mai nelle proprieta' della partita, nel diario, nei log, nella cartella del gioco. Senza chiave
+  salvata vale la variabile d'ambiente del fornitore (`ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`: CI).
+  `chiave-stratega.txt` accanto al gioco (prima riga non commento; anche `groq=...`) importato all'apertura del
+  pannello se manca una chiave per quel fornitore (riconosciuto dal prefisso `sk-ant-`/`gsk_`/`sk-`), poi il pannello
+  chiede se cancellarlo; e' nel `.gitignore`.
+- **Pannello** (`ProPlusSettingsDialog` + `StrategistPanel`): per alleanza riga "Stratega" (al posto di "Decisore") +
+  cursore "Fantasia" (1-5, default 2, `Pro+ stratega fantasia: <alleanza>`); sezione "Stratega (LLM)": stato rilevato
+  (in background: "✓ Claude Code trovato" / "✗ Claude non trovato – uso la chiave Haiku (••••1234)" / "... uso le
+  regole"), fornitore, campo chiave (password) + "salvata: ••••1234", Salva / Prova connessione (chiamata minima,
+  esito "✓ Connessione riuscita: Haiku risponde (1,2 s)" o il motivo) / Rimuovi, tetto chiamate. OK salva anche il
+  fornitore e, se un'alleanza usa una modalita' LLM, la rende la preferita delle partite nuove.
+- **Autoplay**: `--decisore <alleanza>=llm` (= Chiave API, fornitore del profilo o Anthropic, chiave da
+  `ANTHROPIC_API_KEY`); `riepilogo.json` `stratega` per alleanza (decisioni, fonti, ripieghi con i primi motivi,
+  cambi piano, posture, strumenti accesi, operazioni lancia/attendi/annulla, uso); riga nel `riepilogo.md`;
+  `riepilogo-generale.md` sezione "Stratega LLM" (una riga per alleanza LLM, totale chiamate e costo per partita, VC
+  finali medie LLM contro regole con gli stessi piani); le configurazioni con decisore non regole hanno il suffisso
+  "(llm)" e non si mescolano con quelle a regole. Comando `qualita <cartella> [--n 30] [--output DIR] [--fornitore
+  anthropic] [--fantasia 2]` (`TestQualita`): N stati `stato-R*-*.json` presi a intervalli regolari, prompt vero, %
+  JSON validi al primo colpo (letto + piano ammesso + postura nota), % limitate dai paletti (tra le valide), latenza
+  media, token, costo, 5 motivazioni; `qualita.md` + `qualita.json`; senza chiave esce 0 senza chiamare.
+- **Paletto trasporti per alleanza** (punto a): vedi `TettoTrasporti` e `contratto-v1.md` (somma di tutti gli sbarchi
+  dell'alleanza nel round, prima era per singolo sbarco).
+
+## Come configurare lo stratega
+
+Per Matteo e gli amici (stesso testo, piu' corto, nel `LEGGIMI.txt` dello zip):
+1. **Senza fare nulla** Pro+ gioca con le regole di sempre (gratis, nessuna rete).
+2. **Con Claude Code** (abbonamento Claude Pro o Max; il piano gratuito NON include Claude Code): installarlo e fare
+   il login una volta (dal sito di Claude Code), poi nel pannello "Impostazioni Pro+" mettere "Stratega" su
+   **Automatico** (o "Claude installato"). "Stato rilevato" deve dire "✓ Claude Code trovato".
+3. **Con una chiave API** (consigliato Claude Haiku: console Anthropic → API keys, servono crediti prepagati):
+   - modo piu' semplice: salvare un file `chiave-stratega.txt` accanto ad `avvia.bat` con dentro solo la chiave;
+     all'apertura del pannello viene importata e il gioco propone di cancellare il file (rispondere Si');
+   - oppure incollarla nel campo "Chiave API" e premere **Salva**; **Prova connessione** dice subito se funziona
+     (chiave giusta: "✓ Connessione riuscita"; sbagliata: "✗ chiave rifiutata da Haiku ...");
+   - mettere "Stratega" su **Automatico** o **Chiave API** per le alleanze che si vogliono far decidere all'LLM.
+4. **Fantasia** 1-5 (2 di default): 1 = segue i piani classici, 5 = cerca finte e mosse inattese (sempre entro i
+   paletti).
+5. **Costo**: con Haiku pochi centesimi per partita (vedi il diario: "Stratega, uso della partita finora"); con
+   Claude Code compreso nell'abbonamento. Tetto di 40 chiamate per partita modificabile.
+6. **Rimuovere la chiave**: pulsante "Rimuovi" (la chiave sta solo in `%USERPROFILE%\.triplea-proplus\stratega.properties`).
+7. Se qualcosa non va (rete, credito finito, chiave revocata) il diario scrive "stratega non disponibile (...)": quel
+   round decidono le regole, la partita continua.
+- DeepSeek e Groq sono selezionabili ma i loro modelli e prezzi NON sono stati verificati sui siti ufficiali
+  (bloccati dalla sandbox): da provare con "Prova connessione" prima di usarli.
 
 ## Log degli step
 
@@ -2338,3 +2465,37 @@ jobs" verde (attempt 2). Tutte le direzioni con decisore `regole` (strumenti spe
   Rispetto al 3d-2 (+0.5 VC, Mosca cade 2/12 invece di 6/12) il peggioramento del 3d-2 sparisce con gli strumenti spenti.
 - Cambi di piano: 2 (Alleati in D/1 e D/2, un seme ciascuno). Budget dell'ingresso rispettato con ampio margine.
 - Hard identica: golden Hard, golden Pro+ e `DiaryNeutralityTest` verdi in CI.
+
+### Step INTEGRAZIONE LLM — stratega LLM (Claude Code / chiave API / regole) (2026-11-08)
+
+Decisione di Matteo: lo stratega LLM decide il COSA/PERCHE', il deterministico esegue; provider Claude Haiku 5.5.
+Vedi "Stratega LLM" e "Come configurare lo stratega". Prima le due correzioni chieste dal report del contratto:
+(a) tetto delle perdite di trasporti accettate per ALLEANZA PER ROUND sommando tutti gli sbarchi (`TettoTrasporti`,
+test `TettoTrasportiTest`); (b) `powershell-tests` solo per modifiche sotto `proplus/ci/` e `proplus/dist/`.
+- Classi nuove: `strategia/llm/*` (Modalita, Fornitore, ProfiloStratega, ClaudeCode, ClientApi, Http, Richiesta,
+  Risposta, ErroreStratega, PromptStratega, UscitaLlm, Uso, Prezzi), `TettoTrasporti`, UI `StrategistPanel`, autoplay
+  `TestQualita`; risorse `prompt-stratega-v1.md`, `prezzi-stratega.json`. Modificate: `DecisoreLlm` (da segnaposto
+  a stratega vero), `Decisore` (`etichetta`, `NonDisponibile`), `Decisori` (modalita'), `Valutazione` (ripiego con
+  avviso, riga "Stratega:", uso), `Direttive` (costanti pubbliche), `Strategie.json`, `TrasportiSbarco` (punto a),
+  `ProPlusSettingsDialog`, autoplay `AutoplayOptions`/`AutoplayRunner`/`Riepilogo`/`RiepilogoGenerale`, workflow.
+  **Nessuna classe Pro toccata** (Hard identica).
+- Test nuovi (tutti con client/processi finti, nessuna rete): `StrategaLlmTest` (10: direttive applicate e scritte
+  nel diario con costo, Fantasia nel prompt, errore/timeout ⇒ regole con avviso, risposta non JSON, piano non
+  ammesso, Automatico con/senza Claude Code, nessuno stratega, tetto delle chiamate, partita senza scelta = regole),
+  `StrategaComponentiTest` (19: corpo Anthropic con cache 1h/schema/senza temperature, DeepSeek/Groq JSON mode e
+  temperatura, chiave rifiutata senza chiave nel testo, nuovo tentativo su 5xx, due timeout, credito/quota, ricerca
+  di Claude Code, non collegato, comando headless, timeout, profilo/maschera/rimozione, variabile d'ambiente, import
+  del file, prefissi, prompt fisso, schema strict, conversione, controllo offline, testo dell'uso),
+  `TettoTrasportiTest` (2), `StrategistPanelTest` (5: prova connessione con chiave giusta/sbagliata, import +
+  maschera + rimozione, salvataggio, stato rilevato), `ProPlusSettingsDialogTest` aggiornato, `AutoplayTest` +2
+  (riepilogo dello stratega, test di qualita').
+- Test in locale (sandbox, JDK 25 da apt): `:game-core:test` 3080 test, falliti solo `ContentDownloaderIntegrationTest`
+  (rete della sandbox) e una volta `DiaryNeutralityTest.decisionsAreTheSameWithAndWithoutDiary` (acquisti di Hard con
+  `Math.random`, nessun piano: verde rilanciato); golden Hard, golden Pro+ (`DecisoreRegole`) e
+  `HardNeutralityGoldenTest` verdi; `:game-headed:test` 93, `:proplus-autoplay:test` 16, `:ai:test` 13 verdi.
+  `spotlessApply` non eseguito (Maven Central 429 dalla sandbox; la CI non lo esegue).
+- Verifica locale (Europe 1940 reale, A/1, 2 round, seme 1, `--decisore Allies=llm` SENZA chiave, 40 s): ogni round
+  degli Alleati "Avviso del contratto: stratega non disponibile (nessuna chiave Haiku salvata): decidono le regole",
+  riga "Stratega: regole - postura ...", partita completata; `qualita` senza chiave esce 0 senza chiamare. Nessuna
+  chiamata reale a un LLM dalla sandbox (nessuna chiave qui): il primo uso vero e' l'autoplay in CI col secret.
+- Ricerca di chiavi nel repo (pattern `sk-ant-api..-`, `gsk_`, `sk-` lunghi): nessuna.

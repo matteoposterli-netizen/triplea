@@ -15,6 +15,7 @@ import games.strategy.engine.history.HistoryNode;
 import games.strategy.engine.history.Step;
 import games.strategy.triplea.ai.pro.util.ProUtils;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
+import games.strategy.triplea.ai.proplus.strategia.llm.Uso;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.OriginalOwnerTracker;
 import games.strategy.triplea.delegate.data.BattleRecords;
@@ -217,11 +218,24 @@ public final class Valutazione {
     final JsonArray notes = new JsonArray();
     checked.avvisi().forEach(notes::add);
     who.add("avvisi", notes);
+    final String source = checked.ripiego() ? Decisore.REGOLE : decider.etichetta();
+    if (!Decisore.REGOLE.equals(decider.nome())) {
+      who.addProperty("fonte", source);
+    }
+    if (Decisore.LLM.equals(decider.nome())) {
+      who.add("uso", Uso.leggi(data.getProperties()));
+    }
     entry.add("decisore", who);
     final StringBuilder text =
         new StringBuilder(result.testo()).append(Contromosse.testo(strategic));
     checked.avvisi().forEach(a -> text.append("  Avviso del contratto: ").append(a).append('\n'));
     text.append(Direttive.testo(directives, decider.nome(), checked.ripiego()));
+    text.append(strategistLine(source, directives));
+    if (Decisore.LLM.equals(decider.nome())) {
+      text.append("  Stratega, uso della partita finora: ")
+          .append(Uso.testo(Uso.leggi(data.getProperties())))
+          .append('\n');
+    }
     final Risultato decided = new Risultato(alliance.get(), round, entry, text.toString(), input);
     StatoMaggiore.aggiungiStorico(data, alliance.get(), entry);
     return Optional.of(decided);
@@ -235,6 +249,12 @@ public final class Valutazione {
     final Optional<JsonObject> raw;
     try {
       raw = decider.decidi(input, ctx);
+    } catch (final Decisore.NonDisponibile e) {
+      // LLM strategist: no answer this round (error, timeout, quota, cap): the rules decide
+      return new Direttive.Validazione(
+          rules,
+          true,
+          List.of("stratega non disponibile (" + e.getMessage() + "): decidono le regole"));
     } catch (final RuntimeException e) {
       return new Direttive.Validazione(
           rules,
@@ -247,6 +267,22 @@ public final class Valutazione {
                   + "): uso le regole"));
     }
     return Direttive.valida(raw, ctx, rules, decider.nome());
+  }
+
+  /**
+   * Diary: "Stratega: <who> - postura X, piano Y, motivazione" (who = regole, file, Claude Code,
+   * Haiku, DeepSeek, Groq).
+   */
+  static String strategistLine(final String source, final JsonObject directives) {
+    final Direttive d = Direttive.of(directives);
+    return "  Stratega: "
+        + source
+        + " - postura "
+        + d.postura()
+        + ", piano "
+        + d.piano()
+        + (d.motivazione().isEmpty() ? "" : ", " + d.motivazione())
+        + '\n';
   }
 
   /** Key of the directives in the history entry of the round. */

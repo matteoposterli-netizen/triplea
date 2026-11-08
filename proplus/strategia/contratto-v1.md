@@ -17,10 +17,11 @@ nell'autoplay. Esempi reali (Europe 1940, Asse A / Alleati 1, seme 1, round 2) i
 |---|---|---|
 | `regole` (default) | `DecisoreRegole` | piano e cambio piano, postura, contro-obiettivi, rischio e obiettivi della fase del file dati, operazioni tutte "lancia" senza perdita accettata, **strumenti di ritardo tutti spenti**, ruoli del piano, lettura del nemico |
 | `file` | `DecisoreFile` | legge le direttive da un file JSON (vedi sotto); se manca la direttiva del round decidono le regole (con avviso) |
-| `llm` | `DecisoreLlm` | solo l'interfaccia: non decide mai (nessuna chiamata di rete), quindi decidono le regole; non selezionabile |
+| `auto` / `claude` / `chiave` | `DecisoreLlm` | stratega LLM (step INTEGRAZIONE LLM): Claude Code installato, poi la chiave API (Claude Haiku, DeepSeek, Groq); qualsiasi errore = regole per quel round. Vedi CLAUDE.md "Stratega LLM" e `prompt-stratega-v1.md` nelle risorse di game-core |
 
-Scelta per alleanza: pannello "Impostazioni Pro+" (riga "Decisore": regole/file + percorso) e autoplay
-`--decisore Allies=file:/percorso,Axis=regole`. Salvata nella partita (proprieta' `Pro+ decisore:
+Scelta per alleanza: pannello "Impostazioni Pro+" (riga "Stratega": Automatico / Claude installato / Chiave
+API / File / Solo regole + percorso) e autoplay `--decisore Allies=file:/percorso,Axis=regole` o
+`Allies=llm` (chiave API da `ANTHROPIC_API_KEY`). Salvata nella partita (proprieta' `Pro+ decisore:
 <alleanza>` e `Pro+ decisore file: <alleanza>`).
 
 **File delle direttive** (`DecisoreFile`): il percorso e' una cartella o un file.
@@ -129,8 +130,11 @@ Esempio di file scritto a mano (`esempi/direttive-file-R1-Allies.json`, provato 
   tocca); soglia minima assoluta d'attacco 30% (`ProPlusTuning`; i livelli 1-5 hanno gia' minime
   45-65%); perdita di trasporti accettata <= 30 TUV per alleanza per turno (somma delle operazioni
   lanciate, ridotta in proporzione); max 2 cambi di piano per partita e >= 3 round tra due cambi.
-- Limite noto: il tetto delle perdite e' per operazione e per sbarco; non si sommano le perdite di piu'
-  sbarchi nello stesso turno.
+- Tetto delle perdite di trasporti accettate (dallo step INTEGRAZIONE LLM): vale per ALLEANZA PER ROUND
+  sommando tutti gli sbarchi di tutte le nazioni dell'alleanza (`TettoTrasporti`, proprieta' `Pro+ perdite
+  trasporti accettate: <alleanza>`); prima valeva per singolo sbarco. Una voce per nazione e bersaglio (la
+  stessa pianificazione ripetuta non conta due volte); uno sbarco accettato e poi scartato da un'altra regola
+  resta contato (prudente).
 
 ## Diario e log
 

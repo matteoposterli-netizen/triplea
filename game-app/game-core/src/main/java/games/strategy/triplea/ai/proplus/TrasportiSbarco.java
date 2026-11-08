@@ -12,6 +12,7 @@ import games.strategy.triplea.ai.pro.data.ProOtherMoveOptions;
 import games.strategy.triplea.ai.pro.data.ProTerritory;
 import games.strategy.triplea.ai.pro.util.ProMatches;
 import games.strategy.triplea.ai.pro.util.ProOddsCalculator;
+import games.strategy.triplea.ai.proplus.strategia.Direttive;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.util.TuvUtils;
@@ -172,18 +173,34 @@ final class TrasportiSbarco {
     final double desired = ProPlusTuning.desiredWinPercentage(proData, target);
     // strategic contract: an operation the directives launch may lose up to their cap
     final double accepted = plan.map(p -> p.perditaAccettata(target)).orElse(0.0);
+    String capNote = "";
     if (accepted > 0 && loss <= accepted) {
-      return new ProLandingTransports(
-          true,
-          KEPT,
-          loss,
-          gain,
-          text(loss, ">", gain, gainText, before, "")
-              + String.format(
-                  Locale.ROOT,
-                  "; tenuto: perdita entro il tetto della direttiva (%.0f TUV)",
-                  accepted),
-          Map.of());
+      // guard rail: the cap holds for the whole alliance in the round, every landing summed
+      final double left = TettoTrasporti.residuo(proData.getData(), player, target);
+      if (loss <= left) {
+        TettoTrasporti.registra(proData.getData(), player, target, loss);
+        return new ProLandingTransports(
+            true,
+            KEPT,
+            loss,
+            gain,
+            text(loss, ">", gain, gainText, before, "")
+                + String.format(
+                    Locale.ROOT,
+                    "; tenuto: perdita entro il tetto della direttiva (%.0f TUV) e dell'alleanza"
+                        + " nel round (residuo %.1f di %.0f TUV)",
+                    accepted,
+                    left,
+                    Direttive.PERDITA_TRASPORTI_MAX),
+            Map.of());
+      }
+      capNote =
+          String.format(
+              Locale.ROOT,
+              "; tetto dell'alleanza nel round superato (residuo %.1f di %.0f TUV < perdita %.1f)",
+              left,
+              Direttive.PERDITA_TRASPORTI_MAX,
+              loss);
     }
     if (plan.isPresent() && plan.get().isCritico(target) && win > desired) {
       return new ProLandingTransports(
@@ -241,7 +258,7 @@ final class TrasportiSbarco {
           DROPPED,
           newLoss,
           gain,
-          text(newLoss, ">", gain, gainText, after, "") + movedText + triedText,
+          text(newLoss, ">", gain, gainText, after, "") + movedText + triedText + capNote,
           Map.of());
     }
     return new ProLandingTransports(
@@ -249,7 +266,7 @@ final class TrasportiSbarco {
         DROPPED,
         loss,
         gain,
-        text(loss, ">", gain, gainText, before, "") + triedText,
+        text(loss, ">", gain, gainText, before, "") + triedText + capNote,
         Map.of());
   }
 

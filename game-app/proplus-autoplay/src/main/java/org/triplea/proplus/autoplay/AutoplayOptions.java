@@ -16,8 +16,9 @@ import javax.annotation.Nullable;
  * --piano A=X,...      plan per alliance, eg. Axis=A,Allies=1 (default: "auto" = Automatico)
  * --rischio A=L,...    base risk level per alliance, 1-5 or name (default Equilibrato)
  * --tipo A=T,...       player type per alliance: proplus | hard (default proplus)
- * --decisore A=D,...   Pro+ decider per alliance: regole | file:PATH (default regole; PATH =
- *                      directives file or folder, see DecisoreFile)
+ * --decisore A=D,...   Pro+ decider per alliance: regole | file:PATH | llm (default regole; PATH =
+ *                      directives file or folder, see DecisoreFile; llm = LLM strategist through
+ *                      the API key, Claude Haiku with ANTHROPIC_API_KEY of the environment)
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
@@ -38,6 +39,7 @@ record AutoplayOptions(
 
   static final String PROPLUS = "proplus";
   static final String HARD = "hard";
+  static final String LLM = "llm";
 
   static AutoplayOptions parse(final String[] args) {
     final Map<String, String> values = new LinkedHashMap<>();
@@ -80,7 +82,7 @@ record AutoplayOptions(
     return Optional.ofNullable(rischi.get(alliance));
   }
 
-  /** {@code regole} or {@code file:PATH} of {@code alliance} (default regole). */
+  /** {@code regole}, {@code file:PATH} or {@code llm} of {@code alliance} (default regole). */
   String decisore(final String alliance) {
     return decisori.getOrDefault(alliance, "regole");
   }
@@ -90,9 +92,15 @@ record AutoplayOptions(
     final Map<String, String> map = pairs(text);
     map.forEach(
         (alliance, d) -> {
-          if (!d.equals("regole") && !(d.startsWith("file:") && d.length() > "file:".length())) {
+          if (!d.equals("regole")
+              && !d.equals(LLM)
+              && !(d.startsWith("file:") && d.length() > "file:".length())) {
             throw new IllegalArgumentException(
-                "Decisore non valido per " + alliance + ": " + d + " (regole | file:PERCORSO)");
+                "Decisore non valido per "
+                    + alliance
+                    + ": "
+                    + d
+                    + " (regole | file:PERCORSO | llm)");
           }
         });
     return map;

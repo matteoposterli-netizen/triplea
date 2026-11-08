@@ -6,14 +6,35 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.RiskLevel;
-import games.strategy.triplea.ai.proplus.strategia.Decisore;
 import games.strategy.triplea.ai.proplus.strategia.Decisori;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.ai.proplus.strategia.Strategie;
+import games.strategy.triplea.ai.proplus.strategia.llm.ClaudeCode;
+import games.strategy.triplea.ai.proplus.strategia.llm.Modalita;
+import games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega;
+import games.strategy.triplea.ai.proplus.strategia.llm.Uso;
+import java.nio.file.Path;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ProPlusSettingsDialogTest {
+  @TempDir static Path profile;
   private final GameData data = new GameData();
+
+  @BeforeAll
+  static void noRealStrategist() {
+    // the panel never looks for Claude Code nor reads the user's real profile in these tests
+    System.setProperty(ClaudeCode.DISABLED_PROPERTY, "true");
+    System.setProperty(ProfiloStratega.FOLDER_PROPERTY, profile.toString());
+  }
+
+  @AfterAll
+  static void cleanUp() {
+    System.clearProperty(ClaudeCode.DISABLED_PROPERTY);
+    System.clearProperty(ProfiloStratega.FOLDER_PROPERTY);
+  }
 
   ProPlusSettingsDialogTest() {
     addPlayer("Germans", "Axis", false);
@@ -79,19 +100,27 @@ class ProPlusSettingsDialogTest {
   }
 
   @Test
-  void deciderPerAllianceStartsAtRulesAndIsWrittenBackWithItsFile() {
+  void strategistPerAllianceStartsAtRulesAndIsWrittenBackWithFileAndFantasy() {
     data.setGameName("World War II Europe 1940 2nd Edition");
     final ProPlusSettingsDialog.Form form = new ProPlusSettingsDialog.Form(data);
 
     assertThat(form.getDeciders()).containsOnlyKeys("Allies", "Axis");
-    assertThat(form.getDeciders().get("Axis").getSelectedItem()).isEqualTo(Decisore.REGOLE);
-    form.getDeciders().get("Allies").setSelectedItem(Decisore.FILE);
+    assertThat(form.getDeciders().get("Axis").getSelectedItem()).isEqualTo(Modalita.REGOLE);
+    assertThat(form.getFantasies().get("Axis").getValue()).isEqualTo(2);
+    form.getDeciders().get("Allies").setSelectedItem(Modalita.FILE);
     form.getDeciderFiles().get("Allies").setText(" C:\\direttive ");
+    form.getDeciders().get("Axis").setSelectedItem(Modalita.AUTOMATICO);
+    form.getFantasies().get("Axis").setValue(4);
+    form.getStrategist().getCap().setValue(20);
     form.apply(data.getProperties());
 
-    assertThat(Decisori.getScelta(data.getProperties(), "Allies")).isEqualTo(Decisore.FILE);
+    assertThat(Decisori.getModalita(data.getProperties(), "Allies")).isEqualTo(Modalita.FILE);
     assertThat(Decisori.getFile(data.getProperties(), "Allies")).isEqualTo("C:\\direttive");
-    assertThat(Decisori.getScelta(data.getProperties(), "Axis")).isEqualTo(Decisore.REGOLE);
+    assertThat(Decisori.getModalita(data.getProperties(), "Axis")).isEqualTo(Modalita.AUTOMATICO);
+    assertThat(Uso.fantasia(data.getProperties(), "Axis")).isEqualTo(4);
+    assertThat(Uso.tetto(data.getProperties())).isEqualTo(20);
+    // the LLM mode becomes the user's default for new games; no key in the game
+    assertThat(ProfiloStratega.carica().modalitaPredefinita()).isEqualTo(Modalita.AUTOMATICO);
   }
 
   @Test

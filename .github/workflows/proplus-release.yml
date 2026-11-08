@@ -16,8 +16,9 @@ concurrency:
   group: proplus-release-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  # Decides whether the Windows job is needed: only when something under proplus/ changed
-  # (aggiorna.ps1, avvia.bat and their tests live there), or on a manual run / new branch.
+  # Decides whether the Windows job is needed: only when something under proplus/ci or
+  # proplus/dist changed (aggiorna.ps1, avvia.bat and their tests live there), or on a manual
+  # run / new branch. proplus/strategia (documentation and examples) does not count.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -34,7 +35,7 @@ jobs:
           if [ "${GITHUB_EVENT_NAME}" != "push" ] || [ -z "${BEFORE}" ] \
              || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             echo "proplus=true" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "${BEFORE}" "${GITHUB_SHA}" | grep -q '^proplus/'; then
+          elif git diff --name-only "${BEFORE}" "${GITHUB_SHA}" | grep -qE '^proplus/(ci|dist)/'; then
             echo "proplus=true" >> "$GITHUB_OUTPUT"
           else
             echo "proplus=false" >> "$GITHUB_OUTPUT"
@@ -153,6 +154,8 @@ jobs:
   # only for commits whose message contains [autoplay] (or a manual run)
   autoplay:
     needs: build
+    # the LLM games read the secret ANTHROPIC_API_KEY (skipped when it is missing)
+    secrets: inherit
     # needs.build.result explicitly: the default success() is false when powershell-tests was skipped
     if: ${{ !cancelled() && needs.build.result == 'success' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[autoplay]')) }}
     uses: ./.github/workflows/proplus-autoplay.yml

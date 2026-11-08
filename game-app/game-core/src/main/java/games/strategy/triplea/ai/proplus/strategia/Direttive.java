@@ -43,9 +43,9 @@ public final class Direttive {
   /** Operation decision: off this round (its units go back to the Pro AI). */
   public static final String ANNULLA = "annulla";
 
-  static final List<String> DECISIONI = List.of(LANCIA, ATTENDI, ANNULLA);
+  public static final List<String> DECISIONI = List.of(LANCIA, ATTENDI, ANNULLA);
 
-  static final List<String> POSTURE =
+  public static final List<String> POSTURE =
       List.of(
           Contromosse.OFFENSIVA,
           Contromosse.RALLENTAMENTO,
@@ -60,7 +60,7 @@ public final class Direttive {
   public static final String ORIGINE_CONTROMOSSA = "contromossa";
 
   /** Highest weight of a target. */
-  static final double PESO_MAX = 20;
+  public static final double PESO_MAX = 20;
 
   /** Guard rail: lowest attack win% whatever the decider (minimum threshold of any attack). */
   public static final double SOGLIA_MINIMA_ASSOLUTA = 30;
@@ -75,7 +75,7 @@ public final class Direttive {
   public static final int ROUND_TRA_CAMBI = 3;
 
   /** Most sentences of the motivation. */
-  static final int FRASI_MAX = 3;
+  public static final int FRASI_MAX = 3;
 
   /** An amphibious operation's decision. */
   public record Operazione(String id, String decisione, double perditaAccettata) {}

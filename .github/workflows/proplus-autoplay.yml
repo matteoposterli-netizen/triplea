@@ -3,7 +3,10 @@
 # published to the release 'autoplay-latest' (asset replaced each run). Never touches
 # 'proplus-latest'. See CLAUDE.md "Autoplay in CI".
 #
-# Started by "ProPlus Release" as a reusable workflow (workflow_call), after its release job.
+# Started by "ProPlus Release" as a reusable workflow (workflow_call, secrets inherited), after its
+# release job. With the secret ANTHROPIC_API_KEY: 4 more games with the LLM strategist (Claude Haiku)
+# and the offline quality test; without it they are skipped (no error). The key is only passed as
+# an environment variable to the steps that need it, never written to files or logs.
 # workflow_run and workflow_dispatch only work for workflows on the default branch ('main' =
 # upstream in this fork): workflow_dispatch is kept for the day this file is there.
 name: ProPlus Autoplay
@@ -85,6 +88,7 @@ jobs:
       - name: Games to play
         id: matrix
         env:
+          HAS_LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
           ROUND: ${{ inputs.round || '12' }}
           PARTITE: ${{ inputs.partite || '7' }}
           SEMI: ${{ inputs.semi || '2' }}
@@ -104,13 +108,31 @@ jobs:
                   if g.lower() == "hard":
                       include.append({"id": f"{i}-Hard-vs-Hard-seme{seed}",
                                       "nome": f"Hard vs Hard (seme {seed})",
-                                      "tipo": "Axis=hard,Allies=hard", "piano": "", "seme": seed})
+                                      "tipo": "Axis=hard,Allies=hard", "piano": "", "seme": seed,
+                                      "decisore": ""})
                   else:
                       axis, allies = g.split("/")
                       include.append({"id": f"{i}-Asse-{axis}-Alleati-{allies}-seme{seed}",
                                       "nome": f"Asse {axis} / Alleati {allies} (seme {seed})",
                                       "tipo": "Axis=proplus,Allies=proplus",
-                                      "piano": f"Axis={axis},Allies={allies}", "seme": seed})
+                                      "piano": f"Axis={axis},Allies={allies}", "seme": seed,
+                                      "decisore": ""})
+          # LLM strategist (Claude Haiku via ANTHROPIC_API_KEY), 2 seeds each, only with the secret:
+          # Allies LLM vs Axis A by rules, Axis LLM vs Allies 1 by rules (compare with A/1)
+          if os.environ["HAS_LLM_KEY"] == "true" and not custom:
+              n = len(configs)
+              for seed in (1, 2):
+                  include.append({"id": f"{n + 1}-LLM-Alleati-vs-Asse-A-seme{seed}",
+                                  "nome": f"Alleati LLM / Asse A regole (seme {seed})",
+                                  "tipo": "Axis=proplus,Allies=proplus",
+                                  "piano": "Axis=A,Allies=1", "seme": seed,
+                                  "decisore": "Allies=llm"})
+              for seed in (1, 2):
+                  include.append({"id": f"{n + 2}-LLM-Asse-vs-Alleati-1-seme{seed}",
+                                  "nome": f"Asse LLM / Alleati 1 regole (seme {seed})",
+                                  "tipo": "Axis=proplus,Allies=proplus",
+                                  "piano": "Axis=A,Allies=1", "seme": seed,
+                                  "decisore": "Axis=llm"})
           print("matrix=" + json.dumps({"include": include}))
           print(f"round={rounds}")
           EOF
@@ -141,6 +163,9 @@ jobs:
           name: autoplay-kit
           path: autoplay-kit
       - name: Play
+        env:
+          # only the LLM games get the key
+          ANTHROPIC_API_KEY: ${{ matrix.decisore != '' && secrets.ANTHROPIC_API_KEY || '' }}
         run: |
           set -uo pipefail
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
@@ -153,6 +178,7 @@ jobs:
                 --seme "${{ matrix.seme }}"
                 --output "$out" --nome "${{ matrix.nome }}" --minuti 25)
           if [ -n "${{ matrix.piano }}" ]; then args+=(--piano "${{ matrix.piano }}"); fi
+          if [ -n "${{ matrix.decisore }}" ]; then args+=(--decisore "${{ matrix.decisore }}"); fi
           start=$(date +%s)
           autoplay-kit/runner/bin/proplus-autoplay "${args[@]}" 2>&1 | tee "$out/partita.log" \
             | { grep --line-buffered -E "AUTOPLAY|ERROR" || true; }
@@ -198,6 +224,8 @@ jobs:
       - name: Comparison and zip
         env:
           MATRIX: ${{ needs.prepare.outputs.matrix }}
+          HAS_LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
           mkdir -p autoplay
@@ -208,6 +236,13 @@ jobs:
           title="Autoplay Pro+ - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
+          # LLM strategist: offline quality test on 30 strategic states of these games (skipped,
+          # exit 0, without the secret)
+          if [ "${HAS_LLM_KEY}" = "true" ]; then
+            ANTHROPIC_API_KEY="${LLM_KEY}" autoplay-kit/runner/bin/proplus-autoplay qualita autoplay \
+              --n 30 --output autoplay/qualita || echo "test di qualita' fallito (non blocca)"
+            test -f autoplay/qualita/qualita.md && cat autoplay/qualita/qualita.md >> "$GITHUB_STEP_SUMMARY"
+          fi
           # strategic contract: the state/directives JSON files of the first seed only (1 game
           # per configuration), the sizes are already in each game's summary
           find autoplay -path '*-seme[2-9]*' \( -name 'stato-R*.json' -o -name 'direttive-R*.json' \) -delete

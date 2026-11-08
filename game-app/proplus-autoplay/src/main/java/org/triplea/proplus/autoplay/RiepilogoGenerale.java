@@ -144,6 +144,7 @@ final class RiepilogoGenerale {
     lostTransports(md, games, alliances, maxRound);
     delayTools(md, games, alliances, maxRound);
     contract(md, games, alliances);
+    strategist(md, games, alliances, maxRound);
 
     md.append(
 """
@@ -250,10 +251,165 @@ final class RiepilogoGenerale {
         alliances,
         a -> {
           final String type = text(p.getAsJsonObject("tipi"), a);
-          return AutoplayOptions.HARD.equals(type)
-              ? Riepilogo.typeLabel(type)
-              : Riepilogo.typeLabel(type) + " " + text(p.getAsJsonObject("piani"), a);
+          if (AutoplayOptions.HARD.equals(type)) {
+            return Riepilogo.typeLabel(type);
+          }
+          final String decider = decider(json, a);
+          return Riepilogo.typeLabel(type)
+              + " "
+              + text(p.getAsJsonObject("piani"), a)
+              + ("regole".equals(decider) ? "" : " (" + decider + ")");
         });
+  }
+
+  /** The decider of {@code alliance} in the game: regole, llm, file:... */
+  static String decider(final JsonObject json, final String alliance) {
+    final JsonObject p = json.getAsJsonObject("parametri");
+    return p.has("decisori") && p.getAsJsonObject("decisori").has(alliance)
+        ? p.getAsJsonObject("decisori").get(alliance).getAsString()
+        : "regole";
+  }
+
+  /**
+   * Step INTEGRAZIONE LLM: the games with the LLM strategist (one row per LLM alliance: who
+   * answered, fallbacks, plan changes, postures, delay tools turned on, operations, calls, tokens,
+   * cost, final VC) and the mean final VC of each configuration with the LLM against the rules.
+   */
+  static void strategist(
+      final StringBuilder md, final List<Game> games, final List<String> alliances, final int maxRound) {
+    final List<Game> llm =
+        games.stream()
+            .filter(g -> g.json() != null)
+            .filter(g -> alliances.stream().anyMatch(a -> "llm".equals(decider(g.json(), a))))
+            .toList();
+    md.append(
+"""
+
+
+## Stratega LLM
+
+""");
+    if (llm.isEmpty()) {
+      md.append("Nessuna partita con lo stratega LLM (secret ANTHROPIC_API_KEY assente o partite"
+          + " non richieste).\n");
+      return;
+    }
+    md.append(
+        "| Partita | Alleanza | Risposte | Ripieghi | Cambi piano | Posture | Strumenti accesi |"
+            + " Operazioni | Chiamate | Token | Costo $ | VC R"
+            + maxRound
+            + " |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+    double cost = 0;
+    int calls = 0;
+    for (final Game g : llm) {
+      final JsonObject st =
+          g.json().has("stratega") ? g.json().getAsJsonObject("stratega") : new JsonObject();
+      final JsonObject last = round(g.json(), maxRound);
+      for (final String a : alliances) {
+        if (!"llm".equals(decider(g.json(), a))) {
+          continue;
+        }
+        final JsonObject x = st.has(a) ? st.getAsJsonObject(a) : new JsonObject();
+        final JsonObject uso = x.has("uso") ? x.getAsJsonObject("uso") : new JsonObject();
+        final double c = uso.has("costo_usd") ? uso.get("costo_usd").getAsDouble() : 0;
+        final int n = uso.has("chiamate") ? uso.get("chiamate").getAsInt() : 0;
+        cost += c;
+        calls += n;
+        final long tokens =
+            (uso.has("token_ingresso") ? uso.get("token_ingresso").getAsLong() : 0)
+                + (uso.has("token_uscita") ? uso.get("token_uscita").getAsLong() : 0)
+                + (uso.has("token_cache_lettura") ? uso.get("token_cache_lettura").getAsLong() : 0)
+                + (uso.has("token_cache_scrittura")
+                    ? uso.get("token_cache_scrittura").getAsLong()
+                    : 0);
+        md.append("| ")
+            .append(g.folder())
+            .append(" | ")
+            .append(Riepilogo.allianceLabel(a))
+            .append(" | ")
+            .append(x.has("fonti") ? x.get("fonti").toString().replace("|", "/") : "-")
+            .append(" | ")
+            .append(x.has("ripieghi") ? x.get("ripieghi").getAsInt() : 0)
+            .append('/')
+            .append(x.has("decisioni") ? x.get("decisioni").getAsInt() : 0)
+            .append(" | ")
+            .append(x.has("cambi_piano") ? x.get("cambi_piano").getAsInt() : 0)
+            .append(" | ")
+            .append(x.has("posture") ? x.get("posture").toString() : "-")
+            .append(" | ")
+            .append(x.has("strumenti_accesi") ? x.get("strumenti_accesi").toString() : "-")
+            .append(" | ")
+            .append(x.has("operazioni") ? x.get("operazioni").toString() : "-")
+            .append(" | ")
+            .append(n)
+            .append(" | ")
+            .append(tokens)
+            .append(" | ")
+            .append(String.format(Locale.ROOT, "%.4f", c))
+            .append(" | ")
+            .append(
+                last == null
+                    ? "-"
+                    : join(
+                        alliances,
+                        al -> {
+                          final JsonObject vc = last.getAsJsonObject("vc");
+                          return vc.has(al)
+                              ? vc.getAsJsonObject(al).get("numero").getAsString()
+                              : "-";
+                        }))
+            .append(" |\n");
+        if (x.has("motivi_ripiego")) {
+          for (final JsonElement r : x.getAsJsonArray("motivi_ripiego")) {
+            md.append("|  | ripiego: ").append(r.getAsString().replace("|", "/")).append(" |||||||||||\n");
+          }
+        }
+      }
+    }
+    md.append(
+        String.format(
+            Locale.ROOT,
+            "%nTotale: %d chiamate, costo stimato $%.4f (%d partite LLM, $%.4f per partita).%n",
+            calls,
+            cost,
+            llm.size(),
+            cost / llm.size()));
+    md.append("\nVC finali (R")
+        .append(maxRound)
+        .append(") medie per configurazione, LLM contro regole con gli stessi piani:\n\n| Configurazione | Partite | ")
+        .append(String.join(" | ", alliances.stream().map(Riepilogo::allianceLabel).toList()))
+        .append(" |\n|---|---|")
+        .append("---|".repeat(alliances.size()))
+        .append('\n');
+    final Map<String, List<Game>> byConfig = new LinkedHashMap<>();
+    games.stream()
+        .filter(g -> g.json() != null)
+        .forEach(g -> byConfig.computeIfAbsent(configuration(g.json(), alliances), k -> new ArrayList<>()).add(g));
+    final java.util.Set<String> plansWithLlm = new java.util.HashSet<>();
+    llm.forEach(g -> plansWithLlm.add(plans(g.json(), alliances)));
+    byConfig.forEach(
+        (config, list) -> {
+          if (!plansWithLlm.contains(plans(list.get(0).json(), alliances))) {
+            return;
+          }
+          md.append("| ").append(config).append(" | ").append(list.size()).append(" | ");
+          for (final String a : alliances) {
+            final List<Double> values = new ArrayList<>();
+            for (final Game g : list) {
+              final JsonObject r = round(g.json(), maxRound);
+              if (r != null && r.getAsJsonObject("vc").has(a)) {
+                values.add(r.getAsJsonObject("vc").getAsJsonObject(a).get("numero").getAsDouble());
+              }
+            }
+            md.append(mean(values)).append(" | ");
+          }
+          md.append('\n');
+        });
+  }
+
+  private static String plans(final JsonObject json, final List<String> alliances) {
+    final JsonObject p = json.getAsJsonObject("parametri");
+    return join(alliances, a -> text(p.getAsJsonObject("tipi"), a) + text(p.getAsJsonObject("piani"), a));
   }
 
   /**

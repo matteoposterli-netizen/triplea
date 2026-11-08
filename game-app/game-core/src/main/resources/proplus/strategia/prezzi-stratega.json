@@ -1,0 +1,26 @@
+{
+  "_nota": "Prezzi in dollari USA per milione di token, usati SOLO per stimare il costo nel diario e nel riepilogo dell'autoplay (la fattura vera la fa il fornitore). cache_scrittura = scrittura della cache del prompt (Anthropic: TTL 1 ora = 2x l'ingresso). Modificabili: un modello assente vale 0. 'verificato': dove e quando il prezzo e' stato controllato.",
+  "modelli": {
+    "claude-haiku-5-5": {
+      "ingresso": 0.10,
+      "uscita": 0.50,
+      "cache_lettura": 0.01,
+      "cache_scrittura": 0.20,
+      "verificato": "2026-11-08, listino ufficiale Anthropic (prompt fino a 100K token)"
+    },
+    "deepseek-v4-flash": {
+      "ingresso": 0.30,
+      "uscita": 1.20,
+      "cache_lettura": 0.006,
+      "cache_scrittura": 0.30,
+      "verificato": "NON verificato sul sito ufficiale (bloccato dalla sandbox): tariffa di punta da fonti terze, settembre 2026; fuori punta -50%"
+    },
+    "openai/gpt-oss-120b": {
+      "ingresso": 0.15,
+      "uscita": 0.60,
+      "cache_lettura": 0.075,
+      "cache_scrittura": 0.15,
+      "verificato": "NON verificato sul sito ufficiale (bloccato dalla sandbox): fonti terze, 2026"
+    }
+  }
+}

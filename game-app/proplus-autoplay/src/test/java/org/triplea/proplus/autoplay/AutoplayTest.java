@@ -232,8 +232,12 @@ class AutoplayTest {
     assertThat(o.decisore("Allies")).isEqualTo("file:/tmp/dir");
     assertThat(o.decisore("Axis")).isEqualTo("regole");
     assertThat(o.decisore("Other")).isEqualTo("regole");
+    assertThat(
+            AutoplayOptions.parse(new String[] {"--mappa", "m", "--decisore", "Axis=llm"})
+                .decisore("Axis"))
+        .isEqualTo(AutoplayOptions.LLM);
     assertThatThrownBy(
-            () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--decisore", "Axis=llm"}))
+            () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--decisore", "Axis=gpt"}))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--decisore", "Axis=file:"}))
@@ -269,6 +273,103 @@ class AutoplayTest {
         .contains("## Contratto strategico (stato e direttive)")
         .contains("| 2 | 10 | 13 | 3 | 1/1 | 0 |")
         .contains("Media su tutte le partite: 10 caratteri");
+  }
+
+  @Test
+  void theStrategistIsSummarizedPerAllianceFromTheDiary(
+      @org.junit.jupiter.api.io.TempDir final java.nio.file.Path diary) throws Exception {
+    java.nio.file.Files.writeString(
+        diary.resolve("decisioni.jsonl"),
+"""
+{"evento":"stato_maggiore_round","alleanza":"Allies","round":1,"piano":"1","decisore":{"nome":"llm","fonte":"Haiku","ripiego":false,"avvisi":[],"uso":{"chiamate":1,"costo_usd":0.002,"token_ingresso":3000}},"direttive":{"postura":"OFFENSIVA","tattiche":[],"operazioni":[{"id":"Overlord UK","decisione":"lancia"}]}}
+{"evento":"stato_maggiore_round","alleanza":"Allies","round":2,"piano":"2","decisore":{"nome":"llm","ripiego":true,"avvisi":["stratega non disponibile (Haiku: timeout): decidono le regole"],"uso":{"chiamate":2,"errori":1,"costo_usd":0.002,"token_ingresso":3000}},"direttive":{"postura":"DIFENSIVA","tattiche":[{"strumento":"blocco_terrestre","nazione":"Russians","attiva":true}],"operazioni":[{"id":"Overlord UK","decisione":"attendi"}]}}
+{"evento":"stato_maggiore_round","alleanza":"Axis","round":1,"piano":"A","decisore":{"nome":"regole","ripiego":false,"avvisi":[]},"direttive":{"postura":"OFFENSIVA","tattiche":[]}}
+""");
+
+    final JsonObject s = Riepilogo.strategist(diary);
+
+    final JsonObject allies = s.getAsJsonObject("Allies");
+    assertThat(allies.get("decisioni").getAsInt()).isEqualTo(2);
+    assertThat(allies.get("ripieghi").getAsInt()).isEqualTo(1);
+    assertThat(allies.get("cambi_piano").getAsInt()).isEqualTo(1);
+    assertThat(allies.getAsJsonObject("fonti").toString()).isEqualTo("{\"Haiku\":1,\"regole\":1}");
+    assertThat(allies.getAsJsonObject("posture").toString())
+        .isEqualTo("{\"OFFENSIVA\":1,\"DIFENSIVA\":1}");
+    assertThat(allies.getAsJsonObject("strumenti_accesi").get("blocco_terrestre").getAsInt())
+        .isEqualTo(1);
+    assertThat(allies.getAsJsonObject("operazioni").toString())
+        .isEqualTo("{\"lancia\":1,\"attendi\":1}");
+    assertThat(allies.getAsJsonObject("uso").get("chiamate").getAsInt()).isEqualTo(2);
+    assertThat(allies.getAsJsonArray("motivi_ripiego").get(0).getAsString())
+        .startsWith("R2: stratega non disponibile");
+    assertThat(s.getAsJsonObject("Axis").get("decisore").getAsString()).isEqualTo("regole");
+
+    final JsonObject game = JsonParser.parseString(SAMPLE).getAsJsonObject();
+    final JsonObject deciders = new JsonObject();
+    deciders.addProperty("Allies", "llm");
+    game.getAsJsonObject("parametri").add("decisori", deciders);
+    game.add("stratega", s);
+    assertThat(Riepilogo.markdown(game))
+        .contains("- Stratega Alleati: {\"Haiku\":1,\"regole\":1}, ripieghi 1/2");
+    final JsonObject rules = JsonParser.parseString(SAMPLE).getAsJsonObject();
+    final String all =
+        RiepilogoGenerale.markdown(
+            "T",
+            List.of(
+                new RiepilogoGenerale.Game("8-LLM", game),
+                new RiepilogoGenerale.Game("1-A-1", rules)));
+    assertThat(all)
+        .contains("## Stratega LLM")
+        .contains("| 8-LLM | Alleati | {\"Haiku\":1,\"regole\":1} | 1/2 | 1 |")
+        .contains("| 2 | 3000 | 0.0020 |")
+        .contains("Totale: 2 chiamate, costo stimato $0.0020")
+        .contains("| Pro+ A / Pro+ 1 (llm) | 1 |")
+        .contains("| Pro+ A / Pro+ 1 | 1 |");
+  }
+
+  @Test
+  void theQualityTestCountsValidJsonLimitsLatencyAndCost(
+      @org.junit.jupiter.api.io.TempDir final java.nio.file.Path dir) throws Exception {
+    final java.nio.file.Path example =
+        java.nio.file.Path.of("../../proplus/strategia/esempi/stato-R2-Allies.json");
+    for (int i = 1; i <= 3; i++) {
+      java.nio.file.Files.copy(example, dir.resolve("stato-R" + i + "-Allies.json"));
+    }
+    final String good =
+        "{\"piano\": \"1\", \"postura\": \"CONTRASTO\", \"rischio\": [{\"fronte\": \"Ovest\","
+            + " \"valore\": 1}], \"operazioni\": [], \"bersagli\": [{\"territorio\": \"Norway\","
+            + " \"peso\": 25, \"origine\": \"contromossa\", \"critico\": false}], \"tattiche\": [],"
+            + " \"ruoli\": [], \"lettura_nemico\": {\"piano\": \"A\", \"probabilita\": 0.8},"
+            + " \"motivazione\": \"Contrasto Barbarossa.\"}";
+    final int[] n = {0};
+    final JsonObject r =
+        TestQualita.valuta(
+            TestQualita.pick(TestQualita.states(dir), 30),
+            games.strategy.triplea.ai.proplus.strategia.llm.Fornitore.ANTHROPIC,
+            2,
+            req -> {
+              n[0]++;
+              if (n[0] == 3) {
+                throw new games.strategy.triplea.ai.proplus.strategia.llm.ErroreStratega("timeout");
+              }
+              return new games.strategy.triplea.ai.proplus.strategia.llm.Risposta(
+                  n[0] == 1 ? good : "{\"piano\": \"Z\", \"postura\": \"OFFENSIVA\"}",
+                  "Haiku", "claude-haiku-5-5", 3000, 300, 6000, 0, 0.001, false, 2000);
+            });
+
+    assertThat(r.get("stati").getAsInt()).isEqualTo(3);
+    assertThat(r.get("json_validi_primo_colpo").getAsInt()).isEqualTo(1);
+    assertThat(r.get("direttive_limitate_dai_paletti").getAsInt()).isEqualTo(1);
+    assertThat(r.get("latenza_media_ms").getAsLong()).isEqualTo(2000);
+    assertThat(r.get("costo_totale_usd").getAsDouble()).isEqualTo(0.002);
+    assertThat(r.getAsJsonArray("motivazioni").get(0).getAsString())
+        .isEqualTo("R2 Allies: Contrasto Barbarossa.");
+    assertThat(TestQualita.markdown(r))
+        .contains("JSON validi al primo colpo 1 (33%)")
+        .contains("peso 25.0 fuori da 0..20.0")
+        .contains("piano non ammesso: Z")
+        .contains("| NO |");
+    assertThat(TestQualita.pick(List.of(dir, dir, dir, dir), 2)).hasSize(2);
   }
 
   @Test

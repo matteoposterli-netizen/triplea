@@ -19,6 +19,7 @@ import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.ai.proplus.diario.DiarySettings;
 import games.strategy.triplea.ai.proplus.strategia.Decisore;
 import games.strategy.triplea.ai.proplus.strategia.Decisori;
+import games.strategy.triplea.ai.proplus.strategia.llm.Modalita;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.settings.ClientSetting;
 import java.io.IOException;
@@ -62,6 +63,8 @@ public final class AutoplayRunner {
     try {
       if (args.length > 0 && "confronto".equals(args[0])) {
         code = RiepilogoGenerale.run(Arrays.copyOfRange(args, 1, args.length));
+      } else if (args.length > 0 && "qualita".equals(args[0])) {
+        code = TestQualita.run(Arrays.copyOfRange(args, 1, args.length));
       } else {
         code = new AutoplayRunner(AutoplayOptions.parse(args)).play();
       }
@@ -181,6 +184,9 @@ public final class AutoplayRunner {
       if (decider.startsWith("file:")) {
         Decisori.set(
             data.getProperties(), alliance, Decisore.FILE, decider.substring("file:".length()));
+      } else if (AutoplayOptions.LLM.equals(decider)) {
+        // LLM strategist through the API key (Claude Haiku: ANTHROPIC_API_KEY of the environment)
+        Decisori.set(data.getProperties(), alliance, Modalita.CHIAVE_API.id(), "");
       } else {
         Decisori.set(data.getProperties(), alliance, Decisore.REGOLE, "");
       }
