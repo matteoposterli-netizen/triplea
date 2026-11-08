@@ -195,6 +195,36 @@ class AutoplayTest {
   }
 
   @Test
+  void delayToolsAndTheFallOfTheSovietKeyTerritories() {
+    final JsonObject game = JsonParser.parseString(SAMPLE).getAsJsonObject();
+    final JsonObject round1 =
+        game.getAsJsonArray("round").get(0).getAsJsonObject().getAsJsonObject("nazioni");
+    final JsonObject russians = new JsonObject();
+    russians.addProperty("reddito", 37);
+    final JsonObject delay = new JsonObject();
+    delay.addProperty("blocchi_messi", 3);
+    delay.addProperty("blocchi_persi", 2);
+    delay.addProperty("navi_messi", 1);
+    delay.addProperty("zone_caccia", 2);
+    delay.addProperty("affondati_caccia", 1);
+    russians.add("ritardo", delay);
+    round1.add("Russians", russians);
+    game.add(
+        "territori_chiave",
+        JsonParser.parseString(
+            "[{\"round\":1,\"evento\":\"caduta\",\"territorio\":\"Novgorod\","
+                + "\"proprietario\":\"Germans\"}]"));
+
+    assertThat(RiepilogoGenerale.fallRound(game, "Novgorod")).isEqualTo(1);
+    assertThat(RiepilogoGenerale.fallRound(game, "Russia")).isZero();
+    assertThat(RiepilogoGenerale.markdown("T", List.of(new RiepilogoGenerale.Game("1-A-1", game))))
+        .contains("## Strumenti di ritardo e fronte russo (step 3d-2)")
+        .contains("| 1-A-1 | Pro+ A / Pro+ 1 | R1 | - | - | London R1 | 3/2 | 1/0 | 0 | 2/1 |")
+        .contains("| Pro+ A / Pro+ 1 | 1 | 1 / R1.0 | 0 | 0 |")
+        .contains("| 1-A-1 | 37 |");
+  }
+
+  @Test
   void firstLandingIsTheEarliestRealLanding() {
     final JsonArray landings =
         JsonParser.parseString(
@@ -226,10 +256,10 @@ class AutoplayTest {
   void usLandingsInWesternEuropeAndTheFirstHeldBridgehead() {
     final JsonArray landings =
         JsonParser.parseString(
-                "[{\"round\":4,\"nazione\":\"Americans\",\"alleanza\":\"Allies\","
-                    + "\"territorio\":\"Normandy Bordeaux\",\"unita\":4,\"fase\":\"combattimento\"},"
-                    + "{\"round\":5,\"nazione\":\"Americans\",\"alleanza\":\"Allies\","
-                    + "\"territorio\":\"Holland Belgium\",\"unita\":3,\"fase\":\"combattimento\"},"
+                "[{\"round\":4,\"nazione\":\"Americans\",\"alleanza\":\"Allies\",\"territorio\":\"Normandy"
+                    + " Bordeaux\",\"unita\":4,\"fase\":\"combattimento\"},"
+                    + "{\"round\":5,\"nazione\":\"Americans\",\"alleanza\":\"Allies\",\"territorio\":\"Holland"
+                    + " Belgium\",\"unita\":3,\"fase\":\"combattimento\"},"
                     + "{\"round\":5,\"nazione\":\"Americans\",\"alleanza\":\"Allies\","
                     + "\"territorio\":\"Greece\",\"unita\":2,\"fase\":\"combattimento\"},"
                     + "{\"round\":6,\"nazione\":\"British\",\"alleanza\":\"Allies\","

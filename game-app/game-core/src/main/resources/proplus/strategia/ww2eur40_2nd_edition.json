@@ -62,6 +62,7 @@
     "distanza_forze": 2,
     "distanza_attaccabile": 2,
     "soglia_contrasto": 0.35,
+    "ritardo": {"_nota": "Step 3d-2: strumenti di ritardo (paletti fissi, non tarati). Attivi (tattiche_attive dello stato maggiore) per le nazioni in 'ritarda' del piano e per tutte le nazioni dell'alleanza in postura RALLENTAMENTO o DIFENSIVA; mai col piano N. Blocco terrestre: 1 fanteria sui territori propri vuoti lungo i percorsi delle unita' mobili nemiche (carri/mech) entro 'distanza_percorso' dai territori chiave, al massimo 'max_blocchi' per nazione e turno. Blocco navale: al massimo 'max_navi_blocco' sottomarini/cacciatorpediniere nelle 'zone_di_passaggio' del piano nemico letto oltre 'soglia_lettura_blocco'. Caccia ai trasporti: zone con trasporti nemici carichi o nelle zone di raccolta del piano nemico, entro 'distanza_caccia' da unita' navali/aeree nostre, contro-obiettivi con peso 'peso_caccia_trasporti'.", "max_blocchi": 3, "distanza_percorso": 4, "max_navi_blocco": 2, "soglia_lettura_blocco": 0.5, "peso_caccia_trasporti": 15, "distanza_caccia": 2},
     "vittoria": {
       "Axis": {"vc": 8},
       "Allies": {"territori": ["Germany", "Southern Italy"], "richiesti": 2}
@@ -180,6 +181,7 @@
           ],
           "subentri": ["D"],
           "contrasta": ["2", "3"],
+          "zone_di_passaggio": [],
           "punti_critici": [
             {"descrizione": "stack tedesco piu' avanzato e isolato", "tipo": "stack_avanzato", "nazione": "Germans"},
             {"descrizione": "Romania (petrolio, obiettivi nazionali tedeschi)", "tipo": "territorio", "territori": ["Romania"]},
@@ -310,6 +312,7 @@
           ],
           "subentri": ["A"],
           "contrasta": [],
+          "zone_di_passaggio": ["111 Sea Zone", "110 Sea Zone"],
           "punti_critici": [
             {"descrizione": "trasporti tedeschi nel Baltico / Mare del Nord: se affondati lo sbarco salta", "tipo": "unita", "nazione": "Germans", "unita": ["transport"], "zone": ["112 Sea Zone", "113 Sea Zone", "114 Sea Zone", "115 Sea Zone"]},
             {"descrizione": "aerei tedeschi a ovest", "tipo": "unita", "nazione": "Germans", "classi": ["aerei"], "fronte": "Ovest"}
@@ -416,6 +419,7 @@
           ],
           "subentri": ["A"],
           "contrasta": [],
+          "zone_di_passaggio": ["111 Sea Zone"],
           "punti_critici": [
             {"descrizione": "trasporti tedeschi nel Baltico / Mare del Nord (primi round)", "tipo": "unita", "nazione": "Germans", "unita": ["transport"], "zone": ["112 Sea Zone", "113 Sea Zone", "114 Sea Zone", "115 Sea Zone"], "a_round": 3},
             {"descrizione": "aerei tedeschi a ovest (primi round)", "tipo": "unita", "nazione": "Germans", "classi": ["aerei"], "fronte": "Ovest", "a_round": 3}
@@ -513,6 +517,7 @@
           ],
           "subentri": ["A"],
           "contrasta": ["1"],
+          "zone_di_passaggio": ["96 Sea Zone", "98 Sea Zone"],
           "punti_critici": [
             {"descrizione": "trasporti italiani nel Mediterraneo", "tipo": "unita", "nazione": "Italians", "unita": ["transport"], "zone": ["92 Sea Zone", "93 Sea Zone", "94 Sea Zone", "95 Sea Zone", "96 Sea Zone", "97 Sea Zone", "98 Sea Zone", "99 Sea Zone"]},
             {"descrizione": "flotta italiana nel Mediterraneo: senza di lei i rinforzi in Africa si fermano", "tipo": "flotta", "nazione": "Italians", "zone": ["92 Sea Zone", "93 Sea Zone", "94 Sea Zone", "95 Sea Zone", "96 Sea Zone", "97 Sea Zone", "98 Sea Zone", "99 Sea Zone"]},
@@ -530,6 +535,7 @@
           "firma": [],
           "subentri": [],
           "contrasta": [],
+          "zone_di_passaggio": [],
           "contromosse": false,
           "punti_critici": []
         }
@@ -643,6 +649,8 @@
           ],
           "subentri": ["2"],
           "contrasta": ["A", "B", "C"],
+          "ritarda": ["Russians"],
+          "zone_di_passaggio": ["104 Sea Zone", "108 Sea Zone", "103 Sea Zone"],
           "punti_critici": [
             {"descrizione": "flotta e trasporti USA/UK nelle zone 104/109/110 (in raccolta per Overlord)", "tipo": "flotta", "zone": ["104 Sea Zone", "109 Sea Zone", "110 Sea Zone"]}
           ]
@@ -732,6 +740,8 @@
           ],
           "subentri": ["1"],
           "contrasta": ["D"],
+          "ritarda": ["Russians"],
+          "zone_di_passaggio": ["102 Sea Zone", "103 Sea Zone"],
           "punti_critici": [
             {"descrizione": "flotta USA a Gibilterra (91/92)", "tipo": "flotta", "nazione": "Americans", "zone": ["91 Sea Zone", "92 Sea Zone"]},
             {"descrizione": "Egypt, base britannica nel Mediterraneo", "tipo": "territorio", "territori": ["Egypt"]},
@@ -783,6 +793,8 @@
           ],
           "subentri": ["1", "2"],
           "contrasta": [],
+          "ritarda": ["Russians"],
+          "zone_di_passaggio": [],
           "punti_critici": []
         }
       ]

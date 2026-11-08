@@ -93,6 +93,7 @@ final class Riepilogo {
     json.add("round", rounds);
     json.add("dichiarazioni_guerra", data.get("dichiarazioni_guerra"));
     json.add("capitali", data.get("capitali"));
+    json.add("territori_chiave", data.get("territori_chiave"));
     json.add("battaglie_top", topBattles(data.getAsJsonArray("battaglie"), diaryData));
     final JsonArray landings = data.getAsJsonArray("sbarchi");
     json.add("sbarchi", landings);
@@ -477,11 +478,11 @@ final class Riepilogo {
     md.append(
         "PU = cassa a fine round; difesa = PU spesi nei passi di difesa (defend_land,"
             + " capital_emergency); piano = PU spesi nel mix del piano; spesi = totale acquisti di"
-            + " unita'; riparazioni = fabbriche riparate; trasporti = trasporti della nazione a fine"
-            + " round.\n\n");
+            + " unita'; riparazioni = fabbriche riparate; trasporti = trasporti della nazione a"
+            + " fine round.\n\n");
     md.append(
-        "| Round | Nazione | PU | Reddito | PU difesa | PU piano | PU spesi | PU riparazioni | TUV |"
-            + " Territori | Trasporti |\n");
+        "| Round | Nazione | PU | Reddito | PU difesa | PU piano | PU spesi | PU riparazioni | TUV"
+            + " | Territori | Trasporti |\n");
     md.append("|---|---|---|---|---|---|---|---|---|---|---|\n");
     for (final JsonElement e : rounds) {
       final JsonObject r = e.getAsJsonObject();

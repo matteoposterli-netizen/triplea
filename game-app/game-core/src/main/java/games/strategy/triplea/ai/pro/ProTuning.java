@@ -202,6 +202,16 @@ public interface ProTuning {
     return Optional.empty();
   }
 
+  /**
+   * Whether the combat move drops a planned land attack that is neither a strafe nor a landing in
+   * its last check, also one "Hard (AI)" would keep (Pro+, step 3d-2: while falling back, only
+   * isolated enemy stacks are counter-attacked). Returns the drop reason (a short code), or empty
+   * to go on as Hard does. Empty by default.
+   */
+  default Optional<String> dropsLandAttack(final ProData proData, final ProAttackWorth worth) {
+    return Optional.empty();
+  }
+
   default Optional<String> keepsBridgehead(
       final ProData proData,
       final ProOddsCalculator calc,

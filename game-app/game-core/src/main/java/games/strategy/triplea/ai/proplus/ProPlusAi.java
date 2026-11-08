@@ -15,6 +15,7 @@ import games.strategy.triplea.ai.proplus.strategia.Valutazione;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -33,6 +34,11 @@ public class ProPlusAi extends ProAi {
   /** Round of the last turn-start line, so it is written once per turn. */
   private int loggedRound = -1;
 
+  /** Step 3d-2: the enemy transports hunted this turn (seen at the start of the turn). */
+  private List<PianoAttivo.Caccia> hunt = List.of();
+
+  private int huntRound = -1;
+
   public ProPlusAi(final String name, final String playerLabel) {
     super(name, playerLabel, new ProData(false, new ProPlusTuning()));
     DiaryRecorder.attach(this);
@@ -46,6 +52,16 @@ public class ProPlusAi extends ProAi {
       final GameData data,
       final GamePlayer player) {
     logPhase(data, player, purchaseForBid ? "bid purchase" : "purchase");
+    if (!purchaseForBid) {
+      // step 3d-2: the enemy transports hunted this turn, seen before any move
+      try {
+        huntRound = data.getSequence().getRound();
+        hunt = PianoAttivo.of(data, player).map(PianoAttivo::getCaccia).orElse(List.of());
+      } catch (final RuntimeException e) {
+        hunt = List.of();
+        ProLogger.warn(LOG_PREFIX + "Transport hunt check failed: " + e);
+      }
+    }
     if (!purchaseForBid && getProData().getTuning() instanceof ProPlusTuning tuning) {
       try {
         initializeData();
@@ -83,6 +99,8 @@ public class ProPlusAi extends ProAi {
     final boolean operations = plan.filter(p -> !p.getOperazioni().isEmpty()).isPresent();
     // step 3d-1: troops stuck aboard go back ashore (every plan with counter-moves, not N)
     final boolean bringBack = plan.filter(p -> p.getPiano().contromosse()).isPresent();
+    // step 3d-2: the delay tools whose switch is on (never with plan N)
+    final boolean delay = bringBack && hasDelayTools(plan.get(), data, player);
     if (!operations && !bringBack) {
       tuning.hold(data, player, java.util.Set.of());
       return;
@@ -113,6 +131,19 @@ public class ProPlusAi extends ProAi {
         held.addAll(result.tenute());
         reports.addAll(result.rapporti());
       }
+      Runnable delayDiary = () -> {};
+      if (delay) {
+        try {
+          if (!held.isEmpty()) {
+            // the operations moved: the tools see the board after the moves
+            initializeData();
+            prepareData(data);
+          }
+          delayDiary = playDelayTools(moveDel, data, player, plan.get(), held);
+        } catch (final RuntimeException e) {
+          ProLogger.warn(LOG_PREFIX + "Delay tools failed: " + e);
+        }
+      }
       tuning.hold(data, player, held);
       if (getProData().getRecorder() instanceof DiaryRecorder diary && !reports.isEmpty()) {
         diary.amphibiousOperations(
@@ -120,6 +151,8 @@ public class ProPlusAi extends ProAi {
             reports,
             tuning.operationPurchases(player, data.getSequence().getRound()));
       }
+      // after the operations' diary block, which starts the non-combat text
+      delayDiary.run();
       reports.forEach(
           r ->
               ProLogger.info(
@@ -139,6 +172,50 @@ public class ProPlusAi extends ProAi {
       ProLogger.warn(LOG_PREFIX + "Amphibious operations failed: " + e);
       tuning.hold(data, player, java.util.Set.of());
     }
+  }
+
+  /**
+   * Whether a delay tool is on for the nation, or the nation has a record of the tools from an
+   * earlier turn (its losses are counted and the record cleared).
+   */
+  private static boolean hasDelayTools(
+      final PianoAttivo plan, final GameData data, final GamePlayer player) {
+    return games.strategy.triplea.ai.proplus.strategia.Tattiche.STRUMENTI.stream()
+            .anyMatch(t -> plan.tattica(t, (String) null).isPresent())
+        || data.getProperties().get(StrumentiRitardo.PROPERTY_PREFIX + player.getName()) != null;
+  }
+
+  /**
+   * Step 3d-2: blocks, fighting retreat and naval blocks in the real non-combat move, after the
+   * amphibious operations ({@code held}: their units, to which the tools' units are added).
+   */
+  private Runnable playDelayTools(
+      final IMoveDelegate moveDel,
+      final GameData data,
+      final GamePlayer player,
+      final PianoAttivo plan,
+      final java.util.Set<games.strategy.engine.data.Unit> held) {
+    final StrumentiRitardo.Esito result =
+        StrumentiRitardo.esegui(getProData(), getCalc(), moveDel, plan, held);
+    held.addAll(result.tenute());
+    final List<PianoAttivo.Caccia> hunted =
+        huntRound == data.getSequence().getRound() ? hunt : List.of();
+    final java.util.Set<String> onMap = new java.util.HashSet<>();
+    data.getMap()
+        .getTerritories()
+        .forEach(t -> t.getUnits().forEach(u -> onMap.add(u.getId().toString())));
+    final int sunk =
+        (int)
+            hunted.stream()
+                .flatMap(c -> c.trasporti().stream())
+                .filter(id -> !onMap.contains(id))
+                .count();
+    final StrumentiRitardo.Perdite lost = StrumentiRitardo.registra(data, player, result, hunted);
+    result.azioni().forEach(a -> ProLogger.info(LOG_PREFIX + a.testo()));
+    if (getProData().getRecorder() instanceof DiaryRecorder diary) {
+      return () -> diary.delayTools(getProData(), result, hunted, sunk, lost);
+    }
+    return () -> {};
   }
 
   @Override

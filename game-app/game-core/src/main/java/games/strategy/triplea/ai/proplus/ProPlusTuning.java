@@ -771,6 +771,33 @@ public final class ProPlusTuning implements ProTuning {
    *       bridgehead (it reinforces that one in its non-combat move).
    * </ul>
    */
+  /** Code of an attack dropped by the fall-back's counter-attack rule (step 3d-2). */
+  public static final String DROP_NOT_ISOLATED = "delay_not_isolated";
+
+  /**
+   * Step 3d-2, fighting retreat: where the tool is on for the nation and the target's front, a land
+   * attack is kept only against an isolated enemy stack: win% at least the desired win% of the
+   * target and the enemy's counter-attack win% at most {@code 100 - minimum} of the effective level
+   * (no counter-attack possible = isolated).
+   */
+  @Override
+  public Optional<String> dropsLandAttack(final ProData proData, final ProAttackWorth worth) {
+    final Territory target = worth.territory();
+    final Optional<PianoAttivo> plan = planOf(proData);
+    if (plan.isEmpty()
+        || plan.get()
+            .tattica(games.strategy.triplea.ai.proplus.strategia.Tattiche.RITIRATA, target)
+            .isEmpty()) {
+      return Optional.empty();
+    }
+    final boolean lowLuck = isLowLuck(proData.getData());
+    final double counterLimit = 100 - riskLevel(proData, target).minimumWinPercentage(lowLuck);
+    final boolean strongEnough = worth.winPercentage() >= desiredWinPercentage(proData, target);
+    final boolean isolated =
+        Double.isNaN(worth.counterWinPercentage()) || worth.counterWinPercentage() <= counterLimit;
+    return strongEnough && isolated ? Optional.empty() : Optional.of(DROP_NOT_ISOLATED);
+  }
+
   @Override
   public Optional<String> dropsLanding(
       final ProData proData,

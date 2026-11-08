@@ -1780,6 +1780,15 @@ public class ProCombatMoveAi {
           dropReason = "amphibious_strafe";
           break;
         }
+        if (!patd.isStrafing() && patd.getAmphibAttackMap().isEmpty() && !t.isWater()) {
+          final Optional<String> dropAttack = proData.getTuning().dropsLandAttack(proData, worth);
+          if (dropAttack.isPresent()) {
+            proData.getRecorder().attackWorth(proData, patd, worth, null);
+            territoryToRemove = patd;
+            dropReason = dropAttack.get();
+            break;
+          }
+        }
         if (!patd.isStrafing() && !patd.getAmphibAttackMap().isEmpty()) {
           final Optional<String> dropLanding =
               proData

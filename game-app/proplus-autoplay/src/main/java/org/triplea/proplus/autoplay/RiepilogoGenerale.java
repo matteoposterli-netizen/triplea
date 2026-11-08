@@ -142,6 +142,7 @@ final class RiepilogoGenerale {
     landingsAndTransports(md, games, alliances, maxRound);
     alliedCoordination(md, games, alliances, maxRound);
     lostTransports(md, games, alliances, maxRound);
+    delayTools(md, games, alliances, maxRound);
 
     md.append(
 """
@@ -447,10 +448,11 @@ final class RiepilogoGenerale {
       }
     }
     md.append(
-        "\nPer configurazione: partite con primo sbarco vero alleato in Europa entro R6, round medio del"
-            + " primo sbarco vero (partite con sbarco), unita' sbarcate e trasporti inattivi per"
-            + " round (media dei semi, Asse / Alleati).\n\n| Configurazione | Alleati in Europa entro R6 |"
-            + " Primo sbarco medio |");
+        "\n"
+            + "Per configurazione: partite con primo sbarco vero alleato in Europa entro R6, round"
+            + " medio del primo sbarco vero (partite con sbarco), unita' sbarcate e trasporti"
+            + " inattivi per round (media dei semi, Asse / Alleati).\n\n"
+            + "| Configurazione | Alleati in Europa entro R6 | Primo sbarco medio |");
     for (int r = 1; r <= maxRound; r++) {
       md.append(" R").append(r).append(" sbarcate | R").append(r).append(" inattivi |");
     }
@@ -686,7 +688,8 @@ Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benel
 """
 Trasporti persi = trasporti sulla mappa dopo un passo e scomparsi dopo il successivo (somma delle partite della configurazione, per round). TUV sbarchi = TUV perso dal difensore meno TUV perso dall'attaccante nelle battaglie dove la nazione ha sbarcato truppe vere nel combattimento (valore dei territori non contato).
 
-| Configurazione | Nazione | Partite |""");
+| Configurazione | Nazione | Partite |\
+""");
     for (int r = 1; r <= maxRound; r++) {
       md.append(" R").append(r).append(" |");
     }
@@ -754,6 +757,141 @@ Trasporti persi = trasporti sulla mappa dopo un passo e scomparsi dopo il succes
             .append(" |\n");
       }
     }
+  }
+
+  /**
+   * Step 3d-2: per game the round of the fall of Novgorod, Russia, Volgograd and of the capitals,
+   * the Soviet income per round and the delay tools (placed and lost, hunted transports sunk); per
+   * configuration the games where each key territory fell and the mean round.
+   */
+  static void delayTools(
+      final StringBuilder md,
+      final List<Game> games,
+      final List<String> alliances,
+      final int maxRound) {
+    md.append("\n\n## Strumenti di ritardo e fronte russo (step 3d-2)\n\n")
+        .append(
+            "Round di caduta = primo round in cui il territorio passa al nemico del proprietario"
+                + " originale (\"-\" = mai). Strumenti, per tutta la partita e tutte le nazioni:"
+                + " blocchi = fanterie di blocco terrestre, navi = navi di blocco navale,"
+                + " messi/persi (persi = scomparsi dalla mappa dopo essere stati messi); ritirata ="
+                + " unita' arretrate; caccia = zone di caccia ai trasporti / trasporti cacciati"
+                + " affondati nel turno.\n\n"
+                + "| Partita | Configurazione |");
+    Monitor.KEY_TERRITORIES.forEach(t -> md.append(' ').append(t).append(" |"));
+    md.append(
+            " Capitali cadute | Blocchi messi/persi | Navi messe/perse | Ritirata |"
+                + " Caccia zone/affondati |\n|---|---|")
+        .append("---|".repeat(Monitor.KEY_TERRITORIES.size() + 5))
+        .append('\n');
+    final Map<String, List<int[]>> fallsByConfig = new LinkedHashMap<>();
+    final StringBuilder income = new StringBuilder();
+    for (final Game g : games) {
+      if (g.json() == null) {
+        continue;
+      }
+      final JsonObject j = g.json();
+      final String config = configuration(j, alliances);
+      md.append("| ").append(g.folder()).append(" | ").append(config).append(" |");
+      final int[] falls = new int[Monitor.KEY_TERRITORIES.size()];
+      for (int i = 0; i < falls.length; i++) {
+        falls[i] = fallRound(j, Monitor.KEY_TERRITORIES.get(i));
+        md.append(' ').append(falls[i] > 0 ? "R" + falls[i] : "-").append(" |");
+      }
+      fallsByConfig.computeIfAbsent(config, k -> new ArrayList<>()).add(falls);
+      final List<String> capitals = new ArrayList<>();
+      if (j.has("capitali") && j.get("capitali").isJsonArray()) {
+        for (final JsonElement e : j.getAsJsonArray("capitali")) {
+          final JsonObject c = e.getAsJsonObject();
+          if ("caduta".equals(text(c, "evento"))) {
+            capitals.add(text(c, "territorio") + " R" + c.get("round").getAsInt());
+          }
+        }
+      }
+      final Map<String, Integer> tools = new TreeMap<>();
+      final int[] soviet = new int[maxRound + 1];
+      for (final JsonElement e : j.getAsJsonArray("round")) {
+        final JsonObject r = e.getAsJsonObject();
+        final int round = r.get("round").getAsInt();
+        for (final Map.Entry<String, JsonElement> x : r.getAsJsonObject("nazioni").entrySet()) {
+          final JsonObject n = x.getValue().getAsJsonObject();
+          if ("Russians".equals(x.getKey()) && round >= 1 && round <= maxRound) {
+            soviet[round] = number(n, "reddito");
+          }
+          if (n.has("ritardo")) {
+            n.getAsJsonObject("ritardo")
+                .entrySet()
+                .forEach(d -> tools.merge(d.getKey(), d.getValue().getAsInt(), Integer::sum));
+          }
+        }
+      }
+      md.append(' ')
+          .append(capitals.isEmpty() ? "-" : String.join(", ", capitals))
+          .append(" | ")
+          .append(tools.getOrDefault("blocchi_messi", 0))
+          .append('/')
+          .append(tools.getOrDefault("blocchi_persi", 0))
+          .append(" | ")
+          .append(tools.getOrDefault("navi_messi", 0))
+          .append('/')
+          .append(tools.getOrDefault("navi_persi", 0))
+          .append(" | ")
+          .append(tools.getOrDefault("ritirata_messi", 0))
+          .append(" | ")
+          .append(tools.getOrDefault("zone_caccia", 0))
+          .append('/')
+          .append(tools.getOrDefault("affondati_caccia", 0))
+          .append(" |\n");
+      income.append("| ").append(g.folder()).append(" |");
+      for (int r = 1; r <= maxRound; r++) {
+        income.append(' ').append(soviet[r] > 0 ? String.valueOf(soviet[r]) : "-").append(" |");
+      }
+      income.append('\n');
+    }
+    md.append(
+        "\nPer configurazione: partite con caduta / round medio di caduta.\n\n"
+            + "| Configurazione | Partite |");
+    Monitor.KEY_TERRITORIES.forEach(t -> md.append(' ').append(t).append(" |"));
+    md.append("\n|---|---|").append("---|".repeat(Monitor.KEY_TERRITORIES.size())).append('\n');
+    fallsByConfig.forEach(
+        (config, list) -> {
+          md.append("| ").append(config).append(" | ").append(list.size()).append(" |");
+          for (int i = 0; i < Monitor.KEY_TERRITORIES.size(); i++) {
+            final int k = i;
+            final List<Integer> rounds = list.stream().map(f -> f[k]).filter(r -> r > 0).toList();
+            md.append(' ').append(rounds.size());
+            if (!rounds.isEmpty()) {
+              md.append(
+                  String.format(
+                      Locale.ROOT,
+                      " / R%.1f",
+                      rounds.stream().mapToInt(Integer::intValue).average().orElse(0)));
+            }
+            md.append(" |");
+          }
+          md.append('\n');
+        });
+    md.append("\nReddito russo per round (fine round).\n\n| Partita |");
+    for (int r = 1; r <= maxRound; r++) {
+      md.append(" R").append(r).append(" |");
+    }
+    md.append("\n|---|").append("---|".repeat(maxRound)).append('\n').append(income);
+  }
+
+  /**
+   * First round {@code territory} fell (event "caduta" of {@code territori_chiave}), 0 if never.
+   */
+  static int fallRound(final JsonObject json, final String territory) {
+    if (!json.has("territori_chiave") || !json.get("territori_chiave").isJsonArray()) {
+      return 0;
+    }
+    for (final JsonElement e : json.getAsJsonArray("territori_chiave")) {
+      final JsonObject o = e.getAsJsonObject();
+      if (territory.equals(text(o, "territorio")) && "caduta".equals(text(o, "evento"))) {
+        return o.get("round").getAsInt();
+      }
+    }
+    return 0;
   }
 
   private static int number(final JsonObject o, final String key) {
@@ -985,7 +1123,9 @@ Trasporti persi = trasporti sulla mappa dopo un passo e scomparsi dopo il succes
       }
     }
     md.append(
-            "\n| Configurazione | Alleanza | Partite | Cambi di piano (totale) | Partite con cambi |")
+            "\n"
+                + "| Configurazione | Alleanza | Partite | Cambi di piano (totale) | Partite con"
+                + " cambi |")
         .append(
 """
  Piano finale |

@@ -206,6 +206,10 @@ public final class Strategia {
    * @param contrasta enemy plans this one counters ("chi mette in crisi chi", step 3d-1)
    * @param contromosse whether the general staff sets a posture and may change this plan (false for
    *     the neutral plan N)
+   * @param ritarda nations whose role in this plan is to delay the enemy (step 3d-2: the delay
+   *     tools are on for them)
+   * @param zoneDiPassaggio sea zones on the way to this plan's gathering zones, where the enemy who
+   *     reads this plan puts its naval blocks (step 3d-2)
    */
   public record Piano(
       String id,
@@ -221,9 +225,11 @@ public final class Strategia {
       List<Operazione> operazioni,
       List<String> subentri,
       List<String> contrasta,
-      boolean contromosse) {
+      boolean contromosse,
+      List<String> ritarda,
+      List<String> zoneDiPassaggio) {
 
-    /** Eg: "B Sea Lion (sperimentale)": the label of the settings dialog. */
+    /** Eg: "B Sea Lion" (sperimentale)": the label of the settings dialog. */
     public String etichettaPannello() {
       return sperimentale ? label() + " (sperimentale)" : label();
     }
@@ -614,6 +620,7 @@ public final class Strategia {
    * @param sogliaContrasto probability of the enemy's plan needed for CONTRASTO
    * @param vittoria per alliance, what its victory counts (the race): victory cities, or given
    *     victory-city territories (Europe 1940: the Allies need Germany and Southern Italy)
+   * @param ritardo the fixed limits of the delay tools (step 3d-2)
    */
   public record Parametri(
       int roundCrisi,
@@ -630,9 +637,11 @@ public final class Strategia {
       int distanzaForze,
       int distanzaAttaccabile,
       double sogliaContrasto,
-      Map<String, Vittoria> vittoria) {
+      Map<String, Vittoria> vittoria,
+      Ritardo ritardo) {
     public static final Parametri DEFAULT =
-        new Parametri(2, 3, 2, 0.1, 0.5, 0.25, 2, 8, 20, 2, 2, 2, 2, 0.35, Map.of());
+        new Parametri(
+            2, 3, 2, 0.1, 0.5, 0.25, 2, 8, 20, 2, 2, 2, 2, 0.35, Map.of(), Ritardo.DEFAULT);
 
     static Parametri parse(final @Nullable JsonObject o) {
       if (o == null) {
@@ -654,7 +663,8 @@ public final class Strategia {
           integer(o, "distanza_forze", d.distanzaForze()),
           integer(o, "distanza_attaccabile", d.distanzaAttaccabile()),
           number(o, "soglia_contrasto", d.sogliaContrasto()),
-          vittoria(o));
+          vittoria(o),
+          Ritardo.parse(o.has("ritardo") ? o.getAsJsonObject("ritardo") : null));
     }
 
     private static Map<String, Vittoria> vittoria(final JsonObject o) {
@@ -681,6 +691,46 @@ public final class Strategia {
 
     private static double number(final JsonObject o, final String key, final double fallback) {
       return o.has(key) ? o.get(key).getAsDouble() : fallback;
+    }
+  }
+
+  /**
+   * The fixed limits of the delay tools (step 3d-2, chosen, not tuned): {@code ritardo} in {@code
+   * stato_maggiore}.
+   *
+   * @param maxBlocchi land blocks (one infantry each) per nation and turn at most
+   * @param distanzaPercorso enemy mobile units this far (by land) from a key territory count
+   * @param maxNaviBlocco ships of a naval block per nation and turn at most
+   * @param sogliaLetturaBlocco probability of the enemy plan above which its passage zones are
+   *     blocked
+   * @param pesoCacciaTrasporti priority bonus of a sea zone with hunted enemy transports
+   * @param distanzaCaccia own sea or air units this far make a transport zone reachable
+   */
+  public record Ritardo(
+      int maxBlocchi,
+      int distanzaPercorso,
+      int maxNaviBlocco,
+      double sogliaLetturaBlocco,
+      double pesoCacciaTrasporti,
+      int distanzaCaccia) {
+    public static final Ritardo DEFAULT = new Ritardo(3, 4, 2, 0.5, 15, 2);
+
+    static Ritardo parse(final @Nullable JsonObject o) {
+      if (o == null) {
+        return DEFAULT;
+      }
+      final Ritardo d = DEFAULT;
+      return new Ritardo(
+          o.has("max_blocchi") ? o.get("max_blocchi").getAsInt() : d.maxBlocchi(),
+          o.has("distanza_percorso") ? o.get("distanza_percorso").getAsInt() : d.distanzaPercorso(),
+          o.has("max_navi_blocco") ? o.get("max_navi_blocco").getAsInt() : d.maxNaviBlocco(),
+          o.has("soglia_lettura_blocco")
+              ? o.get("soglia_lettura_blocco").getAsDouble()
+              : d.sogliaLetturaBlocco(),
+          o.has("peso_caccia_trasporti")
+              ? o.get("peso_caccia_trasporti").getAsDouble()
+              : d.pesoCacciaTrasporti(),
+          o.has("distanza_caccia") ? o.get("distanza_caccia").getAsInt() : d.distanzaCaccia());
     }
   }
 
@@ -856,7 +906,9 @@ public final class Strategia {
         operazioni(p, id),
         strings(p, "subentri"),
         strings(p, "contrasta"),
-        !p.has("contromosse") || p.get("contromosse").getAsBoolean());
+        !p.has("contromosse") || p.get("contromosse").getAsBoolean(),
+        strings(p, "ritarda"),
+        strings(p, "zone_di_passaggio"));
   }
 
   private static List<Operazione> operazioni(final JsonObject p, final String plan) {

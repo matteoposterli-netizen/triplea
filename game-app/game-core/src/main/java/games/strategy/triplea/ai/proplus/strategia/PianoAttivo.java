@@ -67,6 +67,19 @@ public final class PianoAttivo {
   /** Step 3d-1: the enemy's critical points made objectives by the posture this round. */
   private final List<Strategia.Obiettivo> controObiettivi;
 
+  /** Step 3d-2: the switches of the delay tools this round ({@link Tattiche}), if any. */
+  @Getter(AccessLevel.NONE)
+  private final @Nullable JsonObject tattiche;
+
+  /** Step 3d-2: the enemy transports hunted this turn (counter-objectives). */
+  private final List<Caccia> caccia;
+
+  /** Step 3d-2: the most probable enemy plan read at the start of the round ("" if none). */
+  private final String letturaNemico;
+
+  /** Step 3d-2: its probability (0 if none). */
+  private final double probabilitaNemico;
+
   private PianoAttivo(
       final GameState data,
       final Strategia strategia,
@@ -127,9 +140,142 @@ public final class PianoAttivo {
                                   Set.of(),
                                   false));
                         }));
+    this.letturaNemico =
+        strategic
+            .filter(j -> j.has("lettura"))
+            .map(j -> j.getAsJsonObject("lettura").get("piu_probabile").getAsString())
+            .orElse("");
+    this.probabilitaNemico =
+        strategic
+            .filter(j -> j.has("lettura"))
+            .map(j -> j.getAsJsonObject("lettura").get("probabilita").getAsDouble())
+            .orElse(0.0);
+    this.tattiche =
+        strategic
+            .filter(j -> j.has(Tattiche.KEY))
+            .map(j -> j.getAsJsonObject(Tattiche.KEY))
+            .orElse(null);
+    // step 3d-2: hunted enemy transports are counter-objectives with the file's fixed weight
+    this.caccia = tattiche == null ? List.of() : huntedTransports(data);
+    caccia.stream()
+        .filter(c -> counter.stream().noneMatch(o -> c.zona().equals(o.territorio())))
+        .forEach(
+            c ->
+                counter.add(
+                    new Strategia.Obiettivo(
+                        c.zona(),
+                        null,
+                        strategia.getParametri().ritardo().pesoCacciaTrasporti(),
+                        Set.of(),
+                        false)));
     this.controObiettivi = List.copyOf(counter);
     list.addAll(controObiettivi);
     this.obiettivi = List.copyOf(list);
+  }
+
+  /**
+   * Step 3d-2: a sea zone with enemy transports the hunt makes a counter-objective: {@code
+   * trasporti} = their unit ids, {@code perche} = loaded and/or in a gathering zone of the enemy
+   * plan read, and why the tool is on.
+   */
+  public record Caccia(String zona, List<String> trasporti, String perche) {}
+
+  /**
+   * Sea zones with transports of nations at war with mine, loaded or in a gathering zone of the
+   * most probable enemy plan's operations, with own warships (by sea) or own planes within {@code
+   * distanza_caccia}; only on the fronts where the hunt is on for my nation.
+   */
+  private List<Caccia> huntedTransports(final GameState data) {
+    final Optional<String> anyFront = Tattiche.perche(tattiche, Tattiche.CACCIA, nazione, null);
+    if (anyFront.isEmpty()) {
+      return List.of();
+    }
+    final GamePlayer me = data.getPlayerList().getPlayerId(nazione);
+    if (me == null) {
+      return List.of();
+    }
+    final Set<String> gathering = new java.util.HashSet<>();
+    pianoNemicoLetto().stream()
+        .flatMap(p -> p.operazioni().stream())
+        .forEach(o -> gathering.addAll(o.raccolta()));
+    final int distance = strategia.getParametri().ritardo().distanzaCaccia();
+    final List<Caccia> found = new ArrayList<>();
+    for (final Territory zone : data.getMap().getTerritories()) {
+      if (!zone.isWater()) {
+        continue;
+      }
+      final List<games.strategy.engine.data.Unit> transports =
+          zone.getMatches(
+              Matches.unitIsSeaTransport()
+                  .and(u -> data.getRelationshipTracker().isAtWar(me, u.getOwner())));
+      if (transports.isEmpty()) {
+        continue;
+      }
+      final boolean loaded = transports.stream().anyMatch(u -> !u.getTransporting().isEmpty());
+      final boolean inGathering = gathering.contains(zone.getName());
+      if (!loaded && !inGathering) {
+        continue;
+      }
+      final Optional<String> on = Tattiche.perche(tattiche, Tattiche.CACCIA, nazione, fronte(zone));
+      if (on.isEmpty() || !canReach(data, me, zone, distance)) {
+        continue;
+      }
+      found.add(
+          new Caccia(
+              zone.getName(),
+              transports.stream().map(u -> u.getId().toString()).sorted().toList(),
+              (loaded && inGathering
+                      ? "carichi e in zona di raccolta"
+                      : loaded ? "carichi" : "in zona di raccolta")
+                  + " ("
+                  + on.get()
+                  + ")"));
+    }
+    return List.copyOf(found);
+  }
+
+  private static boolean canReach(
+      final GameState data, final GamePlayer me, final Territory zone, final int distance) {
+    final java.util.function.Predicate<games.strategy.engine.data.Unit> warship =
+        Matches.unitIsOwnedBy(me)
+            .and(Matches.unitIsSea())
+            .and(u -> u.getUnitAttachment().getAttack(me) > 0);
+    final java.util.function.Predicate<games.strategy.engine.data.Unit> plane =
+        Matches.unitIsOwnedBy(me)
+            .and(Matches.unitIsAir())
+            .and(u -> u.getUnitAttachment().getAttack(me) > 0);
+    if (zone.anyUnitsMatch(warship.or(plane))) {
+      return true;
+    }
+    return data.getMap().getNeighbors(zone, distance, Matches.territoryIsWater()).stream()
+            .anyMatch(t -> t.anyUnitsMatch(warship))
+        || data.getMap().getNeighbors(zone, distance).stream()
+            .anyMatch(t -> t.anyUnitsMatch(plane));
+  }
+
+  /** Step 3d-2: the enemy alliance's plan read as most probable at the start of the round. */
+  public Optional<Strategia.Piano> pianoNemicoLetto() {
+    if (letturaNemico.isEmpty()) {
+      return Optional.empty();
+    }
+    return ProPlusSettings.configurableAlliances(dataPerCondizioni).stream()
+        .filter(a -> !a.equals(alleanza))
+        .flatMap(a -> strategia.alleanza(a).stream())
+        .flatMap(a -> a.piano(letturaNemico).stream())
+        .findFirst();
+  }
+
+  /**
+   * Step 3d-2: why the delay tool {@code tool} is on for this nation on {@code front} ({@code null}
+   * = any front), empty if off ({@link Tattiche}).
+   */
+  public Optional<String> tattica(final String tool, final @Nullable String front) {
+    return Tattiche.perche(tattiche, tool, nazione, front);
+  }
+
+  /** Step 3d-2: {@link #tattica} on the front of {@code t}. */
+  public Optional<String> tattica(final String tool, final Territory t) {
+    return tattica(tool, fronte(t));
   }
 
   /**

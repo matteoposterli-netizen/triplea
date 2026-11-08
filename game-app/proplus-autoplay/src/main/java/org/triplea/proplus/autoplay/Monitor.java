@@ -91,7 +91,25 @@ final class Monitor {
           "Germany",
           "Greater Southern Germany");
 
+  /** Step 3d-2: Soviet territories whose fall is tracked (WW2 Europe 1940). */
+  static final List<String> KEY_TERRITORIES = List.of("Novgorod", "Russia", "Volgograd");
+
   private final GameData data;
+
+  /** Step 3d-2: falls and recaptures of {@link #KEY_TERRITORIES}. */
+  private final JsonArray keyTerritoryEvents = new JsonArray();
+
+  /** Step 3d-2: key territories held by the enemy of their original owner now. */
+  private final Set<String> keyFallen = new HashSet<>();
+
+  /** Step 3d-2: records of the delay tools already read ("nation|round"). */
+  private final Set<String> delayRecords = new HashSet<>();
+
+  /** Step 3d-2: unit id -> "nation|tool" of the units placed by a delay tool, still on the map. */
+  private final Map<String, String> delayUnits = new HashMap<>();
+
+  /** Step 3d-2: round -> nation -> counter name -> value (placed, lost, sunk by the hunt). */
+  private final Map<Integer, Map<String, Map<String, Integer>>> delayCounts = new TreeMap<>();
 
   /** Alliance -> its nations (configurable alliances only, eg. Axis and Allies). */
   private final Map<String, List<String>> alliances = new LinkedHashMap<>();
@@ -160,6 +178,7 @@ final class Monitor {
     fallen.addAll(currentFallenCapitals().keySet());
     lastRound = data.getSequence().getRound();
     knownTransports.putAll(currentTransports());
+    keyFallen.addAll(currentKeyFallen());
   }
 
   Map<String, List<String>> alliances() {
@@ -197,6 +216,7 @@ final class Monitor {
       recordIdleTransports(lastRound);
     }
     recordLostTransports(lastRound);
+    recordDelayTools(lastRound);
     runningStep = "";
     final int round = data.getSequence().getRound();
     final GameStep step = data.getSequence().getStep();
@@ -232,6 +252,14 @@ final class Monitor {
                   capitalOwner(territory), territory == null ? "?" : territory.getOwner().getName()
                 },
                 "liberata"));
+      }
+    }
+    final Set<String> nowKeyFallen = currentKeyFallen();
+    for (final String t : KEY_TERRITORIES) {
+      if (nowKeyFallen.contains(t) && keyFallen.add(t)) {
+        keyTerritoryEvents.add(keyEvent(eventRound, t, "caduta"));
+      } else if (!nowKeyFallen.contains(t) && keyFallen.remove(t)) {
+        keyTerritoryEvents.add(keyEvent(eventRound, t, "ripresa"));
       }
     }
     if (round != lastRound) {
@@ -278,7 +306,105 @@ final class Monitor {
     battles.values().forEach(list -> list.forEach(b::add));
     json.add("battaglie", b);
     json.add("sbarchi", landings.deepCopy());
+    json.add("territori_chiave", keyTerritoryEvents.deepCopy());
     return json;
+  }
+
+  // ------------------------------------------------------------- delay tools, key territories
+
+  /**
+   * Step 3d-2: reads each nation's record of the delay tools ({@code "Pro+ ritardo: <nation>"},
+   * written in its non-combat move): new block units and ships are counted as placed and followed
+   * until they leave the map (lost); hunted transports already gone when the record is written (the
+   * record comes after the hunter's battles) count as sunk by the hunt.
+   */
+  private void recordDelayTools(final int round) {
+    final Set<String> onMap = new HashSet<>();
+    data.getMap().getTerritories().forEach(t -> t.getUnits().forEach(u -> onMap.add(id(u))));
+    for (final List<String> members : alliances.values()) {
+      for (final String nation : members) {
+        final Object value = data.getProperties().get("Pro+ ritardo: " + nation);
+        if (!(value instanceof String text)) {
+          continue;
+        }
+        final JsonObject rec;
+        try {
+          rec = com.google.gson.JsonParser.parseString(text).getAsJsonObject();
+        } catch (final RuntimeException e) {
+          continue;
+        }
+        if (!rec.has("round") || !delayRecords.add(nation + "|" + rec.get("round").getAsInt())) {
+          continue;
+        }
+        final Map<String, Integer> c =
+            delayCounts
+                .computeIfAbsent(round, k -> new TreeMap<>())
+                .computeIfAbsent(nation, k -> new TreeMap<>());
+        for (final String tool : List.of("blocchi", "navi", "ritirata")) {
+          if (!rec.has(tool)) {
+            continue;
+          }
+          for (final JsonElement e : rec.getAsJsonArray(tool)) {
+            c.merge(tool + "_messi", 1, Integer::sum);
+            if (!"ritirata".equals(tool)) {
+              delayUnits.put(e.getAsString(), nation + "|" + tool);
+            }
+          }
+        }
+        if (rec.has("caccia")) {
+          for (final JsonElement e : rec.getAsJsonArray("caccia")) {
+            c.merge("zone_caccia", 1, Integer::sum);
+            for (final JsonElement t : e.getAsJsonObject().getAsJsonArray("trasporti")) {
+              if (!onMap.contains(t.getAsString())) {
+                c.merge("affondati_caccia", 1, Integer::sum);
+              }
+            }
+          }
+        }
+      }
+    }
+    for (final var it = delayUnits.entrySet().iterator(); it.hasNext(); ) {
+      final Map.Entry<String, String> e = it.next();
+      if (!onMap.contains(e.getKey())) {
+        final String[] p = e.getValue().split("\\|");
+        delayCounts
+            .computeIfAbsent(round, k -> new TreeMap<>())
+            .computeIfAbsent(p[0], k -> new TreeMap<>())
+            .merge(p[1] + "_persi", 1, Integer::sum);
+        it.remove();
+      }
+    }
+  }
+
+  private static String id(final Unit u) {
+    return u.getId().toString();
+  }
+
+  /** {@link #KEY_TERRITORIES} owned by an enemy (not allied) of their original owner. */
+  private Set<String> currentKeyFallen() {
+    final Set<String> fallenNow = new HashSet<>();
+    for (final String name : KEY_TERRITORIES) {
+      final Territory t = data.getMap().getTerritoryOrNull(name);
+      if (t == null) {
+        continue;
+      }
+      final Optional<GamePlayer> original = OriginalOwnerTracker.getOriginalOwner(t);
+      if (original.isPresent()
+          && !t.getOwner().equals(original.get())
+          && !data.getRelationshipTracker().isAllied(original.get(), t.getOwner())) {
+        fallenNow.add(name);
+      }
+    }
+    return fallenNow;
+  }
+
+  private JsonObject keyEvent(final int round, final String territory, final String event) {
+    final JsonObject o = new JsonObject();
+    o.addProperty("round", round);
+    o.addProperty("evento", event);
+    o.addProperty("territorio", territory);
+    o.addProperty("proprietario", data.getMap().getTerritoryOrNull(territory).getOwner().getName());
+    return o;
   }
 
   // ----------------------------------------------------------------- landings, idle transports
@@ -447,6 +573,14 @@ final class Monitor {
             "tuv_trasporti_persi",
             lostTransportsTuv.getOrDefault(round, Map.of()).getOrDefault(name, 0));
         n.addProperty("tuv_sbarchi", landingTuv.getOrDefault(name, 0));
+        // step 3d-2: delay tools of the round
+        final Map<String, Integer> delay =
+            delayCounts.getOrDefault(round, Map.of()).getOrDefault(name, Map.of());
+        if (!delay.isEmpty()) {
+          final JsonObject d = new JsonObject();
+          delay.forEach(d::addProperty);
+          n.add("ritardo", d);
+        }
         nations.add(name, n);
       }
     }

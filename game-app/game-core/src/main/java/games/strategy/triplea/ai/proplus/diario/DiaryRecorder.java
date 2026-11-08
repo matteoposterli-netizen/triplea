@@ -32,6 +32,7 @@ import games.strategy.triplea.ai.proplus.OperazioniAnfibie;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.ProPlusTuning;
 import games.strategy.triplea.ai.proplus.RiskLevel;
+import games.strategy.triplea.ai.proplus.StrumentiRitardo;
 import games.strategy.triplea.ai.proplus.TestaDiPonte;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.Strategia;
@@ -1063,6 +1064,82 @@ public final class DiaryRecorder implements ProDecisionRecorder {
             json.add("acquisti", asked);
             pendingOperationsJson.add(json);
           }
+          pendingOperationsText = sb.toString();
+        });
+  }
+
+  /**
+   * Step 3d-2: the delay tools of the non-combat move ("Ritardo: <strumento> in X (perche' attivo:
+   * ...)"), the hunted transports and the turn's total with the units lost in the tools since the
+   * last turn. Written with the amphibious operations, before the non-combat move.
+   */
+  public void delayTools(
+      final ProData proData,
+      final StrumentiRitardo.Esito result,
+      final List<PianoAttivo.Caccia> hunted,
+      final int sunk,
+      final StrumentiRitardo.Perdite lost) {
+    guard(
+        () -> {
+          if (!active
+              || (result.azioni().isEmpty()
+                  && result.note().isEmpty()
+                  && hunted.isEmpty()
+                  && lost.totale() == 0)) {
+            return;
+          }
+          final StringBuilder sb =
+              new StringBuilder(pendingOperationsText == null ? "" : pendingOperationsText);
+          result.azioni().forEach(a -> sb.append("  ").append(a.testo()).append('\n'));
+          for (final PianoAttivo.Caccia c : hunted) {
+            sb.append("  Ritardo: caccia_trasporti in ")
+                .append(c.zona())
+                .append(" - ")
+                .append(c.trasporti().size())
+                .append(" trasporti nemici ")
+                .append(c.perche())
+                .append('\n');
+          }
+          if (!hunted.isEmpty()) {
+            sb.append("  Ritardo: trasporti nemici affondati con la caccia: ")
+                .append(sunk)
+                .append('\n');
+          }
+          result.note().forEach(n -> sb.append("    (").append(n).append(")\n"));
+          sb.append("  ").append(StrumentiRitardo.totale(result, hunted, lost)).append('\n');
+          final JsonObject json = event("ritardo");
+          json.addProperty("fase", "noncombat");
+          final JsonArray actions = new JsonArray();
+          for (final StrumentiRitardo.Azione a : result.azioni()) {
+            final JsonObject o = new JsonObject();
+            o.addProperty("strumento", a.strumento());
+            o.addProperty("territorio", a.territorio());
+            o.add("unita", counts(countTypes(a.unita())));
+            o.addProperty("modo", a.modo());
+            o.addProperty("perche", a.perche());
+            o.addProperty("dettaglio", a.dettaglio());
+            actions.add(o);
+          }
+          json.add("azioni", actions);
+          final JsonArray h = new JsonArray();
+          for (final PianoAttivo.Caccia c : hunted) {
+            final JsonObject o = new JsonObject();
+            o.addProperty("zona", c.zona());
+            o.addProperty("trasporti", c.trasporti().size());
+            o.addProperty("perche", c.perche());
+            h.add(o);
+          }
+          json.add("caccia", h);
+          json.addProperty("affondati_caccia", sunk);
+          final JsonObject l = new JsonObject();
+          l.addProperty("blocchi", lost.blocchi());
+          l.addProperty("navi", lost.navi());
+          l.addProperty("ritirata", lost.ritirata());
+          json.add("persi_dal_turno_prima", l);
+          final JsonArray notes = new JsonArray();
+          result.note().forEach(notes::add);
+          json.add("note", notes);
+          pendingOperationsJson.add(json);
           pendingOperationsText = sb.toString();
         });
   }

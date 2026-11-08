@@ -129,6 +129,9 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
 - Step 3d-1: `ai/proplus/strategia/Contromosse` (cambio piano, corsa, postura, contro-obiettivi),
   `StatoMaggiore.cambia` (+ `cambi` nello stato), `PianoAttivo` (postura e contro-obiettivi del round),
   `OperazioniAnfibie.rientro` (truppe ferme a bordo). Vedi "Postura, cambio piano, contromosse".
+- Step 3d-2: `ai/proplus/strategia/Tattiche` (interruttori + decisore a regole), `ai/proplus/StrumentiRitardo`
+  (blocco terrestre, ritirata, blocco navale, registro), `PianoAttivo.getCaccia`/`tattica`, `ProTuning.dropsLandAttack`
+  (aggancio in `ProCombatMoveAi`, default vuoto), `Strategia.Ritardo`. Vedi "Strumenti di ritardo".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -1068,6 +1071,60 @@ eccezioni Pro+ (`keepsLandingWithExposedTransports`: regola obiettivo e testa di
   difensore − attaccante nelle battaglie dove la nazione ha sbarcato truppe vere nel combattimento);
   `riepilogo-generale.md` sezione "Trasporti persi e sbarchi (step 3d-1-bis)": per configurazione e nazione
   trasporti persi per round (somma dei semi), totale, TUV trasporti persi, TUV sbarchi.
+
+## Strumenti di ritardo (step 3d-2, solo Pro+)
+
+Decisione di Matteo (8 nov): la parte deterministica fa il "COME" ed e' congelata; il "COSA e PERCHE'" passera' a un
+decisore (regole oggi, LLM domani) tramite un contratto JSON (step successivo). Questo step aggiunge solo
+**strumenti eseguibili accesi/spenti da interruttori**; nessuna formula di convenienza, solo paletti fissi nel file dati.
+Hard identica (hook nuovo `ProTuning.dropsLandAttack`, default vuoto), piano N senza effetti (`contromosse: false` ⇒
+nessuno strumento).
+- **Interruttori** (`strategia/Tattiche`): struttura `tattiche_attive` nell'ingresso del round dello storico dello stato
+  maggiore (`stato_strategico.tattiche_attive`, quindi salvata nella partita):
+  `{"<strumento>": {"<nazione>": {"fronti": [], "perche": "..."}}}`; nazione assente = spento, `fronti` vuoto = tutti.
+  Strumenti: `blocco_terrestre`, `ritirata_combattuta`, `blocco_navale`, `caccia_trasporti`. Un decisore futuro deve solo
+  scrivere questa struttura. **Decisore a regole** (`Tattiche.decidi`, chiamato in `Contromosse.statoStrategico`): nazioni
+  del campo `ritarda` del piano (Europe 1940: Russians nei piani alleati 1, 2, 3) con "ruolo ritarda nel piano X" + tutte
+  le nazioni dell'alleanza in postura RALLENTAMENTO o DIFENSIVA ("postura X"). Letti da `PianoAttivo.tattica(strumento,
+  fronte)`. Diario: riga "Tattiche attive: ..." nel blocco dello stato maggiore (solo se qualcuno e' attivo).
+- **Dati**: per piano `ritarda` [nazioni] e `zone_di_passaggio` [zone di mare verso le zone di raccolta del piano, dove il
+  NEMICO che lo legge mette i blocchi navali; B 111/110, C 111, D 96/98, 1 104/108/103, 2 102/103, A/N/3 nessuna,
+  verificate sull'XML]; `stato_maggiore.ritardo` = `max_blocchi` 3, `distanza_percorso` 4, `max_navi_blocco` 2,
+  `soglia_lettura_blocco` 0.5, `peso_caccia_trasporti` 15, `distanza_caccia` 2 (`Strategia.Ritardo`, scelti, non tarati).
+- **Esecuzione** (`proplus/StrumentiRitardo`, in `ProPlusAi` nel non combattimento reale dopo rientro e operazioni
+  anfibie, prima del non combattimento di Hard; unita' tenute con `heldUnits`):
+  1. *Blocco terrestre*: territori propri confinanti con unita' mobili nemiche (terra, movimento >= 2: carri/mech; nemici
+     reali dello step 3c) e un passo piu' vicini a un territorio chiave proprio (capitale, fabbrica, VC) entro
+     `distanza_percorso` (via terra, territori non neutrali) ⇒ 1 fanteria ("lasciata" se c'e' gia' una fanteria propria,
+     "portata" da un territorio vicino se il territorio e' vuoto). Prima i vuoti, poi distanza, capitale. Max 3 per turno.
+     Fonte: un territorio senza minaccia reale, oppure dove il miglior attacco nemico **senza quella fanteria** vince
+     comunque <= 100 − minima del livello effettivo (interpretazione di "mai togliendo difese a territori con minaccia
+     reale": la lettura letterale vietava ogni fanteria vicino al fronte russo, minacciato ovunque dai carri).
+  2. *Ritirata combattuta*: per ogni fronte attivo lo stack proprio con piu' TUV di terra; se il miglior attacco nemico
+     vince > 100 − minima del livello effettivo, le unita' (non i blocchi) arretrano verso il territorio chiave proprio piu'
+     vicino (altro dal suo; mai dalla propria capitale), fin dove arrivano. Combattimento (`ProPlusTuning.dropsLandAttack`,
+     codice `delay_not_isolated`): attacchi di terra (non sbarchi, non logoramenti) tenuti solo se win% >= desiderata del
+     bersaglio e contrattacco nemico <= 100 − minima (nessun contrattacco = isolato).
+  3. *Blocco navale*: piano nemico piu' probabile letto > `soglia_lettura_blocco` ⇒ nelle sue `zone_di_passaggio`, in
+     ordine, al massimo 2 sottomarini/cacciatorpediniere propri ("lasciata" se gia' li', altrimenti la nave raggiungibile
+     piu' vicina; mai la scorta di trasporti propri; zona occupata dal nemico saltata).
+  4. *Caccia ai trasporti* (`PianoAttivo.getCaccia`, calcolata a ogni `PianoAttivo`): zone con trasporti di nazioni in
+     guerra con me, carichi o nelle zone di raccolta delle operazioni del piano nemico letto, con navi da guerra proprie
+     (via mare) o aerei propri entro `distanza_caccia` ⇒ contro-obiettivi con peso `peso_caccia_trasporti` (bonus di
+     priorita', desiderata >= livello base come gli altri contro-obiettivi).
+- **Registro** `"Pro+ ritardo: <nazione>"` (proprieta' JSON, scritta nel non combattimento): {round, blocchi, navi,
+  ritirata (id unita'), caccia [{zona, trasporti (id, visti a inizio turno)}]}; al turno dopo le unita' sparite = perse.
+- **Diario**: tra le operazioni anfibie "Ritardo: <strumento> in X - <modo> <unita'>; <dettaglio> (perche' attivo:
+  ...)", "Ritardo: caccia_trasporti in Z - N trasporti nemici carichi/in zona di raccolta (...)", "trasporti nemici
+  affondati con la caccia: N", note (perche' niente), "Ritardo, totale del turno: ... perse negli strumenti dal turno
+  prima: N (blocchi, navi, ritirata)". JSON evento `ritardo` {azioni, caccia, affondati_caccia, persi_dal_turno_prima,
+  note}. Log AI "[Pro+] Ritardo: ...".
+- **Autoplay** (`Monitor`): `territori_chiave` = cadute/riprese di Novgorod, Russia, Volgograd (proprietario non alleato
+  del proprietario originale); per nazione e round `ritardo` {blocchi_messi/persi, navi_messi/persi, ritirata_messi,
+  zone_caccia, affondati_caccia} letto dal registro (persi = id scomparsi dalla mappa dopo un passo; affondati = trasporti
+  cacciati gia' spariti quando il registro e' scritto, cioe' dopo le battaglie del cacciatore). `riepilogo-generale.md`
+  sezione "Strumenti di ritardo e fronte russo (step 3d-2)": per partita round di caduta, capitali cadute,
+  messi/persi, ritirata, caccia; per configurazione partite con caduta e round medio; reddito russo per round.
 
 ## Log degli step
 
@@ -2127,3 +2184,25 @@ comprati − fine round". TUV perso in trasporti / TUV sbarchi solo dal 3d-1-bis
   a 12, sotto i 19 del 3d-1 ma sopra i 10 di 011a5ac), ma gli sbarchi USA entro R7 restano 2/8: il limite
   principale non è più la regola dei trasporti ma l'accumulo/stallo di Overlord (Overlord in stallo in 8/8 partite).
 - Hard identica: golden e `DiaryNeutralityTest` verdi in CI. **Tema sbarchi chiuso** (decisione di Matteo).
+
+### Step 3d-2 ridotto — strumenti di ritardo (2026-11-08)
+
+Decisione di Matteo: il deterministico fa il "COME" (congelato), le scelte strategiche passeranno a un decisore via
+contratto JSON (step successivo); qui solo strumenti eseguibili con interruttori, nessuna formula di convenienza (uno
+"step 3d-2" con formule di convenienza era stato ipotizzato e abbandonato). Vedi "Strumenti di ritardo". Classi nuove
+`strategia/Tattiche`, `StrumentiRitardo`; modificate `Strategia` (`ritarda`, `zone_di_passaggio`, `Ritardo`),
+`Contromosse` (tattiche nello stato strategico + diario), `PianoAttivo` (interruttori, lettura, caccia),
+`ProPlusTuning.dropsLandAttack`, `ProPlusAi`, `DiaryRecorder`/`Italian`, autoplay `Monitor`/`Riepilogo`/
+`RiepilogoGenerale`; classi Pro: solo l'hook `ProTuning.dropsLandAttack` (default vuoto) e la sua chiamata in
+`ProCombatMoveAi`.
+- Test nuovi: `DelayToolsTest` (10: decisore per ruolo/postura/fronti, piano N e Asse senza strumenti, blocco su
+  Belarus vuota con fanteria da Smolensk, ritirata da Belarus verso Novgorod, contrattacco solo su stack isolati e Hard
+  mai, blocco navale in 111 con Sea Lion letto al 70%, niente blocco sotto soglia, caccia a un trasporto carico in 112
+  con peso 15, perdite dei blocchi dal registro); `AutoplayTest` +1 (sezione 3d-2). 416 test AI di game-core e
+  autoplay verdi in locale (golden Hard e `DiaryNeutralityTest` compresi).
+- Nota: con la regola letterale "mai togliere fanteria da territori minacciati" il test con 6 fanterie a Smolensk non
+  trovava fonti (Smolensk raggiungibile dai carri e dagli aerei tedeschi): da qui la regola "resta sotto soglia senza".
+- Verifica locale (A/1, 2 round, 43 s): Alleati in RALLENTAMENTO dal R1 ⇒ strumenti attivi per tutte le nazioni
+  alleate (Russians anche per ruolo); blocchi R1-R2: 6 (quasi tutti "lasciata" in territori gia' presidiati: Bessarabia,
+  Eastern Poland, Baltic States; 1 in Alexandria), 1 perso; 1 attacco britannico scartato dalla regola
+  "solo stack isolati" (Anglo Egyptian Sudan 84% < desiderata 85%); nessuna ritirata, nave o caccia in 2 round.

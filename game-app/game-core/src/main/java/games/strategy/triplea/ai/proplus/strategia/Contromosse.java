@@ -468,6 +468,8 @@ public final class Contromosse {
     }
     final JsonArray changes = state.cambi().deepCopy();
     json.add("cambi_piano", changes);
+    // step 3d-2: the switches of the delay tools, by the decider by rules
+    json.add(Tattiche.KEY, Tattiche.decidi(data, alliance, plan, posture));
     return json;
   }
 
@@ -1057,6 +1059,11 @@ public final class Contromosse {
             .append(c.get("motivo").getAsString())
             .append('\n');
       }
+    }
+    final String tools =
+        Tattiche.testo(s.has(Tattiche.KEY) ? s.getAsJsonObject(Tattiche.KEY) : null);
+    if (!tools.endsWith("nessuna")) {
+      sb.append(tools).append('\n');
     }
     return sb.toString();
   }

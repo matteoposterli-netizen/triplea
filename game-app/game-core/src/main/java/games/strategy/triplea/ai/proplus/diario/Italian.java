@@ -95,11 +95,16 @@ public final class Italian {
           Map.entry("transports_after_landing", "trasporti esposti dopo lo sbarco"),
           Map.entry(
               "bridgehead_other_target",
-              "non e' il bersaglio della coppia: l'operazione alleata sbarca su un altro bersaglio"),
+              "non e' il bersaglio della coppia: l'operazione alleata sbarca su un altro"
+                  + " bersaglio"),
           Map.entry(
               "bridgehead_not_held",
               "testa di ponte non tenibile: contrattacco stimato dopo il rinforzo alleato oltre la"
                   + " soglia"),
+          Map.entry(
+              "delay_not_isolated",
+              "Ritardo: ritirata combattuta, si contrattaccano solo stack nemici isolati (win%"
+                  + " sotto la desiderata o contrattacco nemico oltre la soglia)"),
           Map.entry(
               "amphibious_strafe",
               "logoramento con sbarco sotto la soglia minima: le unita' sbarcate non possono"
