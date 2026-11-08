@@ -2216,9 +2216,9 @@ misurate prima di questo step).
 |---|---|---|
 | VC Alleati R12, media delle 6 configurazioni Pro+ | 5.08 | 4.25 |
 | VC Alleati R12 contro Asse A (A/1, A/2) | - | 3.5 / 3.5 |
-| Russia (Mosca) caduta, partite Pro+ | n/d | 7/12 (R9-R12); Hard 0/2 |
+| Russia (Mosca) caduta, partite Pro+ | n/d | 6/12 (R9-R12); Hard 0/2 |
 | Novgorod caduta, round medio | n/d | Pro+ R4-R6 per configurazione; Hard R3.5 |
-| Volgograd caduta | n/d | 10/12 Pro+ (R6-R12); Hard 2/2 (R5, R8) |
+| Volgograd caduta | n/d | 8/12 Pro+ (R6-R12); Hard 2/2 (R5, R8) |
 
 Strumenti (12 partite Pro+, somma): blocchi terrestri Russians 237 (224 "lasciata", 13 "portata"), persi 124; Germans 49 /
 19 (Asse in RALLENTAMENTO 33 round su 144); British 19/12; Italians 6/1. Ritirate: Russians 19 (539 unita' arretrate),
@@ -2228,6 +2228,6 @@ diario, piu' stadi della stessa pianificazione): Russians 212, Germans 130, Ital
 - Giudizio (non tarato): gli strumenti si attivano dove previsto (Russians per ruolo in tutte le partite, posture per
   le altre nazioni); il blocco terrestre e' quasi sempre "lasciata" in territori gia' presidiati (effetto scarso); la
   caccia non produce affondamenti (il bonus 15 non basta a far attaccare Hard); i blocchi navali tedeschi si perdono
-  tutti. Peggioramento netto probabile per gli Alleati (VC −0.83 di media, Mosca cade in 7/12): ipotesi principale la
+  tutti. Peggioramento netto probabile per gli Alleati (VC −0.83 di media, Mosca cade in 6/12): ipotesi principale la
   regola "solo stack isolati" sui russi (212 scarti) + ritirate che cedono territorio (reddito russo in A: 28 → 1-8 a
   R9). Varianza alta (2 semi), ma la direzione e' negativa. Non tarato: da decidere.
