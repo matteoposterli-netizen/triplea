@@ -2125,5 +2125,5 @@ comprati − fine round". TUV perso in trasporti / TUV sbarchi solo dal 3d-1-bis
   "nessuna alternativa migliore" e i punteggi; nessun ping-pong (1 cambio Asse D → A in D/2).
 - Il valore strategico rende di nuovo convenienti gli sbarchi sui bersagli del piano (trasporti persi risaliti
   a 12, sotto i 19 del 3d-1 ma sopra i 10 di 011a5ac), ma gli sbarchi USA entro R7 restano 2/8: il limite
-  principale non è più la regola dei trasporti ma l'accumulo/stallo di Overlord (stallo in 6/8 partite).
+  principale non è più la regola dei trasporti ma l'accumulo/stallo di Overlord (Overlord in stallo in 8/8 partite).
 - Hard identica: golden e `DiaryNeutralityTest` verdi in CI. **Tema sbarchi chiuso** (decisione di Matteo).
