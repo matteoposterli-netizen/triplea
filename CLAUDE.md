@@ -2206,3 +2206,28 @@ contratto JSON (step successivo); qui solo strumenti eseguibili con interruttori
   alleate (Russians anche per ruolo); blocchi R1-R2: 6 (quasi tutti "lasciata" in territori gia' presidiati: Bessarabia,
   Eastern Poland, Baltic States; 1 in Alexandria), 1 perso; 1 attacco britannico scartato dalla regola
   "solo stack isolati" (Anglo Egyptian Sudan 84% < desiderata 85%); nessuna ritirata, nave o caccia in 2 round.
+
+#### Autoplay in CI (run 42506232917, commit 2853ee7, tutto verde) contro f4446c8 (run 42500350471)
+Gli artefatti per partita di f4446c8 non sono scaricabili dalla sandbox (host Azure degli artefatti bloccato dal proxy) e
+`autoplay-latest` e' stato ricreato: per f4446c8 valgono solo i numeri gia' registrati qui (cadute di Novgorod/Russia non
+misurate prima di questo step).
+
+| Metrica | f4446c8 | 2853ee7 (3d-2) |
+|---|---|---|
+| VC Alleati R12, media delle 6 configurazioni Pro+ | 5.08 | 4.25 |
+| VC Alleati R12 contro Asse A (A/1, A/2) | - | 3.5 / 3.5 |
+| Russia (Mosca) caduta, partite Pro+ | n/d | 7/12 (R9-R12); Hard 0/2 |
+| Novgorod caduta, round medio | n/d | Pro+ R4-R6 per configurazione; Hard R3.5 |
+| Volgograd caduta | n/d | 10/12 Pro+ (R6-R12); Hard 2/2 (R5, R8) |
+
+Strumenti (12 partite Pro+, somma): blocchi terrestri Russians 237 (224 "lasciata", 13 "portata"), persi 124; Germans 49 /
+19 (Asse in RALLENTAMENTO 33 round su 144); British 19/12; Italians 6/1. Ritirate: Russians 19 (539 unita' arretrate),
+Germans 11 (189), British 6 (45), Italians 9 (38). Blocchi navali: 21 navi mandate/lasciate, 15 perse (Germans 7/7).
+Caccia ai trasporti: 34 zone segnate, **0 trasporti affondati**. Attacchi scartati da "solo stack isolati" (righe del
+diario, piu' stadi della stessa pianificazione): Russians 212, Germans 130, Italians 69, British 47, Americans 14.
+- Giudizio (non tarato): gli strumenti si attivano dove previsto (Russians per ruolo in tutte le partite, posture per
+  le altre nazioni); il blocco terrestre e' quasi sempre "lasciata" in territori gia' presidiati (effetto scarso); la
+  caccia non produce affondamenti (il bonus 15 non basta a far attaccare Hard); i blocchi navali tedeschi si perdono
+  tutti. Peggioramento netto probabile per gli Alleati (VC −0.83 di media, Mosca cade in 7/12): ipotesi principale la
+  regola "solo stack isolati" sui russi (212 scarti) + ritirate che cedono territorio (reddito russo in A: 28 → 1-8 a
+  R9). Varianza alta (2 semi), ma la direzione e' negativa. Non tarato: da decidere.
