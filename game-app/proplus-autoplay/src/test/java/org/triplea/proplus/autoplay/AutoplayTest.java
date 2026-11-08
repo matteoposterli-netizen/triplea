@@ -167,6 +167,34 @@ class AutoplayTest {
   }
 
   @Test
+  void lostTransportsPerNationAndRoundAgainstTheLandingsTuv() {
+    final JsonObject game = JsonParser.parseString(SAMPLE).getAsJsonObject();
+    final JsonObject british =
+        game.getAsJsonArray("round")
+            .get(0)
+            .getAsJsonObject()
+            .getAsJsonObject("nazioni")
+            .getAsJsonObject("British");
+    british.addProperty("trasporti_persi", 2);
+    british.addProperty("tuv_trasporti_persi", 14);
+    british.addProperty("tuv_sbarchi", 9);
+    final JsonObject other = game.deepCopy();
+
+    assertThat(
+            RiepilogoGenerale.markdown(
+                "T",
+                List.of(
+                    new RiepilogoGenerale.Game("1-A-1-seme1", game),
+                    new RiepilogoGenerale.Game("1-A-1-seme2", other))))
+        .contains("## Trasporti persi e sbarchi (step 3d-1-bis)")
+        .contains("| Configurazione | Nazione | Partite | R1 | Totale | TUV trasporti persi |")
+        // two games: the sums
+        .contains("| Pro+ A / Pro+ 1 | British | 2 | 4 | 4 | 28 | 18 |")
+        // nothing lost, no landing: no row
+        .doesNotContain("| Pro+ A / Pro+ 1 | Germans | 2 |");
+  }
+
+  @Test
   void firstLandingIsTheEarliestRealLanding() {
     final JsonArray landings =
         JsonParser.parseString(

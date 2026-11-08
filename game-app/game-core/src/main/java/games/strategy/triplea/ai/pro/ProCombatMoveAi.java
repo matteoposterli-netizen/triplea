@@ -1279,8 +1279,28 @@ public class ProCombatMoveAi {
         initialProductionAndIsCapital.production +=
             (int) Math.round(ProNationalObjectiveUtils.value(proData, player, t));
         final int isCapital = isCapitalWorthTargeting(patd, player, data) ? 1 : 0;
-        final double attackValue =
-            result.getTuvSwing() + initialProductionAndIsCapital.production * (1 + 3.0 * isCapital);
+        final double conquestValue =
+            initialProductionAndIsCapital.production * (1 + 3.0 * isCapital);
+        final double attackValue = result.getTuvSwing() + conquestValue;
+        final Optional<ProLandingTransports> ownCheck =
+            patd.isStrafing()
+                ? Optional.empty()
+                : proData
+                    .getTuning()
+                    .checksLandingTransports(
+                        proData,
+                        calc,
+                        patd,
+                        territoryTransportAndBombardMap,
+                        enemyAttackOptions,
+                        movingUnits(attackMap),
+                        result,
+                        conquestValue,
+                        (zone, units) -> isLostToScramble(t, zone, units));
+        if (ownCheck.isPresent()) {
+          applyLandingTransports(patd, ownCheck.get());
+          continue;
+        }
         if (!patd.isStrafing()
             && (0.75 * enemyTuvSwing) > attackValue
             && !keepsLandingWithExposedTransports(patd, result, enemyTuvSwing, attackValue)) {
@@ -1308,6 +1328,36 @@ public class ProCombatMoveAi {
         }
       }
     }
+  }
+
+  /** Units the combat move uses: attackers, transports of landings, bombarding ships. */
+  private static Set<Unit> movingUnits(final Map<Territory, ProTerritory> attackMap) {
+    final Set<Unit> moving = new HashSet<>();
+    for (final ProTerritory t : attackMap.values()) {
+      moving.addAll(t.getUnits());
+      moving.addAll(t.getAmphibAttackMap().keySet());
+      moving.addAll(t.getBombardTerritoryMap().keySet());
+    }
+    return moving;
+  }
+
+  /**
+   * The tuning's own check of the landing's transports: keeps it (maybe from other zones) or not.
+   */
+  private void applyLandingTransports(final ProTerritory patd, final ProLandingTransports check) {
+    proData.getRecorder().landingTransports(proData, patd, check.detail());
+    proData
+        .getRecorder()
+        .attackUnitsCleared(proData, patd, check.reason(), check.expectedLoss(), check.gain());
+    if (check.keep()) {
+      patd.getTransportTerritoryMap().putAll(check.unloadZones());
+      ProLogger.debug("Keeping amphib territory: " + patd.getTerritory() + ", " + check.detail());
+      return;
+    }
+    ProLogger.debug("Removing amphib territory: " + patd.getTerritory() + ", " + check.detail());
+    patd.getUnits().clear();
+    patd.getAmphibAttackMap().clear();
+    patd.getBombardTerritoryMap().clear();
   }
 
   /** The tuning's exception to dropping a landing whose transports are exposed (Hard: none). */

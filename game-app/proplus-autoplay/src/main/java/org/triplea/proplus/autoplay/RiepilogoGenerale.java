@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
@@ -140,6 +141,7 @@ final class RiepilogoGenerale {
     plansAndPostures(md, games, alliances);
     landingsAndTransports(md, games, alliances, maxRound);
     alliedCoordination(md, games, alliances, maxRound);
+    lostTransports(md, games, alliances, maxRound);
 
     md.append(
 """
@@ -663,6 +665,99 @@ Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benel
       }
       md.append('\n');
     }
+  }
+
+  /**
+   * Step 3d-1-bis: per configuration and nation, the transports lost per round (sum of the games),
+   * and the TUV lost in transports against the TUV gained in the battles of real landings.
+   */
+  static void lostTransports(
+      final StringBuilder md,
+      final List<Game> games,
+      final List<String> alliances,
+      final int maxRound) {
+    md.append(
+"""
+
+## Trasporti persi e sbarchi (step 3d-1-bis)
+
+""")
+        .append(
+"""
+Trasporti persi = trasporti sulla mappa dopo un passo e scomparsi dopo il successivo (somma delle partite della configurazione, per round). TUV sbarchi = TUV perso dal difensore meno TUV perso dall'attaccante nelle battaglie dove la nazione ha sbarcato truppe vere nel combattimento (valore dei territori non contato).
+
+| Configurazione | Nazione | Partite |""");
+    for (int r = 1; r <= maxRound; r++) {
+      md.append(" R").append(r).append(" |");
+    }
+    md.append(" Totale | TUV trasporti persi | TUV sbarchi |\n|---|---|---|")
+        .append("---|".repeat(maxRound + 3))
+        .append('\n');
+    final Map<String, List<JsonObject>> byConfig = new LinkedHashMap<>();
+    for (final Game g : games) {
+      if (g.json() != null) {
+        byConfig
+            .computeIfAbsent(configuration(g.json(), alliances), k -> new ArrayList<>())
+            .add(g.json());
+      }
+    }
+    for (final Map.Entry<String, List<JsonObject>> c : byConfig.entrySet()) {
+      final Set<String> nations = new TreeSet<>();
+      for (final JsonObject j : c.getValue()) {
+        for (final JsonElement e : j.getAsJsonArray("round")) {
+          for (final Map.Entry<String, JsonElement> x :
+              e.getAsJsonObject().getAsJsonObject("nazioni").entrySet()) {
+            final JsonObject o = x.getValue().getAsJsonObject();
+            if (number(o, "trasporti_persi") > 0 || number(o, "tuv_sbarchi") != 0) {
+              nations.add(x.getKey());
+            }
+          }
+        }
+      }
+      for (final String nation : nations) {
+        final int[] perRound = new int[maxRound + 1];
+        int tuvLost = 0;
+        int tuvLanding = 0;
+        for (final JsonObject j : c.getValue()) {
+          for (final JsonElement e : j.getAsJsonArray("round")) {
+            final JsonObject r = e.getAsJsonObject();
+            final JsonObject n = r.getAsJsonObject("nazioni").getAsJsonObject(nation);
+            if (n == null) {
+              continue;
+            }
+            final int round = r.get("round").getAsInt();
+            if (round >= 1 && round <= maxRound) {
+              perRound[round] += number(n, "trasporti_persi");
+            }
+            tuvLost += number(n, "tuv_trasporti_persi");
+            tuvLanding += number(n, "tuv_sbarchi");
+          }
+        }
+        md.append("| ")
+            .append(c.getKey())
+            .append(" | ")
+            .append(nation)
+            .append(" | ")
+            .append(c.getValue().size())
+            .append(" |");
+        int total = 0;
+        for (int r = 1; r <= maxRound; r++) {
+          md.append(' ').append(perRound[r]).append(" |");
+          total += perRound[r];
+        }
+        md.append(' ')
+            .append(total)
+            .append(" | ")
+            .append(tuvLost)
+            .append(" | ")
+            .append(tuvLanding)
+            .append(" |\n");
+      }
+    }
+  }
+
+  private static int number(final JsonObject o, final String key) {
+    return o.has(key) ? o.get(key).getAsInt() : 0;
   }
 
   /** First round an amphibious operation of the game was in a stall (diary), 0 if never. */

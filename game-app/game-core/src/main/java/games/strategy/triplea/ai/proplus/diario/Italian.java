@@ -92,6 +92,7 @@ public final class Italian {
           Map.entry("capital_defense", "unita' tenute a difesa della capitale"),
           Map.entry(
               "transports_exposed", "sbarco annullato: trasporti esposti al contrattacco nemico"),
+          Map.entry("transports_after_landing", "trasporti esposti dopo lo sbarco"),
           Map.entry(
               "bridgehead_other_target",
               "non e' il bersaglio della coppia: l'operazione alleata sbarca su un altro bersaglio"),

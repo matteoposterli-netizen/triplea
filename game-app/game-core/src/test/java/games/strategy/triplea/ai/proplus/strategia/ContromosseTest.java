@@ -215,6 +215,73 @@ class ContromosseTest {
   }
 
   @Test
+  void thePlanInForceInCrisisGetsNoCounterBonus() {
+    // step 3d-1-bis: both plans counter the enemy's A read at 60%; plan 1 is in force and in
+    // crisis, so only the alternative 2 gets the bonus
+    final Strategia s =
+        Strategia.parse(
+            new StringReader(
+                "{\"alleanze\": {"
+                    + "\"Allies\": {\"piani\": ["
+                    + "{\"id\": \"1\", \"subentri\": [\"2\"], \"contrasta\": [\"A\"]},"
+                    + "{\"id\": \"2\", \"subentri\": [\"1\"], \"contrasta\": [\"A\"]}]},"
+                    + "\"Axis\": {\"piani\": [{\"id\": \"A\"}, {\"id\": \"D\"}]}}}"));
+    final JsonObject read = entry(7, "1", true);
+    final JsonObject reading = new JsonObject();
+    reading.addProperty("piu_probabile", "A");
+    final JsonObject probs = new JsonObject();
+    probs.addProperty("A", 0.6);
+    probs.addProperty("D", 0.4);
+    reading.add("probabilita", probs);
+    read.add("lettura", reading);
+    final Contromosse.Cambio change =
+        Contromosse.cambio(
+            data,
+            "Allies",
+            s,
+            plan(s, "Allies", "1"),
+            new StatoMaggiore.Stato("1", 1, history(entry(6, "1", true))),
+            read,
+            7);
+
+    assertThat(score(change, "1")).isEqualTo(0.33);
+    assertThat(score(change, "2")).isEqualTo(0.75);
+    assertThat(change.nuovo()).map(Strategia.Piano::id).contains("2");
+    final JsonObject current = change.json().getAsJsonArray("valutazioni").get(0).getAsJsonObject();
+    assertThat(current.get("contrasto").getAsDouble()).isZero();
+    assertThat(current.get("contrasto_escluso").getAsString()).contains("in crisi");
+  }
+
+  @Test
+  void noBetterAlternativeGivesTheScoresOfBothPlans() {
+    // a margin of 0.5: the alternative 2 (0.50) is not enough above plan 1 (0.33); the reason
+    // lists the parts of both scores
+    final Strategia s =
+        Strategia.parse(
+            new StringReader(
+                "{\"stato_maggiore\": {\"margine_cambio\": 0.5}, \"alleanze\": {"
+                    + "\"Allies\": {\"piani\": ["
+                    + "{\"id\": \"1\", \"subentri\": [\"2\"]},"
+                    + "{\"id\": \"2\", \"subentri\": [\"1\"]}]},"
+                    + "\"Axis\": {\"piani\": [{\"id\": \"A\"}]}}}"));
+    final Contromosse.Cambio change =
+        Contromosse.cambio(
+            data,
+            "Allies",
+            s,
+            plan(s, "Allies", "1"),
+            new StatoMaggiore.Stato("1", 1, history(entry(6, "1", true))),
+            entry(7, "1", true),
+            7);
+
+    assertThat(change.nuovo()).isEmpty();
+    assertThat(change.motivo())
+        .contains("nessuna alternativa migliore di 0.50")
+        .contains("1 0.33 = (tappe 0.50 + forze 0.50 + stato 0.00)/3 + contrasto 0.00")
+        .contains("2 0.50 = (tappe 0.50 + forze 0.50 + stato 0.50)/3 + contrasto 0.00");
+  }
+
+  @Test
   void theRealFileMovesTheAlliesFromAStalledOverlordToItalyFirst() {
     final Strategia s = europe();
     StatoMaggiore.setChoice(data.getProperties(), "Allies", "1");

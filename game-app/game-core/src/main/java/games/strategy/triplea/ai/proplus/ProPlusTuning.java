@@ -647,6 +647,66 @@ public final class ProPlusTuning implements ProTuning {
     return bridgehead ? Optional.of(KEPT_BY_BRIDGEHEAD) : Optional.empty();
   }
 
+  // ------------------------------------------------------- transports after a landing (3d-1-bis)
+
+  private String unloadKey = "";
+  private @Nullable GameState unloadData;
+  private final Map<Unit, Territory> unloadZones = new java.util.HashMap<>();
+
+  /**
+   * Step 3d-1-bis: the expected loss of the landing's transports (and escort) in their unload zones
+   * against the expected gain, in place of Hard's "transports exposed" rule ({@link
+   * TrasportiSbarco}); a safer zone next to the target is remembered for the route ({@link
+   * #unloadZone}).
+   */
+  @Override
+  public Optional<games.strategy.triplea.ai.pro.ProLandingTransports> checksLandingTransports(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final ProTerritory landing,
+      final Map<Territory, List<Unit>> zones,
+      final games.strategy.triplea.ai.pro.data.ProOtherMoveOptions enemyAttackOptions,
+      final java.util.Collection<Unit> moving,
+      final games.strategy.triplea.ai.pro.data.ProBattleResult battle,
+      final double conquestValue,
+      final java.util.function.BiPredicate<Territory, java.util.Collection<Unit>> lostToScramble) {
+    final games.strategy.triplea.ai.pro.ProLandingTransports check =
+        TrasportiSbarco.valuta(
+            proData,
+            calc,
+            landing,
+            zones,
+            enemyAttackOptions,
+            moving,
+            battle,
+            conquestValue,
+            lostToScramble);
+    syncUnloadZones(proData);
+    landing.getAmphibAttackMap().keySet().forEach(unloadZones::remove);
+    if (check.keep()) {
+      unloadZones.putAll(check.unloadZones());
+    }
+    return Optional.of(check);
+  }
+
+  @Override
+  public Optional<Territory> unloadZone(
+      final ProData proData, final Unit transport, final Territory target) {
+    syncUnloadZones(proData);
+    // only for the landing it was chosen for (a zone next to the target)
+    return Optional.ofNullable(unloadZones.get(transport))
+        .filter(z -> proData.getData().getMap().getNeighbors(target).contains(z));
+  }
+
+  private void syncUnloadZones(final ProData proData) {
+    final String key = turnKey(proData);
+    if (!key.equals(unloadKey) || unloadData != proData.getData()) {
+      unloadKey = key;
+      unloadData = proData.getData();
+      unloadZones.clear();
+    }
+  }
+
   // ------------------------------------------------------------- two-step bridgehead (ANFIBIE-BIS)
 
   private String bridgeheadKey = "";

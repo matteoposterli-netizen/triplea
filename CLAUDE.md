@@ -960,7 +960,14 @@ dati reali) dopo avanzamento e lettura. Hard identica (nessuna AI Hard arriva qu
   bersagli delle operazioni); stato = 0 per il piano in vigore (è in crisi), 0.5 per le alternative;
   contrasto = `bonus_contrasto` se il piano `contrasta` il piano nemico più probabile letto oltre
   `soglia_lettura` ("chi mette in crisi chi": 1 contrasta A, B, C; 2 contrasta D; A contrasta 2, 3; D
-  contrasta 1). Cambio se la migliore alternativa supera il piano in vigore di `margine_cambio`. Al cambio:
+  contrasta 1). Cambio se la migliore alternativa supera il piano in vigore di `margine_cambio`.
+  **Formula (dallo step 3d-1-bis)**: punteggio(P) = (tappe + forze + stato)/3 + contrasto, con
+  contrasto = `bonus_contrasto` (0.25) **solo se P è un'alternativa** (un subentro) e `contrasta` il piano
+  nemico più probabile letto oltre `soglia_lettura`; per il piano in vigore contrasto = 0, perché qui è
+  sempre in crisi (IN CRISI o operazione in stallo: solo allora si valuta), JSON `contrasto_escluso` =
+  "piano in vigore in crisi" quando il bonus gli spetterebbe. Prima (3d-1) il bonus andava anche al piano
+  in vigore e lo teneva sopra il 2 in 6 partite su 8. Senza cambio il motivo è "nessuna alternativa
+  migliore di <margine> (1 0.33 = (tappe a + forze b + stato 0.00)/3 + contrasto 0.00; 2 ... )". Al cambio:
   `StatoMaggiore.cambia`, stallo delle operazioni del nuovo piano ripartito (`StalloOperazioni.riparti`),
   avanzamento ricalcolato col nuovo piano; le sue tappe non sono in ritardo prima di round del cambio +
   `proroga_tappe` (`entro_round_effettivo` nel JSON). La fase è quella del round corrente; acquisti,
@@ -996,8 +1003,10 @@ dati reali) dopo avanzamento e lettura. Hard identica (nessuna AI Hard arriva qu
   rientro), fermo, non in una zona di raccolta delle operazioni del piano (lì scarica già la regola
   "bersaglio troppo forte") ⇒ costa amica (terra propria o alleata) più vicina via mare (entro 6 zone), a
   parità un porto delle operazioni del piano, poi terra propria; zona d'arrivo sicura (win% nemica ≤ 100 −
-  minima del livello della zona; trasporto senza navi da guerra = 100%); fuori portata ⇒ verso di lei fino
-  alla zona sicura più lontana (resta "in rientro"). Truppe a terra, trasporto e truppe tenuti
+  minima del livello della zona; trasporto senza navi da guerra = 100%; **memoria del pericolo dallo step
+  3d-1-bis**: zona dove unità della nazione hanno perso TUV difendendo negli ultimi 3 round ⇒ soglia
+  dimezzata, testo "zona pericolosa: perdite al round R, soglia dimezzata"); fuori portata ⇒ verso di lei
+  fino alla zona sicura più lontana (stessa soglia; resta "in rientro"). Truppe a terra, trasporto e truppe tenuti
   (`heldUnits`). Diario: rapporto "Rientro truppe a bordo" tra le operazioni anfibie.
 - **Stato strategico** (JSON `stato_strategico` nell'ingresso dello storico, quindi nel diario e in
   `decisioni.jsonl` con l'evento `stato_maggiore_round`): {alleanza, round, piano, nome_piano, fase, stato,
@@ -1016,6 +1025,42 @@ dati reali) dopo avanzamento e lettura. Hard identica (nessuna AI Hard arriva qu
   `riepilogo-generale.md` sezione "Piani e posture dello stato maggiore" (per partita: piani con round e
   motivo dei cambi, posture per tratti di round; per configurazione: cambi totali, partite con cambi,
   piano finale).
+
+## Trasporti negli sbarchi del combattimento (step 3d-1-bis, solo Pro+)
+
+`ai/proplus/TrasportiSbarco`, chiamata da `ProPlusTuning.checksLandingTransports`. Hard identica: hook nuovi
+`ProTuning.checksLandingTransports` (default vuoto ⇒ regola "transports exposed" di Hard) e
+`ProTuning.unloadZone` (default vuoto ⇒ rotta di Hard), chiamati in `ProCombatMoveAi.
+removeTerritoriesWhereTransportsAreExposed` (dopo `calculateAmphibRoutes`, zone di scarico note) e in
+`ProMoveUtils.calculateAmphibRoutes` (solo combattimento). Per Pro+ sostituisce la regola di Hard e le sue
+eccezioni Pro+ (`keepsLandingWithExposedTransports`: regola obiettivo e testa di ponte, non più usate).
+- Per ogni zona dove finiscono trasporti e navi da bombardamento dello sbarco: difensori = navi alleate già
+  lì e non usate nel combattimento + quelle in arrivo + navi da guerra del partner che raggiungono la zona
+  di raccolta comune nel suo turno (come le soste sicure); win% nemica = miglior attacco della stima di Hard
+  con i nemici reali (step 3c, la stessa delle soste), 100% senza navi da guerra; **perdita attesa = win% ×
+  TUV delle mie unità navali nella zona** (trasporti + scorta propria; il carico è già a terra).
+- Guadagno = valore della conquista × win% + TUV atteso della battaglia (valore della conquista = quello di
+  Hard in quel controllo: produzione + obiettivi nazionali, ×4 se capitale).
+- Tenuto se guadagno > perdita attesa, oppure se il bersaglio è obiettivo **critico** della fase
+  (`PianoAttivo.isCritico`) e win% > desiderata (`ProPlusTuning.desiredWinPercentage`). Altrimenti, per
+  ogni zona con perdita: le altre zone di mare confinanti col bersaglio, senza unità nemiche, raggiungibili
+  in questo turno da tutti i trasporti della zona (carico a bordo o confinante con la zona di partenza),
+  senza scramble nemico che li batte; scelta quella che riduce di più la perdita totale (perdita che resta
+  nella zona lasciata, dove restano le navi da bombardamento, + quanto i trasporti aggiungono nella nuova).
+  Se così il guadagno supera la perdita lo sbarco si fa da lì (`ProLandingTransports.unloadZones` ⇒
+  `transportTerritoryMap` + `unloadZone` ⇒ la rotta del combattimento porta il trasporto carico in quella
+  zona e scarica da lì; solo per lo sbarco su quel bersaglio), altrimenti è scartato.
+- Diario: scartato "<territorio>: ... - trasporti esposti dopo lo sbarco: perdita attesa X TUV > guadagno Y
+  (<zona>: win% nemica W% x T TUV (trasporti N, scorta M) = P; guadagno Y = conquista C x win W% + TUV
+  battaglia S)[; scarico spostato: A -> B (n)][; zone alternative: B perdita P, ...]"; tenuto con perdita > 0
+  "; trasporti dopo lo sbarco: perdita attesa X TUV <= guadagno Y (...)" o "; tenuto: obiettivo critico del
+  piano, win W% > desiderata D%". Codici `transports_after_landing` / `kept_transports_after_landing`; JSON
+  dell'attacco `trasporti_dopo_sbarco` (testo), `tuv_nemico_trasporti` = perdita, `valore_sbarco` = guadagno.
+- Autoplay (`Monitor`, per nazione e round): `trasporti_persi` (trasporti sulla mappa dopo un passo e
+  spariti dopo il successivo, qualunque causa), `tuv_trasporti_persi`, `tuv_sbarchi` (TUV perso dal
+  difensore − attaccante nelle battaglie dove la nazione ha sbarcato truppe vere nel combattimento);
+  `riepilogo-generale.md` sezione "Trasporti persi e sbarchi (step 3d-1-bis)": per configurazione e nazione
+  trasporti persi per round (somma dei semi), totale, TUV trasporti persi, TUV sbarchi.
 
 ## Log degli step
 
@@ -1997,4 +2042,24 @@ sosta da persi negli sbarchi del combattimento di Hard).
 - Posture: tutte e 4 usate; RALLENTAMENTO/CONTRASTO frequenti per gli Alleati nei R1-R5 contro A (A letto
   60-74%), DIFENSIVA solo con IN CRISI (R8-R12). Asse quasi sempre OFFENSIVA/RALLENTAMENTO.
 - Hard identica: golden e `DiaryNeutralityTest` verdi in CI.
+
+### Step 3d-1-bis — bonus "contrasta", trasporti negli sbarchi, rientro, autoplay (2026-11-08)
+
+Vedi "Postura, cambio piano, contromosse" (formula), "Trasporti negli sbarchi del combattimento" e
+"Rientro". Classi: nuove `proplus/TrasportiSbarco`, `pro/ProLandingTransports` (record); modificate
+`Contromosse` (bonus solo alle alternative, motivo con i punteggi), `OperazioniAnfibie` (memoria del
+pericolo nel rientro, `combinedArrivals` statico), `ProPlusTuning` (due override), `DiaryRecorder`/
+`AttackRecord`/`Italian`, autoplay `Monitor`/`RiepilogoGenerale`. Classi Pro: solo hook con default vuoto
+(`ProTuning` +2, `ProDecisionRecorder.landingTransports`) e le due chiamate (`ProCombatMoveAi`,
+`ProMoveUtils`).
+- Test nuovi: `ContromosseTest` +2 (piano in vigore in crisi senza bonus ⇒ cambio al 2; "nessuna alternativa
+  migliore" con le parti dei punteggi); `AmphibiousOperationsTest` +6 (rientro: zona con perdite ⇒ soglia
+  dimezzata; sbarco da una zona più sicura con la rotta del combattimento che scarica da lì e Hard senza zona
+  propria; navi del partner contate nella raccolta comune; perdita ovunque ⇒ scartato coi numeri; guadagno
+  maggiore ⇒ tenuto; obiettivo critico sopra la desiderata ⇒ tenuto, sotto ⇒ scartato); `AutoplayTest` +1.
+  Test AI di game-core (394, golden Hard e `DiaryNeutralityTest` compresi) e autoplay verdi in locale.
+- Verifica locale (2 partite da 2 round, B/1 e A/1): nel diario le righe "trasporti esposti dopo lo sbarco"
+  scartano sbarchi mediterranei con trasporti esposti (Egypt, Malta, Morocco, Ethiopia: perdite attese 7-27
+  TUV contro guadagni 2-5). Atteso: meno sbarchi "a perdere"; da verificare in CI che gli sbarchi USA in
+  Europa entro R7 restino ≥ 4/8.
 

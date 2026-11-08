@@ -214,6 +214,36 @@ public final class ProMoveUtils {
             }
           }
 
+          // A zone the tuning chose to unload from (Hard: none): sail there once loaded, stay there
+          final Optional<Territory> chosenZone =
+              isCombatMove && !t.isWater() && remainingUnitsToLoad.isEmpty()
+                  ? proData.getTuning().unloadZone(proData, transport, t)
+                  : Optional.empty();
+          if (chosenZone.isPresent()) {
+            if (chosenZone.get().equals(transportTerritory)) {
+              break;
+            }
+            final Optional<Route> route =
+                movesLeft > 0
+                    ? map.getRouteForUnit(
+                        transportTerritory,
+                        chosenZone.get(),
+                        ProMatches.territoryCanMoveSeaUnitsThrough(player, true),
+                        transport,
+                        player)
+                    : Optional.empty();
+            if (route.isPresent() && route.get().numberOfSteps() <= movesLeft) {
+              final Territory next = route.get().getSteps().get(0);
+              final var unitsToMove = new ArrayList<Unit>();
+              unitsToMove.add(transport);
+              unitsToMove.addAll(loadedUnits);
+              moves.addMove(unitsToMove, new Route(transportTerritory, next));
+              transportTerritory = next;
+              movesLeft--;
+              continue;
+            }
+          }
+
           // Move transport if I'm not already at the end or out of moves
           final Territory unloadTerritory =
               attackMap.get(t).getTransportTerritoryMap().get(transport);

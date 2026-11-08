@@ -6,6 +6,8 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Properties;
+import games.strategy.triplea.ai.pro.data.ProBattleResult;
+import games.strategy.triplea.ai.pro.data.ProOtherMoveOptions;
 import games.strategy.triplea.ai.pro.data.ProTerritory;
 import games.strategy.triplea.ai.pro.util.ProOddsCalculator;
 import java.util.Collection;
@@ -14,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.function.BiPredicate;
 
 /**
  * The Pro AI numbers that a variant of the AI may change. Every default returns exactly the value
@@ -142,6 +145,37 @@ public interface ProTuning {
       final double winPercentage,
       final double enemyTuvSwing,
       final double attackValue) {
+    return Optional.empty();
+  }
+
+  /**
+   * A tuning's own check of a planned landing's transports, in place of "Hard (AI)"'s "transports
+   * exposed" rule (and of {@link #keepsLandingWithExposedTransports}): {@code unloadZones} are the
+   * sea zones the transports and bombarding ships end their move in, with those units; {@code
+   * moving} every unit the combat move uses; {@code battle} the landing's battle with the units
+   * assigned; {@code conquestValue} what taking the territory is worth; {@code lostToScramble}
+   * whether enemy air scrambling into a zone would beat the units there. Empty by default: Hard's
+   * rule.
+   */
+  default Optional<ProLandingTransports> checksLandingTransports(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final ProTerritory landing,
+      final Map<Territory, List<Unit>> unloadZones,
+      final ProOtherMoveOptions enemyAttackOptions,
+      final Collection<Unit> moving,
+      final ProBattleResult battle,
+      final double conquestValue,
+      final BiPredicate<Territory, Collection<Unit>> lostToScramble) {
+    return Optional.empty();
+  }
+
+  /**
+   * The sea zone a tuning chose for {@code transport} to unload from onto {@code target} in the
+   * combat move ({@link ProLandingTransports#unloadZones}), if any. Empty by default: Hard's route.
+   */
+  default Optional<Territory> unloadZone(
+      final ProData proData, final Unit transport, final Territory target) {
     return Optional.empty();
   }
 

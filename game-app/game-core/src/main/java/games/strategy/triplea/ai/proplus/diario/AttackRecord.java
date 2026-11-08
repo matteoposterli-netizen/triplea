@@ -75,6 +75,9 @@ final class AttackRecord {
 
   double clearedAttackValue = Double.NaN;
 
+  /** Step 3d-1-bis: Pro+'s check of the transports after the landing (text), null if none. */
+  @Nullable String transportsAfterLanding;
+
   /** Last "worth it with the units assigned" check of the combat move; null if never reached. */
   @Nullable WorthInfo worth;
 

@@ -39,7 +39,8 @@ import org.triplea.java.collections.IntegerMap;
  * changes were made, the last one at least {@link Strategia.Parametri#inerziaRound} rounds ago, and
  * one of its {@code subentri} scores at least {@link Strategia.Parametri#margineCambio} more. Score
  * of a plan = mean of three parts in 0..1, plus {@link Strategia.Parametri#bonusContrasto} if the
- * plan counters ({@code contrasta}) the enemy plan read with a probability above {@link
+ * plan is an alternative (not the plan in force, which is in crisis here: step 3d-1-bis) and
+ * counters ({@code contrasta}) the enemy plan read with a probability above {@link
  * Strategia.Parametri#sogliaLettura}:
  *
  * <ul>
@@ -148,8 +149,10 @@ public final class Contromosse {
     final Forze forces = new Forze(data, alliance);
     // checked only in crisis: the plan in force scores its state as IN CRISI (a stalled operation
     // counts as crisis even when the progress reads IN RITARDO)
+    // step 3d-1-bis: the "contrasta" bonus goes to the alternatives only; the plan in force is in
+    // crisis here (IN CRISI or its operation in a stall), so its bonus is 0
     final Punteggio current =
-        score(data, strategia, plan, forces, reading, Valutazione.IN_CRISI, round);
+        score(data, strategia, plan, forces, reading, Valutazione.IN_CRISI, false, round);
     final JsonArray scores = new JsonArray();
     scores.add(current.json());
     Punteggio best = null;
@@ -158,7 +161,7 @@ public final class Contromosse {
       if (alt.isEmpty()) {
         continue;
       }
-      final Punteggio p = score(data, strategia, alt.get(), forces, reading, null, round);
+      final Punteggio p = score(data, strategia, alt.get(), forces, reading, null, true, round);
       scores.add(p.json());
       if (best == null || p.totale() > best.totale()) {
         best = p;
@@ -170,10 +173,10 @@ public final class Contromosse {
           json,
           String.format(
               Locale.ROOT,
-              "nessuna alternativa migliore (%s %.2f; %s)",
-              plan.id(),
-              current.totale(),
-              best == null ? "nessuna" : best.piano().id() + " " + round2(best.totale())));
+              "nessuna alternativa migliore di %.2f (%s; %s)",
+              par.margineCambio(),
+              parts(current),
+              best == null ? "nessuna" : parts(best)));
     }
     final String why =
         String.format(
@@ -194,6 +197,19 @@ public final class Contromosse {
     json.addProperty("scelto", best.piano().id());
     json.addProperty("motivo", why);
     return new Cambio(Optional.of(best.piano()), why, json);
+  }
+
+  /** Eg "1 0.33 = (tappe 0.50 + forze 0.50 + stato 0.00)/3 + contrasto 0.00". */
+  private static String parts(final Punteggio p) {
+    return String.format(
+        Locale.ROOT,
+        "%s %.2f = (tappe %.2f + forze %.2f + stato %.2f)/3 + contrasto %.2f",
+        p.piano().id(),
+        p.totale(),
+        p.tappe(),
+        p.forze(),
+        p.stato(),
+        p.contrasto());
   }
 
   private static Cambio none(final JsonObject json, final String why) {
@@ -265,6 +281,7 @@ public final class Contromosse {
       final Forze forces,
       final Lettura reading,
       final @Nullable String state,
+      final boolean candidate,
       final int round) {
     final Strategia.Parametri par = strategia.getParametri();
     final int distance = par.distanzaForze();
@@ -303,11 +320,10 @@ public final class Contromosse {
               case Valutazione.IN_RITARDO -> 0.5;
               default -> 0;
             };
-    final double counter =
+    final boolean counters =
         reading.probabilita() > par.sogliaLettura()
-                && plan.contrasta().contains(reading.piuProbabile())
-            ? par.bonusContrasto()
-            : 0;
+            && plan.contrasta().contains(reading.piuProbabile());
+    final double counter = candidate && counters ? par.bonusContrasto() : 0;
     final double total = (milestones + near + stateScore) / 3 + counter;
     final JsonObject json = new JsonObject();
     json.addProperty("piano", plan.id());
@@ -317,6 +333,9 @@ public final class Contromosse {
     json.addProperty("tuv_nemico", Math.round(enemy));
     json.addProperty("stato", round2(stateScore));
     json.addProperty("contrasto", round2(counter));
+    if (counters && !candidate) {
+      json.addProperty("contrasto_escluso", "piano in vigore in crisi");
+    }
     json.addProperty("punteggio", round2(total));
     return new Punteggio(plan, milestones, near, stateScore, counter, total, json);
   }
@@ -1018,14 +1037,19 @@ public final class Contromosse {
                   final JsonObject v = e.getAsJsonObject();
                   list.add(
                       String.format(
-                          Locale.ROOT,
-                          "%s %.2f (tappe %.2f, forze %.2f, stato %.2f, contrasto %.2f)",
-                          v.get("piano").getAsString(),
-                          v.get("punteggio").getAsDouble(),
-                          v.get("tappe_raggiungibili").getAsDouble(),
-                          v.get("forze_vicine").getAsDouble(),
-                          v.get("stato").getAsDouble(),
-                          v.get("contrasto").getAsDouble()));
+                              Locale.ROOT,
+                              "%s %.2f (tappe %.2f, forze %.2f, stato %.2f, contrasto %.2f)",
+                              v.get("piano").getAsString(),
+                              v.get("punteggio").getAsDouble(),
+                              v.get("tappe_raggiungibili").getAsDouble(),
+                              v.get("forze_vicine").getAsDouble(),
+                              v.get("stato").getAsDouble(),
+                              v.get("contrasto").getAsDouble())
+                          + (v.has("contrasto_escluso")
+                              ? " [contrasto escluso: "
+                                  + v.get("contrasto_escluso").getAsString()
+                                  + "]"
+                              : ""));
                 });
         sb.append("  Valutazione dei piani: ")
             .append(String.join("; ", list))

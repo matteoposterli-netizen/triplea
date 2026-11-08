@@ -1565,6 +1565,18 @@ public final class DiaryRecorder implements ProDecisionRecorder {
         });
   }
 
+  @Override
+  public void landingTransports(
+      final ProData proData, final ProTerritory patd, final String detail) {
+    guard(
+        () -> {
+          if (ignorePlan) {
+            return;
+          }
+          record(proData, patd).transportsAfterLanding = detail;
+        });
+  }
+
   /** The precise reason behind "units_not_worth", from the last check of the attack. */
   private static String notWorthReason(final AttackRecord rec) {
     final AttackRecord.WorthInfo w = rec.worth;
@@ -2025,6 +2037,11 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     if (r.worth != null && r.worth.keptBy() != null) {
       sb.append("; ").append(keptText(r.worth));
     }
+    if ("kept_transports_after_landing".equals(r.clearedReason)
+        && r.transportsAfterLanding != null
+        && !r.transportsAfterLanding.startsWith("perdita attesa 0.0 ")) {
+      sb.append("; trasporti dopo lo sbarco: ").append(r.transportsAfterLanding);
+    }
     if ("kept_transports_exposed".equals(r.clearedReason)) {
       sb.append("; trasporti esposti ma tenuto da Pro+ (regola obiettivo o testa di ponte): ")
           .append(transportsText(r));
@@ -2053,6 +2070,9 @@ public final class DiaryRecorder implements ProDecisionRecorder {
       sb.append(" - ").append(Italian.reason(r.dropReason));
       if (r.dropReason != null && r.dropReason.startsWith("units_") && r.worth != null) {
         sb.append(": ").append(worthText(r, r.worth));
+      } else if ("transports_after_landing".equals(r.dropReason)
+          && r.transportsAfterLanding != null) {
+        sb.append(": ").append(r.transportsAfterLanding);
       } else if ("transports_exposed".equals(r.dropReason)
           && !Double.isNaN(r.clearedEnemyTuvSwing)) {
         sb.append(": ").append(transportsText(r));
@@ -2497,6 +2517,9 @@ public final class DiaryRecorder implements ProDecisionRecorder {
       json.addProperty("tolto_da", r.clearedReason);
       json.addProperty("tuv_nemico_trasporti", round1(r.clearedEnemyTuvSwing));
       json.addProperty("valore_sbarco", round1(r.clearedAttackValue));
+    }
+    if (r.transportsAfterLanding != null) {
+      json.addProperty("trasporti_dopo_sbarco", r.transportsAfterLanding);
     }
     return json;
   }

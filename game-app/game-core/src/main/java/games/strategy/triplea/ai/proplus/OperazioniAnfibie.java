@@ -445,17 +445,22 @@ public final class OperazioniAnfibie {
         continue;
       }
       final double enemyWin = enemyWinOnLone(sh.zone(), transport);
-      final double threshold =
-          100 - ProPlusTuning.riskLevel(proData, sh.zone()).minimumWinPercentage(lowLuck);
+      final OptionalInt lost = lossRound(Set.of(player.getName()), sh.zone());
+      final double threshold = returnThreshold(sh.zone());
       if (enemyWin > threshold) {
         reasons.add(
             String.format(
-                Locale.ROOT,
-                "%s non sicura per lo sbarco a %s (win%% nemica %.0f%% > %.0f%%)",
-                sh.zone().getName(),
-                sh.land().getName(),
-                enemyWin,
-                threshold));
+                    Locale.ROOT,
+                    "%s non sicura per lo sbarco a %s (win%% nemica %.0f%% > %.0f%%",
+                    sh.zone().getName(),
+                    sh.land().getName(),
+                    enemyWin,
+                    threshold)
+                + (lost.isPresent()
+                    ? ", zona pericolosa: perdite al round "
+                        + lost.getAsInt()
+                        + ", soglia dimezzata)"
+                    : ")"));
         continue;
       }
       if (route.isPresent() && route.get().numberOfSteps() > movesLeft) {
@@ -463,8 +468,7 @@ public final class OperazioniAnfibie {
         final List<Territory> path = route.get().getAllTerritories();
         for (int s = Math.min(movesLeft, path.size() - 1); s >= 1; s--) {
           final Territory end = path.get(s);
-          if (enemyWinOnLone(end, transport)
-              <= 100 - ProPlusTuning.riskLevel(proData, end).minimumWinPercentage(lowLuck)) {
+          if (enemyWinOnLone(end, transport) <= returnThreshold(end)) {
             if (move(withCargo(transport), new Route(path.subList(0, s + 1)), moves, "rientro")) {
               held.addAll(withCargo(transport));
             }
@@ -489,6 +493,16 @@ public final class OperazioniAnfibie {
     }
     reasons.add("nessun porto amico sicuro raggiungibile");
     return false;
+  }
+
+  /**
+   * Highest enemy win% accepted where a stuck transport goes back: {@code 100 - minimum win%} of
+   * the zone's level, halved in a zone where my units were sunk in the last {@value #DANGER_ROUNDS}
+   * rounds (memory of danger, step 3d-1-bis, as for the operations' stops).
+   */
+  private double returnThreshold(final Territory zone) {
+    final double base = 100 - ProPlusTuning.riskLevel(proData, zone).minimumWinPercentage(lowLuck);
+    return lossRound(Set.of(player.getName()), zone).isPresent() ? base / 2 : base;
   }
 
   /** Win% of the enemy's best attack on {@code zone} with {@code transport} and allied ships. */
@@ -1331,12 +1345,20 @@ public final class OperazioniAnfibie {
    * operation's nations (troops or carriers) were sunk defending {@code zone} (battle records).
    */
   private OptionalInt lossRound(final Strategia.Operazione op, final Territory zone) {
+    final Set<String> mine = new HashSet<>(op.nazioni());
+    mine.addAll(op.vettori());
+    return lossRound(mine, zone);
+  }
+
+  /**
+   * The latest round, within the last {@value #DANGER_ROUNDS} rounds, in which units of {@code
+   * mine} (nation names) were sunk defending {@code zone} (battle records).
+   */
+  private OptionalInt lossRound(final Set<String> mine, final Territory zone) {
     if (!zone.isWater() || data.getBattleRecordsList() == null) {
       return OptionalInt.empty();
     }
     final int round = data.getSequence().getRound();
-    final Set<String> mine = new HashSet<>(op.nazioni());
-    mine.addAll(op.vettori());
     int found = -1;
     for (final Map.Entry<Integer, games.strategy.triplea.delegate.data.BattleRecords> e :
         data.getBattleRecordsList().getBattleRecordsMapCopy().entrySet()) {
@@ -1374,6 +1396,12 @@ public final class OperazioniAnfibie {
    * when I move after the partner (its ships are already where they are).
    */
   private List<Unit> combinedArrivals(final Territory zone) {
+    return combinedArrivals(map, coppie, zone);
+  }
+
+  /** See {@link #combinedArrivals(Territory)}, for the pairs {@code coppie} of my operations. */
+  static List<Unit> combinedArrivals(
+      final GameMap map, final List<TestaDiPonte.Coppia> coppie, final Territory zone) {
     final List<Unit> list = new ArrayList<>();
     for (final TestaDiPonte.Coppia c : coppie) {
       if (!c.primaIo() || !c.raccoltaComune().contains(zone.getName())) {

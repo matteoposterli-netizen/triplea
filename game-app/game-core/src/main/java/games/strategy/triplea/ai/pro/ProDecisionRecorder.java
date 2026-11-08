@@ -70,6 +70,12 @@ public interface ProDecisionRecorder {
       double enemyTuvSwing,
       double attackValue) {}
 
+  /**
+   * A tuning's own check of the landing's transports on {@code patd} ({@link
+   * ProTuning#checksLandingTransports}): its numbers as text.
+   */
+  default void landingTransports(ProData proData, ProTerritory patd, String detail) {}
+
   /** The attacks still planned after the combat move step {@code stage}. */
   default void attackStage(ProData proData, String stage, Collection<ProTerritory> planned) {}
 

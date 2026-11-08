@@ -865,6 +865,209 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
     assertThat(data.getProperties().get("Pro+ a bordo: British")).isNull();
   }
 
+  @Test
+  void aStuckTransportAvoidsZonesWithRecentLossesWithAHalvedThreshold() {
+    clearAxisAirAndNavy();
+    clearAlliedAirAndNavy();
+    clearTransports(americans);
+    clearSea("104 Sea Zone");
+    final Unit transport = add("104 Sea Zone", "transport", 1, americans).get(0);
+    loadInPlace(transport, add("104 Sea Zone", "infantry", 2, americans));
+    // German battleships reach every friendly coast near 104
+    add("112 Sea Zone", "battleship", 2, germans);
+    nonCombat(americans, 5);
+    bringBack(americans);
+    newTurn(transport);
+    nonCombat(americans, 6);
+    sunk(territory("110 Sea Zone"), 5);
+
+    final OperazioniAnfibie.Rapporto r = report(bringBack(americans), OperazioniAnfibie.RIENTRO);
+
+    // step 3d-1-bis: the memory of danger also for the way back
+    assertThat(r.motivo())
+        .contains("110 Sea Zone non sicura per lo sbarco")
+        .contains("zona pericolosa: perdite al round 5, soglia dimezzata");
+  }
+
+  // ------------------------------------- step 3d-1-bis: transports after a landing
+
+  /**
+   * A transport of {@code owner} with 2 infantry in 104 Sea Zone (next to 110 and 105, both next to
+   * Normandy), German battleships in 113 Sea Zone (they reach both), Normandy German.
+   */
+  private Unit landingFrom104(final GamePlayer owner) {
+    clearAxisAirAndNavy();
+    clearAlliedAirAndNavy();
+    clearTransports(americans);
+    clearTransports(british);
+    clearSea("104 Sea Zone");
+    clearSea("105 Sea Zone");
+    clearSea("110 Sea Zone");
+    ownedBy(territory("Normandy Bordeaux"), germans);
+    final Unit transport = add("104 Sea Zone", "transport", 1, owner).get(0);
+    loadInPlace(transport, add("104 Sea Zone", "infantry", 2, owner));
+    add("113 Sea Zone", "battleship", 2, germans);
+    return transport;
+  }
+
+  private record LandingCheck(
+      ProData proData, ProTerritory landing, Optional<ProLandingTransports> check) {}
+
+  /** The Pro+ check of a landing on {@code target} unloading from {@code zone}. */
+  private LandingCheck checkLanding(
+      final GamePlayer player,
+      final Unit transport,
+      final String target,
+      final String zone,
+      final double win,
+      final double conquestValue) {
+    final ProData proData = new ProData(false, new ProPlusTuning());
+    final TestAi ai = new TestAi(proData, player.getName());
+    proData.initializeSimulation(ai, data, player);
+    ai.prepareData(data);
+    final Territory t = territory(target);
+    final ProTerritory landing = new ProTerritory(t, proData);
+    landing.putAmphibAttackMap(transport, List.copyOf(transport.getTransporting()));
+    landing.getTransportTerritoryMap().put(transport, territory(zone));
+    final games.strategy.triplea.ai.pro.data.ProTerritoryManager manager =
+        new games.strategy.triplea.ai.pro.data.ProTerritoryManager(ai.getCalc(), proData);
+    manager.populateEnemyAttackOptions(
+        List.of(t), new ArrayList<>(map().getNeighbors(t, Matches.territoryIsWater())));
+    final Optional<ProLandingTransports> check =
+        proData
+            .getTuning()
+            .checksLandingTransports(
+                proData,
+                ai.getCalc(),
+                landing,
+                java.util.Map.of(territory(zone), List.of(transport)),
+                manager.getEnemyAttackOptions(),
+                java.util.Set.of(transport),
+                new games.strategy.triplea.ai.pro.data.ProBattleResult(
+                    win, 1, true, List.of(), List.of(), 1),
+                conquestValue,
+                (z, units) -> false);
+    return new LandingCheck(proData, landing, check);
+  }
+
+  @Test
+  void aLandingWhoseTransportsAreLostAfterwardsUnloadsFromASaferZone() {
+    // the British move after the Americans: no partner's ships join 110 in a later turn
+    final Unit transport = landingFrom104(british);
+    // an American fleet guards 105 (allied ships defend, only my sea units count as the loss)
+    add("105 Sea Zone", "battleship", 3, americans);
+    data.getSequence().setRoundAndStep(4, "Combat Move", british);
+
+    final LandingCheck c =
+        checkLanding(british, transport, "Normandy Bordeaux", "110 Sea Zone", 90, 3);
+
+    // 110: the transport alone against the battleships (100% x 7 TUV) > gain 3 x 90% + 1; 105:
+    // with the American fleet the enemy rarely wins there
+    final ProLandingTransports check = c.check().orElseThrow();
+    assertThat(check.keep()).as(check.detail()).isTrue();
+    assertThat(check.unloadZones()).containsEntry(transport, territory("105 Sea Zone"));
+    assertThat(check.detail())
+        .contains("TUV <= guadagno 3.7")
+        .contains("105 Sea Zone: win% nemica")
+        .contains("scarico spostato: 110 Sea Zone -> 105 Sea Zone (1)");
+    final Territory normandy = territory("Normandy Bordeaux");
+    assertThat(c.proData().getTuning().unloadZone(c.proData(), transport, normandy))
+        .contains(territory("105 Sea Zone"));
+    // the route of the combat move unloads from there
+    games.strategy.triplea.ai.pro.util.ProMoveUtils.calculateAmphibRoutes(
+        c.proData(), british, java.util.Map.of(normandy, c.landing()), true);
+    assertThat(c.landing().getTransportTerritoryMap())
+        .containsEntry(transport, territory("105 Sea Zone"));
+    // Hard: its own rule, no zone of its own
+    assertThat(ProTuning.DEFAULT.unloadZone(c.proData(), transport, normandy)).isEmpty();
+  }
+
+  @Test
+  void thePartnersShipsJoiningTheGatheringZoneCountAsForTheSafeStops() {
+    // the Americans move first: British ships within 2 zones of 110 (shared gathering zone of
+    // Overlord) join it in the British turn, before the enemy's
+    final Unit transport = landingFrom104(americans);
+    add("105 Sea Zone", "battleship", 3, british);
+    data.getSequence().setRoundAndStep(4, "Combat Move", americans);
+
+    final ProLandingTransports check =
+        checkLanding(americans, transport, "Normandy Bordeaux", "110 Sea Zone", 90, 3)
+            .check()
+            .orElseThrow();
+
+    assertThat(check.keep()).isTrue();
+    assertThat(check.unloadZones()).isEmpty();
+    assertThat(check.detail()).contains("110 Sea Zone: win% nemica").contains("scorta 3");
+  }
+
+  @Test
+  void aLandingWhoseTransportsAreLostEverywhereIsDroppedWithTheNumbers() {
+    final Unit transport = landingFrom104(americans);
+    data.getSequence().setRoundAndStep(4, "Combat Move", americans);
+
+    final ProLandingTransports check =
+        checkLanding(americans, transport, "Normandy Bordeaux", "110 Sea Zone", 90, 3)
+            .check()
+            .orElseThrow();
+
+    assertThat(check.keep()).isFalse();
+    assertThat(check.reason()).isEqualTo("transports_after_landing");
+    assertThat(check.expectedLoss()).isEqualTo(7, within());
+    assertThat(check.detail())
+        .startsWith("perdita attesa 7.0 TUV > guadagno 3.7")
+        .contains("110 Sea Zone: win% nemica 100% x 7 TUV (trasporti 1, scorta 0)")
+        .contains("zone alternative: 105 Sea Zone perdita 7.0");
+  }
+
+  @Test
+  void aLandingThatGainsMoreThanTheTransportsLossIsMade() {
+    final Unit transport = landingFrom104(americans);
+    data.getSequence().setRoundAndStep(4, "Combat Move", americans);
+
+    final ProLandingTransports check =
+        checkLanding(americans, transport, "Normandy Bordeaux", "110 Sea Zone", 90, 10)
+            .check()
+            .orElseThrow();
+
+    // 10 x 90% + 1 = 10 > 7
+    assertThat(check.keep()).isTrue();
+    assertThat(check.unloadZones()).isEmpty();
+    assertThat(check.detail()).startsWith("perdita attesa 7.0 TUV <= guadagno 10.0");
+  }
+
+  @Test
+  void aCriticalObjectiveIsLandedOnAboveItsDesiredWinDespiteTheTransports() {
+    // plan B: Sea Lion, the United Kingdom a critical objective of the Germans in rounds 1-3
+    StatoMaggiore.setChoice(data.getProperties(), "Axis", "B");
+    clearAxisAirAndNavy();
+    clearAlliedAirAndNavy();
+    clearTransports(germans);
+    clearSea("110 Sea Zone");
+    clearSea("112 Sea Zone");
+    final Unit transport = add("112 Sea Zone", "transport", 1, germans).get(0);
+    loadInPlace(transport, add("112 Sea Zone", "infantry", 2, germans));
+    add("109 Sea Zone", "battleship", 2, british);
+    add("111 Sea Zone", "battleship", 2, british);
+    data.getSequence().setRoundAndStep(2, "Combat Move", germans);
+
+    final ProLandingTransports check =
+        checkLanding(germans, transport, "United Kingdom", "110 Sea Zone", 90, 3)
+            .check()
+            .orElseThrow();
+
+    assertThat(check.keep()).isTrue();
+    assertThat(check.detail())
+        .startsWith("perdita attesa 7.0 TUV > guadagno 3.7")
+        .contains("tenuto: obiettivo critico del piano, win 90% > desiderata 80%");
+
+    // below the desired win%: dropped
+    final ProLandingTransports low =
+        checkLanding(germans, transport, "United Kingdom", "110 Sea Zone", 75, 3)
+            .check()
+            .orElseThrow();
+    assertThat(low.keep()).isFalse();
+  }
+
   private static List<Unit> withCargo(final Unit transport) {
     final List<Unit> units = new ArrayList<>(transport.getTransporting());
     units.add(transport);

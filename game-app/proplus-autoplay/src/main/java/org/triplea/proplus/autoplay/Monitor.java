@@ -128,6 +128,15 @@ final class Monitor {
   /** Round -> nation -> transports that did nothing in the nation's turn (empty, not moved). */
   private final Map<Integer, Map<String, Integer>> idleTransports = new TreeMap<>();
 
+  /** Step 3d-1-bis: sea transports on the map after the last step, with their owner. */
+  private final Map<Unit, String> knownTransports = new HashMap<>();
+
+  /** Round -> nation -> transports lost (on the map after a step, gone after the next). */
+  private final Map<Integer, Map<String, Integer>> lostTransports = new TreeMap<>();
+
+  /** Round -> nation -> TUV of the transports lost. */
+  private final Map<Integer, Map<String, Integer>> lostTransportsTuv = new TreeMap<>();
+
   Monitor(final GameData data) {
     this.data = data;
     // reverse name order: Axis before Allies, as in the plans (Asse / Alleati)
@@ -150,6 +159,7 @@ final class Monitor {
     atWar.addAll(currentWars());
     fallen.addAll(currentFallenCapitals().keySet());
     lastRound = data.getSequence().getRound();
+    knownTransports.putAll(currentTransports());
   }
 
   Map<String, List<String>> alliances() {
@@ -186,6 +196,7 @@ final class Monitor {
     if (GameStep.isNonCombatMoveStepName(runningStep)) {
       recordIdleTransports(lastRound);
     }
+    recordLostTransports(lastRound);
     runningStep = "";
     final int round = data.getSequence().getRound();
     final GameStep step = data.getSequence().getStep();
@@ -326,6 +337,64 @@ final class Monitor {
         });
   }
 
+  /** Step 3d-1-bis: the transports gone since the last step, per owner, in {@code round}. */
+  private void recordLostTransports(final int round) {
+    final Map<Unit, String> now = currentTransports();
+    knownTransports.forEach(
+        (u, owner) -> {
+          if (!now.containsKey(u)) {
+            lostTransports
+                .computeIfAbsent(round, k -> new TreeMap<>())
+                .merge(owner, 1, Integer::sum);
+            lostTransportsTuv
+                .computeIfAbsent(round, k -> new TreeMap<>())
+                .merge(
+                    owner,
+                    costs.getOrDefault(owner, Map.of()).getOrDefault(u.getType().getName(), 0),
+                    Integer::sum);
+          }
+        });
+    knownTransports.clear();
+    knownTransports.putAll(now);
+  }
+
+  private Map<Unit, String> currentTransports() {
+    final Map<Unit, String> map = new HashMap<>();
+    for (final Territory t : data.getMap().getTerritories()) {
+      for (final Unit u : t.getMatches(Matches.unitIsSeaTransport())) {
+        map.put(u, u.getOwner().getName());
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Step 3d-1-bis: TUV swing (defender's TUV lost - attacker's) of the battles of {@code round} on
+   * land where the attacker landed real troops in its combat move, per attacking nation.
+   */
+  private Map<String, Integer> landingTuv(final int round, final JsonArray roundBattles) {
+    final Set<String> landed = new HashSet<>();
+    for (final JsonElement e : landings) {
+      final JsonObject l = e.getAsJsonObject();
+      if (l.get("round").getAsInt() == round
+          && "combattimento".equals(l.get("fase").getAsString())) {
+        landed.add(l.get("nazione").getAsString() + "|" + l.get("territorio").getAsString());
+      }
+    }
+    final Map<String, Integer> tuv = new HashMap<>();
+    for (final JsonElement e : roundBattles) {
+      final JsonObject b = e.getAsJsonObject();
+      final String attacker = b.get("attaccante").getAsString();
+      if (landed.contains(attacker + "|" + b.get("territorio").getAsString())) {
+        tuv.merge(
+            attacker,
+            b.get("tuv_perso_difensore").getAsInt() - b.get("tuv_perso_attaccante").getAsInt(),
+            Integer::sum);
+      }
+    }
+    return tuv;
+  }
+
   /** Transports of the player in turn that end its non-combat move empty and unmoved. */
   private void recordIdleTransports(final int round) {
     final GamePlayer player = data.getPlayerList().getPlayerId(runningPlayer);
@@ -358,6 +427,8 @@ final class Monitor {
     final Map<String, Integer> tuv = tuvByNation();
     final Map<String, Integer> land = landByNation();
     final Map<String, Integer> transports = transportsByNation();
+    final JsonArray roundBattles = battlesOf(round);
+    final Map<String, Integer> landingTuv = landingTuv(round, roundBattles);
     for (final List<String> members : alliances.values()) {
       for (final String name : members) {
         final GamePlayer p = data.getPlayerList().getPlayerId(name);
@@ -370,6 +441,12 @@ final class Monitor {
         n.addProperty(
             "trasporti_inattivi",
             idleTransports.getOrDefault(round, Map.of()).getOrDefault(name, 0));
+        n.addProperty(
+            "trasporti_persi", lostTransports.getOrDefault(round, Map.of()).getOrDefault(name, 0));
+        n.addProperty(
+            "tuv_trasporti_persi",
+            lostTransportsTuv.getOrDefault(round, Map.of()).getOrDefault(name, 0));
+        n.addProperty("tuv_sbarchi", landingTuv.getOrDefault(name, 0));
         nations.add(name, n);
       }
     }
@@ -394,7 +471,7 @@ final class Monitor {
     } else {
       partialRound = json;
     }
-    battles.put(round, battlesOf(round));
+    battles.put(round, roundBattles);
   }
 
   private Map<String, Integer> tuvByNation() {
