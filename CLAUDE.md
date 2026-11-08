@@ -2577,3 +2577,31 @@ Vedi "Stratega LLM" (punti "Due livelli", "Rischio per nazione", "Prompt strateg
   direttive dello stratega" per ogni nazione alleata, partita completata.
 - Test in locale: `:game-core:test` 3093 (fallito solo `ContentDownloaderIntegrationTest`, rete della sandbox),
   `:game-headed:test` 93, `:proplus-autoplay:test` 18, `:ai:test` 13 verdi. Ricerca di chiavi nel repo: nessuna.
+
+#### Autoplay in CI (run 42531873047, commit bb83094, tutto verde: Windows, test, release, 18 partite)
+
+| Metrica | Valore |
+|---|---|
+| Test di qualita' Stratega (30 stati, prompt v2) | JSON validi al primo colpo **30/30 (100%)**, limitate dai paletti 8/30 (27%), latenza media 3,9 s, $0,029 |
+| Test di qualita' Ordini del turno (30 ingressi) | JSON validi al primo colpo **30/30 (100%)**, limitate 10/30 (33%), latenza media **1,9 s**, $0,012 |
+| Chiamate nelle 4 partite LLM | Stratega 48/48, Ordini del turno 110/110 valide, **0 ripieghi** |
+| Costo per partita (una alleanza LLM) | **$0,019-0,029** (media $0,023): Stratega $0,012 + Ordini del turno $0,011 |
+| Chiamate per partita | Alleati 12 + 31 ordini (Francia esclusa, nazioni senza PU saltate), Asse 12 + 24 |
+| Durata partita LLM | 292-512 s (regole 274-366 s) |
+| VC R12 Asse / Alleati: A/1 regole | 6,5 / 4,5 (run precedente 8 / 3: varianza) |
+| VC R12: Alleati LLM / Asse A regole | 8 / 3 (entrambi i semi) |
+| VC R12: Asse LLM / Alleati 1 regole | 8 / 3 e 6 / 5 (media 7 / 4) |
+| Sbarchi veri degli Alleati, A/1 regole vs Alleati LLM | 19 e 7 vs 4 e 13 |
+
+- Rischio per nazione: usato poco (Germans 3,03-3,05 contro Italians 3,0; British 2,45-2,47 contro French 2,43-2,47);
+  Alleati LLM con DIFENSIVA 4 round su 12 ⇒ rischio medio alleato ~2,45 contro ~3,05 delle regole.
+- **Problema confermato**: le operazioni anfibie alleate restano "attendi" in quasi tutti i round, sia nelle direttive
+  (44/46) sia negli ordini del turno (43/44 decisioni). Le motivazioni mostrano l'equivoco: Haiku usa "attendi" per
+  "aspetta che flotta e scorta siano pronte", ma "attendi" blocca lo sbarco anche a flotta pronta (il motore con
+  "lancia" raccoglie e sbarca solo quando trasporti e scorta bastano). Il chiarimento del prompt v2 su "lancia" non e'
+  bastato. Proposta (non fatta, da decidere): nei due prompt definire "attendi" come "rinvio deliberato anche se tutto
+  e' pronto (finta, attesa di un altro fronte)" e dire esplicitamente che l'attesa della flotta la gestisce gia' il
+  motore con "lancia".
+- Giudizio: integrazione a due livelli affidabile (100% JSON validi su entrambi i livelli, nessun ripiego), costo
+  ~2-3 centesimi per partita con un'alleanza LLM (meno dei 5-10 attesi). Sul gioco l'LLM non migliora le regole con 2
+  semi; per gli Alleati probabilmente peggiora (meno sbarchi, piu' DIFENSIVA). Non tarato.
