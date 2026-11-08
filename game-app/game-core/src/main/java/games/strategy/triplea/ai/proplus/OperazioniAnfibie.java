@@ -32,6 +32,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Predicate;
@@ -243,6 +244,281 @@ public final class OperazioniAnfibie {
       }
     }
     return new Esito(Set.copyOf(o.held), List.copyOf(reports));
+  }
+
+  // ------------------------------------------------------------- troops stuck aboard (3d-1)
+
+  /** Game property prefix of the record of my loaded transports (JSON, JDK strings only). */
+  static final String ABOARD_PREFIX = "Pro+ a bordo: ";
+
+  /** Name of the report of {@link #rientro} in the diary. */
+  public static final String RIENTRO = "Rientro truppe a bordo";
+
+  /** Candidate destinations checked for safety at most per transport (one estimate each). */
+  private static final int MAX_DESTINATIONS = 6;
+
+  /**
+   * Step 3d-1: my troops aboard my transports that sat loaded in the same sea zone for more than a
+   * turn without landing (eg American transports loaded in 104 Sea Zone for many rounds: Hard never
+   * uses transports loaded in an earlier turn) go back to the nearest safe friendly port and go
+   * ashore, so the plan (also a new one after a change) can use them. A transport on its way back
+   * keeps going until its troops are ashore. Not at a gathering zone of the plan's operations (the
+   * operations unload there themselves). Remembered in the game property {@code "Pro+ a bordo:
+   * <nation>"} = {transport id: {zona, dal_round, carico, rientro}}, updated at each real
+   * non-combat move.
+   */
+  public static Esito rientro(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final IMoveDelegate moveDel,
+      final PianoAttivo plan) {
+    return new OperazioniAnfibie(proData, calc, moveDel).bringBack(plan);
+  }
+
+  private Esito bringBack(final PianoAttivo plan) {
+    final int round = data.getSequence().getRound();
+    final String key = ABOARD_PREFIX + player.getName();
+    final com.google.gson.JsonObject before = readJson(data.getProperties().get(key));
+    final com.google.gson.JsonObject now = new com.google.gson.JsonObject();
+    final Set<String> gathering = new HashSet<>();
+    plan.getOperazioni().stream()
+        .filter(o -> o.riguarda(player.getName()))
+        .forEach(o -> gathering.addAll(o.raccolta()));
+    final List<Unit> stuck = new ArrayList<>();
+    final Map<Unit, Integer> since = new HashMap<>();
+    for (final Territory zone : map.getTerritories()) {
+      if (!zone.isWater()) {
+        continue;
+      }
+      for (final Unit t :
+          zone.getMatches(Matches.unitIsOwnedBy(player).and(OperazioniAnfibie::isTransport))) {
+        final List<Unit> cargo = ownCargo(t);
+        if (cargo.isEmpty()) {
+          continue;
+        }
+        final String id = t.getId().toString();
+        final Set<String> ids = new HashSet<>();
+        cargo.forEach(u -> ids.add(u.getId().toString()));
+        final com.google.gson.JsonObject prev =
+            before.has(id) ? before.getAsJsonObject(id) : new com.google.gson.JsonObject();
+        final Set<String> prevCargo = new HashSet<>();
+        if (prev.has("carico")) {
+          prev.getAsJsonArray("carico").forEach(e -> prevCargo.add(e.getAsString()));
+        }
+        final boolean sameCargo = !prevCargo.isEmpty() && prevCargo.containsAll(ids);
+        final boolean returning =
+            sameCargo && prev.has("rientro") && prev.get("rientro").getAsBoolean();
+        final boolean sameZone =
+            sameCargo && prev.has("zona") && prev.get("zona").getAsString().equals(zone.getName());
+        final int from =
+            (sameZone || returning) && prev.has("dal_round")
+                ? prev.get("dal_round").getAsInt()
+                : round;
+        final boolean isStuck =
+            (returning || round - from >= 1)
+                && !gathering.contains(zone.getName())
+                && t.getAlreadyMoved().signum() == 0
+                && t.getUnloaded().isEmpty();
+        final com.google.gson.JsonObject rec = new com.google.gson.JsonObject();
+        rec.addProperty("zona", zone.getName());
+        rec.addProperty("dal_round", from);
+        final com.google.gson.JsonArray c = new com.google.gson.JsonArray();
+        ids.stream().sorted().forEach(c::add);
+        rec.add("carico", c);
+        rec.addProperty("rientro", isStuck);
+        now.add(id, rec);
+        if (isStuck) {
+          stuck.add(t);
+          since.put(t, from);
+          where.put(t, zone);
+        }
+      }
+    }
+    data.getProperties().set(key, (java.io.Serializable) null);
+    data.getProperties().set(key, now.toString());
+    if (stuck.isEmpty()) {
+      return Esito.NESSUNO;
+    }
+    final Set<Territory> check = new HashSet<>();
+    for (final Unit t : stuck) {
+      check.add(territory(t));
+      check.addAll(map.getNeighbors(territory(t), MAX_DISTANCE, Matches.territoryIsWater()));
+    }
+    enemy = new ProTerritoryManager(calc, proData);
+    enemy.populateEnemyAttackOptions(List.of(), check);
+    final Set<String> planPorts = new HashSet<>();
+    plan.getOperazioni().stream()
+        .filter(o -> o.nazioni().contains(player.getName()))
+        .forEach(o -> o.porti().forEach(p -> planPorts.add(p.territorio())));
+    final List<String> moves = new ArrayList<>();
+    final List<String> reasons = new ArrayList<>();
+    int aboard = 0;
+    int ashore = 0;
+    for (final Unit t : stuck) {
+      final Territory zone = territory(t);
+      final int troops = ownCargo(t).size();
+      reasons.add(
+          String.format(
+              Locale.ROOT,
+              "%s in %s: %d unita' a bordo dal round %d senza sbarco",
+              t.getType().getName(),
+              zone.getName(),
+              troops,
+              since.get(t)));
+      if (bringBackOne(t, zone, planPorts, moves, reasons)) {
+        ashore += troops;
+      } else {
+        aboard += ownCargo(t).size();
+      }
+    }
+    final Rapporto report =
+        new Rapporto(
+            RIENTRO,
+            player.getName(),
+            aboard > 0 ? Stato.IN_ROTTA : Stato.PREPARAZIONE,
+            stuck.size(),
+            aboard,
+            0,
+            0,
+            List.of(),
+            ashore > 0
+                ? ashore + " unita' a terra, disponibili per il piano"
+                : "verso il porto sicuro piu' vicino",
+            String.join("; ", reasons),
+            List.copyOf(moves),
+            Optional.empty(),
+            -1,
+            "",
+            "",
+            Optional.empty(),
+            Optional.empty());
+    return new Esito(Set.copyOf(held), List.of(report));
+  }
+
+  /**
+   * One stuck transport: to the nearest friendly coast whose zone is safe (a port of the plan's
+   * operations first at equal distance), troops ashore there; if it is beyond this turn's move,
+   * towards it, stopping at the farthest safe zone. Returns whether the troops went ashore.
+   */
+  private boolean bringBackOne(
+      final Unit transport,
+      final Territory zone,
+      final Set<String> planPorts,
+      final List<String> moves,
+      final List<String> reasons) {
+    final Predicate<Territory> canPass = ProMatches.territoryCanMoveSeaUnitsThrough(player, false);
+    final List<Territory> zones = new ArrayList<>();
+    zones.add(zone);
+    zones.addAll(map.getNeighbors(zone, MAX_DISTANCE, canPass));
+    final Map<Territory, Integer> distance = new HashMap<>();
+    zones.forEach(z -> distance.put(z, z.equals(zone) ? 0 : map.getDistance(zone, z, canPass)));
+    record Shore(Territory zone, Territory land, int distance, boolean planPort) {}
+    final List<Shore> shores = new ArrayList<>();
+    for (final Territory z : zones) {
+      final int d = distance.get(z);
+      if (!z.isWater() || d < 0) {
+        continue;
+      }
+      for (final Territory land : map.getNeighbors(z, Matches.territoryIsLand())) {
+        if (isFriendlyLand(land)) {
+          shores.add(new Shore(z, land, d, planPorts.contains(land.getName())));
+        }
+      }
+    }
+    shores.sort(
+        Comparator.comparingInt(Shore::distance)
+            .thenComparing(sh -> !sh.planPort())
+            .thenComparing(sh -> !sh.land().isOwnedBy(player))
+            .thenComparing(sh -> sh.land().getName()));
+    final int movesLeft = transport.getMovementLeft().intValue();
+    int checked = 0;
+    for (final Shore sh : shores) {
+      if (checked >= MAX_DESTINATIONS) {
+        break;
+      }
+      checked++;
+      final Optional<Route> route =
+          sh.zone().equals(zone)
+              ? Optional.empty()
+              : seaRoute(zone, sh.zone(), withCargo(transport));
+      if (!sh.zone().equals(zone) && route.isEmpty()) {
+        continue;
+      }
+      final double enemyWin = enemyWinOnLone(sh.zone(), transport);
+      final double threshold =
+          100 - ProPlusTuning.riskLevel(proData, sh.zone()).minimumWinPercentage(lowLuck);
+      if (enemyWin > threshold) {
+        reasons.add(
+            String.format(
+                Locale.ROOT,
+                "%s non sicura per lo sbarco a %s (win%% nemica %.0f%% > %.0f%%)",
+                sh.zone().getName(),
+                sh.land().getName(),
+                enemyWin,
+                threshold));
+        continue;
+      }
+      if (route.isPresent() && route.get().numberOfSteps() > movesLeft) {
+        // beyond this turn: towards it, at the farthest safe zone of the way
+        final List<Territory> path = route.get().getAllTerritories();
+        for (int s = Math.min(movesLeft, path.size() - 1); s >= 1; s--) {
+          final Territory end = path.get(s);
+          if (enemyWinOnLone(end, transport)
+              <= 100 - ProPlusTuning.riskLevel(proData, end).minimumWinPercentage(lowLuck)) {
+            if (move(withCargo(transport), new Route(path.subList(0, s + 1)), moves, "rientro")) {
+              held.addAll(withCargo(transport));
+            }
+            return false;
+          }
+        }
+        continue;
+      }
+      if (route.isPresent()
+          && !move(
+              withCargo(transport), route.get(), moves, "rientro verso " + sh.land().getName())) {
+        continue;
+      }
+      held.add(transport);
+      final List<Unit> mine = ownCargo(transport);
+      if (move(mine, new Route(sh.zone(), sh.land()), moves, "a terra (rientro)")) {
+        held.addAll(mine);
+        return true;
+      }
+      held.addAll(withCargo(transport));
+      return false;
+    }
+    reasons.add("nessun porto amico sicuro raggiungibile");
+    return false;
+  }
+
+  /** Win% of the enemy's best attack on {@code zone} with {@code transport} and allied ships. */
+  private double enemyWinOnLone(final Territory zone, final Unit transport) {
+    final ProTerritory max = enemyMax(zone);
+    if (max == null || max.getMaxUnits().isEmpty()) {
+      return 0;
+    }
+    final List<Unit> defenders =
+        new ArrayList<>(zone.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsNotLand())));
+    if (!defenders.contains(transport)) {
+      defenders.add(transport);
+    }
+    if (defenders.stream().noneMatch(OperazioniAnfibie::isWarship)) {
+      return 100;
+    }
+    return calc.calculateBattleResults(
+            proData, zone, max.getMaxUnits(), defenders, max.getMaxBombardUnits())
+        .getWinPercentage();
+  }
+
+  private static com.google.gson.JsonObject readJson(final @Nullable Object value) {
+    if (value instanceof String text) {
+      try {
+        return com.google.gson.JsonParser.parseString(text).getAsJsonObject();
+      } catch (final RuntimeException e) {
+        return new com.google.gson.JsonObject();
+      }
+    }
+    return new com.google.gson.JsonObject();
   }
 
   // ------------------------------------------------------------------------------ one operation
@@ -580,11 +856,26 @@ public final class OperazioniAnfibie {
       reasons.add("nessuna rotta libera verso " + gather.get().getName());
       return;
     }
+    if (route.get().numberOfSteps() > MAX_DISTANCE) {
+      // a detour (eg around the world when the direct way is closed) is no way to the gathering
+      reasons.add(
+          "nessuna rotta diretta verso "
+              + gather.get().getName()
+              + " (rotta libera di "
+              + route.get().numberOfSteps()
+              + " zone)");
+      holdIfSafe(op, withCargo(transport), zone, reasons, "in attesa di rotta");
+      return;
+    }
     final List<Territory> path = route.get().getAllTerritories();
     final int steps = Math.min(movesLeft, path.size() - 1);
+    final List<String> unsafeStops = new ArrayList<>();
     for (int s = steps; s >= 1; s--) {
       final Territory end = path.get(s);
       final Safety safety = makeSafe(op, end, List.of(transport));
+      if (!safety.safe()) {
+        unsafeStops.add(safety.testo(end));
+      }
       if (safety.safe()) {
         if (move(withCargo(transport), new Route(path.subList(0, s + 1)), moves, "in rotta")) {
           held.addAll(withCargo(transport));
@@ -608,6 +899,15 @@ public final class OperazioniAnfibie {
                 safety.warships()));
       }
     }
+    // no safe stop on the way: the fleet does not leave
+    reasons.add(
+        "nessuna sosta sicura verso "
+            + gather.get().getName()
+            + ", la flotta resta in "
+            + zone.getName()
+            + " (soste: "
+            + String.join("; ", unsafeStops)
+            + ")");
     holdIfSafe(op, withCargo(transport), zone, reasons, "in attesa di scorta");
   }
 
@@ -981,7 +1281,8 @@ public final class OperazioniAnfibie {
             safety.threshold(),
             safety.warships(),
             List.copyOf(moved),
-            safety.arriving());
+            safety.arriving(),
+            safety.pericoloDal());
       }
     }
     return safety;
@@ -990,17 +1291,25 @@ public final class OperazioniAnfibie {
   private Safety safety(
       final Strategia.Operazione op, final Territory zone, final Collection<Unit> escorts) {
     // step OPERAZIONI ANFIBIE-BIS: the risk the zone's level accepts (Equilibrato: 40%)
-    final double threshold =
-        100 - ProPlusTuning.riskLevel(proData, zone).minimumWinPercentage(lowLuck);
+    final double base = 100 - ProPlusTuning.riskLevel(proData, zone).minimumWinPercentage(lowLuck);
+    // memory of danger: a zone where units of the operation were sunk in the last 3 rounds is a
+    // stop
+    // only with a double margin (half the accepted enemy win%)
+    final OptionalInt lost = lossRound(op, zone);
+    final double threshold = lost.isPresent() ? base / 2 : base;
     final List<Unit> defenders =
         new ArrayList<>(zone.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsNotLand())));
     defenders.addAll(escorts);
     final List<Unit> arriving = combinedArrivals(zone);
     defenders.addAll(arriving);
     final int warships = (int) defenders.stream().filter(OperazioniAnfibie::isWarship).count();
+    // no transports alone out of a port of the operation: the escort must be in the zone where the
+    // fleet ends its move (fix of Matteo's game, 315bcc2: transports alone in 108 Sea Zone)
+    final boolean port = portOf(op, zone).isPresent();
+    final boolean enoughEscort = port || warships >= 1;
     final ProTerritory max = enemyMax(zone);
     if (max == null || max.getMaxUnits().isEmpty()) {
-      return new Safety(true, 0, threshold, warships, List.of(), arriving.size());
+      return new Safety(enoughEscort, 0, threshold, warships, List.of(), arriving.size(), lost);
     }
     final double win =
         defenders.stream().noneMatch(OperazioniAnfibie::isWarship)
@@ -1008,9 +1317,54 @@ public final class OperazioniAnfibie {
             : calc.calculateBattleResults(
                     proData, zone, max.getMaxUnits(), defenders, max.getMaxBombardUnits())
                 .getWinPercentage();
-    final boolean enoughEscort = warships >= Math.min(op.scortaMinima(), 1) || win <= 0;
+    final boolean escorted =
+        enoughEscort && (port || warships >= Math.min(op.scortaMinima(), 1) || win <= 0);
     return new Safety(
-        win <= threshold && enoughEscort, win, threshold, warships, List.of(), arriving.size());
+        win <= threshold && escorted, win, threshold, warships, List.of(), arriving.size(), lost);
+  }
+
+  /** Rounds kept in the memory of danger of a zone. */
+  static final int DANGER_ROUNDS = 3;
+
+  /**
+   * The latest round, within the last {@value #DANGER_ROUNDS} rounds, in which units of the
+   * operation's nations (troops or carriers) were sunk defending {@code zone} (battle records).
+   */
+  private OptionalInt lossRound(final Strategia.Operazione op, final Territory zone) {
+    if (!zone.isWater() || data.getBattleRecordsList() == null) {
+      return OptionalInt.empty();
+    }
+    final int round = data.getSequence().getRound();
+    final Set<String> mine = new HashSet<>(op.nazioni());
+    mine.addAll(op.vettori());
+    int found = -1;
+    for (final Map.Entry<Integer, games.strategy.triplea.delegate.data.BattleRecords> e :
+        data.getBattleRecordsList().getBattleRecordsMapCopy().entrySet()) {
+      if (e.getKey() < round - DANGER_ROUNDS + 1 || e.getKey() > round) {
+        continue;
+      }
+      for (final games.strategy.triplea.delegate.data.BattleRecord r :
+          games.strategy.triplea.delegate.data.BattleRecords.getAllRecords(e.getValue())) {
+        // the record's fields are not public: the public helpers on a one-record list
+        final List<games.strategy.triplea.delegate.data.BattleRecord> one = List.of(r);
+        final boolean lostHere =
+            mine.stream()
+                    .map(data.getPlayerList()::getPlayerId)
+                    .filter(Objects::nonNull)
+                    .anyMatch(
+                        p ->
+                            games.strategy.triplea.delegate.data.BattleRecords
+                                .getWereThereBattlesInTerritoriesMatching(
+                                    one, null, p, "any", List.of(zone)))
+                && games.strategy.triplea.delegate.data.BattleRecords.getLostTuvForBattleRecords(
+                        one, false, false)
+                    > 0;
+        if (lostHere) {
+          found = Math.max(found, e.getKey());
+        }
+      }
+    }
+    return found < 0 ? OptionalInt.empty() : OptionalInt.of(found);
   }
 
   /**
@@ -1059,13 +1413,39 @@ public final class OperazioniAnfibie {
       double threshold,
       int warships,
       List<Unit> escortsMoved,
-      int arriving) {}
+      int arriving,
+      OptionalInt pericoloDal) {
+    /** Eg "108 Sea Zone: win% nemica 70% > soglia 40% (scorta 0)", with the memory of danger. */
+    String testo(final Territory zone) {
+      return String.format(
+              Locale.ROOT,
+              "%s: win%% nemica %.0f%% %s soglia %.0f%% (scorta %d)",
+              zone.getName(),
+              enemyWin,
+              enemyWin > threshold ? ">" : "<=",
+              threshold,
+              warships)
+          + (pericoloDal.isPresent()
+              ? ", zona pericolosa: perdite al round "
+                  + pericoloDal.getAsInt()
+                  + ", soglia dimezzata"
+              : "")
+          + (warships == 0 ? ", trasporti senza scorta" : "");
+    }
+  }
 
   /** Own warships that may join a fleet in {@code zone}, nearest then cheapest. */
   private List<Unit> escortCandidates(final Territory zone, final List<Unit> arriving) {
     final List<Unit> list = new ArrayList<>();
+    // fix (Matteo's game, 315bcc2): the warships in the zone the transports leave come along with
+    // them (before, a zone with own transports gave no escort: "scorta 3" stayed in 101)
+    final Set<Territory> origins = new HashSet<>();
+    arriving.stream()
+        .filter(OperazioniAnfibie::isTransport)
+        .forEach(u -> origins.add(territory(u)));
     for (final Territory t : map.getNeighbors(zone, 2, Matches.territoryIsWater())) {
-      if (t.anyUnitsMatch(Matches.unitIsOwnedBy(player).and(OperazioniAnfibie::isTransport))) {
+      if (!origins.contains(t)
+          && t.anyUnitsMatch(Matches.unitIsOwnedBy(player).and(OperazioniAnfibie::isTransport))) {
         continue; // they guard transports there
       }
       for (final Unit u :

@@ -126,6 +126,9 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   acquisti), `ProTuning.heldUnits` (unità che il non-combattimento di Hard non muove; default vuoto),
   aggancio in `ProNonCombatMoveAi.findUnitsThatCantMove`, `Strategia.Operazione`/`Porto`,
   `PianoAttivo.getOperazioni`. Vedi "Operazioni anfibie".
+- Step 3d-1: `ai/proplus/strategia/Contromosse` (cambio piano, corsa, postura, contro-obiettivi),
+  `StatoMaggiore.cambia` (+ `cambi` nello stato), `PianoAttivo` (postura e contro-obiettivi del round),
+  `OperazioniAnfibie.rientro` (truppe ferme a bordo). Vedi "Postura, cambio piano, contromosse".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -417,10 +420,13 @@ rischio effettivo e obiettivi per bersaglio).
   (zone di mare con navi di quella nazione), `peso`, `nazioni` opzionale}]], `ruoli` {nazione:
   compito}, `tappe` e `firma` (step 3c, vedi "Avanzamento del piano e lettura del nemico"),
   `sperimentale` (step 3c: "(sperimentale)" nel pannello, mai scelto da "Automatico"; B Sea Lion),
-  `punti_critici` [{`descrizione`, `tipo`, `territori`, `zone`, `unita`, `nazione`}], `logistica`
-  (step 3b, vedi "Logistica del piano"). Usati: `fasi` (rischio, obiettivi), `logistica`; `ruoli`
-  appare nel diario; `tappe`/`firma` solo osservazione (step 3c); `punti_critici` letti ma non
-  usati.
+  `punti_critici` [{`descrizione`, `tipo` (`territorio` | `unita` | `flotta` | `stack_avanzato`),
+  `territori`, `zone`, `unita`, `classi`, `fronte`, `nazione`, `da_round`, `a_round`}] (step 3d-1:
+  bersagli concreti per il nemico del piano), `subentri` [id] e `contrasta` [id nemici] (step
+  3d-1), `contromosse` (default true; N false), `logistica` (step 3b, vedi "Logistica del piano").
+  Usati: `fasi` (rischio, obiettivi), `logistica`, dallo step 3d-1 `tappe`/`firma` (lettura e stato
+  che decidono postura e cambio), `punti_critici`, `subentri`, `contrasta`; `ruoli` appare nel
+  diario. Radice del file: `stato_maggiore` (numeri dello step 3d-1, vedi sotto).
 - Fronti Europe 1940: Ovest, Est, Mediterraneo-Africa, Mari (`zone_di_mare: true` = tutte le zone
   di mare), Altro. Piani: Asse A Barbarossa (Automatico), B Sea Lion, C Finta Sea Lion,
   D Sud/Mediterraneo, N Neutro (tutti 0, nessun obiettivo, nessuna logistica: per confronti); B
@@ -430,10 +436,12 @@ rischio effettivo e obiettivi per bersaglio).
 - Persistenza (solo `String` JDK ⇒ salvataggio apribile dalla TripleA ufficiale):
   `"Pro+ piano: <alleanza>"` = id scelto o `auto`; `"Pro+ stato maggiore: <alleanza>"` =
   `{"piano":"A","round_inizio":1,"storico":[]}`. Il piano si **fissa** (`StatoMaggiore.fix`) al
-  primo turno Pro+ dell'alleanza (`ProPlusAi.logPhase`, sui dati reali) e poi non cambia: il
-  pannello mostra la tendina bloccata "fissato al round N". `storico` = per round, vuoto nello
-  step 3a (avanzamento, ipotesi sull'avversario, postura negli step successivi). Fase = round di
-  gioco assoluto (non relativo a `round_inizio`).
+  primo turno Pro+ dell'alleanza (`ProPlusAi.logPhase`, sui dati reali): il pannello mostra la
+  tendina bloccata "fissato al round N". Dallo step 3d-1 lo stato maggiore può **cambiarlo** a
+  inizio round (`StatoMaggiore.cambia`): `piano` = nuovo piano, `cambi` [{round, da, a, motivo}]
+  (assente finché non ce ne sono). `storico` = per round (avanzamento, lettura, dallo step 3d-1
+  `piano` in vigore e `stato_strategico`). Fase = round di gioco assoluto (non relativo a
+  `round_inizio` né al round del cambio).
 - Rischio effettivo di un attacco = cursore dell'alleanza + modificatore della fase per il fronte
   del bersaglio, limitato a -1..+1 e a 1..5 (`RiskLevel.withModifier`). Usato per: soglie
   desiderata/minima per bersaglio (`ProTuning.targetAttackWinPercentage`/`targetAttackMinWin…`,
@@ -762,6 +770,24 @@ default vuoti), piano N senza operazioni.
   - unità mosse o tenute (trasporti, carico, scorta, navi da guerra della zona) ⇒ `ProTuning.heldUnits`
     ⇒ `ProNonCombatMoveAi` le mette tra le "non muovibili" (il carico solo fuori dalle mosse). Flotta in
     una zona non sicura ⇒ non tenuta: Hard la porta nella zona più sicura.
+- **Soste sicure e scorta** (fix della partita di Matteo, build 315bcc2, Alleati Pro+ piano 1 contro Asse
+  umano: R7-R9 trasporti USA carichi mandati da 101 a 108 Sea Zone senza scorta, "scorta 3" rimasta in 101, e
+  affondati ogni turno; la logica è la stessa in 011a5ac). Cause nel codice: (a) zona senza attacco nemico
+  stimato ⇒ "sicura" anche senza navi da guerra (uscita anticipata di `safety`); (b) i candidati di scorta
+  escludevano le zone con trasporti propri, quindi le navi nella zona di partenza dei trasporti non li
+  accompagnavano mai; (c) nessuna memoria delle perdite. Ora (`OperazioniAnfibie.safety`/`makeSafe`):
+  ogni zona di fine movimento (non solo la raccolta) richiede **almeno 1 nave da guerra presente** se non è
+  la zona di un porto dell'operazione (niente trasporti soli fuori dal porto, anche con stima nemica 0) e
+  win% del miglior attacco nemico ≤ soglia del livello effettivo; le navi della zona di partenza dei
+  trasporti possono fare da scorta e si muovono nella stessa zona d'arrivo; **memoria del pericolo**
+  (`lossRound`, dai `BattleRecords` tramite gli helper pubblici): zona dove unità delle nazioni
+  dell'operazione (truppe o vettori) hanno perso TUV difendendo negli ultimi `DANGER_ROUNDS` = 3 round ⇒
+  soglia dimezzata (margine doppio). Nessuna sosta sicura ⇒ la flotta non parte, diario "nessuna sosta
+  sicura verso X, la flotta resta in Y (soste: Z: win% nemica A% > soglia B% (scorta N)[, zona pericolosa:
+  perdite al round R, soglia dimezzata][, trasporti senza scorta]; ...)". Rotta libera più lunga di 6 zone
+  (deviazioni, es. nella mappa Global di test il giro del mondo via Panama) ⇒ "nessuna rotta diretta",
+  la flotta aspetta. Vale per trasporti carichi, spola dei vuoti (fuori porto con scorta) e scorte della
+  flotta combinata.
 - **Acquisti** (`OperazioniAnfibie.acquisti`, calcolati in `ProPlusAi.purchase` sul tabellone reale prima
   della simulazione, `ProPlusTuning.prepareOperationPurchases`): obbligati aggiunti agli ordini del piano
   (al posto della regola "+1 trasporto per l'imbarco" dello step 3b-ter): trasporti (max 2 per turno, fino
@@ -888,6 +914,83 @@ nuovo hook `ProTuning.keepsBridgehead` (default vuoto) chiamato in `ProCombatMov
   americano in WEST_EUROPE il cui territorio è alleato a fine del suo round e del successivo);
   `riepilogo-generale.md` sezione "Coordinamento alleato: sbarchi USA e teste di ponte" (per partita e
   per configurazione: sbarco USA entro R7, teste di ponte ≥ 2 round, round medio, unità USA per round).
+
+## Postura, cambio piano, contromosse (step 3d-1, solo Pro+)
+
+`strategia/Contromosse`, chiamata da `Valutazione.inizioRound` (primo turno Pro+ dell'alleanza nel round,
+dati reali) dopo avanzamento e lettura. Hard identica (nessuna AI Hard arriva qui), piano N senza effetti
+(`contromosse: false` ⇒ postura `NESSUNA`, mai cambio, niente rientro). Decisioni indipendenti dal diario.
+- **Numeri** (`stato_maggiore` nel file, `Strategia.Parametri`; scelti, non tarati): `round_crisi` 2,
+  `inerzia_round` 3, `max_cambi` 2, `margine_cambio` 0.1, `soglia_lettura` 0.5, `bonus_contrasto` 0.25,
+  `proroga_tappe` 2, `peso_rallentamento` 8, `peso_contrasto` 20, `round_contrasto` 2, `corsa_pari` 2,
+  `distanza_forze` 2, `distanza_attaccabile` 2, `soglia_contrasto` 0.35, `vittoria` {Axis: {vc: 8},
+  Allies: {territori: [Germany, Southern Italy], richiesti: 2}} (come le condizioni di vittoria dell'XML:
+  gli Alleati partono con 8 VC su 11, contarle darebbe "vittoria in 0 round" dal R1).
+- **Cambio piano** (`Contromosse.cambio`): condizione = piano in vigore in crisi (stato IN CRISI **o** una
+  sua operazione in stallo) in `round_crisi` round di fila con quel piano, meno di `max_cambi` cambi,
+  almeno `inerzia_round` round dall'ultimo cambio. Alternative = `subentri` (A→D, D→A, C→A, B→A, 1→2,
+  2→1, 3→1/2). Punteggio = (tappe + forze + stato)/3 + contrasto: tappe = quota delle tappe del piano
+  tenute o con unità di terra dell'alleanza entro `distanza_forze`; forze = TUV terra+aerei nostro /
+  (nostro + nemico) entro `distanza_forze` dai bersagli non tenuti (tappe, obiettivi della fase del round,
+  bersagli delle operazioni); stato = 0 per il piano in vigore (è in crisi), 0.5 per le alternative;
+  contrasto = `bonus_contrasto` se il piano `contrasta` il piano nemico più probabile letto oltre
+  `soglia_lettura` ("chi mette in crisi chi": 1 contrasta A, B, C; 2 contrasta D; A contrasta 2, 3; D
+  contrasta 1). Cambio se la migliore alternativa supera il piano in vigore di `margine_cambio`. Al cambio:
+  `StatoMaggiore.cambia`, stallo delle operazioni del nuovo piano ripartito (`StalloOperazioni.riparti`),
+  avanzamento ricalcolato col nuovo piano; le sue tappe non sono in ritardo prima di round del cambio +
+  `proroga_tappe` (`entro_round_effettivo` nel JSON). La fase è quella del round corrente; acquisti,
+  raccolta e operazioni seguono il nuovo piano dallo stesso round (`PianoAttivo` legge lo stato).
+- **Corsa** (`Contromosse.Corsa`): per alleanza misura = VC tenute (o territori di `vittoria` tenuti),
+  tendenza = (misura ora − misura dell'ingresso dello storico di 3 round fa, o il più vecchio) / round,
+  round alla vittoria = (obiettivo − misura) / tendenza (`mai` = 99 se tendenza ≤ 0; 0 se raggiunto). Pari
+  se entrambe `mai` o differenza ≤ `corsa_pari`.
+- **Postura**, in quest'ordine: `DIFENSIVA` (piano IN CRISI e nemico più veloce ⇒ rischio −1 su tutti i
+  fronti dopo il modificatore della fase, `PianoAttivo.livelloFronte`; quota del piano 0 negli acquisti ⇒
+  la difesa della minaccia reale viene prima del mix senza tetto, etichetta "[postura DIFENSIVA ...]");
+  `CONTRASTO` (nemico più veloce, piano nemico più probabile letto ≥ `soglia_contrasto`, almeno un suo punto
+  critico attaccabile = unità nostre con attacco > 0 nel bersaglio o entro `distanza_attaccabile`, meno di
+  `round_contrasto` round di contrasto di fila ⇒ i punti attaccabili sono obiettivi di tutte le nazioni
+  dell'alleanza con peso `peso_contrasto`); `RALLENTAMENTO` (corsa pari e piano nemico letto oltre
+  `soglia_lettura` ⇒ tutti i suoi punti critici presenti obiettivi con `peso_rallentamento`);
+  `OFFENSIVA` altrimenti (piano IN LINEA e in vantaggio, **ma anche ogni caso non coperto**: nessun
+  effetto; il motivo dice quale). Contro-obiettivi = obiettivi normali del piano (bonus di priorità,
+  desiderata ≥ livello base, regola "obiettivo" dello step 2d; mai neutrali).
+- **Punti critici** (`Contromosse.places`, bersagli per l'alleanza che contrasta): `territorio` = i
+  territori se sono dell'alleanza del piano (Egypt conta solo se l'Asse l'ha preso); `unita` = luoghi di
+  `territori`/`zone` o del `fronte` con unità `unita`/`classi` di `nazione` (terra: solo se del nemico);
+  `flotta` = zone con navi di `nazione` (assente = qualunque nazione del piano); `stack_avanzato` = territorio
+  dell'alleanza del piano con unità di terra di `nazione` confinante con terra nostra, il più lontano dalla
+  capitale (distanza via terra), a parità il meno sostenuto (meno territori confinanti del piano), poi più
+  unità. Dati: A stack tedesco, Romania, Egypt; B trasporti tedeschi in 112-115, aerei tedeschi sul fronte
+  Ovest; C come B fino al R3; D trasporti e flotta italiani in 92-99, Egypt, Gibraltar; 1 flotta (qualunque
+  nazione alleata) in 104/109/110; 2 flotta USA in 91/92, Egypt, Malta; 3 e N nessuno.
+- **Rientro** (`OperazioniAnfibie.rientro`, in `ProPlusAi.move` nel non combattimento reale prima delle
+  operazioni, per ogni piano con contromosse anche senza operazioni): proprietà `"Pro+ a bordo: <nazione>"`
+  = {id trasporto: {zona, dal_round, carico, rientro}} aggiornata a ogni non combattimento. Trasporto puro
+  con mie truppe a bordo nella **stessa zona con lo stesso carico** da un round precedente (o già in
+  rientro), fermo, non in una zona di raccolta delle operazioni del piano (lì scarica già la regola
+  "bersaglio troppo forte") ⇒ costa amica (terra propria o alleata) più vicina via mare (entro 6 zone), a
+  parità un porto delle operazioni del piano, poi terra propria; zona d'arrivo sicura (win% nemica ≤ 100 −
+  minima del livello della zona; trasporto senza navi da guerra = 100%); fuori portata ⇒ verso di lei fino
+  alla zona sicura più lontana (resta "in rientro"). Truppe a terra, trasporto e truppe tenuti
+  (`heldUnits`). Diario: rapporto "Rientro truppe a bordo" tra le operazioni anfibie.
+- **Stato strategico** (JSON `stato_strategico` nell'ingresso dello storico, quindi nel diario e in
+  `decisioni.jsonl` con l'evento `stato_maggiore_round`): {alleanza, round, piano, nome_piano, fase, stato,
+  lettura {piu_probabile, probabilita, probabilita_piani}, corsa {vc, obiettivo_vc, tendenza,
+  round_alla_vittoria, esito}, postura, motivo, contro_obiettivi [{territorio, punto_critico, attaccabile,
+  peso, ruolo}], punti_critici_nemici, cambio_piano {round_in_crisi, cambi_fatti, valutazioni [{piano,
+  tappe_raggiungibili, forze_vicine, tuv_nostro, tuv_nemico, stato, contrasto, punteggio}], scelto,
+  motivo} (solo se valutato; altrimenti `cambio_piano_motivo`), cambi_piano}. L'ingresso ha anche `piano`.
+  `PianoAttivo` usa solo l'ingresso del round corrente con lo stesso piano.
+- **Diario**: nel blocco dello stato maggiore "Stato maggiore: postura X perche' ...; piano Y (cambiato da
+  Z perche' ...)" (o "(in vigore dal round N)"), "Contro-obiettivi principali/secondari: ...",
+  "Valutazione dei piani: ..." quando valutati; nell'intestazione del turno "(subentrato al round N)" e
+  ", postura X".
+- **Autoplay**: `Monitor` per round e alleanza `piano` (dell'ingresso), `postura`, `motivo_postura`,
+  `contro_obiettivi`, `cambio`; `riepilogo.md` colonna "Postura" e sezione "Piani e posture";
+  `riepilogo-generale.md` sezione "Piani e posture dello stato maggiore" (per partita: piani con round e
+  motivo dei cambi, posture per tratti di round; per configurazione: cambi totali, partite con cambi,
+  piano finale).
 
 ## Log degli step
 
@@ -1801,4 +1904,29 @@ Piano 1 = 8 partite (A/1, D/1, C/1, B/1 × 2 semi). Perdite dal diario come sopr
   lo step 3d: la logistica atlantica USA (zona di raccolta 110 mai sicura, nessun ripiego su 109 né su
   sbarco diretto da 104, flotta di scorta USA/UK insufficiente) e l'uso di "Overlord in stallo" per
   cambiare piano.
+
+### Step 3d-1 — postura, cambio piano, contromosse + fix soste/scorta dei trasporti (2026-11-08)
+
+Vedi "Postura, cambio piano, contromosse" e "Operazioni anfibie" (soste sicure e scorta). Classi: nuova
+`strategia/Contromosse`; modificate `Strategia` (`Parametri`, `Vittoria`, `subentri`, `contrasta`,
+`contromosse`, punti critici concreti con `da_round`/`a_round`), `StatoMaggiore` (`cambi`, `cambia`,
+`roundPiano`), `Valutazione` (decisione a inizio round, proroga delle tappe), `StalloOperazioni.riparti`,
+`PianoAttivo` (postura, contro-obiettivi, `roundSubentro`, rischio −1 in DIFENSIVA), `ProPlusTuning` (quota 0
+in DIFENSIVA), `OperazioniAnfibie` (rientro, soste/scorta/pericolo, limite deviazioni), `ProPlusAi`,
+`DiaryRecorder` (intestazione), autoplay `Monitor`/`Riepilogo`/`RiepilogoGenerale`; JSON (stato_maggiore,
+subentri, contrasta, punti critici). Nessuna classe Pro toccata.
+- Scoperta: in Europe 1940 gli Alleati partono con 8 VC su 11 (Asse 3): "VC tenute" non misura la loro
+  corsa (Honorable 9 ⇒ quasi vinta dal R1). La corsa usa le condizioni dell'XML: Asse 8 VC, Alleati
+  Germany + Southern Italy (`stato_maggiore.vittoria`).
+- Test nuovi: `ContromosseTest` (13: file dati, scarti del parser, cambio con 2 round di crisi, nessun cambio
+  con 1 round / IN LINEA / crisi di un altro piano, inerzia 3 round e massimo 2 cambi, bonus "contrasta", file
+  reale: Overlord in stallo R7-R8 ⇒ piano 2 al R8 con ordini del piano 2 nello stesso round e tappe non subito
+  in ritardo, piano N sempre NESSUNA, corsa pari/vantaggio/nemico più veloce, DIFENSIVA, CONTRASTO su Romania,
+  RALLENTAMENTO e lettura al 50% senza effetti, effetti su PianoAttivo); `AmphibiousOperationsTest` (+7: rientro
+  da 104 a United Kingdom, trasporto in transito non bloccato, nessuna sosta sicura ⇒ la flotta resta, scorta
+  che accompagna, niente trasporto solo fuori porto, perdita al round prima ⇒ zona evitata, perdita di 3 round
+  prima dimenticata); `AutoplayTest` (+1: piani e posture). Golden e `DiaryNeutralityTest` verdi.
+- Verifica locale: 1 partita A/1 da 2 round (38 s): posture Alleati R1 RALLENTAMENTO (A letto 72%,
+  contro-obiettivi Finland e Romania), R2 CONTRASTO (Asse +1 VC/round); Asse R1-2 OFFENSIVA.
+- Autoplay in CI: vedi sotto (risultati da analizzare).
 

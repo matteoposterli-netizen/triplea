@@ -119,10 +119,49 @@ public final class Valutazione {
     if (plan.isEmpty()) {
       return Optional.empty();
     }
-    final Risultato result =
-        valuta(data, alliance.get(), strategia.get(), plan.get(), state.get().storico(), round);
-    StatoMaggiore.aggiungiStorico(data, alliance.get(), result.storico());
-    return Optional.of(result);
+    final int changedIn = state.get().cambi().isEmpty() ? 0 : state.get().roundPiano();
+    Risultato result =
+        valuta(
+            data,
+            alliance.get(),
+            strategia.get(),
+            plan.get(),
+            state.get().storico(),
+            round,
+            changedIn);
+    // step 3d-1: the general staff decides (plan change, posture, counter-objectives)
+    final Contromosse.Cambio change =
+        Contromosse.cambio(
+            data,
+            alliance.get(),
+            strategia.get(),
+            plan.get(),
+            state.get(),
+            result.storico(),
+            round);
+    Strategia.Piano inForce = plan.get();
+    if (change.nuovo().isPresent()) {
+      inForce = change.nuovo().get();
+      StatoMaggiore.cambia(data, alliance.get(), inForce.id(), round, change.motivo());
+      inForce
+          .operazioni()
+          .forEach(o -> StalloOperazioni.riparti(data.getProperties(), o.nome(), round));
+      result =
+          valuta(
+              data, alliance.get(), strategia.get(), inForce, state.get().storico(), round, round);
+    }
+    final StatoMaggiore.Stato now =
+        StatoMaggiore.getState(data.getProperties(), alliance.get()).orElse(state.get());
+    final JsonObject entry = result.storico();
+    entry.addProperty("piano", inForce.id());
+    final JsonObject strategic =
+        Contromosse.statoStrategico(
+            data, alliance.get(), strategia.get(), inForce, now, entry, change, round);
+    entry.add("stato_strategico", strategic);
+    final Risultato decided =
+        new Risultato(alliance.get(), round, entry, result.testo() + Contromosse.testo(strategic));
+    StatoMaggiore.aggiungiStorico(data, alliance.get(), entry);
+    return Optional.of(decided);
   }
 
   static Risultato valuta(
@@ -132,6 +171,21 @@ public final class Valutazione {
       final Strategia.Piano plan,
       final JsonArray storico,
       final int round) {
+    return valuta(data, alliance, strategia, plan, storico, round, 0);
+  }
+
+  /**
+   * @param changedIn round the plan took over in after a change (0 = never changed): its milestones
+   *     get {@link Strategia.Parametri#prorogaTappe} rounds before they can be late
+   */
+  static Risultato valuta(
+      final GameState data,
+      final String alliance,
+      final Strategia strategia,
+      final Strategia.Piano plan,
+      final JsonArray storico,
+      final int round,
+      final int changedIn) {
     final List<GamePlayer> own = players(data, alliance);
     final Optional<String> enemyAlliance =
         ProPlusSettings.configurableAlliances(data).stream()
@@ -141,7 +195,8 @@ public final class Valutazione {
 
     final JsonObject entry = new JsonObject();
     entry.addProperty("round", round);
-    final JsonObject progress = progress(data, plan, own, enemies, storico, round);
+    final int grace = changedIn > 0 ? changedIn + strategia.getParametri().prorogaTappe() : 0;
+    final JsonObject progress = progress(data, plan, own, enemies, storico, round, grace);
     entry.add("avanzamento", progress);
     final StringBuilder text = new StringBuilder();
     text.append(
@@ -182,7 +237,8 @@ public final class Valutazione {
       final List<GamePlayer> own,
       final List<GamePlayer> enemies,
       final JsonArray storico,
-      final int round) {
+      final int round,
+      final int grace) {
     final JsonObject json = new JsonObject();
     final JsonArray milestones = new JsonArray();
     final Map<String, Integer> reachedBefore = reachedBefore(storico);
@@ -191,6 +247,10 @@ public final class Valutazione {
       final JsonObject m = new JsonObject();
       m.addProperty("tappa", tappa.label());
       m.addProperty("entro_round", tappa.entroRound());
+      final int deadline = Math.max(tappa.entroRound(), grace);
+      if (deadline != tappa.entroRound()) {
+        m.addProperty("entro_round_effettivo", deadline);
+      }
       final Integer before = reachedBefore.get(tappa.label());
       if (before != null) {
         m.addProperty("stato", "raggiunta");
@@ -198,7 +258,7 @@ public final class Valutazione {
       } else if (taken(data, tappa, own, seenLost(storico, tappa.label()))) {
         m.addProperty("stato", "raggiunta");
         m.addProperty("round_raggiunta", round);
-      } else if (round > tappa.entroRound()) {
+      } else if (round > deadline) {
         m.addProperty("stato", "in ritardo");
         late++;
       } else {

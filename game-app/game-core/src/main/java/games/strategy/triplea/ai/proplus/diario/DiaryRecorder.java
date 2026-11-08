@@ -297,12 +297,18 @@ public final class DiaryRecorder implements ProDecisionRecorder {
         .append(Italian.alliance(plan.getAlleanza()))
         .append(": piano ")
         .append(plan.getPiano().label());
-    plan.getRoundInizio()
-        .ifPresentOrElse(
-            r -> sb.append(" (fissato al round ").append(r).append(')'),
-            () -> sb.append(" (non ancora fissato)"));
+    if (plan.getRoundSubentro().isPresent()) {
+      sb.append(" (subentrato al round ").append(plan.getRoundSubentro().get()).append(')');
+    } else {
+      plan.getRoundInizio()
+          .ifPresentOrElse(
+              r -> sb.append(" (fissato al round ").append(r).append(')'),
+              () -> sb.append(" (non ancora fissato)"));
+    }
     final Strategia.Fase fase = plan.getFase();
     sb.append(", fase ").append(fase == null ? "nessuna (tutti i fronti 0)" : fase.label());
+    // step 3d-1: the posture of the round
+    sb.append(", postura ").append(plan.getPostura());
     sb.append(String.format("%n  Fronti -> rischio effettivo (soglie desiderata/minima):"));
     plan.livelliPerFronte()
         .forEach(

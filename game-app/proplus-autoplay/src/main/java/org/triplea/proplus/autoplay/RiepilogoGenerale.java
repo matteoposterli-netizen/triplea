@@ -137,6 +137,7 @@ final class RiepilogoGenerale {
         .append(" (PU = somma della cassa delle nazioni a fine round).\n");
 
     configurations(md, games, alliances, vcRounds, maxRound);
+    plansAndPostures(md, games, alliances);
     landingsAndTransports(md, games, alliances, maxRound);
     alliedCoordination(md, games, alliances, maxRound);
 
@@ -845,5 +846,140 @@ Europa occidentale = Francia (Normandy Bordeaux, France, Southern France), Benel
 
   private static String text(final JsonObject o, final String key) {
     return o != null && o.has(key) ? o.get(key).getAsString() : "-";
+  }
+
+  /**
+   * Step 3d-1: per game the history of the plans (round and reason of each change) and of the
+   * postures; per configuration the plan changes and the final plans.
+   */
+  private static void plansAndPostures(
+      final StringBuilder md, final List<Game> games, final List<String> alliances) {
+    md.append(
+"""
+
+## Piani e posture dello stato maggiore (step 3d-1)
+
+""")
+        .append(
+"""
+| Partita | Alleanza | Piani (cambi) | Posture |
+|---|---|---|---|
+""");
+    final Map<String, List<JsonObject>> byConfig = new LinkedHashMap<>();
+    for (final Game g : games) {
+      if (g.json() == null) {
+        continue;
+      }
+      byConfig
+          .computeIfAbsent(configuration(g.json(), alliances), k -> new ArrayList<>())
+          .add(g.json());
+      for (final String a : alliances) {
+        final List<String> postures = postures(g.json(), a);
+        if (postures.stream().allMatch("-"::equals)) {
+          continue;
+        }
+        md.append("| ")
+            .append(g.folder())
+            .append(" | ")
+            .append(Riepilogo.allianceLabel(a))
+            .append(" | ")
+            .append(planHistory(g.json(), a))
+            .append(" | ")
+            .append(Riepilogo.runs(postures))
+            .append(" |\n");
+      }
+    }
+    md.append(
+            "\n| Configurazione | Alleanza | Partite | Cambi di piano (totale) | Partite con cambi |")
+        .append(
+"""
+ Piano finale |
+|---|---|---|---|---|---|
+""");
+    for (final Map.Entry<String, List<JsonObject>> c : byConfig.entrySet()) {
+      for (final String a : alliances) {
+        if (c.getValue().stream().allMatch(j -> postures(j, a).stream().allMatch("-"::equals))) {
+          continue;
+        }
+        final Map<String, Integer> finals = new TreeMap<>();
+        int total = 0;
+        int with = 0;
+        for (final JsonObject j : c.getValue()) {
+          final int n = changes(j, a).size();
+          total += n;
+          with += n > 0 ? 1 : 0;
+          finals.merge(finalPlan(j, a), 1, Integer::sum);
+        }
+        md.append("| ")
+            .append(c.getKey())
+            .append(" | ")
+            .append(Riepilogo.allianceLabel(a))
+            .append(" | ")
+            .append(c.getValue().size())
+            .append(" | ")
+            .append(total)
+            .append(" | ")
+            .append(with)
+            .append(" | ")
+            .append(
+                String.join(
+                    ", ",
+                    finals.entrySet().stream().map(e -> e.getKey() + " x" + e.getValue()).toList()))
+            .append(" |\n");
+      }
+    }
+  }
+
+  /** Posture of {@code alliance} per round ("-" without one). */
+  static List<String> postures(final JsonObject json, final String alliance) {
+    final List<String> list = new ArrayList<>();
+    for (final JsonElement e : json.getAsJsonArray("round")) {
+      final JsonObject staff = e.getAsJsonObject().getAsJsonObject("stato_maggiore");
+      final JsonObject a = staff == null ? null : staff.getAsJsonObject(alliance);
+      list.add(a != null && a.has("postura") ? a.get("postura").getAsString() : "-");
+    }
+    return list;
+  }
+
+  /** The plan changes of {@code alliance}: [{round, da, a, motivo}]. */
+  static List<JsonObject> changes(final JsonObject json, final String alliance) {
+    final List<JsonObject> list = new ArrayList<>();
+    for (final JsonElement e : json.getAsJsonArray("round")) {
+      final JsonObject r = e.getAsJsonObject();
+      final JsonObject staff = r.getAsJsonObject("stato_maggiore");
+      final JsonObject a = staff == null ? null : staff.getAsJsonObject(alliance);
+      if (a != null && a.has("cambio")) {
+        final JsonObject c = a.getAsJsonObject("cambio").deepCopy();
+        c.addProperty("round", r.get("round").getAsInt());
+        list.add(c);
+      }
+    }
+    return list;
+  }
+
+  static String finalPlan(final JsonObject json, final String alliance) {
+    final JsonObject last = lastRound(json);
+    final JsonObject staff = last == null ? null : last.getAsJsonObject("stato_maggiore");
+    final JsonObject a = staff == null ? null : staff.getAsJsonObject(alliance);
+    return a != null && a.has("piano") ? a.get("piano").getAsString() : "-";
+  }
+
+  /** Eg "1 -> 2 (R8: piano 1 in crisi da 2 round ...)" or "A". */
+  static String planHistory(final JsonObject json, final String alliance) {
+    final List<JsonObject> list = changes(json, alliance);
+    if (list.isEmpty()) {
+      return finalPlan(json, alliance);
+    }
+    final StringBuilder sb = new StringBuilder(list.get(0).get("da").getAsString());
+    for (final JsonObject c : list) {
+      sb.append(" -> ")
+          .append(c.get("a").getAsString())
+          .append(" (R")
+          .append(c.get("round").getAsInt())
+          .append(": ")
+          .append(c.get("motivo").getAsString().replace("|", "/"))
+          .append(')');
+    }
+    return sb.toString();
   }
 }

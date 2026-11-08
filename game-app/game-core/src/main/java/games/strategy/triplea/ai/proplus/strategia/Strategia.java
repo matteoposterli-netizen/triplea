@@ -27,8 +27,11 @@ import lombok.Getter;
  *
  * <p>Fields of a plan used in game (step 3a): {@code fasi} (per range of rounds: risk modifier per
  * front, weighted objectives). Step 3c: {@code tappe} (the plan's progress) and {@code firma} (the
- * enemy reading the plan), observation only. Read but not used: {@code punti_critici}, {@code
- * ruoli}.
+ * enemy reading the plan). Step 3d-1: {@code subentri} (plans that may take over), {@code
+ * contrasta} (enemy plans this one counters), {@code punti_critici} (concrete targets the enemy
+ * attacks to put the plan in trouble), {@code contromosse} (false = no posture, no plan change:
+ * plan N) and the general staff's numbers {@code stato_maggiore} ({@link Parametri}). Read but not
+ * used: {@code ruoli}.
  */
 public final class Strategia {
   /** Front of the territories no front lists (modifier 0). */
@@ -43,19 +46,24 @@ public final class Strategia {
   /** Unit categories of the purchase mixes: name → unit types (in buying rotation order). */
   @Getter private final Map<String, List<String>> categorie;
 
+  /** The general staff's numbers (step 3d-1). */
+  @Getter private final Parametri parametri;
+
   private Strategia(
       final String gioco,
       final List<String> fronti,
       final Map<String, String> frontByTerritory,
       final @Nullable String seaFront,
       final Map<String, Alleanza> alleanze,
-      final Map<String, List<String>> categorie) {
+      final Map<String, List<String>> categorie,
+      final Parametri parametri) {
     this.gioco = gioco;
     this.fronti = fronti;
     this.frontByTerritory = frontByTerritory;
     this.seaFront = seaFront;
     this.alleanze = alleanze;
     this.categorie = categorie;
+    this.parametri = parametri;
   }
 
   /** Front names in file order, then {@link #ALTRO}. */
@@ -130,6 +138,11 @@ public final class Strategia {
               .filter(name -> map.getTerritoryOrNull(name) == null)
               .forEach(unknown::add);
         }
+        for (final PuntoCritico c : piano.puntiCritici()) {
+          java.util.stream.Stream.concat(c.territori().stream(), c.zone().stream())
+              .filter(name -> map.getTerritoryOrNull(name) == null)
+              .forEach(unknown::add);
+        }
         for (final Operazione o : piano.operazioni()) {
           o.territoriNominati().stream()
               .filter(name -> map.getTerritoryOrNull(name) == null)
@@ -189,6 +202,10 @@ public final class Strategia {
    * @param sperimentale shown as "(sperimentale)" in the settings dialog, never chosen by
    *     "Automatico" (step 3c)
    * @param operazioni amphibious operations (step OPERAZIONI ANFIBIE)
+   * @param subentri plans of the same alliance that may take over when this one fails (step 3d-1)
+   * @param contrasta enemy plans this one counters ("chi mette in crisi chi", step 3d-1)
+   * @param contromosse whether the general staff sets a posture and may change this plan (false for
+   *     the neutral plan N)
    */
   public record Piano(
       String id,
@@ -201,7 +218,10 @@ public final class Strategia {
       List<PuntoCritico> puntiCritici,
       Map<String, List<Logistica>> logistica,
       boolean sperimentale,
-      List<Operazione> operazioni) {
+      List<Operazione> operazioni,
+      List<String> subentri,
+      List<String> contrasta,
+      boolean contromosse) {
 
     /** Eg: "B Sea Lion (sperimentale)": the label of the settings dialog. */
     public String etichettaPannello() {
@@ -537,13 +557,132 @@ public final class Strategia {
     }
   }
 
+  /**
+   * What puts a plan in trouble: a concrete target for the enemy (step 3d-1, {@code Contromosse}).
+   *
+   * @param tipo {@value #TERRITORIO} (the territories, when not the enemy's alliance's), {@value
+   *     #UNITA} (places of {@code territori}/{@code zone}, or of {@code fronte}, with units of
+   *     {@code nazione} of the types {@code unita} or classes {@code classi}), {@value #FLOTTA}
+   *     (sea zones of {@code zone} with ships of {@code nazione}) or {@value #STACK_AVANZATO} (the
+   *     land territory with units of {@code nazione} farthest from its capital that borders the
+   *     enemy, the least supported by its own side)
+   */
   public record PuntoCritico(
       String descrizione,
       String tipo,
       List<String> territori,
       List<String> zone,
       List<String> unita,
-      @Nullable String nazione) {}
+      @Nullable String nazione,
+      List<String> classi,
+      @Nullable String fronte,
+      int daRound,
+      int aRound) {
+    public boolean covers(final int round) {
+      return round >= daRound && round <= aRound;
+    }
+
+    public static final String TERRITORIO = "territorio";
+    public static final String UNITA = "unita";
+    public static final String FLOTTA = "flotta";
+    public static final String STACK_AVANZATO = "stack_avanzato";
+    static final Set<String> TIPI = Set.of(TERRITORIO, UNITA, FLOTTA, STACK_AVANZATO);
+  }
+
+  /**
+   * What an alliance's victory counts in the race (step 3d-1): {@code vc} victory cities held, or
+   * {@code richiesti} of the victory-city territories {@code territori} held.
+   */
+  public record Vittoria(int vc, List<String> territori, int richiesti) {}
+
+  /**
+   * The general staff's numbers (step 3d-1, {@code stato_maggiore} in the file; chosen, not tuned).
+   *
+   * @param roundCrisi rounds in a row in crisis (or with an operation in a stall) before a change
+   * @param inerziaRound rounds at least between two changes
+   * @param maxCambi plan changes per game at most
+   * @param margineCambio score an alternative needs above the plan in force
+   * @param sogliaLettura probability of the enemy's plan that counts as "read"
+   * @param bonusContrasto score added to a plan that counters the enemy plan read
+   * @param prorogaTappe rounds after a change before a milestone of the new plan can be late
+   * @param pesoRallentamento priority bonus of the enemy's critical points in RALLENTAMENTO
+   * @param pesoContrasto priority bonus of the enemy's critical points in CONTRASTO
+   * @param roundContrasto rounds in a row of CONTRASTO at most
+   * @param corsaPari rounds of difference in the race that still count as even
+   * @param distanzaForze distance from the targets of the forces counted for an alternative
+   * @param distanzaAttaccabile distance of own units that makes a critical point attackable
+   * @param sogliaContrasto probability of the enemy's plan needed for CONTRASTO
+   * @param vittoria per alliance, what its victory counts (the race): victory cities, or given
+   *     victory-city territories (Europe 1940: the Allies need Germany and Southern Italy)
+   */
+  public record Parametri(
+      int roundCrisi,
+      int inerziaRound,
+      int maxCambi,
+      double margineCambio,
+      double sogliaLettura,
+      double bonusContrasto,
+      int prorogaTappe,
+      double pesoRallentamento,
+      double pesoContrasto,
+      int roundContrasto,
+      int corsaPari,
+      int distanzaForze,
+      int distanzaAttaccabile,
+      double sogliaContrasto,
+      Map<String, Vittoria> vittoria) {
+    public static final Parametri DEFAULT =
+        new Parametri(2, 3, 2, 0.1, 0.5, 0.25, 2, 8, 20, 2, 2, 2, 2, 0.35, Map.of());
+
+    static Parametri parse(final @Nullable JsonObject o) {
+      if (o == null) {
+        return DEFAULT;
+      }
+      final Parametri d = DEFAULT;
+      return new Parametri(
+          integer(o, "round_crisi", d.roundCrisi()),
+          integer(o, "inerzia_round", d.inerziaRound()),
+          integer(o, "max_cambi", d.maxCambi()),
+          number(o, "margine_cambio", d.margineCambio()),
+          number(o, "soglia_lettura", d.sogliaLettura()),
+          number(o, "bonus_contrasto", d.bonusContrasto()),
+          integer(o, "proroga_tappe", d.prorogaTappe()),
+          number(o, "peso_rallentamento", d.pesoRallentamento()),
+          number(o, "peso_contrasto", d.pesoContrasto()),
+          integer(o, "round_contrasto", d.roundContrasto()),
+          integer(o, "corsa_pari", d.corsaPari()),
+          integer(o, "distanza_forze", d.distanzaForze()),
+          integer(o, "distanza_attaccabile", d.distanzaAttaccabile()),
+          number(o, "soglia_contrasto", d.sogliaContrasto()),
+          vittoria(o));
+    }
+
+    private static Map<String, Vittoria> vittoria(final JsonObject o) {
+      if (!o.has("vittoria")) {
+        return Map.of();
+      }
+      final Map<String, Vittoria> map = new LinkedHashMap<>();
+      for (final Map.Entry<String, JsonElement> e : o.getAsJsonObject("vittoria").entrySet()) {
+        final JsonObject v = e.getValue().getAsJsonObject();
+        final List<String> territori = strings(v, "territori");
+        map.put(
+            e.getKey(),
+            new Vittoria(
+                v.has("vc") ? v.get("vc").getAsInt() : 0,
+                territori,
+                v.has("richiesti") ? v.get("richiesti").getAsInt() : territori.size()));
+      }
+      return Map.copyOf(map);
+    }
+
+    private static int integer(final JsonObject o, final String key, final int fallback) {
+      return o.has(key) ? o.get(key).getAsInt() : fallback;
+    }
+
+    private static double number(final JsonObject o, final String key, final double fallback) {
+      return o.has(key) ? o.get(key).getAsDouble() : fallback;
+    }
+  }
 
   // ------------------------------------------------------------------------------------ parsing
 
@@ -604,13 +743,43 @@ public final class Strategia {
           new Alleanza(
               Optional.ofNullable(string(alliance, "automatico")).orElse(""), List.copyOf(piani)));
     }
+    checkTakeOvers(alleanze);
     return new Strategia(
         Optional.ofNullable(string(root, "gioco")).orElse(""),
         List.copyOf(fronti),
         Map.copyOf(frontByTerritory),
         seaFront,
         Map.copyOf(alleanze),
-        Collections.unmodifiableMap(categorie));
+        Collections.unmodifiableMap(categorie),
+        Parametri.parse(
+            root.has("stato_maggiore") ? root.getAsJsonObject("stato_maggiore") : null));
+  }
+
+  /**
+   * Step 3d-1: {@code subentri} name plans of the same alliance (not the plan itself), {@code
+   * contrasta} plans of another alliance.
+   */
+  private static void checkTakeOvers(final Map<String, Alleanza> alleanze) {
+    for (final Map.Entry<String, Alleanza> e : alleanze.entrySet()) {
+      for (final Piano p : e.getValue().piani()) {
+        for (final String id : p.subentri()) {
+          if (id.equals(p.id()) || e.getValue().piano(id).isEmpty()) {
+            throw new IllegalArgumentException(
+                "subentri del piano " + p.id() + ": piano sconosciuto " + id);
+          }
+        }
+        for (final String id : p.contrasta()) {
+          final boolean known =
+              alleanze.entrySet().stream()
+                  .anyMatch(
+                      o -> !o.getKey().equals(e.getKey()) && o.getValue().piano(id).isPresent());
+          if (!known) {
+            throw new IllegalArgumentException(
+                "contrasta del piano " + p.id() + ": piano nemico sconosciuto " + id);
+          }
+        }
+      }
+    }
   }
 
   private static Piano piano(final JsonObject p, final Set<String> categories) {
@@ -645,14 +814,23 @@ public final class Strategia {
     final List<PuntoCritico> puntiCritici = new ArrayList<>();
     for (final JsonElement t : array(p, "punti_critici")) {
       final JsonObject o = t.getAsJsonObject();
+      final String tipo = Optional.ofNullable(string(o, "tipo")).orElse("");
+      if (!PuntoCritico.TIPI.contains(tipo)) {
+        throw new IllegalArgumentException(
+            "punto critico del piano " + id + ": tipo sconosciuto " + tipo);
+      }
       puntiCritici.add(
           new PuntoCritico(
               Optional.ofNullable(string(o, "descrizione")).orElse(""),
-              Optional.ofNullable(string(o, "tipo")).orElse(""),
+              tipo,
               strings(o, "territori"),
               strings(o, "zone"),
               strings(o, "unita"),
-              string(o, "nazione")));
+              string(o, "nazione"),
+              strings(o, "classi"),
+              string(o, "fronte"),
+              o.has("da_round") ? o.get("da_round").getAsInt() : 1,
+              o.has("a_round") ? o.get("a_round").getAsInt() : Integer.MAX_VALUE));
     }
     final Map<String, List<Logistica>> logistica = new LinkedHashMap<>();
     if (p.has("logistica")) {
@@ -675,7 +853,10 @@ public final class Strategia {
         List.copyOf(puntiCritici),
         Map.copyOf(logistica),
         p.has("sperimentale") && p.get("sperimentale").getAsBoolean(),
-        operazioni(p, id));
+        operazioni(p, id),
+        strings(p, "subentri"),
+        strings(p, "contrasta"),
+        !p.has("contromosse") || p.get("contromosse").getAsBoolean());
   }
 
   private static List<Operazione> operazioni(final JsonObject p, final String plan) {

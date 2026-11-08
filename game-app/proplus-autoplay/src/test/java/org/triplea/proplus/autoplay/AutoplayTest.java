@@ -97,7 +97,7 @@ class AutoplayTest {
         .contains("Esito: **vittoria Asse**")
         .contains("| R1 | 3 (Berlin) | 1 (London) |")
         .contains("| R1 | Germans | 30 | 40 | 9 | 18 | 33 | - | 500 | 12 |")
-        .contains("| R1 | Alleati | 1 | IN LINEA | A | A | 60% | si' |")
+        .contains("| R1 | Alleati | 1 | IN LINEA | - | A | A | 60% | si' |")
         .contains("- R1: Germans - Russians (nel turno di Germans)")
         .contains("- R1: London (capitale di British) caduta, ora di Germans")
         .contains("| R1 | France | Germans | French | 10 / 40 | CONQUERED | 90% | VITTORIA |");
@@ -121,6 +121,49 @@ class AutoplayTest {
         .contains(
             "- Primo sbarco alleato in Europa: R1 Normandy Bordeaux (British, attacco (LOST))")
         .contains("| R1 | Germans | 30 | 40 | 9 | 18 | 33 | - | 500 | 12 | 2 |");
+  }
+
+  @Test
+  void plansAndPosturesPerGameAndConfiguration() {
+    final JsonObject game = JsonParser.parseString(SAMPLE).getAsJsonObject();
+    final JsonArray rounds = new JsonArray();
+    final String[][] staff = {
+      {"1", "OFFENSIVA", ""}, {"1", "CONTRASTO", ""}, {"2", "RALLENTAMENTO", "cambio"}
+    };
+    for (int i = 0; i < staff.length; i++) {
+      final JsonObject r = game.getAsJsonArray("round").get(0).getAsJsonObject().deepCopy();
+      r.addProperty("round", i + 1);
+      final JsonObject a = r.getAsJsonObject("stato_maggiore").getAsJsonObject("Allies");
+      a.addProperty("piano", staff[i][0]);
+      a.addProperty("postura", staff[i][1]);
+      final JsonArray counter = new JsonArray();
+      if (i == 1) {
+        counter.add("Romania");
+      }
+      a.add("contro_obiettivi", counter);
+      if (!staff[i][2].isEmpty()) {
+        a.add(
+            "cambio",
+            JsonParser.parseString(
+                "{\"round\":3,\"da\":\"1\",\"a\":\"2\",\"motivo\":\"Overlord in stallo\"}"));
+      }
+      rounds.add(r);
+    }
+    game.add("round", rounds);
+
+    assertThat(Riepilogo.markdown(game))
+        .contains("| R2 | Alleati | 1 | IN LINEA | CONTRASTO (Romania) |")
+        .contains("| R3 | Alleati | 2 | IN LINEA | RALLENTAMENTO - **cambio piano 1 -> 2** |")
+        .contains(
+            "- Alleati: piano iniziale 1, cambi: R3 1 -> 2 (Overlord in stallo); posture: R1"
+                + " OFFENSIVA, R2 CONTRASTO, R3 RALLENTAMENTO");
+    assertThat(RiepilogoGenerale.markdown("T", List.of(new RiepilogoGenerale.Game("1-A-1", game))))
+        .contains(
+            "| 1-A-1 | Alleati | 1 -> 2 (R3: Overlord in stallo) | R1 OFFENSIVA, R2 CONTRASTO, R3"
+                + " RALLENTAMENTO |")
+        .contains("| Pro+ A / Pro+ 1 | Alleati | 1 | 1 | 1 | 2 x1 |");
+    assertThat(Riepilogo.runs(List.of("A", "A", "B", "B", "B", "A")))
+        .isEqualTo("R1-2 A, R3-5 B, R6 A");
   }
 
   @Test

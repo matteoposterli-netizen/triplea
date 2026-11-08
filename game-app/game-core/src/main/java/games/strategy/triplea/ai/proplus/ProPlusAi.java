@@ -79,40 +79,62 @@ public class ProPlusAi extends ProAi {
     if (!(getProData().getTuning() instanceof ProPlusTuning tuning)) {
       return;
     }
-    final var plan = PianoAttivo.of(data, player).filter(p -> !p.getOperazioni().isEmpty());
-    if (plan.isEmpty()) {
+    final var plan = PianoAttivo.of(data, player);
+    final boolean operations = plan.filter(p -> !p.getOperazioni().isEmpty()).isPresent();
+    // step 3d-1: troops stuck aboard go back ashore (every plan with counter-moves, not N)
+    final boolean bringBack = plan.filter(p -> p.getPiano().contromosse()).isPresent();
+    if (!operations && !bringBack) {
       tuning.hold(data, player, java.util.Set.of());
       return;
     }
     try {
       initializeData();
       prepareData(data);
-      final OperazioniAnfibie.Esito result =
-          OperazioniAnfibie.esegui(getProData(), getCalc(), moveDel, plan.get());
-      tuning.hold(data, player, result.tenute());
-      if (getProData().getRecorder() instanceof DiaryRecorder diary) {
+      final java.util.Set<games.strategy.engine.data.Unit> held = new java.util.HashSet<>();
+      final java.util.List<OperazioniAnfibie.Rapporto> reports = new java.util.ArrayList<>();
+      if (bringBack) {
+        try {
+          final OperazioniAnfibie.Esito back =
+              OperazioniAnfibie.rientro(getProData(), getCalc(), moveDel, plan.get());
+          held.addAll(back.tenute());
+          reports.addAll(back.rapporti());
+          if (!back.rapporti().isEmpty()) {
+            // the units moved: the operations see the board after the moves
+            initializeData();
+            prepareData(data);
+          }
+        } catch (final RuntimeException e) {
+          ProLogger.warn(LOG_PREFIX + "Troops aboard check failed: " + e);
+        }
+      }
+      if (operations) {
+        final OperazioniAnfibie.Esito result =
+            OperazioniAnfibie.esegui(getProData(), getCalc(), moveDel, plan.get());
+        held.addAll(result.tenute());
+        reports.addAll(result.rapporti());
+      }
+      tuning.hold(data, player, held);
+      if (getProData().getRecorder() instanceof DiaryRecorder diary && !reports.isEmpty()) {
         diary.amphibiousOperations(
             getProData(),
-            result.rapporti(),
+            reports,
             tuning.operationPurchases(player, data.getSequence().getRound()));
       }
-      result
-          .rapporti()
-          .forEach(
-              r ->
-                  ProLogger.info(
-                      LOG_PREFIX
-                          + "Operation "
-                          + r.operazione()
-                          + ": "
-                          + r.stato().testo()
-                          + ", transports "
-                          + r.trasporti()
-                          + ", aboard "
-                          + r.truppeABordo()
-                          + ", escort "
-                          + r.scorta()
-                          + (r.motivo().isEmpty() ? "" : ", " + r.motivo())));
+      reports.forEach(
+          r ->
+              ProLogger.info(
+                  LOG_PREFIX
+                      + "Operation "
+                      + r.operazione()
+                      + ": "
+                      + r.stato().testo()
+                      + ", transports "
+                      + r.trasporti()
+                      + ", aboard "
+                      + r.truppeABordo()
+                      + ", escort "
+                      + r.scorta()
+                      + (r.motivo().isEmpty() ? "" : ", " + r.motivo())));
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "Amphibious operations failed: " + e);
       tuning.hold(data, player, java.util.Set.of());

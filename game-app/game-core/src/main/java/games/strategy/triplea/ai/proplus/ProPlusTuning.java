@@ -229,7 +229,22 @@ public final class ProPlusTuning implements ProTuning {
             plan ->
                 plan.getLogistica()
                     .filter(l -> !l.mix().isEmpty() || !l.obbligati().isEmpty())
-                    .map(l -> ordersWithOperations(proData, plan, l)));
+                    .map(l -> ordersWithOperations(proData, plan, l))
+                    .map(o -> plan.isDifensiva() ? withoutPlanShare(o) : o));
+  }
+
+  /**
+   * Step 3d-1, posture DIFENSIVA: no share reserved for the plan, so the real-threat defense comes
+   * before the mix without a ceiling.
+   */
+  private static ProPurchaseOrders withoutPlanShare(final ProPurchaseOrders o) {
+    return new ProPurchaseOrders(
+        o.label() + " [postura DIFENSIVA: difesa prima del piano, nessuna quota]",
+        o.mix(),
+        o.mandatory(),
+        o.preferredPlacement(),
+        o.stagingTerritories(),
+        0);
   }
 
   /**

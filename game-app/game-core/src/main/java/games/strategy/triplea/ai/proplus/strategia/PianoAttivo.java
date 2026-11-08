@@ -1,5 +1,6 @@
 package games.strategy.triplea.ai.proplus.strategia;
 
+import com.google.gson.JsonObject;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.Territory;
@@ -39,6 +40,9 @@ public final class PianoAttivo {
   /** Round the plan was fixed in; empty while not fixed yet (only a choice). */
   private final Optional<Integer> roundInizio;
 
+  /** Step 3d-1: round this plan took over in after a plan change; empty if never changed. */
+  private final Optional<Integer> roundSubentro;
+
   /** Game properties holding the alliance's slider (read on each use: the dialog may change it). */
   @Getter(AccessLevel.NONE)
   private final GameProperties props;
@@ -53,6 +57,15 @@ public final class PianoAttivo {
 
   /** Amphibious operations of the plan in force this round for this nation (step OPERAZIONI). */
   private final List<Strategia.Operazione> operazioni;
+
+  /**
+   * Step 3d-1: the alliance's posture this round ({@link Contromosse}); {@link
+   * Contromosse#OFFENSIVA} without a decision for this round and plan.
+   */
+  private final String postura;
+
+  /** Step 3d-1: the enemy's critical points made objectives by the posture this round. */
+  private final List<Strategia.Obiettivo> controObiettivi;
 
   private PianoAttivo(
       final GameState data,
@@ -70,6 +83,10 @@ public final class PianoAttivo {
     this.piano = piano;
     this.fase = piano.fase(round).orElse(null);
     this.roundInizio = roundInizio;
+    this.roundSubentro =
+        StatoMaggiore.getState(props, alleanza)
+            .filter(st -> st.piano().equals(piano.id()) && !st.cambi().isEmpty())
+            .map(StatoMaggiore.Stato::roundPiano);
     this.props = props;
     this.dataPerCondizioni = data;
     this.operazioni = piano.operazioni(nazione, round).stream().map(o -> attiva(data, o)).toList();
@@ -91,7 +108,54 @@ public final class PianoAttivo {
         }
       }
     }
+    final Optional<JsonObject> strategic = strategicState(props, alleanza, piano.id(), round);
+    this.postura = strategic.map(j -> j.get("postura").getAsString()).orElse(Contromosse.OFFENSIVA);
+    final List<Strategia.Obiettivo> counter = new ArrayList<>();
+    strategic
+        .filter(j -> j.has("contro_obiettivi"))
+        .ifPresent(
+            j ->
+                j.getAsJsonArray("contro_obiettivi")
+                    .forEach(
+                        e -> {
+                          final JsonObject o = e.getAsJsonObject();
+                          counter.add(
+                              new Strategia.Obiettivo(
+                                  o.get("territorio").getAsString(),
+                                  null,
+                                  o.get("peso").getAsDouble(),
+                                  Set.of(),
+                                  false));
+                        }));
+    this.controObiettivi = List.copyOf(counter);
+    list.addAll(controObiettivi);
     this.obiettivi = List.copyOf(list);
+  }
+
+  /**
+   * The general staff's decision ({@code stato_strategico}) of the history entry of {@code round},
+   * if it was taken with {@code planId} in force.
+   */
+  private static Optional<JsonObject> strategicState(
+      final GameProperties props, final String alliance, final String planId, final int round) {
+    final Optional<StatoMaggiore.Stato> state = StatoMaggiore.getState(props, alliance);
+    if (state.isEmpty() || state.get().storico().isEmpty()) {
+      return Optional.empty();
+    }
+    final JsonObject last =
+        state.get().storico().get(state.get().storico().size() - 1).getAsJsonObject();
+    if (!last.has("round")
+        || last.get("round").getAsInt() != round
+        || !last.has("stato_strategico")) {
+      return Optional.empty();
+    }
+    final JsonObject s = last.getAsJsonObject("stato_strategico");
+    return planId.equals(s.get("piano").getAsString()) ? Optional.of(s) : Optional.empty();
+  }
+
+  /** Step 3d-1: posture DIFENSIVA (risk −1 on every front, defense before the plan's share). */
+  public boolean isDifensiva() {
+    return Contromosse.DIFENSIVA.equals(postura);
   }
 
   /**
@@ -193,8 +257,10 @@ public final class PianoAttivo {
     return ProPlusSettings.getRiskLevel(props, alleanza);
   }
 
+  /** The front's level: the slider moved by the phase's modifier, then −1 in DIFENSIVA. */
   public RiskLevel livelloFronte(final String front) {
-    return getLivelloBase().withModifier(modificatore(front));
+    final RiskLevel level = getLivelloBase().withModifier(modificatore(front));
+    return isDifensiva() ? level.withModifier(-1) : level;
   }
 
   /** Effective risk level of an attack on {@code t}. */

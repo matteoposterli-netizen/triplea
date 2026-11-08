@@ -49,6 +49,19 @@ public final class StalloOperazioni {
     return state;
   }
 
+  /**
+   * Step 3d-1: the plan the operation belongs to took over in {@code round}: the stall count starts
+   * again (as if the operation had been ready in {@code round}).
+   */
+  public static void riparti(final GameProperties props, final String nome, final int round) {
+    final JsonObject json = new JsonObject();
+    json.addProperty("ultimo_pronto", round);
+    json.addProperty("round_senza", 0);
+    json.addProperty("stallo", false);
+    props.set(PREFIX + nome, (Serializable) null);
+    props.set(PREFIX + nome, json.toString());
+  }
+
   /** Whether the operation named {@code nome} is in a stall (as last noted). */
   public static boolean inStallo(final GameProperties props, final String nome) {
     return read(props, nome)

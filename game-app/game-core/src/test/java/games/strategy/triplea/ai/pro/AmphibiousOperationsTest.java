@@ -693,6 +693,195 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
 
   // ------------------------------------------------------------------------------- helpers
 
+  // ------------------------------- fix of Matteo's game (315bcc2): safe stops, escort, danger
+
+  /**
+   * An American transport loaded with 2 infantry in 92 Sea Zone (Gibraltar), on the way to the
+   * gathering zone 92 -> 91 -> 104 -> 110 (the test map keeps the neutral Americans out of
+   * 103/106/107), with {@code destroyers} American destroyers.
+   */
+  private Unit americanFleetAt92(final int destroyers) {
+    clearAxisAirAndNavy();
+    clearAlliedAirAndNavy();
+    clearTransports(americans);
+    clearTransports(british);
+    final Unit transport = add("92 Sea Zone", "transport", 1, americans).get(0);
+    loadInPlace(transport, add("92 Sea Zone", "infantry", 2, americans));
+    if (destroyers > 0) {
+      add("92 Sea Zone", "destroyer", destroyers, americans);
+    }
+    return transport;
+  }
+
+  @Test
+  void aFleetDoesNotLeaveWhenNoStopOnTheWayIsSafe() {
+    final Unit transport = americanFleetAt92(1);
+    // a German battle fleet next to both stops of the way (91, 104)
+    add("103 Sea Zone", "battleship", 3, germans);
+    nonCombat(americans, 4);
+
+    final OperazioniAnfibie.Rapporto r = report(play(americans), "Overlord USA");
+
+    assertThat(where(transport)).isEqualTo(territory("92 Sea Zone"));
+    assertThat(r.motivo())
+        .contains("nessuna sosta sicura verso")
+        .contains("la flotta resta in 92 Sea Zone")
+        .contains("104 Sea Zone: win% nemica")
+        .contains("91 Sea Zone: win% nemica");
+  }
+
+  @Test
+  void theEscortSailsWithTheTransports() {
+    final Unit transport = americanFleetAt92(1);
+    nonCombat(americans, 4);
+
+    play(americans);
+
+    final Territory stop = where(transport);
+    assertThat(stop).isNotEqualTo(territory("92 Sea Zone"));
+    // the destroyer of the transport's zone ends its move in the same zone
+    assertThat(stop.getUnits())
+        .anyMatch(u -> u.isOwnedBy(americans) && u.getType().getName().equals("destroyer"));
+  }
+
+  @Test
+  void noTransportSailsAloneOutOfAPort() {
+    final Unit transport = americanFleetAt92(0);
+    nonCombat(americans, 4);
+
+    final OperazioniAnfibie.Rapporto r = report(play(americans), "Overlord USA");
+
+    // no enemy anywhere, but no escort: it does not leave
+    assertThat(where(transport)).isEqualTo(territory("92 Sea Zone"));
+    assertThat(r.motivo()).contains("trasporti senza scorta");
+  }
+
+  @Test
+  void aZoneWhereTheOperationLostUnitsIsAvoidedForThreeRounds() {
+    final Unit transport = americanFleetAt92(DANGER_DESTROYERS);
+    add(DANGER_THREAT_ZONE, "submarine", DANGER_SUBS, germans);
+    nonCombat(americans, 4);
+    // the Germans sank American units in both stops of the way last round
+    sunk(territory("91 Sea Zone"), 3);
+    sunk(territory("104 Sea Zone"), 3);
+
+    final OperazioniAnfibie.Rapporto r = report(play(americans), "Overlord USA");
+
+    assertThat(where(transport)).isEqualTo(territory("92 Sea Zone"));
+    assertThat(r.motivo()).contains("zona pericolosa: perdite al round 3, soglia dimezzata");
+  }
+
+  @Test
+  void aLossOlderThanThreeRoundsIsForgotten() {
+    final Unit transport = americanFleetAt92(DANGER_DESTROYERS);
+    add(DANGER_THREAT_ZONE, "submarine", DANGER_SUBS, germans);
+    nonCombat(americans, 4);
+    sunk(territory("91 Sea Zone"), 1);
+    sunk(territory("104 Sea Zone"), 1);
+
+    final OperazioniAnfibie.Rapporto r = report(play(americans), "Overlord USA");
+
+    assertThat(where(transport)).isNotEqualTo(territory("92 Sea Zone"));
+  }
+
+  private static final int DANGER_DESTROYERS = 1;
+  private static final int DANGER_SUBS = 1;
+  private static final String DANGER_THREAT_ZONE = "103 Sea Zone";
+
+  private games.strategy.engine.data.GameMap map() {
+    return data.getMap();
+  }
+
+  /** A battle record of {@code round}: the Germans sank an American destroyer in {@code zone}. */
+  private void sunk(final Territory zone, final int round) {
+    final games.strategy.triplea.delegate.data.BattleRecords records =
+        new games.strategy.triplea.delegate.data.BattleRecords();
+    final java.util.UUID id = java.util.UUID.randomUUID();
+    records.addBattle(
+        germans, id, zone, games.strategy.triplea.delegate.battle.IBattle.BattleType.NORMAL);
+    records.addResultToBattle(
+        germans,
+        id,
+        americans,
+        0,
+        8,
+        games.strategy.triplea.delegate.data.BattleRecord.BattleResultDescription
+            .WON_WITHOUT_CONQUERING,
+        null);
+    games.strategy.engine.data.BattleRecordsList.addRecords(
+        data.getBattleRecordsList().getBattleRecordsMap(), round, records);
+  }
+
+  // ------------------------------------------------- step 3d-1: troops stuck aboard
+
+  @Test
+  void troopsStuckAboardForMoreThanATurnGoBackToTheNearestSafePort() {
+    clearAxisAirAndNavy();
+    clearTransports(americans);
+    clearSea("104 Sea Zone");
+    final Unit transport = add("104 Sea Zone", "transport", 1, americans).get(0);
+    final List<Unit> troops = add("104 Sea Zone", "infantry", 2, americans);
+    loadInPlace(transport, troops);
+
+    // round 5: loaded in 104 since now, not stuck yet
+    nonCombat(americans, 5);
+    assertThat(bringBack(americans).rapporti()).isEmpty();
+    assertThat(where(transport).getName()).isEqualTo("104 Sea Zone");
+    assertThat(data.getProperties().get("Pro+ a bordo: Americans").toString())
+        .contains("104 Sea Zone");
+
+    // round 6: still loaded in 104, a whole turn without landing: back to a friendly port
+    newTurn(transport);
+    nonCombat(americans, 6);
+    final OperazioniAnfibie.Esito result = bringBack(americans);
+
+    final OperazioniAnfibie.Rapporto r = report(result, OperazioniAnfibie.RIENTRO);
+    assertThat(r.motivo()).contains("a bordo dal round 5 senza sbarco");
+    final Territory ashore = where(troops.get(0));
+    assertThat(ashore.isWater()).isFalse();
+    assertThat(Matches.isTerritoryAllied(americans).test(ashore)).isTrue();
+    assertThat(transport.getTransporting()).isEmpty();
+    assertThat(result.tenute()).contains(transport).containsAll(troops);
+    // the plan's port (Overlord USA embarks in United Kingdom) is preferred at equal distance
+    assertThat(ashore.getName()).isEqualTo("United Kingdom");
+  }
+
+  @Test
+  void aLoadedTransportOnItsWayIsNotStuck() {
+    clearAxisAirAndNavy();
+    clearTransports(americans);
+    final Unit transport = add("101 Sea Zone", "transport", 1, americans).get(0);
+    loadInPlace(transport, add("101 Sea Zone", "infantry", 2, americans));
+    nonCombat(americans, 5);
+    assertThat(bringBack(americans).rapporti()).isEmpty();
+    // it moved on (another zone the next turn): its count starts again
+    data.performChange(
+        ChangeFactory.moveUnits(
+            territory("101 Sea Zone"), territory("92 Sea Zone"), withCargo(transport)));
+    newTurn(transport);
+    nonCombat(americans, 6);
+    assertThat(bringBack(americans).rapporti()).isEmpty();
+    // Hard: never (no plan, no property)
+    assertThat(data.getProperties().get("Pro+ a bordo: British")).isNull();
+  }
+
+  private static List<Unit> withCargo(final Unit transport) {
+    final List<Unit> units = new ArrayList<>(transport.getTransporting());
+    units.add(transport);
+    return units;
+  }
+
+  private OperazioniAnfibie.Esito bringBack(final GamePlayer player) {
+    final ProData proData = new ProData(false, new ProPlusTuning());
+    final TestAi ai = new TestAi(proData, player.getName());
+    proData.initializeSimulation(ai, data, player);
+    ai.prepareData(data);
+    final MoveDelegate moveDelegate = (MoveDelegate) data.getMoveDelegate();
+    moveDelegate.setDelegateBridgeAndPlayer(newDelegateBridge(player));
+    return OperazioniAnfibie.rientro(
+        proData, ai.getCalc(), moveDelegate, PianoAttivo.of(data, player).orElseThrow());
+  }
+
   /**
    * An American transport with 2 infantry in 105 Sea Zone (one move from 110), 2 German battleships
    * in 112 Sea Zone, no British ship near 110, Normandy German.

@@ -510,6 +510,26 @@ final class Monitor {
       for (final JsonElement e : state.get().storico()) {
         final JsonObject entry = e.getAsJsonObject();
         if (entry.has("round") && entry.get("round").getAsInt() == round) {
+          if (entry.has("piano")) {
+            a.addProperty("piano", entry.get("piano").getAsString());
+          }
+          if (entry.has("stato_strategico")) {
+            // step 3d-1: posture and plan change of the round
+            final JsonObject s = entry.getAsJsonObject("stato_strategico");
+            a.addProperty("postura", s.get("postura").getAsString());
+            a.addProperty("motivo_postura", s.get("motivo").getAsString());
+            final JsonArray changes = s.getAsJsonArray("cambi_piano");
+            if (!changes.isEmpty()) {
+              final JsonObject last = changes.get(changes.size() - 1).getAsJsonObject();
+              if (last.get("round").getAsInt() == round) {
+                a.add("cambio", last.deepCopy());
+              }
+            }
+            final JsonArray counter = new JsonArray();
+            s.getAsJsonArray("contro_obiettivi")
+                .forEach(c -> counter.add(c.getAsJsonObject().get("territorio").getAsString()));
+            a.add("contro_obiettivi", counter);
+          }
           if (entry.has("avanzamento")) {
             a.addProperty("stato", entry.getAsJsonObject("avanzamento").get("stato").getAsString());
           }

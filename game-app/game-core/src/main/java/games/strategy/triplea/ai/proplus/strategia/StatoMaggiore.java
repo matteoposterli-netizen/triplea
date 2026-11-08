@@ -21,8 +21,10 @@ import lombok.experimental.UtilityClass;
  *       round (empty in step 3a; later steps write progress, guesses about the enemy and posture).
  * </ul>
  *
- * <p>The plan is fixed the first time an alliance's Pro+ player plays ({@link #fix}) and never
- * changes afterwards (step 3a).
+ * <p>The plan is fixed the first time an alliance's Pro+ player plays ({@link #fix}). From step
+ * 3d-1 the general staff may change it at the start of a round ({@link #cambia}, decided by {@link
+ * Contromosse}): {@code "piano"} becomes the new plan and {@code "cambi"} lists the changes
+ * [{round, da, a, motivo}] (absent while there is none).
  */
 @UtilityClass
 public final class StatoMaggiore {
@@ -36,14 +38,29 @@ public final class StatoMaggiore {
    * @param piano id of the plan in force
    * @param roundInizio round the plan was fixed in
    * @param storico one entry per round ({@link Valutazione})
+   * @param cambi the plan changes, oldest first (step 3d-1)
    */
-  public record Stato(String piano, int roundInizio, JsonArray storico) {
+  public record Stato(String piano, int roundInizio, JsonArray storico, JsonArray cambi) {
+    public Stato(final String piano, final int roundInizio, final JsonArray storico) {
+      this(piano, roundInizio, storico, new JsonArray());
+    }
+
     String toJson() {
       final JsonObject json = new JsonObject();
       json.addProperty("piano", piano);
       json.addProperty("round_inizio", roundInizio);
       json.add("storico", storico);
+      if (!cambi.isEmpty()) {
+        json.add("cambi", cambi);
+      }
       return json.toString();
+    }
+
+    /** Round the plan in force took over in: its last change, else {@link #roundInizio}. */
+    public int roundPiano() {
+      return cambi.isEmpty()
+          ? roundInizio
+          : cambi.get(cambi.size() - 1).getAsJsonObject().get("round").getAsInt();
     }
 
     static Optional<Stato> fromJson(final String text) {
@@ -53,7 +70,8 @@ public final class StatoMaggiore {
             new Stato(
                 json.get("piano").getAsString(),
                 json.get("round_inizio").getAsInt(),
-                json.has("storico") ? json.getAsJsonArray("storico") : new JsonArray()));
+                json.has("storico") ? json.getAsJsonArray("storico") : new JsonArray(),
+                json.has("cambi") ? json.getAsJsonArray("cambi") : new JsonArray()));
       } catch (final RuntimeException e) {
         return Optional.empty();
       }
@@ -129,7 +147,37 @@ public final class StatoMaggiore {
               set(
                   props,
                   STATE_PREFIX + alliance,
-                  new Stato(state.piano(), state.roundInizio(), storico).toJson());
+                  new Stato(state.piano(), state.roundInizio(), storico, state.cambi()).toJson());
+            });
+  }
+
+  /**
+   * Step 3d-1: {@code alliance}'s plan becomes {@code nuovo} from {@code round}; the change is
+   * added to {@code cambi}. Nothing without a fixed plan or when {@code nuovo} is the plan in
+   * force.
+   */
+  public static void cambia(
+      final GameState data,
+      final String alliance,
+      final String nuovo,
+      final int round,
+      final String motivo) {
+    final GameProperties props = data.getProperties();
+    getState(props, alliance)
+        .filter(state -> !state.piano().equals(nuovo))
+        .ifPresent(
+            state -> {
+              final JsonArray cambi = state.cambi().deepCopy();
+              final JsonObject change = new JsonObject();
+              change.addProperty("round", round);
+              change.addProperty("da", state.piano());
+              change.addProperty("a", nuovo);
+              change.addProperty("motivo", motivo);
+              cambi.add(change);
+              set(
+                  props,
+                  STATE_PREFIX + alliance,
+                  new Stato(nuovo, state.roundInizio(), state.storico(), cambi).toJson());
             });
   }
 

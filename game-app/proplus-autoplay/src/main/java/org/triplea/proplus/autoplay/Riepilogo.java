@@ -16,6 +16,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -517,8 +518,8 @@ final class Riepilogo {
     final StringBuilder staff = new StringBuilder();
     staff.append(
 """
-| Round | Alleanza | Piano | Stato | Piano nemico piu' probabile | Piano reale | Prob. piano reale | Corretta |
-|---|---|---|---|---|---|---|---|
+| Round | Alleanza | Piano | Stato | Postura | Piano nemico piu' probabile | Piano reale | Prob. piano reale | Corretta |
+|---|---|---|---|---|---|---|---|---|
 """);
     for (final JsonElement e : rounds) {
       final JsonObject r = e.getAsJsonObject();
@@ -537,6 +538,8 @@ final class Riepilogo {
             .append(" | ")
             .append(text(v, "stato"))
             .append(" | ")
+            .append(postureCell(v))
+            .append(" | ")
             .append(l == null ? "-" : text(l, "piu_probabile"))
             .append(" | ")
             .append(l == null ? "-" : text(l, "piano_reale"))
@@ -554,6 +557,9 @@ final class Riepilogo {
       }
     }
     md.append(any ? staff : "Nessun piano (giocatori Hard).\n");
+    if (any) {
+      md.append(plansMarkdown(rounds));
+    }
 
     md.append(
 """
@@ -956,5 +962,103 @@ final class Riepilogo {
     } catch (final IOException e) {
       return Optional.empty();
     }
+  }
+
+  /** Eg "CONTRASTO (Romania, Egypt)" or "RALLENTAMENTO"; with the plan change of the round. */
+  static String postureCell(final JsonObject v) {
+    if (!v.has("postura")) {
+      return "-";
+    }
+    final StringBuilder sb = new StringBuilder(v.get("postura").getAsString());
+    if (v.has("contro_obiettivi") && !v.getAsJsonArray("contro_obiettivi").isEmpty()) {
+      final List<String> names = new ArrayList<>();
+      v.getAsJsonArray("contro_obiettivi").forEach(e -> names.add(e.getAsString()));
+      sb.append(" (").append(String.join(", ", names)).append(')');
+    }
+    if (v.has("cambio")) {
+      final JsonObject c = v.getAsJsonObject("cambio");
+      sb.append(" - **cambio piano ")
+          .append(c.get("da").getAsString())
+          .append(" -> ")
+          .append(c.get("a").getAsString())
+          .append("**");
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Step 3d-1: per alliance, the plans of the game (round and reason of each change) and the
+   * postures by runs of rounds.
+   */
+  static String plansMarkdown(final JsonArray rounds) {
+    final Map<String, List<String>> changes = new LinkedHashMap<>();
+    final Map<String, String> first = new LinkedHashMap<>();
+    final Map<String, List<String>> postures = new LinkedHashMap<>();
+    for (final JsonElement e : rounds) {
+      final JsonObject r = e.getAsJsonObject();
+      final int round = r.get("round").getAsInt();
+      for (final Map.Entry<String, JsonElement> s :
+          r.getAsJsonObject("stato_maggiore").entrySet()) {
+        final JsonObject v = s.getValue().getAsJsonObject();
+        first.putIfAbsent(s.getKey(), text(v, "piano"));
+        if (v.has("cambio")) {
+          final JsonObject c = v.getAsJsonObject("cambio");
+          changes
+              .computeIfAbsent(s.getKey(), k -> new ArrayList<>())
+              .add(
+                  "R"
+                      + round
+                      + " "
+                      + c.get("da").getAsString()
+                      + " -> "
+                      + c.get("a").getAsString()
+                      + " ("
+                      + c.get("motivo").getAsString()
+                      + ")");
+          if (changes.get(s.getKey()).size() == 1) {
+            first.put(s.getKey(), c.get("da").getAsString());
+          }
+        }
+        postures
+            .computeIfAbsent(s.getKey(), k -> new ArrayList<>())
+            .add(v.has("postura") ? v.get("postura").getAsString() : "-");
+      }
+    }
+    final StringBuilder md =
+        new StringBuilder(
+"""
+
+### Piani e posture (step 3d-1)
+
+""");
+    for (final String alliance : first.keySet()) {
+      md.append("- ")
+          .append(allianceLabel(alliance))
+          .append(": piano iniziale ")
+          .append(first.get(alliance))
+          .append(", cambi: ")
+          .append(
+              changes.containsKey(alliance) ? String.join("; ", changes.get(alliance)) : "nessuno")
+          .append("; posture: ")
+          .append(runs(postures.get(alliance)))
+          .append('\n');
+    }
+    return md.toString();
+  }
+
+  /** Eg ["A", "A", "B"] -> "R1-2 A, R3 B". */
+  static String runs(final List<String> values) {
+    final List<String> parts = new ArrayList<>();
+    int start = 0;
+    for (int i = 1; i <= values.size(); i++) {
+      if (i == values.size() || !values.get(i).equals(values.get(start))) {
+        parts.add(
+            (i - 1 == start ? "R" + (start + 1) : "R" + (start + 1) + "-" + i)
+                + " "
+                + values.get(start));
+        start = i;
+      }
+    }
+    return String.join(", ", parts);
   }
 }
