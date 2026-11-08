@@ -1245,8 +1245,8 @@ nuovo cambia una decisione.
   tappe, nomi degli indizi della firma, punti critici, operazioni, subentri, contrasta, ruoli), strumenti (operazioni
   lancia/attendi/annulla, perdita accettata, strumenti di ritardo SPENTI salvo accenderli, quando servono), paletti
   (`PromptStratega.paletti()` dai valori di `Direttive`), istruzioni (stato maggiore, rischi calcolati se la corsa lo
-  chiede, cambia piano solo se fallimentare, max 3 frasi) e schema. ~20.000 caratteri, uguale per entrambe le
-  alleanze ⇒ in cache. Parte variabile = livello di Fantasia (testo per 1-5) + stato strategico JSON compatto.
+  chiede, cambia piano solo se fallimentare, max 3 frasi) e schema. Misurata in CI: **12.385 token** (Haiku 5.5),
+  uguale per entrambe le alleanze ⇒ in cache (scritta una volta, poi letta anche tra job diversi entro 1 ora). Parte variabile = livello di Fantasia (testo per 1-5) + stato strategico JSON compatto.
 - **Risposta** (`UscitaLlm`): JSON estratto dal testo (tollera blocchi di codice), schema dello stratega
   (`rischio`/`ruoli` come liste di coppie, fronte vuoto = tutti) convertito nelle direttive v1, poi
   `Direttive.valida` + paletti come per ogni decisore. `UscitaLlm.controlla` = controllo offline sullo stato (piano
@@ -2499,3 +2499,27 @@ test `TettoTrasportiTest`); (b) `powershell-tests` solo per modifiche sotto `pro
   riga "Stratega: regole - postura ...", partita completata; `qualita` senza chiave esce 0 senza chiamare. Nessuna
   chiamata reale a un LLM dalla sandbox (nessuna chiave qui): il primo uso vero e' l'autoplay in CI col secret.
 - Ricerca di chiavi nel repo (pattern `sk-ant-api..-`, `gsk_`, `sk-` lunghi): nessuna.
+
+#### Autoplay in CI (run 42526503915, commit b289818, tutto verde: Windows, test 8 min 36 s, 18 partite)
+Secret `ANTHROPIC_API_KEY` presente ⇒ 14 partite a regole + 4 con lo stratega LLM (Claude Haiku via chiave API).
+
+| Metrica | Valore |
+|---|---|
+| Test di qualita' (30 stati, Haiku, Fantasia 2) | JSON validi al primo colpo **30/30 (100%)**; limitate dai paletti 4/30 (13%); latenza media **3,7 s**; costo totale **$0,027** |
+| Chiamate nelle 4 partite LLM | 48/48 risposte valide, **0 ripieghi**, 0 errori |
+| Costo per partita (una alleanza LLM, 12 chiamate) | **$0,010-0,014** (in media $0,011) |
+| Token per chiamata | ~16.900 (12.385 parte fissa letta dalla cache + ~3.400 stato + ~900 risposta) |
+| Durata partita LLM | 273-471 s (a regole 240-370 s) |
+| VC R12 Asse / Alleati, A/1 tutto regole (2 semi) | 8 / 3 |
+| VC R12, Alleati LLM contro Asse A regole | 8 / 3 (entrambi i semi) |
+| VC R12, Asse LLM contro Alleati 1 regole | 8 / 3 e 7 / 4 (media 7,5 / 3,5) |
+
+- Comportamento dell'LLM: Alleati in RALLENTAMENTO 18 round su 24, operazioni anfibie **"attendi" 44 volte su 46**
+  (Overlord quasi mai lanciato: nelle motivazioni Haiku legge `perdita_attesa_trasporti_stima` 22-87 TUV come oltre
+  il "tetto di 30" e aspetta sempre; con "lancia" lo sbarco avverrebbe comunque solo se sicuro); strumenti di ritardo
+  accesi spesso (blocco terrestre 21 round, blocco navale 7, caccia 6, ritirata 4). Asse LLM: OFFENSIVA 23/24, quasi
+  nessuno strumento. Nessun cambio di piano. Limitazioni del test di qualita': operazioni non ancora attive al R1
+  elencate dall'LLM (ignorate), strumenti chiesti per i Russians dall'Asse (ignorati).
+- Giudizio: integrazione affidabile (100% JSON validi, nessun ripiego, costo ~1 centesimo per partita), ma l'effetto
+  sul gioco e' nullo o non misurabile con 2 semi (stesse VC delle regole); la prudenza sugli sbarchi e' un difetto
+  del prompt (vedi problemi aperti), non della parte deterministica. Non tarato.
