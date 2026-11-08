@@ -1956,5 +1956,45 @@ subentri, contrasta, punti critici). Nessuna classe Pro toccata.
 - CI: run 42428388452 (4a6660e) interrotta dallo spegnimento del runner, il re-run è rimasto "queued"
   senza job e non si annulla; poi le Actions del fork si sono fermate (il push 4b17015 non ha creato
   run). Riattivate da Matteo; applicate le regole di consumo (sezione sopra).
-- Autoplay in CI: risultati da analizzare.
+- Il 2026-11-08 GitHub ha avuto ~1 ora di 504 sui download delle release (asset del gioco, Gradle, Kotlin):
+  run 42466240207 verde al 3° tentativo (test + release); autoplay saltato per la condizione `success()`
+  (corretta in 0fa7e03).
+
+#### Autoplay in CI (run 42475178239, commit 0fa7e03, tutto verde) contro a9b51b3 (run 42420519719)
+a9b51b3 = stesso codice di 011a5ac (commit solo doc), secondo campione; la run 42418306952 di 011a5ac
+dava VC Alleati in A/1 3 e 3, questa 5 e 4 (varianza tra due campioni dello stesso codice).
+
+| Metrica | a9b51b3 (= 011a5ac) | 0fa7e03 (3d-1) |
+|---|---|---|
+| Cambi di piano Alleati (12 partite Pro+) | - | 1 (D/1 seme 1: 1 → 2 al R9) |
+| Cambi di piano Asse | - | 1 (D/1 seme 1: D → A al R11) |
+| Cambi con piano IN LINEA / ping-pong | - | 0 / 0 |
+| Partite piano 1 IN CRISI ≥ 2 round senza cambio | - | 6/8 ("nessuna alternativa migliore") |
+| VC Alleati R12 contro Asse A (A/1) | 5, 4 (011a5ac: 3, 3) | 3, 4 |
+| VC Alleati R12, media delle 6 configurazioni Pro+ | 4.75 | 5.6 |
+| Sbarco USA in Europa occ. entro R7 (piano 1) | 2/8 | 5/8 |
+| Unità USA sbarcate in Europa occ. (piano 1, somma) | 45 | 54 |
+| Trasporti USA persi, piano 1 (8 partite) | 10 (113 comprati) | 19 (120) |
+| Trasporti USA persi, piano 2 (4 partite) | 10 (84) | 24 (85) |
+| Trasporti USA persi, Hard (2 partite) | 8 | 3 |
+
+Trasporti USA persi per round (somma delle partite, R1-R12): piano 1 a9b51b3 0 0 0 1 1 0 1 0 2 0 2 3,
+3d-1 0 0 0 0 3 0 1 5 2 4 1 3; piano 2 a9b51b3 0 0 0 0 1 3 0 1 0 0 1 4, 3d-1 0 0 2 1 1 0 2 4 5 4 4 1
+(persi = trasporti a fine round prima + comprati − trasporti a fine round; non distingue affondati in
+sosta da persi negli sbarchi del combattimento di Hard).
+- **Cambio 1 → 2** (D/1 seme 1): piano 1 IN CRISI R8 (Overlord in stallo) e R8-R9 ⇒ piano 2 al R9 (2 0.31
+  contro 1 0.19); Libya+Tobruk raggiunta al R11 (tappa R5 prorogata), Southern/Northern Italy in ritardo
+  al R12; VC R12 3/8 (Alleati 8), la migliore delle partite piano 1.
+- **Perché il piano 1 in crisi non cambia nelle altre 6 partite**: il punteggio del piano in vigore
+  (0.40-0.72) resta sopra quello del 2 (0.29-0.52). Causa principale: `bonus_contrasto` 0.25 al piano
+  1, che `contrasta` A/B/C, letti oltre 0.5 in quelle partite (A/1 65-74%); il piano 2 contrasta solo D.
+  Il bonus premia il piano in vigore anche quando è in crisi. Non tarato (da decidere).
+- Regole nuove dei trasporti attive: "nessuna sosta sicura" 0-7 volte per partita, "trasporti senza
+  scorta" 0-4, "zona pericolosa" 0-4, rientro truppe a bordo 0-5. Ciononostante i trasporti USA persi
+  sono aumentati (piano 1: 10 → 19, piano 2: 10 → 24), insieme agli sbarchi USA (piano 2: 53 → 105
+  unità sbarcate in Europa occidentale): le perdite più probabili sono negli sbarchi decisi dal
+  combattimento di Hard, che le soste sicure non coprono. Non verificato battaglia per battaglia.
+- Posture: tutte e 4 usate; RALLENTAMENTO/CONTRASTO frequenti per gli Alleati nei R1-R5 contro A (A letto
+  60-74%), DIFENSIVA solo con IN CRISI (R8-R12). Asse quasi sempre OFFENSIVA/RALLENTAMENTO.
+- Hard identica: golden e `DiaryNeutralityTest` verdi in CI.
 
