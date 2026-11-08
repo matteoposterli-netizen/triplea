@@ -153,7 +153,8 @@ jobs:
   # only for commits whose message contains [autoplay] (or a manual run)
   autoplay:
     needs: build
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[autoplay]') }}
+    # needs.build.result explicitly: the default success() is false when powershell-tests was skipped
+    if: ${{ !cancelled() && needs.build.result == 'success' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[autoplay]')) }}
     uses: ./.github/workflows/proplus-autoplay.yml
     with:
       round: "12"

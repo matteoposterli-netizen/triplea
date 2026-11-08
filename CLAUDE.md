@@ -264,7 +264,9 @@ Dopo che le Actions del fork si erano fermate (step 3d-1):
   annulla quella vecchia dello stesso branch (release e autoplay compresi); job `changes` (ubuntu)
   ⇒ `powershell-tests` (Windows, minuti x2) solo se il push cambia qualcosa sotto `proplus/` (o run
   manuale/branch nuovo), `build` parte anche se è saltato; job `autoplay` solo con `[autoplay]` nel
-  messaggio del commit di testa (`github.event.head_commit.message`) o run manuale.
+  messaggio del commit di testa (`github.event.head_commit.message`) o run manuale. Le condizioni di
+  `build` e `autoplay` controllano `needs.<job>.result` con `!cancelled()`: il `success()` implicito è
+  falso se un job a monte è stato saltato (run 42466240207: build verde, autoplay saltato).
 - Autoplay: timeout 30 minuti per partita, `--minuti 25` (le partite da 12 round durano 3-8 min).
 - Prima dei test (release e `prepare` dell'autoplay) il passo "Download the Gradle distribution"
   ripete `./gradlew --version` fino a 5 volte: il wrapper ha un solo tentativo con timeout 10 s e la
