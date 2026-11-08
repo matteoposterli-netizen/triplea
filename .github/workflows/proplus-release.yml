@@ -5,14 +5,48 @@ on:
   push:
     branches:
       - proplus
+    # a commit that only touches documentation starts no job
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
 permissions:
   contents: write
+# a new run on the branch cancels the older one (release and autoplay included)
+concurrency:
+  group: proplus-release-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  # Decides whether the Windows job is needed: only when something under proplus/ changed
+  # (aggiorna.ps1, avvia.bat and their tests live there), or on a manual run / new branch.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      proplus: ${{ steps.diff.outputs.proplus }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" != "push" ] || [ -z "${BEFORE}" ] \
+             || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "proplus=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "${BEFORE}" "${GITHUB_SHA}" | grep -q '^proplus/'; then
+            echo "proplus=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "proplus=false" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
+
   # Tests the PowerShell auto-update logic (aggiorna.ps1) on a real Windows
   # runner: version comparison, offline fallback, download + zip validation,
   # launcher self-update staging, and a short real launch of the jar.
   powershell-tests:
+    needs: changes
+    if: needs.changes.outputs.proplus == 'true'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -29,10 +63,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: powershell-tests
-    # one release at a time (job level: the autoplay games after it never delay the next release)
-    concurrency:
-      group: proplus-release
-      cancel-in-progress: false
+    # runs when the Windows tests passed or were not needed
+    if: ${{ !cancelled() && (needs.powershell-tests.result == 'success' || needs.powershell-tests.result == 'skipped') }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -104,8 +136,10 @@ jobs:
   # AI vs AI games (proplus-autoplay.yml) on the released commit, after the release: they
   # never block or change 'proplus-latest'. Called as a reusable workflow because
   # workflow_run / workflow_dispatch need the workflow on the default branch ('main' = upstream).
+  # only for commits whose message contains [autoplay] (or a manual run)
   autoplay:
     needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[autoplay]') }}
     uses: ./.github/workflows/proplus-autoplay.yml
     with:
       round: "12"

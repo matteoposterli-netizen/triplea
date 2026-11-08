@@ -231,15 +231,15 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
   `workflow_call`, 12 round, 6 configurazioni × 2 semi = 12 partite dallo step 3c-bis; dallo step
   OPERAZIONI ANFIBIE 7 configurazioni = 14 partite, aggiunta **B/1** in coda dopo Hard, così gli id
   delle altre restano uguali): la release è già pubblicata, quindi non la blocca né la
-  modifica. `concurrency` di `proplus-release` spostata sul job `build` (un'altra release non aspetta
-  le partite). **`workflow_run` e `workflow_dispatch` non funzionano**: GitHub li accetta solo per
+  modifica. **Solo se il messaggio dell'ultimo commit del push contiene `[autoplay]`** (regole di
+  consumo, sotto). **`workflow_run` e `workflow_dispatch` non funzionano**: GitHub li accetta solo per
   workflow presenti sul branch di default (`main` = upstream, non si tocca): verificato, `gh workflow
   run` ⇒ "HTTP 404: workflow proplus-autoplay.yml not found on the default branch".
   `workflow_dispatch` (input `round`, `partite` = prime N configurazioni di A/1, A/2, D/1, D/2, C/1,
   Hard, `semi` = semi per configurazione (2, max 4), `piani` = es. `A/1,B/2,hard`) resta nel file per quando/se il file sarà su `main`. Ripetere a mano oggi:
   Actions → run di "ProPlus Release" → "Re-run all jobs" (rifà anche la release).
 - Job: `prepare` (installDist + XML della mappa + matrice, artefatto `autoplay-kit`), `play` (matrice,
-  max-parallel 6, fail-fast off, timeout 60 min, `--minuti 52`, semi 1..N **uguali per ogni
+  max-parallel 6, fail-fast off, timeout 30 min, `--minuti 25`, semi 1..N **uguali per ogni
   configurazione** (id `<n>-Asse-A-Alleati-1-seme<s>`), rischio Equilibrato per entrambe, artefatto
   `partita-<id>`), `publish` (anche se qualche partita fallisce: cartella vuota = "FALLITA" nel
   confronto; `riepilogo-generale.md` con: tabella per partita (VC a 1/3, 2/3 e fine = round 4/8/12,
@@ -256,10 +256,24 @@ game-app/proplus-autoplay/build/install/proplus-autoplay/bin/proplus-autoplay --
 la cui run pubblicherà). `proplus-latest` mai toccata.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
+## Regole di consumo della CI (decise da Matteo, 2026-11-08)
+
+Dopo che le Actions del fork si erano fermate (step 3d-1):
+- `proplus-release.yml`: `paths-ignore: '**.md'` ⇒ un push di sola documentazione non lancia nulla;
+  `concurrency` del workflow `proplus-release-<ref>` con `cancel-in-progress: true` ⇒ una run nuova
+  annulla quella vecchia dello stesso branch (release e autoplay compresi); job `changes` (ubuntu)
+  ⇒ `powershell-tests` (Windows, minuti x2) solo se il push cambia qualcosa sotto `proplus/` (o run
+  manuale/branch nuovo), `build` parte anche se è saltato; job `autoplay` solo con `[autoplay]` nel
+  messaggio del commit di testa (`github.event.head_commit.message`) o run manuale.
+- Autoplay: timeout 30 minuti per partita, `--minuti 25` (le partite da 12 round durano 3-8 min).
+- Commit raggruppati: 1-2 push per step, l'ultimo con `[autoplay]` nel messaggio; CLAUDE.md dentro
+  l'ultimo commit, **niente push di sola documentazione**.
+- La run #38 (42428388452, 4a6660e) è rimasta "queued" senza job e non si può annullare: ignorarla.
+
 ## Release Pro+ (GitHub Action)
 
-`.github/workflows/proplus-release.yml` — su push a `proplus` (o manuale):
-0. job `powershell-tests` (runner **windows-latest**, gate del job `build`): esegue
+`.github/workflows/proplus-release.yml` — su push a `proplus` (o manuale), con le regole di consumo sopra:
+0. job `powershell-tests` (runner **windows-latest**, gate del job `build`, solo se cambia `proplus/`): esegue
    `proplus/ci/test-aggiorna.ps1`, che testa la logica di `aggiorna.ps1` con un server HTTP
    locale (`System.Net.HttpListener`) che simula la GitHub API + download (nessuna rete reale);
    `Start-MockServer` attende il server con ping ogni 250 ms fino a 90 s e riavvia il job (max 3)
@@ -271,7 +285,8 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
    `build-info.txt` + `LEGGIMI.txt` + `.triplea-root` (marcatore vuoto cercato da
    `ClientFileSystemHelper.getRootFolder()`);
 4. sposta il tag `proplus-latest` sul commit e sostituisce l'asset nella release (prerelease);
-5. job `autoplay` (dopo la release, workflow riutilizzabile): partite AI vs AI, vedi "Autoplay in CI".
+5. job `autoplay` (dopo la release, workflow riutilizzabile, solo con `[autoplay]`): partite AI vs AI,
+   vedi "Autoplay in CI".
 
 Sorgenti dei file dello zip: `proplus/dist/{avvia.bat,aggiorna.ps1,LEGGIMI.txt,build-info.txt}`.
 Placeholder `@VERSION@ @COMMIT@ @DATE@ @REPO@` sostituiti in CI in `LEGGIMI.txt` e
@@ -1928,7 +1943,8 @@ subentri, contrasta, punti critici). Nessuna classe Pro toccata.
   prima dimenticata); `AutoplayTest` (+1: piani e posture). Golden e `DiaryNeutralityTest` verdi.
 - Verifica locale: 1 partita A/1 da 2 round (38 s): posture Alleati R1 RALLENTAMENTO (A letto 72%,
   contro-obiettivi Finland e Romania), R2 CONTRASTO (Asse +1 VC/round); Asse R1-2 OFFENSIVA.
-- Autoplay in CI: run 42428388452 (4a6660e) interrotta dallo spegnimento del runner; il re-run e' rimasto
-  "queued" senza job (GitHub: "Cannot cancel a workflow re-run that has not yet queued") ⇒ nuova run con
-  un commit. Risultati da analizzare.
+- CI: run 42428388452 (4a6660e) interrotta dallo spegnimento del runner, il re-run è rimasto "queued"
+  senza job e non si annulla; poi le Actions del fork si sono fermate (il push 4b17015 non ha creato
+  run). Riattivate da Matteo; applicate le regole di consumo (sezione sopra).
+- Autoplay in CI: risultati da analizzare.
 
