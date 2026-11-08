@@ -1928,5 +1928,7 @@ subentri, contrasta, punti critici). Nessuna classe Pro toccata.
   prima dimenticata); `AutoplayTest` (+1: piani e posture). Golden e `DiaryNeutralityTest` verdi.
 - Verifica locale: 1 partita A/1 da 2 round (38 s): posture Alleati R1 RALLENTAMENTO (A letto 72%,
   contro-obiettivi Finland e Romania), R2 CONTRASTO (Asse +1 VC/round); Asse R1-2 OFFENSIVA.
-- Autoplay in CI: vedi sotto (risultati da analizzare).
+- Autoplay in CI: run 42428388452 (4a6660e) interrotta dallo spegnimento del runner; il re-run e' rimasto
+  "queued" senza job (GitHub: "Cannot cancel a workflow re-run that has not yet queued") ⇒ nuova run con
+  un commit. Risultati da analizzare.
 
