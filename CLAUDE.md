@@ -266,6 +266,10 @@ Dopo che le Actions del fork si erano fermate (step 3d-1):
   manuale/branch nuovo), `build` parte anche se è saltato; job `autoplay` solo con `[autoplay]` nel
   messaggio del commit di testa (`github.event.head_commit.message`) o run manuale.
 - Autoplay: timeout 30 minuti per partita, `--minuti 25` (le partite da 12 round durano 3-8 min).
+- Prima dei test (release e `prepare` dell'autoplay) il passo "Download the Gradle distribution"
+  ripete `./gradlew --version` fino a 5 volte: il wrapper ha un solo tentativo con timeout 10 s e la
+  cache di Gradle è in sola lettura fuori dal branch di default (si scarica a ogni run). Run 42465326439
+  fallita 2 volte così (timeout su services.gradle.org dai runner).
 - Commit raggruppati: 1-2 push per step, l'ultimo con `[autoplay]` nel messaggio; CLAUDE.md dentro
   l'ultimo commit, **niente push di sola documentazione**.
 - La run #38 (42428388452, 4a6660e) è rimasta "queued" senza job e non si può annullare: ignorarla.

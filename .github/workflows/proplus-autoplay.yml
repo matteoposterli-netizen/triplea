@@ -59,6 +59,14 @@ jobs:
           java-version: 25
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+      - name: Download the Gradle distribution (retries)
+        # the wrapper gives up after one 10 s timeout; the cache is read-only off the default branch
+        run: |
+          for i in 1 2 3 4 5; do
+            ./gradlew --no-daemon --version && exit 0
+            echo "tentativo $i fallito, nuovo tentativo tra $((i * 20)) s"; sleep $((i * 20))
+          done
+          exit 1
       - name: Build the autoplay runner
         run: ./gradlew --no-daemon :proplus-autoplay:installDist
       - name: Download the map (triplea-maps/world_war_ii_europe)
