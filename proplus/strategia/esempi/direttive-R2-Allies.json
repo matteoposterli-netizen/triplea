@@ -1,0 +1,47 @@
+{
+  "versione": 1,
+  "alleanza": "Allies",
+  "round": 2,
+  "piano": "1",
+  "postura": "RALLENTAMENTO",
+  "rischio": {
+    "Ovest": 1,
+    "Est": -1,
+    "Mediterraneo-Africa": -1,
+    "Mari": 0,
+    "Altro": 0
+  },
+  "operazioni": [
+    {
+      "id": "Overlord UK",
+      "decisione": "lancia",
+      "perdita_trasporti_accettata_max_TUV": 0
+    }
+  ],
+  "bersagli": [
+    {
+      "territorio": "Finland",
+      "peso": 8.0,
+      "origine": "contromossa",
+      "punto_critico": "stack tedesco piu' avanzato e isolato"
+    },
+    {
+      "territorio": "Romania",
+      "peso": 8.0,
+      "origine": "contromossa",
+      "punto_critico": "Romania (petrolio, obiettivi nazionali tedeschi)"
+    }
+  ],
+  "tattiche": [],
+  "ruoli": {
+    "British": "tiene il Regno Unito e la Manica, sbarca con gli americani",
+    "Russians": "regge a Est senza attacchi rischiosi",
+    "French": "difende quel che resta",
+    "Americans": "costruisce la flotta di sbarco e sbarca in Francia dal round 4"
+  },
+  "lettura_nemico": {
+    "piano": "A",
+    "probabilita": 0.8
+  },
+  "motivazione": "Regole: postura RALLENTAMENTO perche' corsa alla pari (VC Allies 0/2 tendenza +0.00, Axis 4/8 tendenza +0.00; round alla vittoria mai / mai) e piano nemico A Barbarossa letto al 80%. Piano 1 Germania prima. Strumenti di ritardo spenti."
+}

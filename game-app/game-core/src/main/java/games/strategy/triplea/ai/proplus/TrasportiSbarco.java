@@ -128,6 +128,18 @@ final class TrasportiSbarco {
     final Territory target = landing.getTerritory();
     final double win = battle.getWinPercentage();
     final Optional<PianoAttivo> plan = ProPlusTuning.planOf(proData);
+    if (plan.isPresent() && plan.get().isBersaglioInAttesa(target)) {
+      // strategic contract: the directives keep the operation waiting this round
+      return new ProLandingTransports(
+          false,
+          DROPPED,
+          0,
+          0,
+          "operazione in attesa per direttiva: nessuno sbarco su "
+              + target.getName()
+              + " in questo round",
+          Map.of());
+    }
     final double objective = plan.map(p -> p.pesoObiettivoFase(target)).orElse(0.0);
     final double operation = plan.map(p -> p.pesoBersaglioOperazione(target)).orElse(0.0);
     final double strategic = TUV_PER_WEIGHT * (objective + operation);
@@ -158,6 +170,21 @@ final class TrasportiSbarco {
           true, KEPT, loss, gain, text(loss, "<=", gain, gainText, before, ""), Map.of());
     }
     final double desired = ProPlusTuning.desiredWinPercentage(proData, target);
+    // strategic contract: an operation the directives launch may lose up to their cap
+    final double accepted = plan.map(p -> p.perditaAccettata(target)).orElse(0.0);
+    if (accepted > 0 && loss <= accepted) {
+      return new ProLandingTransports(
+          true,
+          KEPT,
+          loss,
+          gain,
+          text(loss, ">", gain, gainText, before, "")
+              + String.format(
+                  Locale.ROOT,
+                  "; tenuto: perdita entro il tetto della direttiva (%.0f TUV)",
+                  accepted),
+          Map.of());
+    }
     if (plan.isPresent() && plan.get().isCritico(target) && win > desired) {
       return new ProLandingTransports(
           true,

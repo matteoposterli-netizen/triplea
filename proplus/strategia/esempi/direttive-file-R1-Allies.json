@@ -1,0 +1,5 @@
+{"piano": "1", "postura": "DIFENSIVA",
+ "tattiche": [{"strumento": "blocco_terrestre", "nazione": "Russians", "fronte": "Est", "attiva": true},
+              {"strumento": "ritirata_combattuta", "nazione": "Russians", "attiva": true}],
+ "operazioni": [{"id": "Overlord UK", "decisione": "attendi"}],
+ "motivazione": "Prova a mano: Mosca prima di tutto. Overlord aspetta."}

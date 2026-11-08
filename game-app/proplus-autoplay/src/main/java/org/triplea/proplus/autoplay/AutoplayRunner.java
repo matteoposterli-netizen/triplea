@@ -17,6 +17,8 @@ import games.strategy.triplea.ai.proplus.ProPlusAi;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.ai.proplus.diario.DiarySettings;
+import games.strategy.triplea.ai.proplus.strategia.Decisore;
+import games.strategy.triplea.ai.proplus.strategia.Decisori;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.settings.ClientSetting;
 import java.io.IOException;
@@ -174,6 +176,14 @@ public final class AutoplayRunner {
           data.getProperties(),
           alliance,
           options.rischio(alliance).map(AutoplayRunner::riskLevel).orElse(RiskLevel.DEFAULT));
+      // strategic contract: the decider of the alliance (rules, or directives from a file)
+      final String decider = options.decisore(alliance);
+      if (decider.startsWith("file:")) {
+        Decisori.set(
+            data.getProperties(), alliance, Decisore.FILE, decider.substring("file:".length()));
+      } else {
+        Decisori.set(data.getProperties(), alliance, Decisore.REGOLE, "");
+      }
     }
     for (final String alliance : options.tipi().keySet()) {
       if (!monitor.alliances().containsKey(alliance)) {

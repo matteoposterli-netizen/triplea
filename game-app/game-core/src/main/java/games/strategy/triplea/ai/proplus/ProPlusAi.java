@@ -109,7 +109,7 @@ public class ProPlusAi extends ProAi {
       initializeData();
       prepareData(data);
       final java.util.Set<games.strategy.engine.data.Unit> held = new java.util.HashSet<>();
-      final java.util.List<OperazioniAnfibie.Rapporto> reports = new java.util.ArrayList<>();
+      final List<OperazioniAnfibie.Rapporto> reports = new java.util.ArrayList<>();
       if (bringBack) {
         try {
           final OperazioniAnfibie.Esito back =
@@ -153,6 +153,7 @@ public class ProPlusAi extends ProAi {
       }
       // after the operations' diary block, which starts the non-combat text
       delayDiary.run();
+      saveReports(data, player, reports);
       reports.forEach(
           r ->
               ProLogger.info(
@@ -171,6 +172,57 @@ public class ProPlusAi extends ProAi {
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "Amphibious operations failed: " + e);
       tuning.hold(data, player, java.util.Set.of());
+    }
+  }
+
+  /**
+   * Strategic contract: the last report of each operation, shown to the decider in the next input
+   * ({@code ultimo_rapporto}).
+   */
+  private static void saveReports(
+      final GameData data,
+      final GamePlayer player,
+      final List<OperazioniAnfibie.Rapporto> reports) {
+    final var alliance = ProPlusSettings.allianceOf(data, player);
+    if (alliance.isEmpty()) {
+      return;
+    }
+    for (final OperazioniAnfibie.Rapporto r : reports) {
+      try {
+        final com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+        o.addProperty("round", data.getSequence().getRound());
+        o.addProperty("nazione", r.nazione());
+        o.addProperty("stato", r.stato().testo());
+        o.addProperty("trasporti", r.trasporti());
+        o.addProperty("truppe_a_bordo", r.truppeABordo());
+        o.addProperty("scorta", r.scorta());
+        o.addProperty("sbarcate", r.sbarcate());
+        r.bersaglio().ifPresent(b -> o.addProperty("bersaglio", b));
+        if (r.bersaglio().isPresent()) {
+          o.addProperty("win_bersaglio", Math.round(r.winStimata()));
+        }
+        r.valutazione()
+            .ifPresent(
+                v -> {
+                  o.addProperty("testa_di_ponte", v.territorio());
+                  o.addProperty("tenuta_stimata", v.tenuta());
+                });
+        r.accumulo()
+            .ifPresent(
+                a -> {
+                  o.addProperty("win_accumulo", Math.round(a.win()));
+                  o.addProperty("soglia_accumulo", Math.round(a.soglia()));
+                });
+        if (!r.motivo().isEmpty()) {
+          o.addProperty(
+              "motivo",
+              r.motivo().length() > 160 ? r.motivo().substring(0, 160) + "..." : r.motivo());
+        }
+        games.strategy.triplea.ai.proplus.strategia.Ingresso.salvaRapporto(
+            data.getProperties(), alliance.get(), r.operazione(), o);
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "Operation report not saved: " + e);
+      }
     }
   }
 

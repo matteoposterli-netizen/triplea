@@ -208,6 +208,9 @@ jobs:
           title="Autoplay Pro+ - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
+          # strategic contract: the state/directives JSON files of the first seed only (1 game
+          # per configuration), the sizes are already in each game's summary
+          find autoplay -path '*-seme[2-9]*' \( -name 'stato-R*.json' -o -name 'direttive-R*.json' \) -delete
           (cd autoplay && zip -q -9 -r ../autoplay.zip .)
           ls -la autoplay.zip
       - name: Publish release autoplay-latest
@@ -228,7 +231,7 @@ jobs:
           Commit: ${sha} (branch proplus)
           Data: $(date -u +'%Y-%m-%d %H:%M UTC')
           Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-          Contenuto di autoplay.zip: riepilogo-generale.md + una cartella per partita (riepilogo.md, riepilogo.json, diario, partita.log.gz)."
+          Contenuto di autoplay.zip: riepilogo-generale.md + una cartella per partita (riepilogo.md, riepilogo.json, diario, partita.log.gz); JSON di stato e direttive del contratto nel diario delle partite seme 1."
           # the tag follows the tested commit: recreate release and tag (never proplus-latest)
           gh release delete "$tag" --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
           gh release create "$tag" autoplay.zip --repo "$GITHUB_REPOSITORY" --target "$sha" \

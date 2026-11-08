@@ -71,6 +71,9 @@ public final class PianoAttivo {
   @Getter(AccessLevel.NONE)
   private final @Nullable JsonObject tattiche;
 
+  /** Strategic contract: the directives of the round (the plan's base orders if none yet). */
+  private final Direttive direttive;
+
   /** Step 3d-2: the enemy transports hunted this turn (counter-objectives). */
   private final List<Caccia> caccia;
 
@@ -102,14 +105,26 @@ public final class PianoAttivo {
             .map(StatoMaggiore.Stato::roundPiano);
     this.props = props;
     this.dataPerCondizioni = data;
-    this.operazioni = piano.operazioni(nazione, round).stream().map(o -> attiva(data, o)).toList();
+    // strategic contract: every strategic choice comes from the directives of the round
+    this.direttive =
+        Direttive.of(
+            directives(props, alleanza, piano.id(), round)
+                .orElseGet(() -> DecisoreRegole.base(strategia, alleanza, piano, round)));
+    this.operazioni =
+        piano.operazioni(nazione, round).stream()
+            .filter(o -> !Direttive.ANNULLA.equals(direttive.operazione(o.nome()).decisione()))
+            .map(o -> attiva(data, o))
+            .toList();
     final List<Strategia.Obiettivo> list = new ArrayList<>();
-    if (fase != null) {
-      fase.obiettivi().stream().filter(o -> o.appliesTo(nazione)).forEach(list::add);
-    }
-    // the targets of an operation whose units are mine are objectives too (step OPERAZIONI)
+    direttive.bersagli().stream()
+        .filter(b -> !b.isContromossa())
+        .map(Direttive.Bersaglio::obiettivo)
+        .filter(o -> o.appliesTo(nazione))
+        .forEach(list::add);
+    // the targets of an operation whose units are mine are objectives too (step OPERAZIONI),
+    // not while the directives keep it waiting
     for (final Strategia.Operazione op : operazioni) {
-      if (!op.nazioni().contains(nazione)) {
+      if (!op.nazioni().contains(nazione) || isInAttesa(op)) {
         continue;
       }
       for (int i = 0; i < op.bersagli().size(); i++) {
@@ -121,42 +136,20 @@ public final class PianoAttivo {
         }
       }
     }
-    final Optional<JsonObject> strategic = strategicState(props, alleanza, piano.id(), round);
-    this.postura = strategic.map(j -> j.get("postura").getAsString()).orElse(Contromosse.OFFENSIVA);
+    this.postura = direttive.postura();
     final List<Strategia.Obiettivo> counter = new ArrayList<>();
-    strategic
-        .filter(j -> j.has("contro_obiettivi"))
-        .ifPresent(
-            j ->
-                j.getAsJsonArray("contro_obiettivi")
-                    .forEach(
-                        e -> {
-                          final JsonObject o = e.getAsJsonObject();
-                          counter.add(
-                              new Strategia.Obiettivo(
-                                  o.get("territorio").getAsString(),
-                                  null,
-                                  o.get("peso").getAsDouble(),
-                                  Set.of(),
-                                  false));
-                        }));
-    this.letturaNemico =
-        strategic
-            .filter(j -> j.has("lettura"))
-            .map(j -> j.getAsJsonObject("lettura").get("piu_probabile").getAsString())
-            .orElse("");
-    this.probabilitaNemico =
-        strategic
-            .filter(j -> j.has("lettura"))
-            .map(j -> j.getAsJsonObject("lettura").get("probabilita").getAsDouble())
-            .orElse(0.0);
-    this.tattiche =
-        strategic
-            .filter(j -> j.has(Tattiche.KEY))
-            .map(j -> j.getAsJsonObject(Tattiche.KEY))
-            .orElse(null);
+    direttive.bersagli().stream()
+        .filter(Direttive.Bersaglio::isContromossa)
+        .forEach(
+            b ->
+                counter.add(
+                    new Strategia.Obiettivo(
+                        b.territorio(), b.flotta(), b.peso(), Set.of(), false)));
+    this.letturaNemico = direttive.letturaPiano();
+    this.probabilitaNemico = direttive.letturaProbabilita();
+    this.tattiche = direttive.tattiche();
     // step 3d-2: hunted enemy transports are counter-objectives with the file's fixed weight
-    this.caccia = tattiche == null ? List.of() : huntedTransports(data);
+    this.caccia = huntedTransports(data);
     caccia.stream()
         .filter(c -> counter.stream().noneMatch(o -> c.zona().equals(o.territorio())))
         .forEach(
@@ -279,10 +272,10 @@ public final class PianoAttivo {
   }
 
   /**
-   * The general staff's decision ({@code stato_strategico}) of the history entry of {@code round},
-   * if it was taken with {@code planId} in force.
+   * The directives of the history entry of {@code round}, if they were written with {@code planId}
+   * in force.
    */
-  private static Optional<JsonObject> strategicState(
+  private static Optional<JsonObject> directives(
       final GameProperties props, final String alliance, final String planId, final int round) {
     final Optional<StatoMaggiore.Stato> state = StatoMaggiore.getState(props, alliance);
     if (state.isEmpty() || state.get().storico().isEmpty()) {
@@ -292,11 +285,44 @@ public final class PianoAttivo {
         state.get().storico().get(state.get().storico().size() - 1).getAsJsonObject();
     if (!last.has("round")
         || last.get("round").getAsInt() != round
-        || !last.has("stato_strategico")) {
+        || !last.has(Valutazione.KEY_DIRETTIVE)) {
       return Optional.empty();
     }
-    final JsonObject s = last.getAsJsonObject("stato_strategico");
-    return planId.equals(s.get("piano").getAsString()) ? Optional.of(s) : Optional.empty();
+    final JsonObject d = last.getAsJsonObject(Valutazione.KEY_DIRETTIVE);
+    return planId.equals(d.get("piano").getAsString()) ? Optional.of(d) : Optional.empty();
+  }
+
+  /** Strategic contract: whether the directives keep {@code op} waiting (no landing this round). */
+  public boolean isInAttesa(final Strategia.Operazione op) {
+    return Direttive.ATTENDI.equals(direttive.operazione(op.nome()).decisione());
+  }
+
+  /**
+   * Strategic contract: the transport loss the directives accept for a landing on {@code t} beyond
+   * the safety rule (TUV, 0 = none): the highest of my launched operations targeting it.
+   */
+  public double perditaAccettata(final Territory t) {
+    double max = 0;
+    for (final Strategia.Operazione op : operazioni) {
+      if (op.nazioni().contains(nazione)
+          && op.bersagli().contains(t.getName())
+          && !isInAttesa(op)) {
+        max = Math.max(max, direttive.operazione(op.nome()).perditaAccettata());
+      }
+    }
+    return max;
+  }
+
+  /**
+   * Strategic contract: whether {@code t} is a target of my operations only while they wait (the
+   * directives say "attendi"): no landing on it this round.
+   */
+  public boolean isBersaglioInAttesa(final Territory t) {
+    final List<Strategia.Operazione> mine =
+        operazioni.stream()
+            .filter(op -> op.nazioni().contains(nazione) && op.bersagli().contains(t.getName()))
+            .toList();
+    return !mine.isEmpty() && mine.stream().allMatch(this::isInAttesa);
   }
 
   /** Step 3d-1: posture DIFENSIVA (risk −1 on every front, defense before the plan's share). */
@@ -312,6 +338,7 @@ public final class PianoAttivo {
   public List<Strategia.Operazione> operazioniCombinate(final Strategia.Operazione mine) {
     return piano.operazioni().stream()
         .filter(o -> !o.nome().equals(mine.nome()) && o.covers(round) && !o.riguarda(nazione))
+        .filter(o -> !Direttive.ANNULLA.equals(direttive.operazione(o.nome()).decisione()))
         .filter(o -> o.raccolta().stream().anyMatch(mine.raccolta()::contains))
         .map(o -> attivaSalvata.computeIfAbsent(o.nome(), k -> attiva(dataPerCondizioni, o)))
         .toList();
@@ -393,9 +420,12 @@ public final class PianoAttivo {
     return strategia.fronteOf(t);
   }
 
-  /** Modifier of {@code front} in this round's phase (-1..+1, 0 without a phase). */
+  /**
+   * Risk offset of {@code front} in the directives of the round (-1..+1; the decider by rules
+   * writes the phase's modifier, 0 without a phase).
+   */
   public int modificatore(final String front) {
-    return fase == null ? 0 : fase.modificatore(front);
+    return direttive.rischio(front);
   }
 
   /** The alliance's slider level. */
@@ -458,10 +488,9 @@ public final class PianoAttivo {
    * posture are not counted here.
    */
   public double pesoObiettivoFase(final Territory t) {
-    if (fase == null) {
-      return 0;
-    }
-    return fase.obiettivi().stream()
+    return direttive.bersagli().stream()
+        .filter(b -> !b.isContromossa())
+        .map(Direttive.Bersaglio::obiettivo)
         .filter(o -> o.appliesTo(nazione) && matches(o, t))
         .mapToDouble(Strategia.Obiettivo::peso)
         .max()
@@ -476,7 +505,7 @@ public final class PianoAttivo {
     double max = 0;
     for (final Strategia.Operazione op : operazioni) {
       final int i = op.bersagli().indexOf(t.getName());
-      if (op.nazioni().contains(nazione) && i >= 0) {
+      if (op.nazioni().contains(nazione) && i >= 0 && !isInAttesa(op)) {
         max = Math.max(max, op.pesoBersaglio(i));
       }
     }

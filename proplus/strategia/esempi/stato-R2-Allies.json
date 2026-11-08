@@ -1,0 +1,545 @@
+{
+  "versione": 1,
+  "alleanza": "Allies",
+  "nemico": "Axis",
+  "round": 2,
+  "ordine_turni": [
+    "Germans",
+    "Russians",
+    "Americans",
+    "British",
+    "Italians",
+    "French"
+  ],
+  "nazioni": {
+    "Allies": [
+      "British",
+      "French",
+      "Americans",
+      "Russians"
+    ],
+    "Axis": [
+      "Germans",
+      "Italians"
+    ]
+  },
+  "fronti": [
+    "Ovest",
+    "Est",
+    "Mediterraneo-Africa",
+    "Mari",
+    "Altro"
+  ],
+  "vc": {
+    "Allies": {
+      "tenute": [
+        "Eastern United States",
+        "Egypt",
+        "Novgorod",
+        "Ontario",
+        "Russia",
+        "United Kingdom",
+        "Volgograd"
+      ],
+      "misura_corsa": 0,
+      "obiettivo": 2,
+      "tendenza_3_round": 0.0,
+      "round_alla_vittoria": 99
+    },
+    "Axis": {
+      "tenute": [
+        "France",
+        "Germany",
+        "Poland",
+        "Southern Italy"
+      ],
+      "misura_corsa": 4,
+      "obiettivo": 8,
+      "tendenza_3_round": 0.0,
+      "round_alla_vittoria": 99
+    },
+    "corsa": "alla pari"
+  },
+  "economia": {
+    "Germans": {
+      "pu": 53,
+      "reddito": 43
+    },
+    "Russians": {
+      "pu": 28,
+      "reddito": 28
+    },
+    "Americans": {
+      "pu": 35,
+      "reddito": 35
+    },
+    "British": {
+      "pu": 31,
+      "reddito": 29
+    },
+    "Italians": {
+      "pu": 18,
+      "reddito": 13
+    },
+    "French": {
+      "pu": 0,
+      "reddito": 7
+    }
+  },
+  "tuv": {
+    "Ovest": {
+      "Allies": {
+        "terra": 66,
+        "mare": 0,
+        "aria": 10
+      },
+      "Axis": {
+        "terra": 111,
+        "mare": 0,
+        "aria": 40
+      }
+    },
+    "Est": {
+      "Allies": {
+        "terra": 161,
+        "mare": 0,
+        "aria": 31
+      },
+      "Axis": {
+        "terra": 153,
+        "mare": 0,
+        "aria": 46
+      }
+    },
+    "Mediterraneo-Africa": {
+      "Allies": {
+        "terra": 59,
+        "mare": 0,
+        "aria": 12
+      },
+      "Axis": {
+        "terra": 122,
+        "mare": 0,
+        "aria": 12
+      }
+    },
+    "Mari": {
+      "Allies": {
+        "terra": 0,
+        "mare": 144,
+        "aria": 21
+      },
+      "Axis": {
+        "terra": 0,
+        "mare": 116,
+        "aria": 0
+      }
+    },
+    "Altro": {
+      "Allies": {
+        "terra": 69,
+        "mare": 0,
+        "aria": 22
+      },
+      "Axis": {
+        "terra": 0,
+        "mare": 0,
+        "aria": 0
+      }
+    }
+  },
+  "capitali": [
+    {
+      "nazione": "Americans",
+      "territorio": "Eastern United States",
+      "proprietario": "Americans",
+      "forza_nemica": 0
+    },
+    {
+      "nazione": "British",
+      "territorio": "United Kingdom",
+      "proprietario": "British",
+      "forza_nemica": 0
+    },
+    {
+      "nazione": "French",
+      "territorio": "France",
+      "proprietario": "Germans",
+      "forza_nemica": 24
+    },
+    {
+      "nazione": "Germans",
+      "territorio": "Germany",
+      "proprietario": "Germans",
+      "forza_nemica": 0
+    },
+    {
+      "nazione": "Italians",
+      "territorio": "Southern Italy",
+      "proprietario": "Italians",
+      "forza_nemica": 0
+    },
+    {
+      "nazione": "Russians",
+      "territorio": "Russia",
+      "proprietario": "Russians",
+      "forza_nemica": 0
+    }
+  ],
+  "fabbriche": {
+    "Allies": {
+      "totale": 9,
+      "perse": [
+        "Normandy Bordeaux",
+        "Southern France",
+        "France"
+      ]
+    },
+    "Axis": {
+      "totale": 7,
+      "perse": []
+    }
+  },
+  "vc_contese": [
+    {
+      "territorio": "Egypt",
+      "di": "Allies",
+      "nemici_vicini": true
+    },
+    {
+      "territorio": "France",
+      "di": "Axis",
+      "in_origine": "Allies",
+      "nemici_vicini": false
+    }
+  ],
+  "piano": {
+    "id": "1",
+    "nome": "Germania prima",
+    "fase": "R1-2",
+    "stato": "IN LINEA",
+    "in_vigore_dal_round": 1,
+    "cambi_fatti": 0,
+    "tappe": [
+      {
+        "tappa": "prima zona di sbarco (Normandy Bordeaux o Norway o Holland Belgium) R5",
+        "stato": "in tempo"
+      },
+      {
+        "tappa": "France R8",
+        "stato": "in tempo"
+      },
+      {
+        "tappa": "Germany R11",
+        "stato": "in tempo"
+      }
+    ],
+    "reddito": 99,
+    "reddito_r1": 100,
+    "reddito_nemico": 56,
+    "bilancio_tuv": -84,
+    "operazioni_in_stallo": [],
+    "ruoli": {
+      "British": "tiene il Regno Unito e la Manica, sbarca con gli americani",
+      "Russians": "regge a Est senza attacchi rischiosi",
+      "French": "difende quel che resta",
+      "Americans": "costruisce la flotta di sbarco e sbarca in Francia dal round 4"
+    }
+  },
+  "piani_ammessi": [
+    {
+      "id": "1",
+      "nome": "Germania prima",
+      "in_vigore": true,
+      "punteggio": 0.61,
+      "tappe": 0.67,
+      "forze": 0.15,
+      "contrasto": 0.0,
+      "contrasta": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    {
+      "id": "2",
+      "nome": "Italia prima",
+      "in_vigore": false,
+      "punteggio": 0.29,
+      "tappe": 0.33,
+      "forze": 0.05,
+      "contrasto": 0.0,
+      "ammesso": true,
+      "contrasta": [
+        "D"
+      ]
+    }
+  ],
+  "lettura_nemico": {
+    "piu_probabile": "A",
+    "probabilita_piani": {
+      "A": 0.801,
+      "B": 0.057,
+      "C": 0.071,
+      "D": 0.071
+    },
+    "indizi_principali": [
+      "quota del TUV di terra tedesco sul fronte Est (A Barbarossa, 96%)",
+      "poche unita' di terra tedesche in Italia, Africa o Balcani del sud (A Barbarossa, 100%)",
+      "attacchi dell'Asse a Malta, Grecia o Gibilterra (D Sud/Mediterraneo, 100%)"
+    ]
+  },
+  "operazioni": [
+    {
+      "id": "Overlord UK",
+      "nazioni": [
+        "British"
+      ],
+      "bersagli": [
+        "Normandy Bordeaux",
+        "Holland Belgium",
+        "Norway"
+      ],
+      "raccolta": [
+        "110 Sea Zone"
+      ],
+      "truppe_pronte_nei_porti": 32,
+      "trasporti_in_zona": 0,
+      "truppe_a_bordo": 0,
+      "scorta": 0,
+      "trasporti_richiesti": 3,
+      "scorta_minima": 2,
+      "perdita_attesa_trasporti_stima": 0,
+      "in_stallo": false
+    }
+  ],
+  "minacce": [
+    {
+      "territorio": "Egypt",
+      "di": "British",
+      "forza_nemica": 100,
+      "tipo": "vc"
+    }
+  ],
+  "eventi": {
+    "battaglie_maggiori": [
+      {
+        "round": 1,
+        "territorio": "110 Sea Zone",
+        "attaccante": "Germans",
+        "difensore": "British",
+        "tuv_perso_attaccante": 59,
+        "tuv_perso_difensore": 74,
+        "esito": "conquered"
+      },
+      {
+        "round": 1,
+        "territorio": "France",
+        "attaccante": "Germans",
+        "difensore": "French",
+        "tuv_perso_attaccante": 40,
+        "tuv_perso_difensore": 53,
+        "esito": "conquered"
+      },
+      {
+        "round": 1,
+        "territorio": "111 Sea Zone",
+        "attaccante": "Germans",
+        "difensore": "British",
+        "tuv_perso_attaccante": 10,
+        "tuv_perso_difensore": 50,
+        "esito": "conquered"
+      },
+      {
+        "round": 1,
+        "territorio": "93 Sea Zone",
+        "attaccante": "Italians",
+        "difensore": "French",
+        "tuv_perso_attaccante": 14,
+        "tuv_perso_difensore": 20,
+        "esito": "conquered"
+      },
+      {
+        "round": 2,
+        "territorio": "Yugoslavia",
+        "attaccante": "Germans",
+        "difensore": "Neutral_Allies",
+        "tuv_perso_attaccante": 12,
+        "tuv_perso_difensore": 15,
+        "esito": "conquered"
+      }
+    ],
+    "conquiste": [
+      {
+        "round": 1,
+        "territorio": "Southern France",
+        "da": "French",
+        "a": "Germans"
+      },
+      {
+        "round": 1,
+        "territorio": "Normandy Bordeaux",
+        "da": "French",
+        "a": "Germans"
+      },
+      {
+        "round": 1,
+        "territorio": "110 Sea Zone",
+        "da": "British",
+        "a": "Germans"
+      },
+      {
+        "round": 1,
+        "territorio": "106 Sea Zone",
+        "da": "British",
+        "a": "Germans"
+      },
+      {
+        "round": 1,
+        "territorio": "111 Sea Zone",
+        "da": "British",
+        "a": "Germans"
+      },
+      {
+        "round": 1,
+        "territorio": "France",
+        "da": "French",
+        "a": "Germans"
+      },
+      {
+        "round": 1,
+        "territorio": "110 Sea Zone",
+        "da": "Germans",
+        "a": "British"
+      },
+      {
+        "round": 1,
+        "territorio": "Greece",
+        "da": "Neutral_Allies",
+        "a": "Italians"
+      },
+      {
+        "round": 1,
+        "territorio": "93 Sea Zone",
+        "da": "French",
+        "a": "Italians"
+      },
+      {
+        "round": 1,
+        "territorio": "Alexandria",
+        "da": "British",
+        "a": "Italians"
+      },
+      {
+        "round": 1,
+        "territorio": "Tunisia",
+        "da": "French",
+        "a": "Italians"
+      },
+      {
+        "round": 2,
+        "territorio": "110 Sea Zone",
+        "da": "British",
+        "a": "Germans"
+      },
+      {
+        "round": 2,
+        "territorio": "Yugoslavia",
+        "da": "Neutral_Allies",
+        "a": "Germans"
+      },
+      {
+        "round": 2,
+        "territorio": "117 Sea Zone",
+        "da": "British",
+        "a": "Germans"
+      }
+    ],
+    "guerre_nuove": []
+  },
+  "strumenti": [
+    {
+      "strumento": "blocco_terrestre",
+      "nazioni": [
+        "British",
+        "French",
+        "Americans",
+        "Russians"
+      ],
+      "fronti": [
+        "Ovest",
+        "Est",
+        "Mediterraneo-Africa",
+        "Mari",
+        "Altro"
+      ],
+      "attiva_dalle_regole": false
+    },
+    {
+      "strumento": "ritirata_combattuta",
+      "nazioni": [
+        "British",
+        "French",
+        "Americans",
+        "Russians"
+      ],
+      "fronti": [
+        "Ovest",
+        "Est",
+        "Mediterraneo-Africa",
+        "Mari",
+        "Altro"
+      ],
+      "attiva_dalle_regole": false
+    },
+    {
+      "strumento": "blocco_navale",
+      "nazioni": [
+        "British",
+        "French",
+        "Americans",
+        "Russians"
+      ],
+      "fronti": [
+        "Ovest",
+        "Est",
+        "Mediterraneo-Africa",
+        "Mari",
+        "Altro"
+      ],
+      "zone_di_passaggio_nemiche": [
+        "111 Sea Zone",
+        "110 Sea Zone",
+        "96 Sea Zone",
+        "98 Sea Zone"
+      ],
+      "attiva_dalle_regole": false
+    },
+    {
+      "strumento": "caccia_trasporti",
+      "nazioni": [
+        "British",
+        "French",
+        "Americans",
+        "Russians"
+      ],
+      "fronti": [
+        "Ovest",
+        "Est",
+        "Mediterraneo-Africa",
+        "Mari",
+        "Altro"
+      ],
+      "attiva_dalle_regole": false
+    }
+  ],
+  "paletti": {
+    "guarnigione_capitale": "sempre (minaccia oltre 25% di win nemica)",
+    "soglia_minima_attacco": 30.0,
+    "perdita_trasporti_max_TUV_per_turno": 30.0,
+    "max_cambi_piano": 2,
+    "round_tra_cambi": 3,
+    "rischio_per_fronte": "-1..+1 rispetto al livello base",
+    "peso_bersaglio": "0..20"
+  }
+}

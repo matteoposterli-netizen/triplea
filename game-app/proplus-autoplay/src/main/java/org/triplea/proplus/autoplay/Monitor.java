@@ -351,6 +351,10 @@ final class Monitor {
             }
           }
         }
+        // strategic contract (decision of Matteo): infantry left where it was is no block
+        if (rec.has("blocchi_lasciati")) {
+          c.merge("blocchi_lasciati", rec.getAsJsonArray("blocchi_lasciati").size(), Integer::sum);
+        }
         if (rec.has("caccia")) {
           for (final JsonElement e : rec.getAsJsonArray("caccia")) {
             c.merge("zone_caccia", 1, Integer::sum);

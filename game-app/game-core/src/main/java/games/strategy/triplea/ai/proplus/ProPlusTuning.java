@@ -16,6 +16,7 @@ import games.strategy.triplea.ai.pro.data.ProTerritory;
 import games.strategy.triplea.ai.pro.util.ProNationalObjectiveUtils;
 import games.strategy.triplea.ai.pro.util.ProOddsCalculator;
 import games.strategy.triplea.ai.pro.util.ProUtils;
+import games.strategy.triplea.ai.proplus.strategia.Direttive;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.Strategia;
 import games.strategy.triplea.attachments.TerritoryAttachment;
@@ -161,8 +162,11 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public double targetAttackMinWinPercentage(
       final ProData proData, final Territory target, final double attackMinWinPercentage) {
+    // strategic contract, guard rail: never below the absolute minimum, whatever the decider
     final double minimum =
-        riskLevel(proData, target).minimumWinPercentage(isLowLuck(proData.getData()));
+        Math.max(
+            Direttive.SOGLIA_MINIMA_ASSOLUTA,
+            riskLevel(proData, target).minimumWinPercentage(isLowLuck(proData.getData())));
     if (!isLandingOnlyTarget(proData, target)) {
       return minimum;
     }
@@ -553,7 +557,9 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public double attackMinWinPercentage(
       final GameState data, final GamePlayer player, final double minWinPercentage) {
-    return ProPlusSettings.riskLevelFor(data, player).minimumWinPercentage(isLowLuck(data));
+    return Math.max(
+        Direttive.SOGLIA_MINIMA_ASSOLUTA,
+        ProPlusSettings.riskLevelFor(data, player).minimumWinPercentage(isLowLuck(data)));
   }
 
   @Override

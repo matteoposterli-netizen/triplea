@@ -16,11 +16,13 @@ import games.strategy.triplea.ai.proplus.ProPlusTuning;
 import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.ai.proplus.StrumentiRitardo;
 import games.strategy.triplea.ai.proplus.strategia.Contromosse;
+import games.strategy.triplea.ai.proplus.strategia.DecisoreRegole;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.ai.proplus.strategia.Strategia;
 import games.strategy.triplea.ai.proplus.strategia.Strategie;
 import games.strategy.triplea.ai.proplus.strategia.Tattiche;
+import games.strategy.triplea.ai.proplus.strategia.Valutazione;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.MoveDelegate;
 import games.strategy.triplea.odds.calculator.SeededBattleCalculator;
@@ -66,19 +68,21 @@ class DelayToolsTest extends AbstractClientSettingTestCase {
   void theDeciderTurnsTheToolsOnForTheDelayingNationAndForTheSlowingPosture() {
     final Strategia.Piano plan1 = strategia.alleanza("Allies").orElseThrow().piano("1").get();
 
-    final JsonObject offensive = Tattiche.decidi(data, "Allies", plan1, Contromosse.OFFENSIVA);
+    final JsonObject offensive =
+        Tattiche.perRuoloEPostura(data, "Allies", plan1, Contromosse.OFFENSIVA);
     assertThat(Tattiche.perche(offensive, Tattiche.BLOCCO_TERRESTRE, "Russians", "Est"))
         .contains("ruolo ritarda nel piano 1");
     assertThat(Tattiche.perche(offensive, Tattiche.CACCIA, "British", null)).isEmpty();
 
-    final JsonObject slowing = Tattiche.decidi(data, "Allies", plan1, Contromosse.RALLENTAMENTO);
+    final JsonObject slowing =
+        Tattiche.perRuoloEPostura(data, "Allies", plan1, Contromosse.RALLENTAMENTO);
     assertThat(Tattiche.perche(slowing, Tattiche.BLOCCO_NAVALE, "British", "Mari"))
         .contains("postura RALLENTAMENTO");
     assertThat(Tattiche.perche(slowing, Tattiche.RITIRATA, "Russians", null))
         .contains("ruolo ritarda nel piano 1");
     assertThat(
             Tattiche.perche(
-                Tattiche.decidi(data, "Allies", plan1, Contromosse.DIFENSIVA),
+                Tattiche.perRuoloEPostura(data, "Allies", plan1, Contromosse.DIFENSIVA),
                 Tattiche.RITIRATA,
                 "Americans",
                 null))
@@ -98,12 +102,13 @@ class DelayToolsTest extends AbstractClientSettingTestCase {
     final Strategia.Piano planN = strategia.alleanza("Axis").orElseThrow().piano("N").get();
     final Strategia.Piano planA = strategia.alleanza("Axis").orElseThrow().piano("A").get();
 
-    assertThat(Tattiche.decidi(data, "Axis", planN, Contromosse.RALLENTAMENTO).toString())
+    assertThat(Tattiche.perRuoloEPostura(data, "Axis", planN, Contromosse.RALLENTAMENTO).toString())
         .doesNotContain("Germans");
-    assertThat(Tattiche.decidi(data, "Axis", planA, Contromosse.OFFENSIVA).toString())
+    assertThat(Tattiche.perRuoloEPostura(data, "Axis", planA, Contromosse.OFFENSIVA).toString())
         .doesNotContain("Germans")
         .doesNotContain("Italians");
-    assertThat(Tattiche.testo(Tattiche.decidi(data, "Axis", planA, Contromosse.OFFENSIVA)))
+    assertThat(
+            Tattiche.testo(Tattiche.perRuoloEPostura(data, "Axis", planA, Contromosse.OFFENSIVA)))
         .endsWith("nessuna");
   }
 
@@ -338,11 +343,13 @@ class DelayToolsTest extends AbstractClientSettingTestCase {
     reading.addProperty("probabilita", probability);
     s.add("lettura", reading);
     s.add("contro_obiettivi", new JsonArray());
-    s.add(Tattiche.KEY, Tattiche.decidi(data, alliance, plan, posture));
+    s.add(Tattiche.KEY, Tattiche.perRuoloEPostura(data, alliance, plan, posture));
     final JsonObject entry = new JsonObject();
     entry.addProperty("round", 3);
     entry.addProperty("piano", planId);
     entry.add("stato_strategico", s);
+    entry.add(
+        Valutazione.KEY_DIRETTIVE, DecisoreRegole.direttive(strategia, alliance, plan, 3, s, null));
     StatoMaggiore.aggiungiStorico(data, alliance, entry);
   }
 

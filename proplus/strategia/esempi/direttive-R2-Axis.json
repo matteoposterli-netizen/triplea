@@ -1,0 +1,38 @@
+{
+  "versione": 1,
+  "alleanza": "Axis",
+  "round": 2,
+  "piano": "A",
+  "postura": "OFFENSIVA",
+  "rischio": {
+    "Ovest": 1,
+    "Est": -1,
+    "Mediterraneo-Africa": 0,
+    "Mari": 0,
+    "Altro": 0
+  },
+  "operazioni": [],
+  "bersagli": [
+    {
+      "territorio": "France",
+      "peso": 15.0,
+      "critico": true,
+      "origine": "piano"
+    },
+    {
+      "flotta": "British",
+      "peso": 10.0,
+      "origine": "piano"
+    }
+  ],
+  "tattiche": [],
+  "ruoli": {
+    "Italians": "tiene il Mediterraneo e chiude l'Egitto",
+    "Germans": "prende la Francia, colpisce la flotta britannica, poi guida l'invasione dell'URSS"
+  },
+  "lettura_nemico": {
+    "piano": "1",
+    "probabilita": 0.66
+  },
+  "motivazione": "Regole: postura OFFENSIVA perche' piano IN LINEA e corsa in vantaggio (VC Axis 4/8 tendenza +1.00, Allies 0/2 tendenza +0.00; round alla vittoria 4 / mai). Piano A Barbarossa. Strumenti di ritardo spenti."
+}

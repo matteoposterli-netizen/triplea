@@ -225,6 +225,53 @@ class AutoplayTest {
   }
 
   @Test
+  void deciderPerAllianceIsRulesOrAFile() {
+    final AutoplayOptions o =
+        AutoplayOptions.parse(
+            new String[] {"--mappa", "m.xml", "--decisore", "Allies=file:/tmp/dir,Axis=regole"});
+    assertThat(o.decisore("Allies")).isEqualTo("file:/tmp/dir");
+    assertThat(o.decisore("Axis")).isEqualTo("regole");
+    assertThat(o.decisore("Other")).isEqualTo("regole");
+    assertThatThrownBy(
+            () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--decisore", "Axis=llm"}))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(
+            () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--decisore", "Axis=file:"}))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void theContractSizeIsMeasuredFromTheStateFilesOfTheDiary(
+      @org.junit.jupiter.api.io.TempDir final java.nio.file.Path diary) throws Exception {
+    java.nio.file.Files.writeString(diary.resolve("stato-R1-Axis.json"), "{\n  \"a\": 1\n}");
+    java.nio.file.Files.writeString(diary.resolve("stato-R1-Allies.json"), "{\"abc\": [1, 2]}");
+    java.nio.file.Files.writeString(diary.resolve("direttive-R1-Axis.json"), "{\"x\": 1}");
+    java.nio.file.Files.writeString(
+        diary.resolve("decisioni.jsonl"),
+"""
+{"evento":"stato_maggiore_round","decisore":{"ripiego":true},"direttive":{"tattiche":[]}}
+{"evento":"attacco"}
+""");
+
+    final JsonObject c = Riepilogo.contract(diary);
+
+    // compact: {"a":1} = 7 characters, {"abc":[1,2]} = 13
+    assertThat(c.get("file_stato").getAsInt()).isEqualTo(2);
+    assertThat(c.get("caratteri_medi").getAsLong()).isEqualTo(10);
+    assertThat(c.get("caratteri_max").getAsLong()).isEqualTo(13);
+    assertThat(c.get("token_stimati_medi").getAsLong()).isEqualTo(3);
+    assertThat(c.get("decisioni").getAsInt()).isEqualTo(1);
+    assertThat(c.get("ripieghi_sulle_regole").getAsInt()).isEqualTo(1);
+
+    final JsonObject game = JsonParser.parseString(SAMPLE).getAsJsonObject();
+    game.add("contratto", c);
+    assertThat(RiepilogoGenerale.markdown("T", List.of(new RiepilogoGenerale.Game("1-A-1", game))))
+        .contains("## Contratto strategico (stato e direttive)")
+        .contains("| 2 | 10 | 13 | 3 | 1/1 | 0 |")
+        .contains("Media su tutte le partite: 10 caratteri");
+  }
+
+  @Test
   void firstLandingIsTheEarliestRealLanding() {
     final JsonArray landings =
         JsonParser.parseString(

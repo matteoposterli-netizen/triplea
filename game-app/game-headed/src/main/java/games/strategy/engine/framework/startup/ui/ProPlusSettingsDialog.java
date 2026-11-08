@@ -7,6 +7,8 @@ import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.ai.proplus.diario.DiarySettings;
 import games.strategy.triplea.ai.proplus.diario.Italian;
+import games.strategy.triplea.ai.proplus.strategia.Decisore;
+import games.strategy.triplea.ai.proplus.strategia.Decisori;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.ai.proplus.strategia.Strategia;
 import games.strategy.triplea.ai.proplus.strategia.Strategie;
@@ -168,6 +170,8 @@ final class ProPlusSettingsDialog {
   static final class Form {
     private final Map<String, JSlider> sliders = new LinkedHashMap<>();
     private final Map<String, JComboBox<PlanChoice>> plans = new LinkedHashMap<>();
+    private final Map<String, JComboBox<String>> deciders = new LinkedHashMap<>();
+    private final Map<String, javax.swing.JTextField> deciderFiles = new LinkedHashMap<>();
     private final JCheckBox diaryCheckBox =
         new JCheckBox("Scrivi il diario delle decisioni dell'AI", DiarySettings.isEnabled());
     @Getter private final JPanel panel = new JPanel();
@@ -189,8 +193,10 @@ final class ProPlusSettingsDialog {
         strategia
             .flatMap(s -> s.alleanza(alliance))
             .ifPresent(
-                plansOfAlliance ->
-                    alliancePanel.add(planRow(data.getProperties(), alliance, plansOfAlliance)));
+                plansOfAlliance -> {
+                  alliancePanel.add(planRow(data.getProperties(), alliance, plansOfAlliance));
+                  alliancePanel.add(deciderRow(data.getProperties(), alliance));
+                });
       }
       if (alliances.isEmpty()) {
         alliancePanel.add(new JLabel("Nessuna alleanza trovata nella mappa."));
@@ -207,7 +213,11 @@ final class ProPlusSettingsDialog {
               "<html>Vale solo per i giocatori \"Pro+ (AI)\". Prudente = soglie di Hard."
                   + "<br>Rischio effettivo di un attacco = cursore + modificatore del piano per"
                   + " il fronte (-1, 0, +1)."
-                  + "<br>Il piano si fissa al primo turno dell'alleanza e poi non cambia."
+                  + "<br>Il piano si fissa al primo turno dell'alleanza; lo stato maggiore puo'"
+                  + " cambiarlo (max 2 volte)."
+                  + "<br>Decisore: \"regole\" = stato maggiore di Pro+; \"file\" = direttive"
+                  + " JSON da un file o da una cartella<br>(direttive-R&lt;round&gt;-&lt;alleanza&gt;.json),"
+                  + " se mancano decidono le regole."
                   + "<br>I valori sono salvati nella partita.</html>"));
     }
 
@@ -217,6 +227,51 @@ final class ProPlusSettingsDialog {
 
     Map<String, JComboBox<PlanChoice>> getPlans() {
       return plans;
+    }
+
+    Map<String, JComboBox<String>> getDeciders() {
+      return deciders;
+    }
+
+    Map<String, javax.swing.JTextField> getDeciderFiles() {
+      return deciderFiles;
+    }
+
+    /** Strategic contract: who decides for the alliance (rules or a directives file). */
+    private JPanel deciderRow(final GameProperties props, final String alliance) {
+      final JComboBox<String> combo = new JComboBox<>(Decisori.SCELTE.toArray(new String[0]));
+      combo.setSelectedItem(Decisori.getScelta(props, alliance));
+      final javax.swing.JTextField file =
+          new javax.swing.JTextField(Decisori.getFile(props, alliance), 18);
+      final JButton browse = new JButton("Sfoglia...");
+      browse.addActionListener(
+          e -> {
+            final javax.swing.JFileChooser chooser = new javax.swing.JFileChooser(file.getText());
+            chooser.setFileSelectionMode(javax.swing.JFileChooser.FILES_AND_DIRECTORIES);
+            if (chooser.showOpenDialog(panel) == javax.swing.JFileChooser.APPROVE_OPTION) {
+              file.setText(chooser.getSelectedFile().getAbsolutePath());
+              combo.setSelectedItem(Decisore.FILE);
+            }
+          });
+      final Runnable refresh =
+          () -> {
+            final boolean byFile = Decisore.FILE.equals(combo.getSelectedItem());
+            file.setEnabled(byFile);
+            browse.setEnabled(byFile);
+          };
+      refresh.run();
+      combo.addActionListener(e -> refresh.run());
+      final JPanel row = new JPanel(new BorderLayout(6, 2));
+      row.setBorder(BorderFactory.createEmptyBorder(0, 4, 10, 4));
+      row.add(new JLabel("Decisore:"), BorderLayout.WEST);
+      final JPanel right = new JPanel(new BorderLayout(4, 0));
+      right.add(combo, BorderLayout.WEST);
+      right.add(file, BorderLayout.CENTER);
+      right.add(browse, BorderLayout.EAST);
+      row.add(right, BorderLayout.CENTER);
+      deciders.put(alliance, combo);
+      deciderFiles.put(alliance, file);
+      return row;
     }
 
     JCheckBox getDiaryCheckBox() {
@@ -300,6 +355,13 @@ final class ProPlusSettingsDialog {
             StatoMaggiore.setChoice(
                 props, alliance, choice == null ? StatoMaggiore.AUTOMATICO : choice.id());
           });
+      deciders.forEach(
+          (alliance, combo) ->
+              Decisori.set(
+                  props,
+                  alliance,
+                  String.valueOf(combo.getSelectedItem()),
+                  deciderFiles.get(alliance).getText().strip()));
     }
   }
 

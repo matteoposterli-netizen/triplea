@@ -468,8 +468,8 @@ public final class Contromosse {
     }
     final JsonArray changes = state.cambi().deepCopy();
     json.add("cambi_piano", changes);
-    // step 3d-2: the switches of the delay tools, by the decider by rules
-    json.add(Tattiche.KEY, Tattiche.decidi(data, alliance, plan, posture));
+    // the switches of the delay tools: all off for the decider by rules (decision of Matteo)
+    json.add(Tattiche.KEY, Tattiche.spente());
     return json;
   }
 

@@ -1244,10 +1244,37 @@ public final class DiaryRecorder implements ProDecisionRecorder {
                 json.addProperty("evento", "stato_maggiore_round");
                 json.addProperty("alleanza", result.alleanza());
                 diary.json(json);
+                contractFiles(diary.getFolder(), result);
               } catch (final RuntimeException e) {
                 ProLogger.warn("Diario Pro+: blocco dello stato maggiore non scritto: " + e);
               }
             });
+  }
+
+  /**
+   * Strategic contract: {@code stato-R<N>-<alliance>.json} (the decider's input) and {@code
+   * direttive-R<N>-<alliance>.json} (the directives in force) in the game's diary folder.
+   */
+  static void contractFiles(final java.nio.file.Path folder, final Valutazione.Risultato result) {
+    final com.google.gson.Gson gson =
+        new com.google.gson.GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    final String suffix = "-R" + result.round() + "-" + result.alleanza() + ".json";
+    try {
+      if (result.ingresso().size() > 0) {
+        java.nio.file.Files.writeString(
+            folder.resolve("stato" + suffix),
+            gson.toJson(result.ingresso()),
+            java.nio.charset.StandardCharsets.UTF_8);
+      }
+      if (result.storico().has(Valutazione.KEY_DIRETTIVE)) {
+        java.nio.file.Files.writeString(
+            folder.resolve("direttive" + suffix),
+            gson.toJson(result.storico().get(Valutazione.KEY_DIRETTIVE)),
+            java.nio.charset.StandardCharsets.UTF_8);
+      }
+    } catch (final java.io.IOException e) {
+      ProLogger.warn("Diario Pro+: file del contratto non scritti: " + e);
+    }
   }
 
   @Override

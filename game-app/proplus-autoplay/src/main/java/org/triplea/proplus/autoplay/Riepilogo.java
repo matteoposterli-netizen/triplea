@@ -104,7 +104,72 @@ final class Riepilogo {
     json.add("operazioni", diaryData.operations);
     json.add("attacchi_regno_unito", diaryData.attacksOnBritain);
     json.add("esito", outcome(o, monitor, rounds, winner, gameOver));
+    json.add("contratto", contract(diary));
     return json;
+  }
+
+  /** Characters per estimated token of the decider's input (rough rule for JSON text). */
+  static final double CHARS_PER_TOKEN = 4.0;
+
+  /**
+   * Strategic contract: size of the decider's input (the {@code stato-R<N>-<alliance>.json} files
+   * of the diary, measured as compact JSON) and the fallbacks to the rules (decisioni.jsonl).
+   */
+  static JsonObject contract(@Nullable final Path diary) {
+    final JsonObject out = new JsonObject();
+    if (diary == null || !Files.isDirectory(diary)) {
+      return out;
+    }
+    int files = 0;
+    long chars = 0;
+    long max = 0;
+    try (Stream<Path> s = Files.list(diary)) {
+      for (final Path f :
+          s.filter(f -> f.getFileName().toString().matches("stato-R\\d+-.+\\.json")).toList()) {
+        final long n =
+            com.google.gson.JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8))
+                .toString()
+                .length();
+        files++;
+        chars += n;
+        max = Math.max(max, n);
+      }
+    } catch (final IOException | RuntimeException e) {
+      out.addProperty("errore", e.toString());
+    }
+    int decisions = 0;
+    int fallbacks = 0;
+    int withTools = 0;
+    final Path jsonl = diary.resolve("decisioni.jsonl");
+    if (Files.isRegularFile(jsonl)) {
+      try {
+        for (final String line : Files.readAllLines(jsonl, StandardCharsets.UTF_8)) {
+          if (!line.contains("\"stato_maggiore_round\"")) {
+            continue;
+          }
+          final JsonObject e = com.google.gson.JsonParser.parseString(line).getAsJsonObject();
+          decisions++;
+          if (e.has("decisore") && e.getAsJsonObject("decisore").get("ripiego").getAsBoolean()) {
+            fallbacks++;
+          }
+          if (e.has("direttive")
+              && !e.getAsJsonObject("direttive").getAsJsonArray("tattiche").isEmpty()) {
+            withTools++;
+          }
+        }
+      } catch (final IOException | RuntimeException e) {
+        out.addProperty("errore_decisioni", e.toString());
+      }
+    }
+    out.addProperty("file_stato", files);
+    out.addProperty("caratteri_medi", files == 0 ? 0 : Math.round((double) chars / files));
+    out.addProperty("caratteri_max", max);
+    out.addProperty(
+        "token_stimati_medi", files == 0 ? 0 : Math.round(chars / CHARS_PER_TOKEN / files));
+    out.addProperty("decisioni", decisions);
+    out.addProperty("ripieghi_sulle_regole", fallbacks);
+    out.addProperty("direttive_con_tattiche", withTools);
+    return out;
   }
 
   static String name(final AutoplayOptions o) {
@@ -139,6 +204,12 @@ final class Riepilogo {
     p.add("tipi", types);
     p.add("piani", plans);
     p.add("rischio_base", risks);
+    final JsonObject deciders = new JsonObject();
+    for (final String a : monitor.alliances().keySet()) {
+      deciders.addProperty(
+          a, AutoplayOptions.HARD.equals(o.tipo(a)) ? "-" : o.decisore(a).replaceFirst(":.*", ""));
+    }
+    p.add("decisori", deciders);
     return p;
   }
 
@@ -447,6 +518,22 @@ final class Riepilogo {
           .append(" - ")
           .append(String.join(", ", strings(json.getAsJsonObject("alleanze").getAsJsonArray(a))))
           .append('\n');
+    }
+    if (json.has("contratto") && json.getAsJsonObject("contratto").has("file_stato")) {
+      final JsonObject c = json.getAsJsonObject("contratto");
+      md.append("- Contratto strategico: ")
+          .append(c.get("file_stato").getAsInt())
+          .append(" ingressi (stato-R*.json), in media ")
+          .append(c.get("caratteri_medi").getAsLong())
+          .append(" caratteri = ~")
+          .append(c.get("token_stimati_medi").getAsLong())
+          .append(" token stimati (max ")
+          .append(c.get("caratteri_max").getAsLong())
+          .append("); ripieghi sulle regole ")
+          .append(c.get("ripieghi_sulle_regole").getAsInt())
+          .append(" su ")
+          .append(c.get("decisioni").getAsInt())
+          .append(" decisioni\n");
     }
 
     final JsonArray rounds = json.getAsJsonArray("round");

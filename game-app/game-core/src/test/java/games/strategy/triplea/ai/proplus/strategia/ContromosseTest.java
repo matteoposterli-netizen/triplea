@@ -565,7 +565,17 @@ class ContromosseTest {
     }
     s.add("contro_obiettivi", counter);
     e.add("stato_strategico", s);
+    // the directives the decider by rules writes from this state (what PianoAttivo reads)
+    final Strategia europe =
+        Strategie.forGame(renamed(TestMapGameData.GLOBAL1940.getGameData())).orElseThrow();
+    final Strategia.Piano p = europe.alleanza("Allies").orElseThrow().piano(plan).orElseThrow();
+    e.add(Valutazione.KEY_DIRETTIVE, DecisoreRegole.direttive(europe, "Allies", p, round, s, null));
     return e;
+  }
+
+  private static GameData renamed(final GameData data) {
+    data.setGameName(EUROPE);
+    return data;
   }
 
   private static Map<String, Double> counterObjectives(final JsonObject strategic) {

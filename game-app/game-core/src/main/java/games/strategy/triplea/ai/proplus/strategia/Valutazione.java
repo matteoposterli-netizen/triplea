@@ -94,8 +94,15 @@ public final class Valutazione {
    *
    * @param storico the entry appended to the alliance's history
    * @param testo the diary block
+   * @param ingresso the strategic state given to the decider (input JSON v1, empty if none)
    */
-  public record Risultato(String alleanza, int round, JsonObject storico, String testo) {}
+  public record Risultato(
+      String alleanza, int round, JsonObject storico, String testo, JsonObject ingresso) {
+    public Risultato(
+        final String alleanza, final int round, final JsonObject storico, final String testo) {
+      this(alleanza, round, storico, testo, new JsonObject());
+    }
+  }
 
   /**
    * The general staff's check at the start of the round, made by the first Pro+ nation of the
@@ -129,7 +136,7 @@ public final class Valutazione {
             state.get().storico(),
             round,
             changedIn);
-    // step 3d-1: the general staff decides (plan change, posture, counter-objectives)
+    // step 3d-1: the rules' check of a plan change (the decider by rules follows it)
     final Contromosse.Cambio change =
         Contromosse.cambio(
             data,
@@ -139,29 +146,136 @@ public final class Valutazione {
             state.get(),
             result.storico(),
             round);
+    // strategic contract: the decider of the alliance writes the directives of the round
+    final Decisore.Contesto ctx =
+        new Decisore.Contesto(
+            data,
+            alliance.get(),
+            strategia.get(),
+            plan.get(),
+            state.get(),
+            result.storico(),
+            change,
+            round);
+    final DecisoreRegole.Esito rules = DecisoreRegole.esito(ctx);
+    final Decisore decider = Decisori.per(data.getProperties(), alliance.get());
+    final JsonObject input = Ingresso.of(ctx);
+    final Direttive.Validazione checked =
+        Decisore.REGOLE.equals(decider.nome())
+            ? new Direttive.Validazione(rules.direttive(), false, List.of())
+            : askDecider(decider, input, ctx, rules.direttive());
+    final JsonObject directives = checked.direttive();
+    final String chosen = directives.get("piano").getAsString();
+    final boolean byRules = checked.ripiego() || Decisore.REGOLE.equals(decider.nome());
     Strategia.Piano inForce = plan.get();
-    if (change.nuovo().isPresent()) {
-      inForce = change.nuovo().get();
-      StatoMaggiore.cambia(data, alliance.get(), inForce.id(), round, change.motivo());
+    Contromosse.Cambio applied = change;
+    if (!chosen.equals(plan.get().id())) {
+      inForce =
+          strategia.get().alleanza(alliance.get()).flatMap(a -> a.piano(chosen)).orElseThrow();
+      if (!byRules) {
+        final String why =
+            "direttiva del decisore "
+                + decider.nome()
+                + ": "
+                + directives.get("motivazione").getAsString();
+        final JsonObject json = change.json().deepCopy();
+        json.addProperty("scelto", chosen);
+        json.addProperty("motivo", why);
+        applied = new Contromosse.Cambio(Optional.of(inForce), why, json);
+      }
+      StatoMaggiore.cambia(data, alliance.get(), inForce.id(), round, applied.motivo());
       inForce
           .operazioni()
           .forEach(o -> StalloOperazioni.riparti(data.getProperties(), o.nome(), round));
       result =
           valuta(
               data, alliance.get(), strategia.get(), inForce, state.get().storico(), round, round);
+    } else if (!byRules && change.nuovo().isPresent()) {
+      // the decider kept the plan the rules would change
+      applied =
+          new Contromosse.Cambio(
+              Optional.empty(), "il decisore " + decider.nome() + " tiene il piano", change.json());
     }
     final StatoMaggiore.Stato now =
         StatoMaggiore.getState(data.getProperties(), alliance.get()).orElse(state.get());
     final JsonObject entry = result.storico();
     entry.addProperty("piano", inForce.id());
     final JsonObject strategic =
-        Contromosse.statoStrategico(
-            data, alliance.get(), strategia.get(), inForce, now, entry, change, round);
+        byRules
+            ? rules.analisi()
+            : Contromosse.statoStrategico(
+                data, alliance.get(), strategia.get(), inForce, now, entry, applied, round);
+    if (!byRules) {
+      overrideWithDirectives(strategic, directives);
+    }
     entry.add("stato_strategico", strategic);
-    final Risultato decided =
-        new Risultato(alliance.get(), round, entry, result.testo() + Contromosse.testo(strategic));
+    entry.add(KEY_DIRETTIVE, directives);
+    entry.add("guerre", Ingresso.guerre(data));
+    final JsonObject who = new JsonObject();
+    who.addProperty("nome", decider.nome());
+    who.addProperty("ripiego", checked.ripiego());
+    final JsonArray notes = new JsonArray();
+    checked.avvisi().forEach(notes::add);
+    who.add("avvisi", notes);
+    entry.add("decisore", who);
+    final StringBuilder text =
+        new StringBuilder(result.testo()).append(Contromosse.testo(strategic));
+    checked.avvisi().forEach(a -> text.append("  Avviso del contratto: ").append(a).append('\n'));
+    text.append(Direttive.testo(directives, decider.nome(), checked.ripiego()));
+    final Risultato decided = new Risultato(alliance.get(), round, entry, text.toString(), input);
     StatoMaggiore.aggiungiStorico(data, alliance.get(), entry);
     return Optional.of(decided);
+  }
+
+  private static Direttive.Validazione askDecider(
+      final Decisore decider,
+      final JsonObject input,
+      final Decisore.Contesto ctx,
+      final JsonObject rules) {
+    final Optional<JsonObject> raw;
+    try {
+      raw = decider.decidi(input, ctx);
+    } catch (final RuntimeException e) {
+      return new Direttive.Validazione(
+          rules,
+          true,
+          List.of(
+              "direttive del decisore "
+                  + decider.nome()
+                  + " non valide ("
+                  + e.getMessage()
+                  + "): uso le regole"));
+    }
+    return Direttive.valida(raw, ctx, rules, decider.nome());
+  }
+
+  /** Key of the directives in the history entry of the round. */
+  public static final String KEY_DIRETTIVE = "direttive";
+
+  /**
+   * The strategic state shows what the directives of a decider other than the rules set: posture,
+   * why, counter-objectives, delay tools.
+   */
+  private static void overrideWithDirectives(final JsonObject strategic, final JsonObject d) {
+    final Direttive dir = Direttive.of(d);
+    strategic.addProperty("postura", dir.postura());
+    strategic.addProperty("motivo", dir.motivazione().isEmpty() ? "direttiva" : dir.motivazione());
+    final JsonArray counter = new JsonArray();
+    dir.bersagli().stream()
+        .filter(Direttive.Bersaglio::isContromossa)
+        .filter(b -> b.territorio() != null)
+        .forEach(
+            b -> {
+              final JsonObject o = new JsonObject();
+              o.addProperty("territorio", b.territorio());
+              o.addProperty("punto_critico", "direttiva");
+              o.addProperty("attaccabile", true);
+              o.addProperty("peso", b.peso());
+              o.addProperty("ruolo", "direttiva");
+              counter.add(o);
+            });
+    strategic.add("contro_obiettivi", counter);
+    strategic.add(Tattiche.KEY, dir.tattiche());
   }
 
   static Risultato valuta(

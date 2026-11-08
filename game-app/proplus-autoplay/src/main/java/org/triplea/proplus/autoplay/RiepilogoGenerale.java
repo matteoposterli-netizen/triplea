@@ -143,6 +143,7 @@ final class RiepilogoGenerale {
     alliedCoordination(md, games, alliances, maxRound);
     lostTransports(md, games, alliances, maxRound);
     delayTools(md, games, alliances, maxRound);
+    contract(md, games, alliances);
 
     md.append(
 """
@@ -448,11 +449,11 @@ final class RiepilogoGenerale {
       }
     }
     md.append(
-        "\n"
-            + "Per configurazione: partite con primo sbarco vero alleato in Europa entro R6, round"
-            + " medio del primo sbarco vero (partite con sbarco), unita' sbarcate e trasporti"
-            + " inattivi per round (media dei semi, Asse / Alleati).\n\n"
-            + "| Configurazione | Alleati in Europa entro R6 | Primo sbarco medio |");
+"""
+
+Per configurazione: partite con primo sbarco vero alleato in Europa entro R6, round medio del primo sbarco vero (partite con sbarco), unita' sbarcate e trasporti inattivi per round (media dei semi, Asse / Alleati).
+
+| Configurazione | Alleati in Europa entro R6 | Primo sbarco medio |""");
     for (int r = 1; r <= maxRound; r++) {
       md.append(" R").append(r).append(" sbarcate | R").append(r).append(" inattivi |");
     }
@@ -764,20 +765,96 @@ Trasporti persi = trasporti sulla mappa dopo un passo e scomparsi dopo il succes
    * the Soviet income per round and the delay tools (placed and lost, hunted transports sunk); per
    * configuration the games where each key territory fell and the mean round.
    */
+  /**
+   * Strategic contract: decider per alliance, size of the decider's input (stato-R*.json, compact
+   * JSON; tokens estimated as characters / {@link Riepilogo#CHARS_PER_TOKEN}), fallbacks to the
+   * rules and directives with delay tools on.
+   */
+  static void contract(
+      final StringBuilder md, final List<Game> games, final List<String> alliances) {
+    md.append(
+"""
+
+
+## Contratto strategico (stato e direttive)
+
+""")
+        .append(
+            "Ingresso del decisore = file stato-R<round>-<alleanza>.json nella cartella del diario"
+                + " (JSON compatto); token stimati = caratteri / "
+                + (int) Riepilogo.CHARS_PER_TOKEN
+                + " (stima grezza, non il conteggio del modello).\n\n"
+                + "| Partita | Decisori | File stato | Caratteri medi | Caratteri max | Token stimati"
+                + " medi | Ripieghi sulle regole | Direttive con tattiche |\n"
+                + "|---|---|---|---|---|---|---|---|\n");
+    long files = 0;
+    double chars = 0;
+    long max = 0;
+    for (final Game g : games) {
+      if (g.json() == null || !g.json().has("contratto")) {
+        continue;
+      }
+      final JsonObject c = g.json().getAsJsonObject("contratto");
+      final JsonObject d =
+          g.json().getAsJsonObject("parametri").has("decisori")
+              ? g.json().getAsJsonObject("parametri").getAsJsonObject("decisori")
+              : new JsonObject();
+      final List<String> who = new ArrayList<>();
+      alliances.forEach(a -> who.add(a + " " + (d.has(a) ? d.get(a).getAsString() : "regole")));
+      final long n = c.has("file_stato") ? c.get("file_stato").getAsLong() : 0;
+      files += n;
+      chars += n * (c.has("caratteri_medi") ? c.get("caratteri_medi").getAsDouble() : 0);
+      max = Math.max(max, c.has("caratteri_max") ? c.get("caratteri_max").getAsLong() : 0);
+      md.append("| ")
+          .append(g.folder())
+          .append(" | ")
+          .append(String.join(", ", who))
+          .append(" | ")
+          .append(n)
+          .append(" | ")
+          .append(c.has("caratteri_medi") ? c.get("caratteri_medi").getAsLong() : 0)
+          .append(" | ")
+          .append(c.has("caratteri_max") ? c.get("caratteri_max").getAsLong() : 0)
+          .append(" | ")
+          .append(c.has("token_stimati_medi") ? c.get("token_stimati_medi").getAsLong() : 0)
+          .append(" | ")
+          .append(c.has("ripieghi_sulle_regole") ? c.get("ripieghi_sulle_regole").getAsInt() : 0)
+          .append('/')
+          .append(c.has("decisioni") ? c.get("decisioni").getAsInt() : 0)
+          .append(" | ")
+          .append(c.has("direttive_con_tattiche") ? c.get("direttive_con_tattiche").getAsInt() : 0)
+          .append(" |\n");
+    }
+    if (files > 0) {
+      md.append(
+          String.format(
+              Locale.ROOT,
+              "%nMedia su tutte le partite: %.0f caratteri, ~%.0f token per ingresso (max %d"
+                  + " caratteri, %d file).%n",
+              chars / files,
+              chars / files / Riepilogo.CHARS_PER_TOKEN,
+              max,
+              files));
+    }
+  }
+
   static void delayTools(
       final StringBuilder md,
       final List<Game> games,
       final List<String> alliances,
       final int maxRound) {
-    md.append("\n\n## Strumenti di ritardo e fronte russo (step 3d-2)\n\n")
+    md.append(
+"""
+
+
+## Strumenti di ritardo e fronte russo (step 3d-2)
+
+""")
         .append(
-            "Round di caduta = primo round in cui il territorio passa al nemico del proprietario"
-                + " originale (\"-\" = mai). Strumenti, per tutta la partita e tutte le nazioni:"
-                + " blocchi = fanterie di blocco terrestre, navi = navi di blocco navale,"
-                + " messi/persi (persi = scomparsi dalla mappa dopo essere stati messi); ritirata ="
-                + " unita' arretrate; caccia = zone di caccia ai trasporti / trasporti cacciati"
-                + " affondati nel turno.\n\n"
-                + "| Partita | Configurazione |");
+"""
+Round di caduta = primo round in cui il territorio passa al nemico del proprietario originale ("-" = mai). Strumenti, per tutta la partita e tutte le nazioni: blocchi = fanterie di blocco terrestre, navi = navi di blocco navale, messi/persi (persi = scomparsi dalla mappa dopo essere stati messi); ritirata = unita' arretrate; caccia = zone di caccia ai trasporti / trasporti cacciati affondati nel turno.
+
+| Partita | Configurazione |""");
     Monitor.KEY_TERRITORIES.forEach(t -> md.append(' ').append(t).append(" |"));
     md.append(
             " Capitali cadute | Blocchi messi/persi | Navi messe/perse | Ritirata |"
@@ -849,8 +926,11 @@ Trasporti persi = trasporti sulla mappa dopo un passo e scomparsi dopo il succes
       income.append('\n');
     }
     md.append(
-        "\nPer configurazione: partite con caduta / round medio di caduta.\n\n"
-            + "| Configurazione | Partite |");
+"""
+
+Per configurazione: partite con caduta / round medio di caduta.
+
+| Configurazione | Partite |""");
     Monitor.KEY_TERRITORIES.forEach(t -> md.append(' ').append(t).append(" |"));
     md.append("\n|---|---|").append("---|".repeat(Monitor.KEY_TERRITORIES.size())).append('\n');
     fallsByConfig.forEach(
@@ -1123,9 +1203,9 @@ Trasporti persi = trasporti sulla mappa dopo un passo e scomparsi dopo il succes
       }
     }
     md.append(
-            "\n"
-                + "| Configurazione | Alleanza | Partite | Cambi di piano (totale) | Partite con"
-                + " cambi |")
+"""
+
+| Configurazione | Alleanza | Partite | Cambi di piano (totale) | Partite con cambi |""")
         .append(
 """
  Piano finale |

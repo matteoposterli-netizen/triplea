@@ -132,6 +132,10 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
 - Step 3d-2: `ai/proplus/strategia/Tattiche` (interruttori + decisore a regole), `ai/proplus/StrumentiRitardo`
   (blocco terrestre, ritirata, blocco navale, registro), `PianoAttivo.getCaccia`/`tattica`, `ProTuning.dropsLandAttack`
   (aggancio in `ProCombatMoveAi`, default vuoto), `Strategia.Ritardo`. Vedi "Strumenti di ritardo".
+- Step CONTRATTO STRATEGICO: `ai/proplus/strategia/` `Decisore` (interfaccia + `Contesto`), `DecisoreRegole`
+  (default), `DecisoreFile`, `DecisoreLlm` (vuoto), `Decisori` (scelta per alleanza), `Ingresso` (stato strategico
+  JSON), `Direttive` (schema, validazione, paletti); `Valutazione.inizioRound` chiama il decisore, `PianoAttivo` legge
+  solo le direttive. Vedi "Contratto strategico" e `proplus/strategia/contratto-v1.md`.
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -1074,6 +1078,10 @@ eccezioni Pro+ (`keepsLandingWithExposedTransports`: regola obiettivo e testa di
 
 ## Strumenti di ritardo (step 3d-2, solo Pro+)
 
+**Dallo step CONTRATTO STRATEGICO il decisore a regole li tiene tutti spenti**: si accendono solo con le direttive
+(`tattiche`), vedi "Contratto strategico". Il "Decisore a regole" descritto sotto e' ora `Tattiche.perRuoloEPostura`
+(solo test).
+
 Decisione di Matteo (8 nov): la parte deterministica fa il "COME" ed e' congelata; il "COSA e PERCHE'" passera' a un
 decisore (regole oggi, LLM domani) tramite un contratto JSON (step successivo). Questo step aggiunge solo
 **strumenti eseguibili accesi/spenti da interruttori**; nessuna formula di convenienza, solo paletti fissi nel file dati.
@@ -1125,6 +1133,55 @@ nessuno strumento).
   cacciati gia' spariti quando il registro e' scritto, cioe' dopo le battaglie del cacciatore). `riepilogo-generale.md`
   sezione "Strumenti di ritardo e fronte russo (step 3d-2)": per partita round di caduta, capitali cadute,
   messi/persi, ritirata, caccia; per configurazione partite con caduta e round medio; reddito russo per round.
+
+## Contratto strategico (step CONTRATTO STRATEGICO, solo Pro+)
+
+Decisione di Matteo: la parte deterministica fa il COME (congelata), un DECISORE fa il COSA/PERCHE'. Oggi il decisore
+sono le regole (stato maggiore 3a-3d), domani un LLM (Claude Haiku 5.5; secret GitHub `ANTHROPIC_API_KEY` gia'
+creato, **non usato** in questo step). Schema completo, esempi reali e regole di validazione:
+**`proplus/strategia/contratto-v1.md`** (+ `proplus/strategia/esempi/`).
+- **Flusso** (`Valutazione.inizioRound`, primo turno Pro+ dell'alleanza nel round, dati reali): avanzamento e lettura
+  (`valuta`) → controllo di cambio delle regole (`Contromosse.cambio`, senza effetti) → `Decisore.Contesto` →
+  `DecisoreRegole.esito` (sempre: e' anche il ripiego; simula il cambio senza scriverlo e calcola postura/contro-obiettivi
+  con il piano scelto, identico a prima) → `Ingresso.of` (stato strategico) → decisore dell'alleanza (`Decisori.per`) →
+  `Direttive.valida` (solo se non sono le regole) → applicazione: cambio piano (`StatoMaggiore.cambia`, stallo
+  ripartito, `valuta` col nuovo piano), `stato_strategico` (delle regole; per un altro decisore ricalcolato col piano
+  scelto e con postura/motivo/contro-obiettivi/tattiche presi dalle direttive), voce dello storico con `direttive`,
+  `decisore` {nome, ripiego, avvisi}, `guerre`.
+- **Lettori**: `PianoAttivo` legge SOLO le direttive del round (stesso piano), altrimenti `DecisoreRegole.base` (ordini
+  base del file: stesso comportamento di prima della prima decisione): postura, `modificatore(fronte)` = rischio
+  delle direttive (+ −1 in DIFENSIVA come prima), obiettivi = `bersagli` non "contromossa" (filtrati per nazione) +
+  bersagli delle operazioni lanciate + contro-obiettivi (`origine: contromossa`) + caccia; operazioni senza quelle
+  "annulla", `isInAttesa`/`isBersaglioInAttesa`/`perditaAccettata` (attendi e tetto delle perdite), lettura del nemico,
+  tattiche (struttura di `Tattiche`, convertita dalla lista delle direttive). `pesoObiettivoFase` = bersagli non
+  contromossa. `TrasportiSbarco`: bersaglio solo di operazioni in attesa ⇒ sbarco scartato ("operazione in attesa per
+  direttiva"); perdita attesa <= perdita accettata (>0) ⇒ tenuto ("perdita entro il tetto della direttiva").
+- **Strumenti di ritardo** (decisione di Matteo sul 3d-2): restano nel codice ma `DecisoreRegole` li tiene tutti spenti
+  (`Tattiche.spente()`); la regola del 3d-2 (ruolo "ritarda" + postura) e' `Tattiche.perRuoloEPostura`, usata solo dai
+  test. Si accendono solo con le direttive. Paletto del 3d-2 sul prelievo di fanteria invariato. Registro dei blocchi:
+  `blocchi` = solo fanterie "portate", `blocchi_lasciati` a parte (le fanterie gia' nel territorio non contano come
+  blocchi, ne' come perse); il diario scrive "N blocchi terrestri (piu' M fanterie lasciate dov'erano)".
+- **Paletti** (qualunque decisore): guarnigione capitale (codice tattico), soglia minima assoluta 30%
+  (`Direttive.SOGLIA_MINIMA_ASSOLUTA`, in `ProPlusTuning.attackMinWinPercentage`/`targetAttackMinWinPercentage`; i
+  livelli hanno minime 45-65% quindi oggi non cambia nulla), perdita di trasporti accettata <= 30 TUV per alleanza per
+  turno (somma ridotta in proporzione), max 2 cambi per partita e >= 3 round tra cambi (`Direttive.cambioNonAmmesso`,
+  il piu' severo tra paletto e file dati).
+- **Ingresso**: stime rapide senza dadi (`ProBattleUtils.estimateStrengthDifference`), battaglie da `BattleRecordsList`
+  per riflessione (come il `Monitor`), ultimo rapporto delle operazioni nella proprieta' `Pro+ rapporti: <alleanza>`
+  (scritta da `ProPlusAi` dopo le operazioni anfibie). Misurato in Europe 1940: 4.500-6.800 caratteri per ingresso
+  (~1.100-1.700 token a 4 caratteri/token), budget ~5.000 token.
+- **File**: `stato-R<N>-<alleanza>.json` e `direttive-R<N>-<alleanza>.json` nella cartella della partita del diario
+  (`DiaryRecorder.contractFiles`, solo con diario attivo; l'autoplay lo ha sempre). `DecisoreFile` legge gli stessi nomi.
+- **Scelta**: pannello "Impostazioni Pro+" (riga "Decisore" per alleanza: regole/file + percorso + "Sfoglia..."),
+  autoplay `--decisore`; proprieta' `Pro+ decisore: <alleanza>` / `Pro+ decisore file: <alleanza>`.
+- **Golden Pro+** (`ai/pro/ProPlusGoldenTest`, `proplus/proplus-golden-global1940-europe.txt`, registrato su f4446c8+
+  punto a, prima del refactoring): Global 1940 rinominata Europe 1940, Asse A / Alleati 1; stato maggiore R1-R10 su una
+  mappa cambiata da un copione (cadute sovietiche, Francia, Egitto, Romania: IN CRISI, DIFENSIVA e cambio 1 → 2 al R10)
+  con quello che la tattica legge per ogni nazione; per Germans/Russians/British R1 attacchi vincibili con soglie e
+  bonus del piano, valori d'attacco, ordini di acquisto e ammassamento. **Non** registra la mossa completa ne' gli
+  acquisti finali: l'ordine delle mosse dipende da HashSet di unita' (UUID diversi a ogni caricamento della mappa, anche
+  in Hard) e gli acquisti usano `Math.random`. Test facoltativo `realEurope1940RoundOneReport` con
+  `PROPLUS_GOLDEN_EUROPE_XML` (mappa reale, R1): report in `build/proplus/` da confrontare a mano.
 
 ## Log degli step
 
@@ -2231,3 +2288,33 @@ diario, piu' stadi della stessa pianificazione): Russians 212, Germans 130, Ital
   tutti. Peggioramento netto probabile per gli Alleati (VC −0.83 di media, Mosca cade in 6/12): ipotesi principale la
   regola "solo stack isolati" sui russi (212 scarti) + ritirate che cedono territorio (reddito russo in A: 28 → 1-8 a
   R9). Varianza alta (2 semi), ma la direzione e' negativa. Non tarato: da decidere.
+
+### Step CONTRATTO STRATEGICO — decisore, stato strategico e direttive JSON (2026-11-08)
+
+Decisioni di Matteo sul 3d-2 applicate prima del resto: (a) strumenti di ritardo tutti spenti nel decisore a regole
+(`Tattiche.spente()`; la regola del 3d-2 resta come `Tattiche.perRuoloEPostura`, usata dai test) ⇒ Pro+ torna a f4446c8
+per la parte strumenti; (b) paletto del prelievo di fanteria invariato; (c) fanterie "lasciate" non contano come blocchi
+(registro `blocchi` = portate, `blocchi_lasciati` a parte; `Monitor` conta `blocchi_lasciati` separatamente). Poi il
+contratto: vedi "Contratto strategico" e `proplus/strategia/contratto-v1.md`.
+- Classi nuove (`ai/proplus/strategia/`): `Decisore`, `DecisoreRegole`, `DecisoreFile`, `DecisoreLlm`, `Decisori`,
+  `Ingresso`, `Direttive`. Modificate: `Valutazione` (flusso del decisore, `Risultato.ingresso`), `PianoAttivo` (legge
+  solo le direttive), `Tattiche`, `Contromosse` (tattiche spente), `TrasportiSbarco` (attendi, tetto delle perdite),
+  `ProPlusTuning` (soglia minima assoluta), `StrumentiRitardo` (punto c), `ProPlusAi` (rapporti delle operazioni),
+  `DiaryRecorder` (file del contratto), `ProPlusSettingsDialog` (riga Decisore), autoplay `AutoplayOptions`
+  (`--decisore`), `AutoplayRunner`, `Monitor`, `Riepilogo` (`contratto`), `RiepilogoGenerale` (sezione), workflow
+  autoplay (JSON del contratto solo delle partite seme 1 nello zip). **Nessuna classe Pro toccata** (Hard identica).
+- Golden Pro+ (`ProPlusGoldenTest`): registrato sul codice di f4446c8 + punto a, **identico dopo il refactoring**
+  (verde). Report sul round 1 di Europe 1940 reale (mappa clonata in sandbox, `PROPLUS_GOLDEN_EUROPE_XML`): identico
+  prima/dopo salvo le chiavi nuove della voce dello storico (`direttive`, `decisore`). Golden Hard e
+  `DiaryNeutralityTest` verdi.
+- Test nuovi: `ContrattoStrategicoTest` (9: direttive delle regole valide con strumenti spenti e operazioni lanciate;
+  ingresso con tutti i campi ed entro 20.000 caratteri; file che cambia postura/rischio/operazioni/bersagli/tattiche con
+  i limiti e gli avvisi; operazione annullata; cambio piano ammesso da file; cambio non ammesso ⇒ ripiego; terzo cambio
+  rifiutato dai paletti; file non JSON / mancante / postura sconosciuta ⇒ ripiego; file stato/direttive scritti dal
+  diario e riletti da `DecisoreFile`), `ProPlusGoldenTest` (2 + 1 facoltativo), `ProPlusSettingsDialogTest` +1,
+  `AutoplayTest` +2. `ContromosseTest`/`DelayToolsTest`: gli helper scrivono anche le direttive
+  (`DecisoreRegole.direttive`).
+- Verifica locale (Europe 1940 reale, seme 1): A/1 2 round 27 s, 4 ingressi da 4.500-6.800 caratteri (media 5.852 =
+  ~1.460 token stimati), direttive delle regole senza tattiche; A/1 1 round con `--decisore Allies=file:...`
+  (DIFENSIVA, Overlord UK in attesa, blocco terrestre e ritirata russi accesi): direttive applicate, 2 blocchi
+  "lasciata" (non contati come blocchi), nessun ripiego.

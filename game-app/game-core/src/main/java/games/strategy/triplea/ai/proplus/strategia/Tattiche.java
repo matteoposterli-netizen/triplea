@@ -22,9 +22,10 @@ import javax.annotation.Nullable;
  * <p>Format: {@code {"<tool>": {"<nation>": {"fronti": [...], "perche": "..."}}}}; no nation = tool
  * off; empty {@code fronti} = every front.
  *
- * <p>The decider by rules (fixed, no score): the nations with role "ritarda" in the plan ({@link
- * Strategia.Piano#ritarda}) and every nation of an alliance in posture RALLENTAMENTO or DIFENSIVA;
- * nothing with a plan without counter-moves (plan N).
+ * <p>Decision of Matteo on step 3d-2 (strategic contract): the decider by rules keeps every tool
+ * off ({@link #spente}); only directives (a file today, the LLM strategist later) turn them on.
+ * {@link #perRuoloEPostura} keeps the step 3d-2 rule (role "ritarda" + posture RALLENTAMENTO or
+ * DIFENSIVA) for tests and as an example of a decider.
  */
 public final class Tattiche {
   public static final String BLOCCO_TERRESTRE = "blocco_terrestre";
@@ -39,8 +40,19 @@ public final class Tattiche {
 
   private Tattiche() {}
 
-  /** The decider by rules, see the class comment. */
-  public static JsonObject decidi(
+  /** Every tool off: what the decider by rules writes (decision of Matteo, strategic contract). */
+  public static JsonObject spente() {
+    final JsonObject json = new JsonObject();
+    STRUMENTI.forEach(t -> json.add(t, new JsonObject()));
+    return json;
+  }
+
+  /**
+   * The step 3d-2 rule, no longer used by the decider by rules: the nations with role "ritarda" in
+   * the plan and every nation of an alliance in posture RALLENTAMENTO or DIFENSIVA; nothing with a
+   * plan without counter-moves (plan N).
+   */
+  public static JsonObject perRuoloEPostura(
       final GameState data,
       final String alliance,
       final Strategia.Piano plan,

@@ -6,6 +6,8 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.RiskLevel;
+import games.strategy.triplea.ai.proplus.strategia.Decisore;
+import games.strategy.triplea.ai.proplus.strategia.Decisori;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.ai.proplus.strategia.Strategie;
 import org.junit.jupiter.api.Test;
@@ -74,6 +76,22 @@ class ProPlusSettingsDialogTest {
     assertThat(StatoMaggiore.getChoice(data.getProperties(), "Axis")).isEqualTo("B");
     assertThat(StatoMaggiore.getChoice(data.getProperties(), "Allies"))
         .isEqualTo(StatoMaggiore.AUTOMATICO);
+  }
+
+  @Test
+  void deciderPerAllianceStartsAtRulesAndIsWrittenBackWithItsFile() {
+    data.setGameName("World War II Europe 1940 2nd Edition");
+    final ProPlusSettingsDialog.Form form = new ProPlusSettingsDialog.Form(data);
+
+    assertThat(form.getDeciders()).containsOnlyKeys("Allies", "Axis");
+    assertThat(form.getDeciders().get("Axis").getSelectedItem()).isEqualTo(Decisore.REGOLE);
+    form.getDeciders().get("Allies").setSelectedItem(Decisore.FILE);
+    form.getDeciderFiles().get("Allies").setText(" C:\\direttive ");
+    form.apply(data.getProperties());
+
+    assertThat(Decisori.getScelta(data.getProperties(), "Allies")).isEqualTo(Decisore.FILE);
+    assertThat(Decisori.getFile(data.getProperties(), "Allies")).isEqualTo("C:\\direttive");
+    assertThat(Decisori.getScelta(data.getProperties(), "Axis")).isEqualTo(Decisore.REGOLE);
   }
 
   @Test

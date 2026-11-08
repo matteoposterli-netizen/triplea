@@ -99,6 +99,9 @@ public final class StrumentiRitardo {
     }
   }
 
+  /** Mode of a tool unit that was already where the tool wants it. */
+  static final String LASCIATA = "lasciata";
+
   private final ProData proData;
   private final ProOddsCalculator calc;
   private final IMoveDelegate moveDel;
@@ -656,7 +659,9 @@ public final class StrumentiRitardo {
     final Perdite lost = perdite(data, data.getProperties().get(key));
     final JsonObject json = new JsonObject();
     json.addProperty("round", data.getSequence().getRound());
-    json.add("blocchi", ids(result, Tattiche.BLOCCO_TERRESTRE));
+    // decision of Matteo (strategic contract): an infantry left where it already was is no block
+    json.add("blocchi", ids(result, Tattiche.BLOCCO_TERRESTRE, false));
+    json.add("blocchi_lasciati", ids(result, Tattiche.BLOCCO_TERRESTRE, true));
     json.add("navi", ids(result, Tattiche.BLOCCO_NAVALE));
     json.add("ritirata", ids(result, Tattiche.RITIRATA));
     final JsonArray h = new JsonArray();
@@ -721,6 +726,19 @@ public final class StrumentiRitardo {
     return a;
   }
 
+  /** Land blocks left where they were ({@code left}) or brought there. */
+  private static JsonArray ids(final Esito result, final String tool, final boolean left) {
+    final JsonArray a = new JsonArray();
+    result.azioni().stream()
+        .filter(x -> x.strumento().equals(tool))
+        .filter(x -> LASCIATA.equals(x.modo()) == left)
+        .flatMap(x -> x.unita().stream())
+        .map(StrumentiRitardo::id)
+        .distinct()
+        .forEach(a::add);
+    return a;
+  }
+
   static String id(final Unit u) {
     return u.getId().toString();
   }
@@ -730,10 +748,17 @@ public final class StrumentiRitardo {
       final Esito result, final List<PianoAttivo.Caccia> hunt, final Perdite lost) {
     return String.format(
         Locale.ROOT,
-        "Ritardo, totale del turno: %d blocchi terrestri, %d ritirate, %d navi di blocco, %d zone"
-            + " di caccia ai trasporti; perse negli strumenti dal turno prima: %d (blocchi %d,"
-            + " navi %d, ritirata %d)",
-        result.conta(Tattiche.BLOCCO_TERRESTRE),
+        "Ritardo, totale del turno: %d blocchi terrestri (piu' %d fanterie lasciate dov'erano),"
+            + " %d ritirate, %d navi di blocco, %d zone di caccia ai trasporti; perse negli"
+            + " strumenti dal turno prima: %d (blocchi %d, navi %d, ritirata %d)",
+        result.azioni().stream()
+            .filter(a -> a.strumento().equals(Tattiche.BLOCCO_TERRESTRE))
+            .filter(a -> !LASCIATA.equals(a.modo()))
+            .count(),
+        result.azioni().stream()
+            .filter(a -> a.strumento().equals(Tattiche.BLOCCO_TERRESTRE))
+            .filter(a -> LASCIATA.equals(a.modo()))
+            .count(),
         result.conta(Tattiche.RITIRATA),
         result.conta(Tattiche.BLOCCO_NAVALE),
         hunt.size(),

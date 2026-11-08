@@ -16,6 +16,8 @@ import javax.annotation.Nullable;
  * --piano A=X,...      plan per alliance, eg. Axis=A,Allies=1 (default: "auto" = Automatico)
  * --rischio A=L,...    base risk level per alliance, 1-5 or name (default Equilibrato)
  * --tipo A=T,...       player type per alliance: proplus | hard (default proplus)
+ * --decisore A=D,...   Pro+ decider per alliance: regole | file:PATH (default regole; PATH =
+ *                      directives file or folder, see DecisoreFile)
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
@@ -28,6 +30,7 @@ record AutoplayOptions(
     Map<String, String> piani,
     Map<String, String> rischi,
     Map<String, String> tipi,
+    Map<String, String> decisori,
     long seme,
     Path output,
     int minuti,
@@ -57,6 +60,7 @@ record AutoplayOptions(
         pairs(values.get("piano")),
         pairs(values.get("rischio")),
         types,
+        deciders(values.get("decisore")),
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
         Integer.parseInt(values.getOrDefault("minuti", "55")),
@@ -74,6 +78,24 @@ record AutoplayOptions(
 
   Optional<String> rischio(final String alliance) {
     return Optional.ofNullable(rischi.get(alliance));
+  }
+
+  /** {@code regole} or {@code file:PATH} of {@code alliance} (default regole). */
+  String decisore(final String alliance) {
+    return decisori.getOrDefault(alliance, "regole");
+  }
+
+  /** "Allies=file:/x/y,Axis=regole": each value is "regole" or "file:PATH". */
+  static Map<String, String> deciders(@Nullable final String text) {
+    final Map<String, String> map = pairs(text);
+    map.forEach(
+        (alliance, d) -> {
+          if (!d.equals("regole") && !(d.startsWith("file:") && d.length() > "file:".length())) {
+            throw new IllegalArgumentException(
+                "Decisore non valido per " + alliance + ": " + d + " (regole | file:PERCORSO)");
+          }
+        });
+    return map;
   }
 
   /** "Axis=A,Allies=1" -> {Axis: A, Allies: 1}. */
