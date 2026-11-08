@@ -2063,3 +2063,28 @@ pericolo nel rientro, `combinedArrivals` statico), `ProPlusTuning` (due override
   TUV contro guadagni 2-5). Atteso: meno sbarchi "a perdere"; da verificare in CI che gli sbarchi USA in
   Europa entro R7 restino ≥ 4/8.
 
+
+#### Autoplay in CI (run 42495914034, commit fb492f7, tutto verde) contro 3d-1 (0fa7e03, run 42475178239) e 011a5ac (run 42418306952)
+Trasporti persi: 3d-1-bis contati dal `Monitor` (spariti tra due passi); 3d-1 e 011a5ac stimati come
+"trasporti a fine round prima + comprati − a fine round" (non identico, ma stesso ordine di grandezza).
+
+| Metrica | 011a5ac | 3d-1 | 3d-1-bis |
+|---|---|---|---|
+| Trasporti USA persi, piano 1 (8 partite) | 10 | 19 | 2 |
+| Trasporti USA persi, piano 2 (4 partite) | 10 | 24 | 0 |
+| Trasporti USA persi, Hard (2 partite) | 8 | 3 | 3 |
+| Sbarco USA in Europa occ. entro R7 (piano 1) | 1/8 | 5/8 | 1/8 |
+| ... entro R9 (piano 1) | 3/8 | - | 3/8 |
+| Partite piano 1 IN CRISI >= 2 round | - | 7/8 | 5/8 |
+| ... con cambio verso il 2 | - | 1 | 1 (D/1 seme 1, R9: 2 0.43 contro 1 0.31) |
+| ... con "nessuna alternativa migliore" e punteggi | - | 6 | 4 (C/1 ×2, B/1 ×2: 1 0.27-0.37 contro 2 0.20-0.38) |
+| Ping-pong / cambi con piano IN LINEA | - | 0 / 0 | 0 / 0 (D/2 seme 2: 2 → 1 al R11, un solo cambio) |
+
+- La regola dei trasporti scarta 16-69 righe di sbarchi per partita Pro+ (0 in Hard), "scarico spostato"
+  0-2, obiettivo critico 1 (Leone marino in B). Per Normandy il guadagno è 0-6 (produzione 2 × win% + TUV
+  battaglia) contro 7-19 TUV di trasporti soli in 105/110 ⇒ quasi sempre scartato: i trasporti USA non si
+  perdono più, ma gli sbarchi USA in Europa tornano ai livelli di 011a5ac. Criterio "≥ 4/8 entro R7" non
+  raggiunto. Causa: il valore della conquista di Hard (solo produzione) ignora il valore di Normandy come
+  obiettivo/testa di ponte del piano, e le navi di scorta propria contano come perdita.
+- VC R12 Alleati (media delle 6 configurazioni Pro+): 5.25 (3d-1: 5.6); Hard 7/4.
+- Hard identica: golden e `DiaryNeutralityTest` verdi in CI.
