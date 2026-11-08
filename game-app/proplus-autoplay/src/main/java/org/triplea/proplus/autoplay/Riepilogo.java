@@ -122,7 +122,8 @@ final class Riepilogo {
     try {
       for (final String line :
           Files.readAllLines(diary.resolve("decisioni.jsonl"), StandardCharsets.UTF_8)) {
-        if (!line.contains("\"stato_maggiore_round\"")) {
+        final boolean orders = line.contains("\"evento\":\"ordini_turno\"");
+        if (!line.contains("\"stato_maggiore_round\"") && !orders) {
           continue;
         }
         final JsonObject e = com.google.gson.JsonParser.parseString(line).getAsJsonObject();
@@ -131,6 +132,23 @@ final class Riepilogo {
           out.add(alliance, new JsonObject());
         }
         final JsonObject a = out.getAsJsonObject(alliance);
+        if (orders) {
+          turnOrders(a, e);
+          continue;
+        }
+        if (e.has("rischio_effettivo")) {
+          for (final Map.Entry<String, JsonElement> n :
+              e.getAsJsonObject("rischio_effettivo").entrySet()) {
+            for (final Map.Entry<String, JsonElement> f : n.getValue().getAsJsonObject().entrySet()) {
+              final JsonObject sums = child(child(a, "rischio_somme"), n.getKey());
+              sums.addProperty(
+                  "somma",
+                  (sums.has("somma") ? sums.get("somma").getAsDouble() : 0)
+                      + f.getValue().getAsDouble());
+              increment(sums, "n", 1);
+            }
+          }
+        }
         increment(a, "decisioni", 1);
         final JsonObject who =
             e.has("decisore") ? e.getAsJsonObject("decisore") : new JsonObject();
@@ -182,7 +200,80 @@ final class Riepilogo {
     } catch (final IOException | RuntimeException e) {
       out.addProperty("errore", e.toString());
     }
+    // mean effective risk per nation (all rounds and fronts)
+    out.entrySet()
+        .forEach(
+            x -> {
+              if (!x.getValue().isJsonObject() || !x.getValue().getAsJsonObject().has("rischio_somme")) {
+                return;
+              }
+              final JsonObject a = x.getValue().getAsJsonObject();
+              final JsonObject mean = new JsonObject();
+              a.getAsJsonObject("rischio_somme")
+                  .entrySet()
+                  .forEach(
+                      n -> {
+                        final JsonObject v = n.getValue().getAsJsonObject();
+                        mean.addProperty(
+                            n.getKey(),
+                            Math.round(v.get("somma").getAsDouble() / v.get("n").getAsDouble() * 100)
+                                / 100.0);
+                      });
+              a.remove("rischio_somme");
+              a.add("rischio_medio", mean);
+            });
     return out;
+  }
+
+  /** LLM step: one turn orders event of a nation of the alliance. */
+  private static void turnOrders(final JsonObject a, final JsonObject e) {
+    final String nation = e.has("nazione") ? e.get("nazione").getAsString() : "?";
+    if (!e.has("chiamato") || !e.get("chiamato").getAsBoolean()) {
+      return;
+    }
+    final JsonObject o = child(a, "ordini_turno");
+    increment(o, "chiamate", 1);
+    increment(child(o, "per_nazione"), nation, 1);
+    final JsonObject own = e.has("ordini") ? e.getAsJsonObject("ordini") : new JsonObject();
+    final JsonObject who = own.has("decisore") ? own.getAsJsonObject("decisore") : new JsonObject();
+    if (who.has("ripiego") && who.get("ripiego").getAsBoolean()) {
+      increment(o, "ripieghi", 1);
+      final JsonArray reasons =
+          o.has("motivi_ripiego") ? o.getAsJsonArray("motivi_ripiego") : new JsonArray();
+      if (reasons.size() < 3 && who.has("avvisi") && !who.getAsJsonArray("avvisi").isEmpty()) {
+        reasons.add(
+            "R"
+                + e.get("round").getAsInt()
+                + " "
+                + nation
+                + ": "
+                + who.getAsJsonArray("avvisi").get(0).getAsString());
+      }
+      o.add("motivi_ripiego", reasons);
+    }
+    if (own.has("ordini")) {
+      final JsonObject orders = own.getAsJsonObject("ordini");
+      if (orders.has("bersagli")) {
+        increment(o, "bersagli", orders.getAsJsonArray("bersagli").size());
+      }
+      if (orders.has("operazioni")) {
+        for (final JsonElement x : orders.getAsJsonArray("operazioni")) {
+          increment(
+              child(o, "operazioni"), x.getAsJsonObject().get("decisione").getAsString(), 1);
+        }
+      }
+      if (orders.has("tattiche")) {
+        for (final JsonElement x : orders.getAsJsonArray("tattiche")) {
+          final JsonObject t = x.getAsJsonObject();
+          if (!t.has("attiva") || t.get("attiva").getAsBoolean()) {
+            increment(child(o, "strumenti_accesi"), t.get("strumento").getAsString(), 1);
+          }
+        }
+      }
+    }
+    if (e.has("uso")) {
+      a.add("uso", e.get("uso"));
+    }
   }
 
   private static JsonObject child(final JsonObject o, final String key) {
@@ -648,11 +739,39 @@ final class Riepilogo {
             .append(", operazioni ")
             .append(a.has("operazioni") ? a.get("operazioni").toString() : "{}")
             .append(
+                a.has("ordini_turno")
+                    ? "; ordini del turno "
+                        + a.getAsJsonObject("ordini_turno").get("chiamate").getAsInt()
+                        + " (ripieghi "
+                        + (a.getAsJsonObject("ordini_turno").has("ripieghi")
+                            ? a.getAsJsonObject("ordini_turno").get("ripieghi").getAsInt()
+                            : 0)
+                        + ")"
+                    : "")
+            .append(
                 a.has("uso")
                     ? "; uso: "
                         + games.strategy.triplea.ai.proplus.strategia.llm.Uso.testo(
                             a.getAsJsonObject("uso"))
                     : "")
+            .append('\n');
+      }
+    }
+
+    if (json.has("stratega")) {
+      final List<String> risk = new ArrayList<>();
+      for (final Map.Entry<String, JsonElement> e : json.getAsJsonObject("stratega").entrySet()) {
+        if (e.getValue().isJsonObject() && e.getValue().getAsJsonObject().has("rischio_medio")) {
+          e.getValue()
+              .getAsJsonObject()
+              .getAsJsonObject("rischio_medio")
+              .entrySet()
+              .forEach(n -> risk.add(n.getKey() + " " + n.getValue().getAsString()));
+        }
+      }
+      if (!risk.isEmpty()) {
+        md.append("- Rischio effettivo medio per nazione (1-5, tutti i round e fronti): ")
+            .append(String.join(", ", risk))
             .append('\n');
       }
     }

@@ -11,6 +11,7 @@ import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.ai.proplus.strategia.Strategie;
+import games.strategy.triplea.ai.proplus.strategia.OrdiniTurno;
 import games.strategy.triplea.ai.proplus.strategia.Valutazione;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
@@ -298,6 +299,12 @@ public class ProPlusAi extends ProAi {
         Valutazione.inizioRound(data, player).ifPresent(r -> DiaryRecorder.allianceRound(data, r));
       } catch (final RuntimeException e) {
         ProLogger.warn("[Pro+] General staff check failed: " + e);
+      }
+      // LLM step: the turn orders of this nation (asked only with an LLM strategist)
+      try {
+        OrdiniTurno.inizioTurno(data, player).ifPresent(r -> DiaryRecorder.nationOrders(data, r));
+      } catch (final RuntimeException e) {
+        ProLogger.warn("[Pro+] Turn orders failed: " + e);
       }
       ProLogger.info(turnStartLine(data, player));
     }

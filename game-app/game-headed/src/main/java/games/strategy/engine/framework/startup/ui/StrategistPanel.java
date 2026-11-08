@@ -112,7 +112,10 @@ final class StrategistPanel {
     panel.add(row("", testResult));
     final JPanel capRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     capRow.add(cap);
-    capRow.add(new JLabel("per partita (una per alleanza per round)"));
+    capRow.add(
+        new JLabel(
+            "<html>per partita (stratega: 1 per alleanza per round; ordini del turno: 1 per"
+                + " nazione per turno)</html>"));
     panel.add(row("Tetto chiamate:", capRow));
     panel.add(
         row(

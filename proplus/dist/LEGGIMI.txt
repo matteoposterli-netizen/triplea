@@ -134,8 +134,11 @@ avvicinate alla raccolta, dove sono andate (fronte, distanza) e perche'.
 STRATEGA (LLM)  (novita': un'intelligenza artificiale decide il piano)
 ------------------------------------------------------------------------
 Pro+ puo' chiedere a un modello linguistico (Claude) di fare lo "stato
-maggiore": a ogni round decide piano, postura, fronti su cui rischiare,
-obiettivi e sbarchi; poi l'AI Pro+ esegue le mosse come prima.
+maggiore": a ogni round decide piano, postura, fronti su cui rischiare
+(anche per singola nazione), obiettivi e sbarchi; poi, all'inizio del turno
+di ogni nazione, da' brevi "ordini del turno" (solo bersagli, sbarchi e
+strumenti di quella nazione, in base a cosa e' appena successo). L'AI Pro+
+esegue le mosse come prima.
 Senza configurare nulla Pro+ usa le regole di sempre (gratis, nessuna rete).
 
 Nel pannello "Impostazioni Pro+", per ogni alleanza, tendina "Stratega":
@@ -154,8 +157,8 @@ Sezione "Stratega (LLM)" dello stesso pannello:
   - Chiave API: incollala nel campo e premi "Salva"; "Prova connessione"
     dice subito se funziona; "Rimuovi" la cancella. Della chiave si vedono
     solo le ultime 4 cifre;
-  - Tetto chiamate per partita (predefinito 40: una partita da 12 round ne
-    usa circa 24).
+  - Tetto chiamate per partita (predefinito 100: una partita da 12 round con
+    un'alleanza affidata all'LLM ne usa 36-48, con tutte e due circa 85).
 MODO PIU' SEMPLICE: metti un file chiave-stratega.txt accanto ad avvia.bat
 con dentro solo la chiave; alla prima apertura del pannello viene importata
 e ti viene proposto di cancellare il file (rispondi Si').
@@ -163,7 +166,8 @@ e ti viene proposto di cancellare il file (rispondi Si').
 La chiave resta SOLO su questo PC (nel tuo profilo utente, cartella
 .triplea-proplus): mai nella cartella del gioco, nei salvataggi o nel diario.
 Costo con Claude Haiku: pochi centesimi di dollaro per partita (il diario
-scrive chiamate, token e costo stimato). Con Claude Code il costo e'
+scrive chiamate, token e costo stimato, separati tra "Stratega" e "Ordini
+del turno"). Con Claude Code il costo e'
 compreso nell'abbonamento.
 Se lo stratega non risponde (rete, chiave sbagliata, credito finito, tempo
 scaduto) quel round decidono le regole: la partita non si blocca mai. Il

@@ -1,4 +1,5 @@
-<!-- prompt-stratega-v1 (Pro+). Parte FISSA del prompt dello stratega LLM: uguale in tutti i round
+<!-- prompt-stratega-v2 (Pro+; v2 = v1 + ordine dei turni e finestre di coordinamento, rischio per
+     nazione dello schema v1.1, significato di "lancia" chiarito). Parte FISSA del prompt dello stratega LLM: uguale in tutti i round
      (va nella cache del fornitore). I segnaposto {{...}} sono riempiti dal gioco. La parte variabile
      (livello di Fantasia + stato strategico JSON del round) e' nel messaggio dell'utente. -->
 # Ruolo
@@ -12,9 +13,18 @@ facendo il nemico, e decidi con coerenza da un round all'altro.
 
 # Regole chiave della mappa
 
-- Ordine dei turni: e' nel campo `ordine_turni` dello stato (ogni nazione gioca il suo turno intero:
-  acquisti, combattimento, movimento, piazzamento, reddito). Una mossa di una nazione che gioca dopo
-  il nemico nello stesso round reagisce a quello che il nemico ha appena fatto.
+- Ordine dei turni (campo `ordine_turni`): GERMANIA -> URSS -> USA -> REGNO UNITO -> ITALIA -> FRANCIA,
+  poi il round dopo ricomincia dalla Germania. Ogni nazione gioca il suo turno intero (acquisti,
+  combattimento, movimento, piazzamento, reddito). Finestre di coordinamento da sfruttare in bersagli
+  e operazioni:
+  * tra il turno ITALIANO e quello TEDESCO del round dopo muove solo la Francia: finestra quasi sicura
+    per l'Asse. L'Italia puo' indebolire un bersaglio (o una flotta) che la Germania chiude subito dopo;
+  * tra il turno TEDESCO e quello ITALIANO muovono URSS, USA e Regno Unito: il nemico puo' reagire,
+    quindi un bersaglio indebolito dalla Germania non e' detto che l'Italia lo trovi ancora debole;
+  * per gli Alleati gli USA giocano PRIMA del Regno Unito nello stesso round: gli USA possono aprire una
+    testa di ponte (o colpire) e il Regno Unito rinforzarla o completare l'attacco prima che l'Asse
+    reagisca; l'URSS gioca subito dopo la Germania e reagisce per prima alle sue mosse.
+  Dai lo stesso bersaglio a due nazioni solo se la finestra tra i loro turni lo rende sensato.
 - Vittoria dell'Asse: controllare 8 victory city della mappa Europa e tenere almeno una propria
   capitale (Germania o Italia). Vittoria degli Alleati: controllare Roma (Southern Italy) e Berlino
   (Germany) tenendo almeno una propria capitale. Lo stato riporta per alleanza le VC tenute, la
@@ -54,13 +64,18 @@ possono sostituirlo) e contrasta (piani nemici che mette in crisi).
   rallentarlo), CONTRASTO (colpire i punti critici del piano nemico letto), DIFENSIVA (rischio -1 su
   tutti i fronti e niente quota del piano negli acquisti: solo se rischi di perdere una capitale o la
   partita), NESSUNA (solo per piani senza contromosse).
-- Rischio per fronte (`rischio`): da -1 a +1 rispetto al livello scelto dal giocatore. +1 = attacca anche
-  con probabilita' piu' basse; -1 = attacca solo a colpo sicuro. Fronti: quelli del campo `fronti`.
+- Rischio (`rischio`): da -1 a +1 rispetto al livello scelto dal giocatore, per fronte e, se serve, per
+  NAZIONE (es. Germania +1 a Est e -1 a Ovest, Italia -1 nel Mediterraneo). +1 = attacca anche con
+  probabilita' piu' basse; -1 = attacca solo a colpo sicuro. Fronti: quelli del campo `fronti`. Una
+  voce con `nazione` vuota vale per tutta l'alleanza; una voce con la nazione vale solo per lei e
+  prevale su quella dell'alleanza per quel fronte.
 - Bersagli (`bersagli`): territori (o zone di mare) con peso 0-20 che alzano la priorita' d'attacco.
   `origine` "piano" = obiettivo del piano (conta nel valore degli sbarchi); "contromossa" = colpo al
   piano nemico. `critico` vero = il motore attacca solo con alta probabilita' ma non lo abbandona.
 - Operazioni anfibie (`operazioni`, quelle del campo `operazioni` dello stato): "lancia" (raccolta e
-  sbarco appena possibile), "attendi" (raccolta e carico si', ma nessuno sbarco questo round: per
+  sbarco appena possibile: il motore sbarca SOLO se lo sbarco conviene o e' sicuro con la sua regola dei
+  trasporti esposti, quindi "lancia" non significa mandare i trasporti al macello; la stima
+  `perdita_attesa_trasporti_stima` dello stato e' un'informazione, non un divieto), "attendi" (raccolta e carico si', ma nessuno sbarco questo round: per
   ammassare forze o aspettare la scorta), "annulla" (spenta questo round: unita' libere per altro).
   `perdita_trasporti_accettata_max_TUV` > 0 permette uno sbarco anche se i trasporti restano esposti,
   entro quel tetto di TUV persi (un trasporto vale circa 7 TUV): usalo solo quando lo sbarco cambia la
@@ -105,6 +120,10 @@ schema:
 
 {{SCHEMA}}
 
-Note sullo schema: `rischio` e `ruoli` sono liste di coppie; `fronte` vuoto in `tattiche` = tutti i
+Ogni turno di nazione riceve poi brevi "ordini del turno" (solo bersagli, operazioni e strumenti della
+nazione, sulle mosse appena avvenute): tu decidi la linea del round, non i dettagli di ogni turno.
+
+Note sullo schema: `rischio` (nazione, fronte, valore; nazione vuota = tutta l'alleanza) e `ruoli`
+sono liste; `fronte` vuoto in `tattiche` = tutti i
 fronti; elenca in `operazioni` tutte le operazioni del campo `operazioni` dello stato; `motivazione` =
 al massimo 3 frasi in italiano, concrete (cosa, perche', cosa ti aspetti).

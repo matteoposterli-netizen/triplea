@@ -56,7 +56,11 @@ public final class UscitaLlm {
       }
     }
     if (in.has("rischio")) {
-      out.add("rischio", pairs(in.get("rischio"), "fronte", "valore"));
+      final JsonObject risk = risk(in.get("rischio"));
+      if (risk.entrySet().stream().anyMatch(e -> e.getValue().isJsonObject())) {
+        out.addProperty("versione", Direttive.VERSIONE_1_1);
+      }
+      out.add("rischio", risk);
     }
     if (in.has("ruoli")) {
       out.add("ruoli", pairs(in.get("ruoli"), "nazione", "ruolo"));
@@ -77,6 +81,35 @@ public final class UscitaLlm {
       out.add("lettura_nemico", in.get("lettura_nemico").deepCopy());
     }
     return out;
+  }
+
+  /**
+   * Risk list -> directives v1.1: {front: value} for the whole alliance (empty nation) and {nation:
+   * {front: value}} per nation. An object (already v1 / v1.1) is kept.
+   */
+  static JsonObject risk(final JsonElement e) {
+    if (e.isJsonObject()) {
+      return e.getAsJsonObject().deepCopy();
+    }
+    final JsonObject map = new JsonObject();
+    if (e.isJsonArray()) {
+      for (final JsonElement p : e.getAsJsonArray()) {
+        final JsonObject o = p.getAsJsonObject();
+        if (!o.has("fronte") || !o.has("valore")) {
+          continue;
+        }
+        final String nation = o.has("nazione") ? o.get("nazione").getAsString().strip() : "";
+        if (nation.isEmpty()) {
+          map.add(o.get("fronte").getAsString(), o.get("valore"));
+        } else {
+          if (!map.has(nation) || !map.get(nation).isJsonObject()) {
+            map.add(nation, new JsonObject());
+          }
+          map.getAsJsonObject(nation).add(o.get("fronte").getAsString(), o.get("valore"));
+        }
+      }
+    }
+    return map;
   }
 
   private static JsonObject pairs(final JsonElement e, final String key, final String value) {
@@ -131,15 +164,27 @@ public final class UscitaLlm {
       errors.add("postura sconosciuta: " + posture);
     }
     final Set<String> fronts = strings(array(stato, "fronti"));
+    final String allianceName = stato.has("alleanza") ? stato.get("alleanza").getAsString() : "";
+    final Set<String> allianceNations =
+        stato.has("nazioni") && stato.getAsJsonObject("nazioni").has(allianceName)
+            ? strings(stato.getAsJsonObject("nazioni").getAsJsonArray(allianceName))
+            : Set.of();
     if (d.has("rischio") && d.get("rischio").isJsonObject()) {
       d.getAsJsonObject("rischio")
           .entrySet()
           .forEach(
               e -> {
-                if (!fronts.contains(e.getKey())) {
-                  limited.add("fronte sconosciuto " + e.getKey());
-                } else if (Math.abs(e.getValue().getAsDouble()) > 1) {
-                  limited.add("rischio fuori da -1..+1 su " + e.getKey());
+                if (e.getValue().isJsonObject()) {
+                  if (!allianceNations.contains(e.getKey())) {
+                    limited.add("rischio per una nazione non dell'alleanza " + e.getKey());
+                    return;
+                  }
+                  e.getValue()
+                      .getAsJsonObject()
+                      .entrySet()
+                      .forEach(f -> checkRisk(f.getKey(), f.getValue(), fronts, limited));
+                } else {
+                  checkRisk(e.getKey(), e.getValue(), fronts, limited);
                 }
               });
     }
@@ -197,6 +242,80 @@ public final class UscitaLlm {
     }
     if (string(d, "motivazione").isBlank()) {
       limited.add("motivazione vuota");
+    }
+    return new Controllo(errors, limited);
+  }
+
+  private static void checkRisk(
+      final String front,
+      final JsonElement value,
+      final Set<String> fronts,
+      final List<String> limited) {
+    if (!fronts.contains(front)) {
+      limited.add("fronte sconosciuto " + front);
+    } else if (Math.abs(value.getAsDouble()) > 1) {
+      limited.add("rischio fuori da -1..+1 su " + front);
+    }
+  }
+
+  /**
+   * Offline check of turn orders (schema ordini-turno-v1) against their input: unusable = not the
+   * expected fields; limited = ignored fields (plan, posture, risk), operations not of the nation,
+   * weights or losses out of range, unknown tools or fronts, too long a motivation.
+   */
+  public static Controllo controllaOrdini(final JsonObject o, final JsonObject ingresso) {
+    final List<String> errors = new ArrayList<>();
+    final List<String> limited = new ArrayList<>();
+    for (final String key : List.of("bersagli", "operazioni", "tattiche")) {
+      if (o.has(key) && !o.get(key).isJsonArray()) {
+        errors.add(key + " non e' una lista");
+      }
+    }
+    if (!errors.isEmpty()) {
+      return new Controllo(errors, limited);
+    }
+    for (final String key : List.of("piano", "postura", "rischio")) {
+      if (o.has(key)) {
+        limited.add("campo " + key + " ignorato negli ordini del turno");
+      }
+    }
+    final Set<String> ops = new HashSet<>();
+    array(ingresso, "operazioni").forEach(x -> ops.add(x.getAsJsonObject().get("id").getAsString()));
+    double loss = 0;
+    for (final JsonElement e : array(o, "operazioni")) {
+      final JsonObject x = e.getAsJsonObject();
+      if (!ops.contains(string(x, "id"))) {
+        limited.add("operazione non della nazione " + string(x, "id"));
+      }
+      if (!Direttive.DECISIONI.contains(string(x, "decisione"))) {
+        limited.add("decisione sconosciuta " + string(x, "decisione"));
+      }
+      final double l = number(x, "perdita_trasporti_accettata_max_TUV");
+      if (l < 0 || l > Direttive.PERDITA_TRASPORTI_MAX) {
+        limited.add("perdita accettata " + l + " fuori da 0.." + Direttive.PERDITA_TRASPORTI_MAX);
+      }
+      loss += Math.max(0, l);
+    }
+    if (loss > Direttive.PERDITA_TRASPORTI_MAX) {
+      limited.add("perdite accettate " + loss + " oltre il tetto");
+    }
+    for (final JsonElement e : array(o, "bersagli")) {
+      final double w = number(e.getAsJsonObject(), "peso");
+      if (w < 0 || w > Direttive.PESO_MAX) {
+        limited.add("peso " + w + " fuori da 0.." + Direttive.PESO_MAX);
+      }
+    }
+    final Set<String> fronts = strings(array(ingresso, "fronti"));
+    for (final JsonElement e : array(o, "tattiche")) {
+      final JsonObject t = e.getAsJsonObject();
+      if (!Tattiche.STRUMENTI.contains(string(t, "strumento"))) {
+        limited.add("strumento sconosciuto " + string(t, "strumento"));
+      } else if (!string(t, "fronte").isBlank() && !fronts.contains(string(t, "fronte"))) {
+        limited.add("strumento su fronte sconosciuto " + string(t, "fronte"));
+      }
+    }
+    if (frasi(string(o, "motivazione")) > 2) {
+      limited.add("motivazione oltre 2 frasi");
     }
     return new Controllo(errors, limited);
   }

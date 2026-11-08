@@ -36,6 +36,7 @@ import games.strategy.triplea.ai.proplus.StrumentiRitardo;
 import games.strategy.triplea.ai.proplus.TestaDiPonte;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.Strategia;
+import games.strategy.triplea.ai.proplus.strategia.OrdiniTurno;
 import games.strategy.triplea.ai.proplus.strategia.Valutazione;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
@@ -1247,6 +1248,47 @@ public final class DiaryRecorder implements ProDecisionRecorder {
                 contractFiles(diary.getFolder(), result);
               } catch (final RuntimeException e) {
                 ProLogger.warn("Diario Pro+: blocco dello stato maggiore non scritto: " + e);
+              }
+            });
+  }
+
+  /**
+   * LLM step: the turn orders of a nation (text when the LLM was asked, event, files {@code
+   * ordini-ingresso-R<N>-<nation>.json} = input and {@code ordini-R<N>-<nation>.json} = orders).
+   * Only while the diary is on; never changes a decision.
+   */
+  public static void nationOrders(final GameState data, final OrdiniTurno.Risultato result) {
+    if (!DiarySettings.isEnabled() || !(data instanceof GameData gameData)) {
+      return;
+    }
+    GameDiary.forGame(gameData)
+        .ifPresent(
+            diary -> {
+              try {
+                if (!result.testo().isEmpty()) {
+                  diary.turnStarted(() -> {});
+                  diary.text(result.testo());
+                }
+                diary.json(result.json().deepCopy());
+                final com.google.gson.Gson gson =
+                    new com.google.gson.GsonBuilder()
+                        .setPrettyPrinting()
+                        .disableHtmlEscaping()
+                        .create();
+                final String suffix = "-R" + result.round() + "-" + result.nazione() + ".json";
+                java.nio.file.Files.writeString(
+                    diary.getFolder().resolve("ordini-ingresso" + suffix),
+                    gson.toJson(result.ingresso()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+                if (result.json().has("ordini")
+                    && result.json().getAsJsonObject("ordini").has("ordini")) {
+                  java.nio.file.Files.writeString(
+                      diary.getFolder().resolve("ordini" + suffix),
+                      gson.toJson(result.json().getAsJsonObject("ordini").get("ordini")),
+                      java.nio.charset.StandardCharsets.UTF_8);
+                }
+              } catch (final java.io.IOException | RuntimeException e) {
+                ProLogger.warn("Diario Pro+: ordini del turno non scritti: " + e);
               }
             });
   }

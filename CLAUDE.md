@@ -272,7 +272,8 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   solo a quei job): `<n+1>-LLM-Alleati-vs-Asse-A-seme1/2` (Alleati LLM, Asse A regole) e
   `<n+2>-LLM-Asse-vs-Alleati-1-seme1/2` (Asse LLM, Alleati 1 regole), piani di partenza Axis=A, Allies=1 (confronto
   con A/1). Nel `publish`, dopo il confronto, `proplus-autoplay qualita autoplay --n 30 --output autoplay/qualita`
-  (test di qualita' su 30 stati strategici delle partite, nello zip e nel sommario della run). Le 14 partite
+  (test di qualita' su 30 stati strategici delle partite, nello zip e nel sommario della run) e, dallo step LLM-2,
+  `qualita autoplay --n 30 --livello ordini --output autoplay/qualita-ordini`. Le 14 partite
   solo-regole restano il riferimento.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
@@ -1238,7 +1239,7 @@ nuovo cambia una decisione.
      l'avviso "stratega non disponibile (<motivi>): decidono le regole". Risposta non JSON ⇒ stesso ripiego
      (`json_non_validi`). Direttive non valide (piano non ammesso, postura sconosciuta) ⇒ ripiego di `Direttive.valida`.
      La partita non si blocca mai: il turno AI aspetta al massimo 120 s (Claude Code) + 2 × 45 s (chiave).
-- **Prompt** (`PromptStratega`, risorsa versionata `game-core/src/main/resources/proplus/strategia/prompt-stratega-v1.md`,
+- **Prompt** (`PromptStratega`, risorsa versionata `game-core/src/main/resources/proplus/strategia/prompt-stratega-v2.md` (era v1),
   in italiano; il commento iniziale e' tolto): parte fissa = ruolo, regole chiave della mappa (verificate sull'XML:
   vittoria Asse 8 VC + una capitale, Alleati Roma + Berlino; obiettivi nazionali con i valori; USA in guerra al R3,
   URSS dal R4 o se attaccata/Londra presa), piani del file dati senza logistica (`PromptStratega.piani`: fasi,
@@ -1278,14 +1279,38 @@ nuovo cambia una decisione.
 - **Autoplay**: `--decisore <alleanza>=llm` (= Chiave API, fornitore del profilo o Anthropic, chiave da
   `ANTHROPIC_API_KEY`); `riepilogo.json` `stratega` per alleanza (decisioni, fonti, ripieghi con i primi motivi,
   cambi piano, posture, strumenti accesi, operazioni lancia/attendi/annulla, uso); riga nel `riepilogo.md`;
-  `riepilogo-generale.md` sezione "Stratega LLM" (una riga per alleanza LLM, totale chiamate e costo per partita, VC
-  finali medie LLM contro regole con gli stessi piani); le configurazioni con decisore non regole hanno il suffisso
+  `riepilogo-generale.md` sezione "Stratega LLM" (una riga per alleanza LLM con chiamate e costo per livello, totali
+  per livello e per partita, VC finali medie LLM contro regole con gli stessi piani) e "Rischio effettivo medio per
+  nazione" (tutte le partite Pro+); le configurazioni con decisore non regole hanno il suffisso
   "(llm)" e non si mescolano con quelle a regole. Comando `qualita <cartella> [--n 30] [--output DIR] [--fornitore
-  anthropic] [--fantasia 2]` (`TestQualita`): N stati `stato-R*-*.json` presi a intervalli regolari, prompt vero, %
+  anthropic] [--fantasia 2] [--livello stratega|ordini]` (`TestQualita`; `ordini` = ingressi
+  `ordini-ingresso-R*-*.json`, prompt e controllo `UscitaLlm.controllaOrdini` degli ordini del turno): N stati `stato-R*-*.json` presi a intervalli regolari, prompt vero, %
   JSON validi al primo colpo (letto + piano ammesso + postura nota), % limitate dai paletti (tra le valide), latenza
   media, token, costo, 5 motivazioni; `qualita.md` + `qualita.json`; senza chiave esce 0 senza chiamare.
 - **Paletto trasporti per alleanza** (punto a): vedi `TettoTrasporti` e `contratto-v1.md` (somma di tutti gli sbarchi
   dell'alleanza nel round, prima era per singolo sbarco).
+- **Due livelli (step LLM-2)**: (a) **Stratega** = la chiamata per alleanza a inizio round (sopra); (b) **Ordini del
+  turno** (`OrdiniTurno`, chiamato da `ProPlusAi.logPhase` subito dopo `Valutazione.inizioRound`, una volta per
+  nazione e round): solo con modalita' LLM, nazione con PU > 0, non in `nazioni_senza_ordini` (French). Ingresso
+  `Ingresso.ordiniTurno` (~3.000 caratteri), "cosa e' cambiato" calcolato contro un'istantanea salvata dopo ogni
+  decisione dell'alleanza (proprieta' `Pro+ istantanea: <alleanza>`: battaglie viste, proprietari, TUV nemico e
+  alleato per territorio; scritta anche con le regole se il diario e' attivo, per i file d'ingresso del test di
+  qualita'). Prompt `prompt-ordini-turno-v1.md` (`PromptOrdini`, piu' corto: niente piani, le direttive sono
+  nell'ingresso), schema `ordini-turno-v1` strict, stessi trasporti e fallback (`DecisoreLlm.ordini`), fusione e
+  paletti in `Direttive.applicaOrdini`. Diario: "Ordini del turno <nazione> (<fonte>): bersagli ...; operazioni ...;
+  tattiche ..." + motivazione, avvisi, uso; evento `ordini_turno`; file `ordini-ingresso-R<N>-<nazione>.json` e
+  `ordini-R<N>-<nazione>.json`. Uso per livello (`Uso.per_livello.stratega|ordini`: chiamate, errori, token, costo),
+  tetto per partita **100** (totale dei due livelli).
+- **Rischio per nazione** (schema direttive v1.1, vedi `contratto-v1.md`): `Direttive.rischio(nazione, fronte)`,
+  `PianoAttivo.modificatore` usa quello della propria nazione; ampiezza `ampiezza_rischio` nel file dati (1);
+  `DecisoreRegole` scrive ancora v1 (golden Pro+ identico). Diario: tabella del rischio effettivo per nazione e
+  fronte; storico `rischio_effettivo`; autoplay `rischio_medio` per nazione.
+- **Prompt stratega v2** (`prompt-stratega-v2.md`, sostituisce v1): + ordine dei turni GER → URSS → USA → UK → ITA →
+  FRA con le finestre di coordinamento (Italia → Germania quasi sicura; Germania → Italia il nemico reagisce; USA
+  prima di UK), rischio per nazione, e il significato di "lancia" chiarito (il motore sbarca solo se conviene; la
+  stima della perdita dei trasporti non e' un divieto), dopo che nel primo autoplay Haiku teneva Overlord in attesa 44
+  volte su 46. Le stesse finestre sono nel prompt degli ordini. Niente "attacco di logoramento" ne' missioni congiunte
+  (step successivo).
 
 ## Come configurare lo stratega
 
@@ -1302,8 +1327,9 @@ Per Matteo e gli amici (stesso testo, piu' corto, nel `LEGGIMI.txt` dello zip):
    - mettere "Stratega" su **Automatico** o **Chiave API** per le alleanze che si vogliono far decidere all'LLM.
 4. **Fantasia** 1-5 (2 di default): 1 = segue i piani classici, 5 = cerca finte e mosse inattese (sempre entro i
    paletti).
-5. **Costo**: con Haiku pochi centesimi per partita (vedi il diario: "Stratega, uso della partita finora"); con
-   Claude Code compreso nell'abbonamento. Tetto di 40 chiamate per partita modificabile.
+5. **Costo**: con Haiku pochi centesimi per partita (vedi il diario: "Stratega, uso della partita finora", separato
+   tra Stratega e Ordini del turno); con Claude Code compreso nell'abbonamento. Tetto di 100 chiamate per partita
+   modificabile (una partita da 12 round: 36-48 chiamate con un'alleanza all'LLM, ~85 con entrambe).
 6. **Rimuovere la chiave**: pulsante "Rimuovi" (la chiave sta solo in `%USERPROFILE%\.triplea-proplus\stratega.properties`).
 7. Se qualcosa non va (rete, credito finito, chiave revocata) il diario scrive "stratega non disponibile (...)": quel
    round decidono le regole, la partita continua.
@@ -2523,3 +2549,31 @@ Secret `ANTHROPIC_API_KEY` presente ⇒ 14 partite a regole + 4 con lo stratega 
 - Giudizio: integrazione affidabile (100% JSON validi, nessun ripiego, costo ~1 centesimo per partita), ma l'effetto
   sul gioco e' nullo o non misurabile con 2 semi (stesse VC delle regole); la prudenza sugli sbarchi e' un difetto
   del prompt (vedi problemi aperti), non della parte deterministica. Non tarato.
+
+### Step LLM-2 — ordini del turno, rischio per nazione, ordine dei turni nei prompt (2026-11-08)
+
+Richiesta di Matteo dopo lo step INTEGRAZIONE LLM: decisione a due livelli (stratega per alleanza + ordini del turno
+per nazione), rischio per nazione (schema v1.1), ordine dei turni e finestre di coordinamento nei prompt, tetto 100.
+Vedi "Stratega LLM" (punti "Due livelli", "Rischio per nazione", "Prompt stratega v2") e `contratto-v1.md`.
+- Classi nuove: `strategia/OrdiniTurno`, `strategia/llm/PromptOrdini`; risorsa `prompt-ordini-turno-v1.md`;
+  `prompt-stratega-v1.md` → `prompt-stratega-v2.md`. Modificate: `Direttive` (v1.1, `applicaOrdini`, `testoOrdini`),
+  `PianoAttivo` (rischio della nazione, direttive fuse), `Ingresso` (`ordiniTurno`, `salvaIstantanea`, un solo
+  calcolatore TUV per ingresso), `Valutazione` (rischio effettivo, istantanea), `StatoMaggiore.aggiornaUltimo`,
+  `Strategia.Parametri` (`ampiezza_rischio`, `nazioni_senza_ordini`; file dati), `DecisoreLlm` (catena comune,
+  `ordini`), `Uso` (per livello, tetto 100), `UscitaLlm` (rischio per nazione, `controllaOrdini`), `ProPlusAi`
+  (aggancio), `DiaryRecorder.nationOrders`, `StrategistPanel`, autoplay `Riepilogo`/`RiepilogoGenerale`/`TestQualita`,
+  workflow (secondo test di qualita'). **Nessuna classe Pro toccata.**
+- Test nuovi: `OrdiniTurnoTest` (9: fusione solo di bersagli/operazioni/tattiche della nazione con piano e postura
+  ignorati, la nazione gioca i suoi ordini e le altre le direttive, rischio v1.1 nel `PianoAttivo`, errore ⇒ direttive
+  dello stratega, Francia e nazioni senza PU senza chiamata, regole senza chiamata ma ingresso costruito, "cosa e'
+  cambiato" con conquista e stack spostato, v1.1 con nazione/fronte sconosciuti, regole ancora v1, ampiezza 0 dal file
+  dati), `StrategaComponentiTest` +4 (rischio v1.1 dalla risposta, prompt degli ordini corto con l'ordine dei turni,
+  controllo offline degli ordini, uso per livello e tetto 100), `AutoplayTest` +2 (ordini e rischio medio nel
+  riepilogo, test di qualita' degli ordini). Golden Hard, golden Pro+, `HardNeutralityGoldenTest`,
+  `DiaryNeutralityTest` verdi.
+- Verifica locale (Europe 1940 reale, seme 1): A/1 a regole 2 round 41 s (prima 40 s), file
+  `ordini-ingresso-R*-*.json` per ogni nazione (~3.000 caratteri), tabella del rischio nel diario; `--decisore
+  Allies=llm` senza chiave 1 round: "ordini del turno non disponibili (nessuna chiave Haiku salvata): valgono le
+  direttive dello stratega" per ogni nazione alleata, partita completata.
+- Test in locale: `:game-core:test` 3093 (fallito solo `ContentDownloaderIntegrationTest`, rete della sandbox),
+  `:game-headed:test` 93, `:proplus-autoplay:test` 18, `:ai:test` 13 verdi. Ricerca di chiavi nel repo: nessuna.

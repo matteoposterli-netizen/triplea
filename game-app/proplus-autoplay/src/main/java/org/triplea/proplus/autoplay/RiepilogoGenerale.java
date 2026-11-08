@@ -145,6 +145,7 @@ final class RiepilogoGenerale {
     delayTools(md, games, alliances, maxRound);
     contract(md, games, alliances);
     strategist(md, games, alliances, maxRound);
+    meanRisk(md, games);
 
     md.append(
 """
@@ -296,11 +297,14 @@ final class RiepilogoGenerale {
     }
     md.append(
         "| Partita | Alleanza | Risposte | Ripieghi | Cambi piano | Posture | Strumenti accesi |"
-            + " Operazioni | Chiamate | Token | Costo $ | VC R"
+            + " Operazioni | Chiamate | Token | Costo $ | Stratega: chiamate / $ | Ordini del turno:"
+            + " chiamate / ripieghi / $ | VC R"
             + maxRound
-            + " |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+            + " |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
     double cost = 0;
     int calls = 0;
+    final double[] byLevel = new double[2];
+    final int[] callsByLevel = new int[2];
     for (final Game g : llm) {
       final JsonObject st =
           g.json().has("stratega") ? g.json().getAsJsonObject("stratega") : new JsonObject();
@@ -315,6 +319,14 @@ final class RiepilogoGenerale {
         final int n = uso.has("chiamate") ? uso.get("chiamate").getAsInt() : 0;
         cost += c;
         calls += n;
+        final List<String> levels = List.of("stratega", "ordini");
+        for (int i = 0; i < 2; i++) {
+          if (uso.has("per_livello") && uso.getAsJsonObject("per_livello").has(levels.get(i))) {
+            final JsonObject l = uso.getAsJsonObject("per_livello").getAsJsonObject(levels.get(i));
+            byLevel[i] += l.has("costo_usd") ? l.get("costo_usd").getAsDouble() : 0;
+            callsByLevel[i] += l.has("chiamate") ? l.get("chiamate").getAsInt() : 0;
+          }
+        }
         final long tokens =
             (uso.has("token_ingresso") ? uso.get("token_ingresso").getAsLong() : 0)
                 + (uso.has("token_uscita") ? uso.get("token_uscita").getAsLong() : 0)
@@ -347,6 +359,13 @@ final class RiepilogoGenerale {
             .append(" | ")
             .append(String.format(Locale.ROOT, "%.4f", c))
             .append(" | ")
+            .append(level(uso, "stratega"))
+            .append(" | ")
+            .append(level(uso, "ordini"))
+            .append(x.has("ordini_turno") && x.getAsJsonObject("ordini_turno").has("ripieghi")
+                ? " (ripieghi " + x.getAsJsonObject("ordini_turno").get("ripieghi").getAsInt() + ")"
+                : "")
+            .append(" | ")
             .append(
                 last == null
                     ? "-"
@@ -361,7 +380,7 @@ final class RiepilogoGenerale {
             .append(" |\n");
         if (x.has("motivi_ripiego")) {
           for (final JsonElement r : x.getAsJsonArray("motivi_ripiego")) {
-            md.append("|  | ripiego: ").append(r.getAsString().replace("|", "/")).append(" |||||||||||\n");
+            md.append("|  | ripiego: ").append(r.getAsString().replace("|", "/")).append(" |||||||||||||\n");
           }
         }
       }
@@ -369,11 +388,19 @@ final class RiepilogoGenerale {
     md.append(
         String.format(
             Locale.ROOT,
-            "%nTotale: %d chiamate, costo stimato $%.4f (%d partite LLM, $%.4f per partita).%n",
+            "%nTotale: %d chiamate, costo stimato $%.4f (%d partite LLM, $%.4f per partita);"
+                + " Stratega %d chiamate $%.4f ($%.4f per partita), Ordini del turno %d chiamate"
+                + " $%.4f ($%.4f per partita).%n",
             calls,
             cost,
             llm.size(),
-            cost / llm.size()));
+            cost / llm.size(),
+            callsByLevel[0],
+            byLevel[0],
+            byLevel[0] / llm.size(),
+            callsByLevel[1],
+            byLevel[1],
+            byLevel[1] / llm.size()));
     md.append("\nVC finali (R")
         .append(maxRound)
         .append(") medie per configurazione, LLM contro regole con gli stessi piani:\n\n| Configurazione | Partite | ")
@@ -405,6 +432,74 @@ final class RiepilogoGenerale {
           }
           md.append('\n');
         });
+  }
+
+  /** Eg "12 / $0.0110" for the calls of one level of the LLM step. */
+  private static String level(final JsonObject uso, final String level) {
+    if (!uso.has("per_livello") || !uso.getAsJsonObject("per_livello").has(level)) {
+      return "-";
+    }
+    final JsonObject l = uso.getAsJsonObject("per_livello").getAsJsonObject(level);
+    return (l.has("chiamate") ? l.get("chiamate").getAsInt() : 0)
+        + String.format(
+            Locale.ROOT, " / $%.4f", l.has("costo_usd") ? l.get("costo_usd").getAsDouble() : 0);
+  }
+
+  /** LLM step: the mean effective risk (1-5) of each nation, per game (every Pro+ game). */
+  static void meanRisk(final StringBuilder md, final List<Game> games) {
+    final java.util.Set<String> nations = new java.util.LinkedHashSet<>();
+    for (final Game g : games) {
+      if (g.json() != null && g.json().has("stratega")) {
+        g.json()
+            .getAsJsonObject("stratega")
+            .entrySet()
+            .forEach(
+                e -> {
+                  if (e.getValue().isJsonObject()
+                      && e.getValue().getAsJsonObject().has("rischio_medio")) {
+                    nations.addAll(
+                        e.getValue().getAsJsonObject().getAsJsonObject("rischio_medio").keySet());
+                  }
+                });
+      }
+    }
+    if (nations.isEmpty()) {
+      return;
+    }
+    md.append("\n\n## Rischio effettivo medio per nazione\n\n")
+        .append("Livello 1-5 (cursore + scostamento delle direttive per nazione e fronte, -1 in")
+        .append(" DIFENSIVA), media di tutti i round e fronti.\n\n| Partita | ")
+        .append(String.join(" | ", nations))
+        .append(" |\n|---|")
+        .append("---|".repeat(nations.size()))
+        .append('\n');
+    for (final Game g : games) {
+      if (g.json() == null || !g.json().has("stratega")) {
+        continue;
+      }
+      final JsonObject mean = new JsonObject();
+      g.json()
+          .getAsJsonObject("stratega")
+          .entrySet()
+          .forEach(
+              e -> {
+                if (e.getValue().isJsonObject()
+                    && e.getValue().getAsJsonObject().has("rischio_medio")) {
+                  e.getValue()
+                      .getAsJsonObject()
+                      .getAsJsonObject("rischio_medio")
+                      .entrySet()
+                      .forEach(n -> mean.add(n.getKey(), n.getValue()));
+                }
+              });
+      if (mean.size() == 0) {
+        continue;
+      }
+      md.append("| ").append(g.folder()).append(" | ");
+      nations.forEach(
+          n -> md.append(mean.has(n) ? mean.get(n).getAsString() : "-").append(" | "));
+      md.append('\n');
+    }
   }
 
   private static String plans(final JsonObject json, final List<String> alliances) {

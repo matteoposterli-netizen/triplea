@@ -10,6 +10,7 @@ import games.strategy.triplea.ai.proplus.strategia.llm.Fornitore;
 import games.strategy.triplea.ai.proplus.strategia.llm.Http;
 import games.strategy.triplea.ai.proplus.strategia.llm.Modalita;
 import games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega;
+import games.strategy.triplea.ai.proplus.strategia.llm.PromptOrdini;
 import games.strategy.triplea.ai.proplus.strategia.llm.PromptStratega;
 import games.strategy.triplea.ai.proplus.strategia.llm.Richiesta;
 import games.strategy.triplea.ai.proplus.strategia.llm.Risposta;
@@ -143,16 +144,47 @@ public final class DecisoreLlm implements Decisore {
 
   @Override
   public Optional<JsonObject> decidi(final JsonObject stato, final Contesto contesto) {
-    etichetta = REGOLE;
     final GameProperties props = contesto.data().getProperties();
-    final int cap = Uso.tetto(props);
-    if (Uso.chiamate(props) >= cap) {
-      throw new NonDisponibile("tetto di " + cap + " chiamate per partita raggiunto");
-    }
     final int fantasia = Uso.fantasia(props, contesto.alleanza());
     final Richiesta request =
         new Richiesta(
             sistema(contesto), PromptStratega.utente(stato, fantasia), PromptStratega.schema(), fantasia);
+    final JsonObject answer =
+        chiedi(request, props, Uso.STRATEGA, contesto.alleanza() + " R" + contesto.round());
+    return Optional.of(UscitaLlm.direttive(answer, contesto.round(), contesto.alleanza()));
+  }
+
+  /**
+   * LLM step, turn orders of {@code nation}: its answer (schema ordini-turno-v1, not checked yet:
+   * {@link Direttive#applicaOrdini} does it).
+   *
+   * @param ingresso the input of the turn orders ({@link Ingresso#ordiniTurno})
+   * @throws Decisore.NonDisponibile no answer (the nation plays the strategic directives)
+   */
+  public JsonObject ordini(
+      final JsonObject ingresso,
+      final GameProperties props,
+      final String alliance,
+      final String nation,
+      final int round) {
+    final int fantasia = Uso.fantasia(props, alliance);
+    final Richiesta request =
+        new Richiesta(
+            PromptOrdini.sistema(),
+            PromptOrdini.utente(ingresso, fantasia),
+            PromptOrdini.schema(),
+            fantasia);
+    return chiedi(request, props, Uso.ORDINI, nation + " R" + round);
+  }
+
+  /** The transports in order; the first answer that is a JSON object wins. */
+  private JsonObject chiedi(
+      final Richiesta request, final GameProperties props, final String level, final String what) {
+    etichetta = REGOLE;
+    final int cap = Uso.tetto(props);
+    if (Uso.chiamate(props) >= cap) {
+      throw new NonDisponibile("tetto di " + cap + " chiamate per partita raggiunto");
+    }
     final List<String> failures = new ArrayList<>();
     for (final Trasporto t : trasporti) {
       final Optional<String> unavailable = t.nonDisponibile();
@@ -168,31 +200,28 @@ public final class DecisoreLlm implements Decisore {
       try {
         answer = t.chiama(request);
       } catch (final ErroreStratega e) {
-        Uso.registraErrore(props, t.nome());
+        Uso.registraErrore(props, t.nome(), level);
         failures.add(t.nome() + ": " + e.getMessage());
         continue;
       }
-      Uso.registra(props, answer);
+      Uso.registra(props, answer, level);
       try {
-        final JsonObject directives =
-            UscitaLlm.direttive(
-                UscitaLlm.leggi(answer.testo()), contesto.round(), contesto.alleanza());
+        final JsonObject json = UscitaLlm.leggi(answer.testo());
         etichetta = answer.fonte();
         ProLogger.info(
-            "[Pro+] Stratega "
+            "[Pro+] "
+                + (Uso.ORDINI.equals(level) ? "Ordini del turno " : "Stratega ")
                 + answer.fonte()
                 + " per "
-                + contesto.alleanza()
-                + " R"
-                + contesto.round()
+                + what
                 + ": "
                 + answer.millis()
                 + " ms, "
                 + answer.tokenTotali()
                 + " token");
-        return Optional.of(directives);
+        return json;
       } catch (final ErroreStratega e) {
-        Uso.registraJsonNonValido(props);
+        Uso.registraJsonNonValido(props, level);
         failures.add(t.nome() + ": " + e.getMessage());
       }
     }

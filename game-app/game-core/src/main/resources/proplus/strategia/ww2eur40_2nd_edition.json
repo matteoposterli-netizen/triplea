@@ -63,6 +63,8 @@
     "distanza_attaccabile": 2,
     "soglia_contrasto": 0.35,
     "ritardo": {"_nota": "Step 3d-2: strumenti di ritardo (paletti fissi, non tarati). Attivi (tattiche_attive dello stato maggiore) per le nazioni in 'ritarda' del piano e per tutte le nazioni dell'alleanza in postura RALLENTAMENTO o DIFENSIVA; mai col piano N. Blocco terrestre: 1 fanteria sui territori propri vuoti lungo i percorsi delle unita' mobili nemiche (carri/mech) entro 'distanza_percorso' dai territori chiave, al massimo 'max_blocchi' per nazione e turno. Blocco navale: al massimo 'max_navi_blocco' sottomarini/cacciatorpediniere nelle 'zone_di_passaggio' del piano nemico letto oltre 'soglia_lettura_blocco'. Caccia ai trasporti: zone con trasporti nemici carichi o nelle zone di raccolta del piano nemico, entro 'distanza_caccia' da unita' navali/aeree nostre, contro-obiettivi con peso 'peso_caccia_trasporti'.", "max_blocchi": 3, "distanza_percorso": 4, "max_navi_blocco": 2, "soglia_lettura_blocco": 0.5, "peso_caccia_trasporti": 15, "distanza_caccia": 2},
+    "ampiezza_rischio": 1,
+    "nazioni_senza_ordini": ["French"],
     "vittoria": {
       "Axis": {"vc": 8},
       "Allies": {"territori": ["Germany", "Southern Italy"], "richiesti": 2}

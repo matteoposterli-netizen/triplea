@@ -108,7 +108,7 @@ public final class PianoAttivo {
     // strategic contract: every strategic choice comes from the directives of the round
     this.direttive =
         Direttive.of(
-            directives(props, alleanza, piano.id(), round)
+            directives(props, alleanza, nazione, piano.id(), round)
                 .orElseGet(() -> DecisoreRegole.base(strategia, alleanza, piano, round)));
     this.operazioni =
         piano.operazioni(nazione, round).stream()
@@ -275,8 +275,16 @@ public final class PianoAttivo {
    * The directives of the history entry of {@code round}, if they were written with {@code planId}
    * in force.
    */
+  /**
+   * The directives of the round for {@code nation}: its turn orders merged with the strategic
+   * directives (LLM step, {@link OrdiniTurno}) if it has some, else the strategic directives.
+   */
   private static Optional<JsonObject> directives(
-      final GameProperties props, final String alliance, final String planId, final int round) {
+      final GameProperties props,
+      final String alliance,
+      final String nation,
+      final String planId,
+      final int round) {
     final Optional<StatoMaggiore.Stato> state = StatoMaggiore.getState(props, alliance);
     if (state.isEmpty() || state.get().storico().isEmpty()) {
       return Optional.empty();
@@ -288,7 +296,13 @@ public final class PianoAttivo {
         || !last.has(Valutazione.KEY_DIRETTIVE)) {
       return Optional.empty();
     }
-    final JsonObject d = last.getAsJsonObject(Valutazione.KEY_DIRETTIVE);
+    JsonObject d = last.getAsJsonObject(Valutazione.KEY_DIRETTIVE);
+    if (last.has(OrdiniTurno.KEY) && last.getAsJsonObject(OrdiniTurno.KEY).has(nation)) {
+      final JsonObject own = last.getAsJsonObject(OrdiniTurno.KEY).getAsJsonObject(nation);
+      if (own.has(Valutazione.KEY_DIRETTIVE)) {
+        d = own.getAsJsonObject(Valutazione.KEY_DIRETTIVE);
+      }
+    }
     return planId.equals(d.get("piano").getAsString()) ? Optional.of(d) : Optional.empty();
   }
 
@@ -421,11 +435,12 @@ public final class PianoAttivo {
   }
 
   /**
-   * Risk offset of {@code front} in the directives of the round (-1..+1; the decider by rules
-   * writes the phase's modifier, 0 without a phase).
+   * Risk offset of {@code front} for this nation in the directives of the round (-1..+1; the
+   * decider by rules writes the phase's modifier for the whole alliance, 0 without a phase).
    */
   public int modificatore(final String front) {
-    return direttive.rischio(front);
+    // schema v1.1: the nation's own offset if the directives give one
+    return direttive.rischio(nazione, front);
   }
 
   /** The alliance's slider level. */

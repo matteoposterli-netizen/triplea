@@ -417,6 +417,103 @@ class StrategaComponentiTest {
     assertThat(Optional.of(Uso.tetto(props))).contains(Uso.TETTO_DEFAULT);
   }
 
+  // ------------------------------------------------------------------------ LLM step, level 2
+
+  @Test
+  void riskPerNationBecomesDirectivesV11() {
+    final JsonObject d =
+        UscitaLlm.direttive(
+            UscitaLlm.leggi(
+                "{\"piano\": \"A\", \"rischio\": [{\"nazione\": \"\", \"fronte\": \"Ovest\","
+                    + " \"valore\": -1}, {\"nazione\": \"Germans\", \"fronte\": \"Est\", \"valore\": 1},"
+                    + " {\"nazione\": \"Italians\", \"fronte\": \"Mediterraneo-Africa\", \"valore\": -1}]}"),
+            2,
+            "Axis");
+
+    assertThat(d.get("versione").getAsDouble()).isEqualTo(1.1);
+    assertThat(d.getAsJsonObject("rischio").toString())
+        .isEqualTo(
+            "{\"Ovest\":-1,\"Germans\":{\"Est\":1},\"Italians\":{\"Mediterraneo-Africa\":-1}}");
+  }
+
+  @Test
+  void theTurnOrdersPromptIsShortAndHasTheTurnOrder() {
+    final String system = PromptOrdini.sistema();
+
+    assertThat(system)
+        .doesNotContain("{{")
+        .contains("GERMANIA -> URSS -> USA -> REGNO UNITO -> ITALIA -> FRANCIA")
+        .contains("NON puoi cambiare piano, postura o rischio")
+        .contains("\"tattiche\"");
+    assertThat(system.length()).isLessThan(PromptStratega.sistema(strategyOrEmpty()).length());
+    assertStrict(PromptOrdini.schema());
+    assertThat(PromptOrdini.utente(JsonParser.parseString("{\"nazione\": \"British\", \"round\": 3}").getAsJsonObject(), 4))
+        .contains("4/5")
+        .contains("ordini del turno di British, round 3");
+    assertThat(PromptStratega.sistema(strategyOrEmpty()))
+        .contains("GERMANIA -> URSS -> USA -> REGNO UNITO -> ITALIA -> FRANCIA")
+        .contains("tra il turno ITALIANO e quello TEDESCO del round dopo muove solo la Francia");
+  }
+
+  @Test
+  void theOfflineCheckOfTurnOrders() {
+    final JsonObject input =
+        JsonParser.parseString(
+                "{\"nazione\": \"British\", \"fronti\": [\"Ovest\", \"Est\"],"
+                    + " \"operazioni\": [{\"id\": \"Overlord UK\"}]}")
+            .getAsJsonObject();
+    final JsonObject ok =
+        JsonParser.parseString(
+                "{\"bersagli\": [{\"territorio\": \"Normandy Bordeaux\", \"peso\": 15}],"
+                    + " \"operazioni\": [{\"id\": \"Overlord UK\", \"decisione\": \"lancia\","
+                    + " \"perdita_trasporti_accettata_max_TUV\": 10}], \"tattiche\": [],"
+                    + " \"motivazione\": \"Rinforzo la testa di ponte.\"}")
+            .getAsJsonObject();
+    assertThat(UscitaLlm.controllaOrdini(ok, input).valido()).isTrue();
+    assertThat(UscitaLlm.controllaOrdini(ok, input).limitati()).isEmpty();
+
+    final JsonObject bad =
+        JsonParser.parseString(
+                "{\"piano\": \"2\", \"bersagli\": [{\"territorio\": \"X\", \"peso\": 30}],"
+                    + " \"operazioni\": [{\"id\": \"Torch\", \"decisione\": \"lancia\"}],"
+                    + " \"tattiche\": [{\"strumento\": \"blocco_terrestre\", \"fronte\": \"Luna\"}],"
+                    + " \"motivazione\": \"Uno. Due. Tre.\"}")
+            .getAsJsonObject();
+    assertThat(String.join(";", UscitaLlm.controllaOrdini(bad, input).limitati()))
+        .contains("campo piano ignorato")
+        .contains("peso 30.0")
+        .contains("operazione non della nazione Torch")
+        .contains("fronte sconosciuto Luna")
+        .contains("motivazione oltre 2 frasi");
+    assertThat(
+            UscitaLlm.controllaOrdini(
+                    JsonParser.parseString("{\"bersagli\": 3}").getAsJsonObject(), input)
+                .valido())
+        .isFalse();
+  }
+
+  @Test
+  void usageIsSplitByLevelAndTheCapIs100() {
+    final var props = new games.strategy.engine.data.properties.GameProperties(null);
+    Uso.registra(props, new Risposta("{}", "Haiku", "m", 1000, 200, 0, 0, 0.002, false, 800));
+    Uso.registra(
+        props, new Risposta("{}", "Haiku", "m", 500, 100, 0, 0, 0.001, false, 400), Uso.ORDINI);
+    Uso.registraErrore(props, "Haiku", Uso.ORDINI);
+
+    assertThat(Uso.tetto(props)).isEqualTo(100);
+    assertThat(Uso.chiamate(props)).isEqualTo(3);
+    assertThat(Uso.testoLivelli(Uso.leggi(props)))
+        .isEqualTo("Stratega 1 chiamate $0.0020; Ordini del turno 2 chiamate (1 errori) $0.0010");
+  }
+
+  private static JsonObject strategyOrEmpty() {
+    try {
+      return strategy();
+    } catch (final IOException e) {
+      return new JsonObject();
+    }
+  }
+
   private static JsonObject strategy() throws IOException {
     try (InputStream in =
         StrategaComponentiTest.class

@@ -242,10 +242,16 @@ jobs:
             ANTHROPIC_API_KEY="${LLM_KEY}" autoplay-kit/runner/bin/proplus-autoplay qualita autoplay \
               --n 30 --output autoplay/qualita || echo "test di qualita' fallito (non blocca)"
             test -f autoplay/qualita/qualita.md && cat autoplay/qualita/qualita.md >> "$GITHUB_STEP_SUMMARY"
+            # turn orders (second level): inputs written by every Pro+ game with the diary
+            ANTHROPIC_API_KEY="${LLM_KEY}" autoplay-kit/runner/bin/proplus-autoplay qualita autoplay \
+              --n 30 --livello ordini --output autoplay/qualita-ordini \
+              || echo "test di qualita' degli ordini fallito (non blocca)"
+            test -f autoplay/qualita-ordini/qualita.md && cat autoplay/qualita-ordini/qualita.md >> "$GITHUB_STEP_SUMMARY"
           fi
           # strategic contract: the state/directives JSON files of the first seed only (1 game
           # per configuration), the sizes are already in each game's summary
-          find autoplay -path '*-seme[2-9]*' \( -name 'stato-R*.json' -o -name 'direttive-R*.json' \) -delete
+          find autoplay -path '*-seme[2-9]*' \( -name 'stato-R*.json' -o -name 'direttive-R*.json' \
+            -o -name 'ordini-ingresso-R*.json' -o -name 'ordini-R*.json' \) -delete
           (cd autoplay && zip -q -9 -r ../autoplay.zip .)
           ls -la autoplay.zip
       - name: Publish release autoplay-latest

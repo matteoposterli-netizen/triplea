@@ -8,6 +8,7 @@ import games.strategy.triplea.ai.proplus.strategia.llm.ClientApi;
 import games.strategy.triplea.ai.proplus.strategia.llm.ErroreStratega;
 import games.strategy.triplea.ai.proplus.strategia.llm.Fornitore;
 import games.strategy.triplea.ai.proplus.strategia.llm.Http;
+import games.strategy.triplea.ai.proplus.strategia.llm.PromptOrdini;
 import games.strategy.triplea.ai.proplus.strategia.llm.PromptStratega;
 import games.strategy.triplea.ai.proplus.strategia.llm.Richiesta;
 import games.strategy.triplea.ai.proplus.strategia.llm.Risposta;
@@ -31,7 +32,9 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Offline quality test of the LLM strategist: {@code qualita <folder> [--n 30] [--output DIR]
- * [--fornitore anthropic] [--fantasia 2]}. Takes N strategic states ({@code stato-R*-*.json}, eg
+ * [--fornitore anthropic] [--fantasia 2] [--livello stratega|ordini]}. With {@code --livello ordini}
+ * the inputs are the turn orders' ({@code ordini-ingresso-R*-*.json}) and the prompt and the check
+ * are those of the turn orders. Takes N strategic states ({@code stato-R*-*.json}, eg
  * from the autoplay diaries; spread evenly over the sorted list) and asks the provider for each,
  * with the real prompt. Reports: valid JSON at the first try (parsed and usable: plan admitted,
  * known posture), directives the guard rails would limit, mean latency, total cost, 5 example
@@ -47,7 +50,8 @@ final class TestQualita {
   static int run(final String[] args) throws IOException {
     if (args.length == 0) {
       throw new IllegalArgumentException(
-          "Uso: qualita <cartella> [--n 30] [--output DIR] [--fornitore anthropic] [--fantasia 2]");
+          "Uso: qualita <cartella> [--n 30] [--output DIR] [--fornitore anthropic] [--fantasia 2]"
+              + " [--livello stratega|ordini]");
     }
     final Path folder = Path.of(args[0]);
     final Map<String, String> opts = new LinkedHashMap<>();
@@ -60,14 +64,20 @@ final class TestQualita {
         Fornitore.daId(opts.getOrDefault("fornitore", "anthropic"))
             .orElseThrow(() -> new IllegalArgumentException("fornitore sconosciuto"));
     final int fantasy = Integer.parseInt(opts.getOrDefault("fantasia", "2"));
+    final boolean orders = ORDINI.equals(opts.getOrDefault("livello", STRATEGA));
     final String key = System.getenv(provider.variabile());
     if (key == null || key.isBlank()) {
       log.warn("AUTOPLAY qualita: {} assente, test saltato", provider.variabile());
       return 0;
     }
-    final List<Path> states = pick(states(folder), n);
+    final List<Path> states = pick(orders ? orderInputs(folder) : states(folder), n);
     final JsonObject report =
-        valuta(states, provider, fantasy, r -> new ClientApi(Http.REALE).chiama(provider, key, r));
+        valuta(
+            states,
+            provider,
+            fantasy,
+            r -> new ClientApi(Http.REALE).chiama(provider, key, r),
+            orders ? ORDINI : STRATEGA);
     Files.createDirectories(output);
     Files.writeString(
         output.resolve("qualita.json"),
@@ -76,6 +86,18 @@ final class TestQualita {
     Files.writeString(output.resolve("qualita.md"), markdown(report), StandardCharsets.UTF_8);
     log.info("AUTOPLAY qualita: {}", report.get("sintesi").getAsString());
     return 0;
+  }
+
+  static final String STRATEGA = "stratega";
+  static final String ORDINI = "ordini";
+
+  /** The inputs of the turn orders written by the diary. */
+  static List<Path> orderInputs(final Path folder) throws IOException {
+    try (Stream<Path> s = Files.walk(folder)) {
+      return s.filter(p -> p.getFileName().toString().matches("ordini-ingresso-R\\d+-.+\\.json"))
+          .sorted(Comparator.comparing(Path::toString))
+          .toList();
+    }
   }
 
   static List<Path> states(final Path folder) throws IOException {
@@ -98,14 +120,26 @@ final class TestQualita {
     return out;
   }
 
-  /** Asks {@code call} for each state; the report (no key in it). */
+  /** Asks {@code call} for each strategic state; the report (no key in it). */
   static JsonObject valuta(
       final List<Path> states,
       final Fornitore provider,
       final int fantasy,
       final Function<Richiesta, Risposta> call)
       throws IOException {
-    final String system = PromptStratega.sistema(strategy());
+    return valuta(states, provider, fantasy, call, STRATEGA);
+  }
+
+  /** Asks {@code call} for each input of {@code level}; the report (no key in it). */
+  static JsonObject valuta(
+      final List<Path> states,
+      final Fornitore provider,
+      final int fantasy,
+      final Function<Richiesta, Risposta> call,
+      final String level)
+      throws IOException {
+    final boolean orders = ORDINI.equals(level);
+    final String system = orders ? PromptOrdini.sistema() : PromptStratega.sistema(strategy());
     int valid = 0;
     int limited = 0;
     int answered = 0;
@@ -124,8 +158,14 @@ final class TestQualita {
       try {
         final Risposta r =
             call.apply(
-                new Richiesta(
-                    system, PromptStratega.utente(state, fantasy), PromptStratega.schema(), fantasy));
+                orders
+                    ? new Richiesta(
+                        system, PromptOrdini.utente(state, fantasy), PromptOrdini.schema(), fantasy)
+                    : new Richiesta(
+                        system,
+                        PromptStratega.utente(state, fantasy),
+                        PromptStratega.schema(),
+                        fantasy));
         answered++;
         millis += r.millis();
         cost += r.costoUsd();
@@ -135,9 +175,15 @@ final class TestQualita {
         c.addProperty("token", r.tokenTotali());
         c.addProperty("cache_letta", r.cacheLettura());
         final int round = state.has("round") ? state.get("round").getAsInt() : 0;
-        final String alliance = state.has("alleanza") ? state.get("alleanza").getAsString() : "";
-        final JsonObject d = UscitaLlm.direttive(UscitaLlm.leggi(r.testo()), round, alliance);
-        final UscitaLlm.Controllo check = UscitaLlm.controlla(d, state);
+        final String alliance =
+            orders && state.has("nazione")
+                ? state.get("nazione").getAsString()
+                : state.has("alleanza") ? state.get("alleanza").getAsString() : "";
+        final JsonObject answer = UscitaLlm.leggi(r.testo());
+        final JsonObject d =
+            orders ? answer : UscitaLlm.direttive(answer, round, alliance);
+        final UscitaLlm.Controllo check =
+            orders ? UscitaLlm.controllaOrdini(answer, state) : UscitaLlm.controlla(d, state);
         c.addProperty("json_valido", check.valido());
         c.add("errori", strings(check.errori()));
         c.add("limitati", strings(check.limitati()));
@@ -163,7 +209,8 @@ final class TestQualita {
     final JsonObject out = new JsonObject();
     out.addProperty("fornitore", provider.etichetta());
     out.addProperty("modello", provider.modello());
-    out.addProperty("prompt", PromptStratega.VERSIONE);
+    out.addProperty("livello", orders ? "ordini del turno" : "stratega");
+    out.addProperty("prompt", orders ? PromptOrdini.VERSIONE : PromptStratega.VERSIONE);
     out.addProperty("fantasia", fantasy);
     out.addProperty("stati", total);
     out.addProperty("risposte", answered);
@@ -182,8 +229,9 @@ final class TestQualita {
         "sintesi",
         String.format(
             Locale.ROOT,
-            "%s (%s): %d stati, JSON validi al primo colpo %d (%.0f%%), limitate dai paletti %d"
-                + " (%.0f%% delle valide), latenza media %.1f s, costo totale $%.4f",
+            "%s, %s (%s): %d ingressi, JSON validi al primo colpo %d (%.0f%%), limitate dai paletti"
+                + " %d (%.0f%% delle valide), latenza media %.1f s, costo totale $%.4f",
+            orders ? "Ordini del turno" : "Stratega",
             provider.etichetta(),
             provider.modello(),
             total,
@@ -197,7 +245,10 @@ final class TestQualita {
   }
 
   static String markdown(final JsonObject r) {
-    final StringBuilder md = new StringBuilder("# Test di qualita' dello stratega LLM\n\n");
+    final StringBuilder md =
+        new StringBuilder("# Test di qualita' dello stratega LLM (")
+            .append(r.has("livello") ? r.get("livello").getAsString() : "stratega")
+            .append(")\n\n");
     md.append(r.get("sintesi").getAsString()).append(".\n\n");
     md.append("- Prompt: ")
         .append(r.get("prompt").getAsString())

@@ -34,6 +34,13 @@ import javax.annotation.Nullable;
 public final class Direttive {
   public static final int VERSIONE = 1;
 
+  /**
+   * Schema v1.1 (compatible with v1): {@code rischio} may hold, next to the offsets per front of
+   * the whole alliance, an object per NATION {front: offset}; a nation without its own value for a
+   * front uses the alliance's.
+   */
+  public static final double VERSIONE_1_1 = 1.1;
+
   /** Operation decision: the operation runs (the default). */
   public static final String LANCIA = "lancia";
 
@@ -101,6 +108,7 @@ public final class Direttive {
   private final String piano;
   private final String postura;
   private final Map<String, Integer> rischio;
+  private final Map<String, Map<String, Integer>> rischioNazioni;
   private final List<Operazione> operazioni;
   private final List<Bersaglio> bersagli;
   private final JsonObject tattiche;
@@ -117,12 +125,26 @@ public final class Direttive {
     this.piano = string(json, "piano", "");
     this.postura = string(json, "postura", Contromosse.OFFENSIVA);
     final Map<String, Integer> risk = new LinkedHashMap<>();
+    final Map<String, Map<String, Integer>> byNation = new LinkedHashMap<>();
     if (json.has("rischio") && json.get("rischio").isJsonObject()) {
       json.getAsJsonObject("rischio")
           .entrySet()
-          .forEach(e -> risk.put(e.getKey(), e.getValue().getAsInt()));
+          .forEach(
+              e -> {
+                if (e.getValue().isJsonObject()) {
+                  final Map<String, Integer> fronts = new LinkedHashMap<>();
+                  e.getValue()
+                      .getAsJsonObject()
+                      .entrySet()
+                      .forEach(f -> fronts.put(f.getKey(), f.getValue().getAsInt()));
+                  byNation.put(e.getKey(), Map.copyOf(fronts));
+                } else {
+                  risk.put(e.getKey(), e.getValue().getAsInt());
+                }
+              });
     }
     this.rischio = Map.copyOf(risk);
+    this.rischioNazioni = Map.copyOf(byNation);
     final List<Operazione> ops = new ArrayList<>();
     array(json, "operazioni")
         .forEach(
@@ -159,9 +181,23 @@ public final class Direttive {
     return postura;
   }
 
-  /** Risk offset of {@code front} (-1..+1, 0 if absent). */
+  /** Risk offset of {@code front} for the whole alliance (-1..+1, 0 if absent). */
   public int rischio(final String front) {
     return rischio.getOrDefault(front, 0);
+  }
+
+  /**
+   * Schema v1.1: risk offset of {@code front} for {@code nation}: its own value if the directives
+   * give one, else the alliance's ({@link #rischio(String)}).
+   */
+  public int rischio(final String nation, final String front) {
+    final Map<String, Integer> own = rischioNazioni.get(nation);
+    return own != null && own.containsKey(front) ? own.get(front) : rischio(front);
+  }
+
+  /** Schema v1.1: the nations with risk offsets of their own. */
+  public Map<String, Map<String, Integer>> rischioNazioni() {
+    return rischioNazioni;
   }
 
   /** The decision on the operation named {@code id} ({@link #LANCIA} with no loss if absent). */
@@ -307,8 +343,11 @@ public final class Direttive {
       final Decisore.Contesto ctx,
       final JsonObject regole,
       final List<String> notes) {
-    if (raw.has("versione") && raw.get("versione").getAsInt() != VERSIONE) {
-      return Optional.of("versione " + raw.get("versione") + " invece di " + VERSIONE);
+    if (raw.has("versione")
+        && raw.get("versione").getAsDouble() != VERSIONE
+        && raw.get("versione").getAsDouble() != VERSIONE_1_1) {
+      return Optional.of(
+          "versione " + raw.get("versione") + " invece di " + VERSIONE + " o " + VERSIONE_1_1);
     }
     final String planId = raw.has("piano") ? raw.get("piano").getAsString() : ctx.piano().id();
     final Optional<Strategia.Piano> plan =
@@ -386,7 +425,16 @@ public final class Direttive {
       posture = Contromosse.NESSUNA;
     }
     out.addProperty("postura", posture);
-    out.add("rischio", risk(pick(raw, base, "rischio").getAsJsonObject(), ctx.strategia(), notes));
+    final JsonObject risk =
+        risk(
+            pick(raw, base, "rischio").getAsJsonObject(),
+            ctx.strategia(),
+            allianceNations(data, ctx.alleanza()),
+            notes);
+    if (risk.entrySet().stream().anyMatch(e -> e.getValue().isJsonObject())) {
+      out.addProperty("versione", VERSIONE_1_1);
+    }
+    out.add("rischio", risk);
     out.add(
         "operazioni",
         operations(pick(raw, base, "operazioni").getAsJsonArray(), plan, ctx.round(), notes));
@@ -416,30 +464,74 @@ public final class Direttive {
     };
   }
 
+  /**
+   * Offsets per front (v1) and, schema v1.1, per nation and front: limited to the data file's
+   * amplitude and to the guard rail of +-1; unknown fronts and nations ignored.
+   */
   private static JsonObject risk(
-      final JsonObject in, final Strategia strategia, final List<String> notes) {
+      final JsonObject in,
+      final Strategia strategia,
+      final Set<String> nations,
+      final List<String> notes) {
+    final int max = Math.max(0, Math.min(1, strategia.getParametri().ampiezzaRischio()));
     final JsonObject out = new JsonObject();
     for (final String front : strategia.getFronti()) {
-      if (!in.has(front)) {
-        out.addProperty(front, 0);
-        continue;
-      }
-      final double v = in.get(front).getAsDouble();
-      final int limited = (int) Math.max(-1, Math.min(1, Math.round(v)));
-      if (limited != v) {
-        notes.add(
-            String.format(Locale.ROOT, "rischio %s %s limitato a %+d", front, fmt(v), limited));
-      }
-      out.addProperty(front, limited);
+      out.addProperty(
+          front,
+          in.has(front) && in.get(front).isJsonPrimitive()
+              ? limitRisk(in.get(front).getAsDouble(), max, front, notes)
+              : 0);
     }
-    in.keySet().stream()
-        .filter(f -> !strategia.getFronti().contains(f))
-        .forEach(f -> notes.add("rischio: fronte sconosciuto " + f + " ignorato"));
+    for (final Map.Entry<String, JsonElement> e : in.entrySet()) {
+      if (e.getValue().isJsonObject()) {
+        if (!nations.contains(e.getKey())) {
+          notes.add("rischio: nazione " + e.getKey() + " non dell'alleanza ignorata");
+          continue;
+        }
+        final JsonObject fronts = new JsonObject();
+        for (final Map.Entry<String, JsonElement> f : e.getValue().getAsJsonObject().entrySet()) {
+          if (!strategia.getFronti().contains(f.getKey())) {
+            notes.add("rischio " + e.getKey() + ": fronte sconosciuto " + f.getKey() + " ignorato");
+            continue;
+          }
+          fronts.addProperty(
+              f.getKey(),
+              limitRisk(f.getValue().getAsDouble(), max, e.getKey() + " " + f.getKey(), notes));
+        }
+        out.add(e.getKey(), fronts);
+      } else if (!strategia.getFronti().contains(e.getKey())) {
+        notes.add("rischio: fronte sconosciuto " + e.getKey() + " ignorato");
+      }
+    }
     return out;
+  }
+
+  private static int limitRisk(
+      final double v, final int max, final String what, final List<String> notes) {
+    final int limited = (int) Math.max(-max, Math.min(max, Math.round(v)));
+    if (limited != v) {
+      notes.add(String.format(Locale.ROOT, "rischio %s %s limitato a %+d", what, fmt(v), limited));
+    }
+    return limited;
   }
 
   private static JsonArray operations(
       final JsonArray in, final Strategia.Piano plan, final int round, final List<String> notes) {
+    return operations(in, plan, round, notes, Operations.FILL_MISSING);
+  }
+
+  /** Whether the operations of the round not named are added as "lancia". */
+  private enum Operations {
+    FILL_MISSING,
+    ONLY_NAMED
+  }
+
+  private static JsonArray operations(
+      final JsonArray in,
+      final Strategia.Piano plan,
+      final int round,
+      final List<String> notes,
+      final Operations mode) {
     final Map<String, JsonObject> byId = new LinkedHashMap<>();
     for (final JsonElement e : in) {
       final JsonObject o = e.getAsJsonObject();
@@ -473,6 +565,7 @@ public final class Direttive {
     }
     // operations of the plan in this round not named: launched with no loss accepted
     plan.operazioni().stream()
+        .filter(op -> mode == Operations.FILL_MISSING)
         .filter(op -> op.covers(round) && !byId.containsKey(op.nome()))
         .forEach(
             op -> {
@@ -586,7 +679,16 @@ public final class Direttive {
 
   private static JsonArray tools(
       final JsonArray in, final Decisore.Contesto ctx, final List<String> notes) {
-    final Set<String> nations = allianceNations(ctx.data(), ctx.alleanza());
+    return tools(in, ctx.data(), ctx.strategia(), ctx.alleanza(), notes);
+  }
+
+  private static JsonArray tools(
+      final JsonArray in,
+      final GameState data,
+      final Strategia strategia,
+      final String alliance,
+      final List<String> notes) {
+    final Set<String> nations = allianceNations(data, alliance);
     final JsonArray out = new JsonArray();
     for (final JsonElement e : in) {
       final JsonObject o = e.getAsJsonObject();
@@ -605,7 +707,7 @@ public final class Direttive {
       t.addProperty("nazione", nation);
       String front = o.has("fronte") ? o.get("fronte").getAsString() : null;
       if (front == null && o.has("zona")) {
-        final Territory zone = ctx.data().getMap().getTerritoryOrNull(o.get("zona").getAsString());
+        final Territory zone = data.getMap().getTerritoryOrNull(o.get("zona").getAsString());
         if (zone == null) {
           notes.add(
               "strumento "
@@ -615,11 +717,11 @@ public final class Direttive {
                   + " ignorata");
           continue;
         }
-        front = ctx.strategia().fronteOf(zone);
+        front = strategia.fronteOf(zone);
         t.addProperty("zona", zone.getName());
       }
       if (front != null) {
-        if (!ctx.strategia().getFronti().contains(front)) {
+        if (!strategia.getFronti().contains(front)) {
           notes.add("strumento " + tool + ": fronte sconosciuto " + front + " ignorato");
           continue;
         }
@@ -642,6 +744,196 @@ public final class Direttive {
     }
     out.addProperty("probabilita", limited);
     return out;
+  }
+
+  // ------------------------------------------------------------------------------- turn orders
+
+  /** The fields the turn orders of a nation may set; anything else in them is ignored. */
+  public static final List<String> CAMPI_ORDINI =
+      List.of("bersagli", "operazioni", "tattiche", "motivazione");
+
+  /**
+   * LLM step, turn orders (schema ordini-turno-v1): the directives {@code nation} plays its turn
+   * with = the strategic directives of the round with, for {@code nation} only, the targets, the
+   * operation decisions and the delay tools of {@code orders}. Plan, posture, risk, enemy reading
+   * and roles stay the strategic ones (in {@code orders} they are ignored, with a notice). Ranges and
+   * guard rails as for the directives (weight 0-20, accepted loss 0-30 per operation and in total,
+   * unknown names ignored); operations that are not the nation's are ignored.
+   *
+   * @param notes what was limited or ignored (Italian)
+   * @return {"ordini": the checked orders, "direttive": the merged directives}
+   */
+  public static JsonObject applicaOrdini(
+      final JsonObject strategic,
+      final JsonObject orders,
+      final GameState data,
+      final Strategia strategia,
+      final Strategia.Piano plan,
+      final String alliance,
+      final String nation,
+      final int round,
+      final List<String> notes) {
+    orders.keySet().stream()
+        .filter(k -> !CAMPI_ORDINI.contains(k))
+        .filter(k -> !List.of("versione", "nazione", "round", "alleanza").contains(k))
+        .forEach(k -> notes.add("ordini del turno: campo " + k + " ignorato (solo lo stratega)"));
+    final JsonObject checked = new JsonObject();
+    // targets: always for this nation
+    final JsonArray rawTargets = new JsonArray();
+    array(orders, "bersagli")
+        .forEach(
+            e -> {
+              final JsonObject t = e.getAsJsonObject().deepCopy();
+              final JsonArray only = new JsonArray();
+              only.add(nation);
+              t.add("nazioni", only);
+              rawTargets.add(t);
+            });
+    final JsonArray targets = targets(rawTargets, data, alliance, notes);
+    checked.add("bersagli", targets);
+    // operations: only those where the nation lands or carries
+    final JsonArray rawOps = new JsonArray();
+    for (final JsonElement e : array(orders, "operazioni")) {
+      final String id = string(e.getAsJsonObject(), "id", "");
+      final boolean mine =
+          plan.operazioni().stream()
+              .anyMatch(
+                  o ->
+                      o.nome().equals(id)
+                          && (o.nazioni().contains(nation) || o.vettori().contains(nation)));
+      if (mine) {
+        rawOps.add(e);
+      } else {
+        notes.add("ordini del turno: operazione " + id + " non di " + nation + " ignorata");
+      }
+    }
+    final JsonArray ops = operations(rawOps, plan, round, notes, Operations.ONLY_NAMED);
+    checked.add("operazioni", ops);
+    // delay tools: always for this nation
+    final JsonArray rawTools = new JsonArray();
+    array(orders, "tattiche")
+        .forEach(
+            e -> {
+              final JsonObject t = e.getAsJsonObject().deepCopy();
+              if (t.has("nazione") && !nation.equals(t.get("nazione").getAsString())) {
+                notes.add(
+                    "ordini del turno: strumento per "
+                        + t.get("nazione").getAsString()
+                        + " assegnato a "
+                        + nation);
+              }
+              t.addProperty("nazione", nation);
+              if (t.has("fronte") && t.get("fronte").getAsString().isBlank()) {
+                t.remove("fronte");
+              }
+              rawTools.add(t);
+            });
+    final JsonArray tools = tools(rawTools, data, strategia, alliance, notes);
+    checked.add("tattiche", tools);
+    checked.addProperty("motivazione", motivation(string(orders, "motivazione", ""), notes));
+
+    final JsonObject merged = strategic.deepCopy();
+    final Set<String> others = new LinkedHashSet<>(allianceNations(data, alliance));
+    others.remove(nation);
+    final Set<String> ordered = new LinkedHashSet<>();
+    targets.forEach(
+        t -> {
+          if (t.getAsJsonObject().has("territorio")) {
+            ordered.add(t.getAsJsonObject().get("territorio").getAsString());
+          }
+        });
+    final JsonArray mergedTargets = new JsonArray();
+    for (final JsonElement e : array(strategic, "bersagli")) {
+      final JsonObject t = e.getAsJsonObject().deepCopy();
+      final String name = t.has("territorio") ? t.get("territorio").getAsString() : null;
+      if (name != null && ordered.contains(name)) {
+        // the nation's own order replaces the strategic target for it; the others keep it
+        final Set<String> keep = new LinkedHashSet<>();
+        if (t.has("nazioni")) {
+          array(t, "nazioni").forEach(n -> keep.add(n.getAsString()));
+          keep.remove(nation);
+        } else {
+          keep.addAll(others);
+        }
+        if (keep.isEmpty()) {
+          continue;
+        }
+        final JsonArray list = new JsonArray();
+        keep.forEach(list::add);
+        t.add("nazioni", list);
+      }
+      mergedTargets.add(t);
+    }
+    targets.forEach(mergedTargets::add);
+    merged.add("bersagli", mergedTargets);
+    final JsonArray mergedOps = new JsonArray();
+    final Set<String> orderedOps = new LinkedHashSet<>();
+    ops.forEach(o -> orderedOps.add(o.getAsJsonObject().get("id").getAsString()));
+    array(strategic, "operazioni")
+        .forEach(
+            o -> {
+              if (!orderedOps.contains(o.getAsJsonObject().get("id").getAsString())) {
+                mergedOps.add(o);
+              }
+            });
+    ops.forEach(mergedOps::add);
+    merged.add("operazioni", mergedOps);
+    if (orders.has("tattiche")) {
+      final JsonArray mergedTools = new JsonArray();
+      array(strategic, "tattiche")
+          .forEach(
+              t -> {
+                if (!nation.equals(string(t.getAsJsonObject(), "nazione", ""))) {
+                  mergedTools.add(t);
+                }
+              });
+      tools.forEach(mergedTools::add);
+      merged.add("tattiche", mergedTools);
+    }
+    final JsonObject out = new JsonObject();
+    out.add("ordini", checked);
+    out.add("direttive", merged);
+    return out;
+  }
+
+  /** Eg "Ordini: bersagli Normandy Bordeaux (15), operazioni Overlord UK lancia, tattiche nessuna". */
+  public static String testoOrdini(final JsonObject orders) {
+    final List<String> targets = new ArrayList<>();
+    array(orders, "bersagli")
+        .forEach(
+            t -> {
+              final JsonObject o = t.getAsJsonObject();
+              targets.add(
+                  string(o, "territorio", string(o, "flotta", "?"))
+                      + " ("
+                      + fmt(number(o, "peso", 0))
+                      + ")");
+            });
+    final List<String> ops = new ArrayList<>();
+    array(orders, "operazioni")
+        .forEach(
+            o -> {
+              final JsonObject x = o.getAsJsonObject();
+              final double loss = number(x, "perdita_trasporti_accettata_max_TUV", 0);
+              ops.add(
+                  string(x, "id", "?")
+                      + " "
+                      + string(x, "decisione", LANCIA)
+                      + (loss > 0 ? " (perdita max " + fmt(loss) + ")" : ""));
+            });
+    final List<String> tools = new ArrayList<>();
+    array(orders, "tattiche")
+        .forEach(
+            t -> {
+              final JsonObject x = t.getAsJsonObject();
+              tools.add(string(x, "strumento", "?") + (x.has("fronte") ? " " + x.get("fronte").getAsString() : ""));
+            });
+    return "bersagli "
+        + (targets.isEmpty() ? "nessuno" : String.join(", ", targets))
+        + "; operazioni "
+        + (ops.isEmpty() ? "come lo stratega" : String.join(", ", ops))
+        + "; tattiche "
+        + (tools.isEmpty() ? "nessuna" : String.join(", ", tools));
   }
 
   /** At most {@link #FRASI_MAX} sentences. */
@@ -695,6 +987,9 @@ public final class Direttive {
             risk.add(f + " " + (v > 0 ? "+" : "") + v);
           }
         });
+    dir.rischioNazioni.forEach(
+        (n, fronts) ->
+            fronts.forEach((f, v) -> risk.add(n + "/" + f + " " + (v > 0 ? "+" : "") + v)));
     sb.append(", rischio ").append(risk.isEmpty() ? "base" : String.join(" ", risk));
     final List<String> ops = new ArrayList<>();
     dir.operazioni.forEach(

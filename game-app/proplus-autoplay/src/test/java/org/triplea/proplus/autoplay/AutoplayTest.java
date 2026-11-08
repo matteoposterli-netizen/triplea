@@ -328,6 +328,82 @@ class AutoplayTest {
   }
 
   @Test
+  void turnOrdersAndMeanRiskPerNationAreSummarized(
+      @org.junit.jupiter.api.io.TempDir final java.nio.file.Path diary) throws Exception {
+    java.nio.file.Files.writeString(
+        diary.resolve("decisioni.jsonl"),
+"""
+{"evento":"stato_maggiore_round","alleanza":"Allies","round":1,"piano":"1","rischio_effettivo":{"British":{"Ovest":4,"Est":3},"Russians":{"Ovest":3,"Est":2}},"decisore":{"nome":"llm","fonte":"Haiku","ripiego":false,"avvisi":[]},"direttive":{"postura":"OFFENSIVA","tattiche":[]}}
+{"evento":"ordini_turno","alleanza":"Allies","nazione":"British","round":1,"chiamato":true,"ordini":{"ordini":{"bersagli":[{"territorio":"Normandy Bordeaux"}],"operazioni":[{"id":"Overlord UK","decisione":"lancia"}],"tattiche":[{"strumento":"blocco_navale","attiva":true}]},"decisore":{"fonte":"Haiku","ripiego":false}},"uso":{"chiamate":2,"costo_usd":0.003,"per_livello":{"stratega":{"chiamate":1,"costo_usd":0.002},"ordini":{"chiamate":1,"costo_usd":0.001}}}}
+{"evento":"ordini_turno","alleanza":"Allies","nazione":"Russians","round":1,"chiamato":true,"ordini":{"decisore":{"fonte":"regole","ripiego":true,"avvisi":["ordini del turno non disponibili (timeout): valgono le direttive dello stratega"]}}}
+{"evento":"ordini_turno","alleanza":"Axis","nazione":"Germans","round":1,"chiamato":false}
+""");
+
+    final JsonObject s = Riepilogo.strategist(diary);
+
+    final JsonObject allies = s.getAsJsonObject("Allies");
+    assertThat(allies.get("decisioni").getAsInt()).isEqualTo(1);
+    final JsonObject orders = allies.getAsJsonObject("ordini_turno");
+    assertThat(orders.get("chiamate").getAsInt()).isEqualTo(2);
+    assertThat(orders.get("ripieghi").getAsInt()).isEqualTo(1);
+    assertThat(orders.getAsJsonObject("operazioni").get("lancia").getAsInt()).isEqualTo(1);
+    assertThat(orders.getAsJsonObject("strumenti_accesi").get("blocco_navale").getAsInt())
+        .isEqualTo(1);
+    assertThat(allies.getAsJsonObject("rischio_medio").get("British").getAsDouble()).isEqualTo(3.5);
+    assertThat(allies.getAsJsonObject("rischio_medio").get("Russians").getAsDouble()).isEqualTo(2.5);
+    assertThat(s.has("Axis")).isTrue();
+
+    final JsonObject game = JsonParser.parseString(SAMPLE).getAsJsonObject();
+    final JsonObject deciders = new JsonObject();
+    deciders.addProperty("Allies", "llm");
+    game.getAsJsonObject("parametri").add("decisori", deciders);
+    game.add("stratega", s);
+    assertThat(Riepilogo.markdown(game))
+        .contains("ordini del turno 2 (ripieghi 1)")
+        .contains("- Rischio effettivo medio per nazione (1-5, tutti i round e fronti): British 3.5, Russians 2.5");
+    assertThat(RiepilogoGenerale.markdown("T", List.of(new RiepilogoGenerale.Game("8-LLM", game))))
+        .contains("| 1 / $0.0020 | 1 / $0.0010 (ripieghi 1) |")
+        .contains("Stratega 1 chiamate $0.0020 ($0.0020 per partita), Ordini del turno 1 chiamate")
+        .contains("## Rischio effettivo medio per nazione")
+        .contains("| 8-LLM | 3.5 | 2.5 |");
+  }
+
+  @Test
+  void theQualityTestOfTurnOrders(@org.junit.jupiter.api.io.TempDir final java.nio.file.Path dir)
+      throws Exception {
+    java.nio.file.Files.writeString(
+        dir.resolve("ordini-ingresso-R3-British.json"),
+        "{\"nazione\": \"British\", \"round\": 3, \"fronti\": [\"Ovest\"],"
+            + " \"operazioni\": [{\"id\": \"Overlord UK\"}]}");
+    java.nio.file.Files.writeString(
+        dir.resolve("ordini-ingresso-R4-British.json"),
+        "{\"nazione\": \"British\", \"round\": 4, \"fronti\": [\"Ovest\"], \"operazioni\": []}");
+    final List<games.strategy.triplea.ai.proplus.strategia.llm.Richiesta> asked =
+        new java.util.ArrayList<>();
+
+    final JsonObject r =
+        TestQualita.valuta(
+            TestQualita.orderInputs(dir),
+            games.strategy.triplea.ai.proplus.strategia.llm.Fornitore.ANTHROPIC,
+            2,
+            req -> {
+              asked.add(req);
+              return new games.strategy.triplea.ai.proplus.strategia.llm.Risposta(
+                  "{\"bersagli\": [], \"operazioni\": [{\"id\": \"Overlord UK\", \"decisione\":"
+                      + " \"lancia\"}], \"tattiche\": [], \"motivazione\": \"Vado.\"}",
+                  "Haiku", "claude-haiku-5-5", 500, 100, 2000, 0, 0.0004, false, 1500);
+            },
+            TestQualita.ORDINI);
+
+    assertThat(asked.get(0).sistema()).contains("ufficiale operativo");
+    assertThat(r.get("livello").getAsString()).isEqualTo("ordini del turno");
+    assertThat(r.get("json_validi_primo_colpo").getAsInt()).isEqualTo(2);
+    // R4: Overlord UK is not an operation of the input
+    assertThat(r.get("direttive_limitate_dai_paletti").getAsInt()).isEqualTo(1);
+    assertThat(TestQualita.markdown(r)).contains("(ordini del turno)").contains("Ordini del turno, Haiku");
+  }
+
+  @Test
   void theQualityTestCountsValidJsonLimitsLatencyAndCost(
       @org.junit.jupiter.api.io.TempDir final java.nio.file.Path dir) throws Exception {
     final java.nio.file.Path example =

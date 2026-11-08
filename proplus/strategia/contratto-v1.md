@@ -85,7 +85,7 @@ Estratto reale (`esempi/stato-R2-Allies.json`):
 | `versione` | 1 | altra versione ⇒ non valide |
 | `piano` | id di un piano dell'alleanza | diverso dal piano in vigore solo se ammesso (subentro + paletti), altrimenti non valide |
 | `postura` | OFFENSIVA, RALLENTAMENTO, CONTRASTO, DIFENSIVA, NESSUNA | DIFENSIVA = rischio −1 su tutti i fronti e quota del piano 0 negli acquisti (come oggi); piano senza contromosse (N) ⇒ NESSUNA |
-| `rischio` | {fronte: −1..+1} | scostamento dal livello base (cursore) per fronte; le regole scrivono il modificatore della fase |
+| `rischio` | {fronte: −1..+1} e, schema **v1.1**, {nazione: {fronte: −1..+1}} | scostamento dal livello base (cursore) per fronte, per tutta l'alleanza; in v1.1 anche per nazione (prevale per quella nazione e quel fronte). Ampiezza massima `stato_maggiore.ampiezza_rischio` del file dati (1), mai oltre ±1. Le regole scrivono il modificatore della fase (v1, invariato). `versione` 1.1 quando c'e' almeno una nazione |
 | `operazioni` | [{`id`, `decisione`: lancia/attendi/annulla, `perdita_trasporti_accettata_max_TUV`}] | lancia = come oggi; attendi = raccolta e trasporto si', nessuno sbarco sui suoi bersagli e bersagli non obiettivi nel round; annulla = operazione spenta nel round (le unita' tornano a Hard). Perdita accettata > 0: uno sbarco sul bersaglio scartato dalla regola dei trasporti esposti si fa se la perdita attesa e' entro il tetto. Operazioni non elencate = lancia, 0 |
 | `bersagli` | [{`territorio` (terra o zona di mare) o `flotta` (nazione), `peso` 0-20, `nazioni`?, `critico`?, `origine`?}] | obiettivi con bonus di priorita'. `origine: "contromossa"` = contro-obiettivo (non conta nel valore strategico degli sbarchi); altrimenti obiettivo del piano |
 | `tattiche` | [{`strumento`, `nazione`, `fronte` o `zona`, `attiva`}] | accende gli strumenti di ritardo (blocco_terrestre, ritirata_combattuta, blocco_navale, caccia_trasporti); senza fronte = tutti; `zona` = il suo fronte |
@@ -147,3 +147,21 @@ Esempio di file scritto a mano (`esempi/direttive-file-R1-Allies.json`, provato 
 - Autoplay: `contratto` nel `riepilogo.json` (file di stato, caratteri medi/max, token stimati, ripieghi,
   direttive con tattiche), riga nel `riepilogo.md`, sezione "Contratto strategico" nel
   `riepilogo-generale.md`; nello zip i JSON di stato e direttive solo delle partite seme 1.
+
+## Schema v1.1 e ordini del turno (step INTEGRAZIONE LLM, livello 2)
+
+- **v1.1** = v1 + rischio per nazione: `"rischio": {"Ovest": 0, "Germans": {"Est": 1, "Ovest": -1}, "Italians":
+  {"Mediterraneo-Africa": -1}}`. Una nazione senza valore proprio per un fronte usa quello dell'alleanza. Accettata
+  `versione` 1 o 1.1. Diario: "Rischio effettivo per nazione e fronte (base N ...): Germans Ovest 4, Est 2 | ...";
+  storico: `rischio_effettivo` {nazione: {fronte: livello 1-5}}.
+- **Ordini del turno** (schema `ordini-turno-v1`, solo con lo stratega LLM): all'inizio del turno di ogni nazione Pro+
+  con PU > 0 (escluse le nazioni di `stato_maggiore.nazioni_senza_ordini`: Europe 1940 `French`). Ingresso
+  (`ordini-ingresso-R<N>-<nazione>.json` nel diario, scritto anche con le regole): `direttive` del round viste dalla
+  nazione, `cambiamenti` dall'ultima decisione dell'alleanza (battaglie nuove, conquiste, stack/flotte nemiche con TUV
+  cambiato >= 10, unita' alleate arrivate >= 6 TUV, rapporti delle operazioni), `muovono_dopo`, PU, reddito, stack,
+  flotte, bersagli vicini, minacce, operazioni della nazione. Uscita: `{bersagli, operazioni, tattiche, motivazione}`
+  (piano/postura/rischio ignorati con avviso). Fusione (`Direttive.applicaOrdini`): bersagli della nazione aggiunti
+  (sostituiscono per lei quelli dello stratega sugli stessi territori), decisioni delle sole operazioni della nazione,
+  `tattiche` (se presenti) sostituiscono quelle della nazione; stessi limiti e paletti. Salvati nella voce dello storico
+  `ordini_turno.<nazione>` {ordini, direttive (fuse), decisore}; `PianoAttivo` della nazione legge le direttive fuse.
+  Errore ⇒ la nazione gioca le direttive dello stratega (avviso nel diario).

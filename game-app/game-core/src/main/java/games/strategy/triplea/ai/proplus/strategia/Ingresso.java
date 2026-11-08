@@ -64,6 +64,7 @@ public final class Ingresso {
 
   /** The strategic state of the alliance of {@code ctx} (input JSON v1). */
   public static JsonObject of(final Decisore.Contesto ctx) {
+    CALC.set(new TuvCostsCalculator());
     final GameState data = ctx.data();
     final String alliance = ctx.alleanza();
     final Strategia strategia = ctx.strategia();
@@ -408,11 +409,19 @@ public final class Ingresso {
 
   private static JsonArray operations(
       final Decisore.Contesto ctx, final Map<String, String> allianceOf) {
-    final GameState data = ctx.data();
-    final JsonObject reports = reports(data.getProperties(), ctx.alleanza());
+    return operations(ctx.data(), ctx.alleanza(), ctx.piano(), ctx.round(), allianceOf);
+  }
+
+  private static JsonArray operations(
+      final GameState data,
+      final String alliance,
+      final Strategia.Piano piano,
+      final int round,
+      final Map<String, String> allianceOf) {
+    final JsonObject reports = reports(data.getProperties(), alliance);
     final JsonArray out = new JsonArray();
-    for (final Strategia.Operazione op : ctx.piano().operazioni()) {
-      if (!op.covers(ctx.round())) {
+    for (final Strategia.Operazione op : piano.operazioni()) {
+      if (!op.covers(round)) {
         continue;
       }
       final Set<String> nations = new LinkedHashSet<>(op.nazioni());
@@ -458,7 +467,7 @@ public final class Ingresso {
             z.getMatches(
                 Matches.unitIsSea()
                     .and(Matches.unitIsSeaTransport().negate())
-                    .and(u -> ctx.alleanza().equals(allianceOf.get(u.getOwner().getName()))));
+                    .and(u -> alliance.equals(allianceOf.get(u.getOwner().getName()))));
         escort += warships.size();
         if (!ts.isEmpty()) {
           fleetTuv += tuvOf(ts) + tuvOf(warships);
@@ -752,16 +761,477 @@ public final class Ingresso {
     return o;
   }
 
+  // -------------------------------------------------------------------------- turn orders
+
+  /** Game property of the snapshot taken at the alliance's last decision. */
+  static final String SNAPSHOT_PREFIX = "Pro+ istantanea: ";
+
+  /** Enemy TUV change in a territory that counts as a moved stack or fleet. */
+  static final double DELTA_NEMICO = 10;
+
+  /** Allied (other nations) land TUV increase in a territory that counts as a reinforcement. */
+  static final double DELTA_ALLEATO = 6;
+
+  /**
+   * LLM step: the input of the turn orders of {@code nation} (schema ordini-turno-v1): the
+   * strategic directives of the round seen by the nation, what changed since the alliance's last
+   * decision (battles, conquests, enemy stacks and fleets moved, allied units arrived, operation
+   * reports) and a compact state of the nation alone. Reads the game only (no dice).
+   */
+  public static JsonObject ordiniTurno(
+      final GameState data,
+      final Strategia strategia,
+      final Strategia.Piano piano,
+      final String alliance,
+      final GamePlayer nation,
+      final JsonObject directives,
+      final int round) {
+    CALC.set(new TuvCostsCalculator());
+    final Map<String, String> allianceOf = allianceOf(data);
+    final String name = nation.getName();
+    final JsonObject json = new JsonObject();
+    json.addProperty("versione", "ordini-turno-v1");
+    json.addProperty("nazione", name);
+    json.addProperty("alleanza", alliance);
+    json.addProperty("round", round);
+    json.add("muovono_dopo", movesAfter(data, name));
+    json.add("direttive", directivesFor(directives, name));
+    json.add("cambiamenti", changes(data, alliance, round, allianceOf));
+    json.addProperty("pu", nation.getResources().getQuantity(Constants.PUS));
+    json.addProperty("reddito", Math.round(ProUtils.getPlayerProduction(nation, data)));
+    json.add("stack", stacks(data, strategia, nation));
+    json.add("flotte", fleets(data, nation));
+    json.add("bersagli_vicini", nearTargets(data, nation, allianceOf, alliance));
+    final JsonArray threats = new JsonArray();
+    threats(data, alliance, allianceOf)
+        .forEach(
+            t -> {
+              if (name.equals(t.getAsJsonObject().get("di").getAsString())) {
+                threats.add(t);
+              }
+            });
+    json.add("minacce", threats);
+    final JsonArray ops = new JsonArray();
+    for (final JsonElement o : operations(data, alliance, piano, round, allianceOf)) {
+      final String id = o.getAsJsonObject().get("id").getAsString();
+      if (piano.operazioni().stream()
+          .anyMatch(
+              op ->
+                  op.nome().equals(id)
+                      && (op.nazioni().contains(name) || op.vettori().contains(name)))) {
+        ops.add(o);
+      }
+    }
+    json.add("operazioni", ops);
+    json.add("fronti", strings(strategia.getFronti()));
+    return json;
+  }
+
+  /**
+   * Saves what {@code alliance} sees now (battles recorded, owners, enemy and allied TUV per
+   * territory): the next turn orders list what changed since. Called after every decision of the
+   * alliance (strategist or turn orders).
+   */
+  public static void salvaIstantanea(final GameState data, final String alliance) {
+    CALC.set(new TuvCostsCalculator());
+    final Map<String, String> allianceOf = allianceOf(data);
+    final int round = data.getSequence().getRound();
+    final JsonObject snap = new JsonObject();
+    snap.addProperty("round", round);
+    final JsonArray battles = new JsonArray();
+    battleKeys(data, round).forEach(battles::add);
+    snap.add("battaglie", battles);
+    final JsonObject owners = new JsonObject();
+    final JsonObject enemies = new JsonObject();
+    final JsonObject allies = new JsonObject();
+    for (final Territory t : data.getMap().getTerritories()) {
+      if (!t.isWater()) {
+        owners.addProperty(t.getName(), t.getOwner().getName());
+      }
+      final double enemy = tuvWhere(t, u -> isEnemy(u, alliance, allianceOf));
+      if (enemy > 0) {
+        enemies.addProperty(t.getName(), enemy);
+      }
+      if (!t.isWater()) {
+        final JsonObject byNation = new JsonObject();
+        for (final Unit u : t.getUnits()) {
+          final String owner = u.getOwner().getName();
+          if (alliance.equals(allianceOf.get(owner))
+              && Matches.unitIsLand().and(Matches.unitIsNotInfrastructure()).test(u)) {
+            byNation.addProperty(
+                owner,
+                (byNation.has(owner) ? byNation.get(owner).getAsDouble() : 0) + tuvOf(List.of(u)));
+          }
+        }
+        if (byNation.size() > 0) {
+          allies.add(t.getName(), byNation);
+        }
+      }
+    }
+    snap.add("proprietari", owners);
+    snap.add("nemici", enemies);
+    snap.add("alleati", allies);
+    data.getProperties().set(SNAPSHOT_PREFIX + alliance, (Serializable) null);
+    data.getProperties().set(SNAPSHOT_PREFIX + alliance, snap.toString());
+  }
+
+  private static JsonObject changes(
+      final GameState data,
+      final String alliance,
+      final int round,
+      final Map<String, String> allianceOf) {
+    final JsonObject out = new JsonObject();
+    final JsonObject before =
+        data.getProperties().get(SNAPSHOT_PREFIX + alliance) instanceof String text
+            ? JsonParser.parseString(text).getAsJsonObject()
+            : null;
+    if (before == null) {
+      out.addProperty("prima_decisione", true);
+      return out;
+    }
+    // battles recorded since the snapshot
+    final Set<String> seen = new LinkedHashSet<>();
+    before.getAsJsonArray("battaglie").forEach(b -> seen.add(b.getAsString()));
+    final List<JsonObject> battles = new ArrayList<>();
+    final Map<Integer, BattleRecords> records = data.getBattleRecordsList().getBattleRecordsMap();
+    for (final int r : List.of(round - 1, round)) {
+      final BattleRecords brs = records.get(r);
+      if (brs == null) {
+        continue;
+      }
+      for (final BattleRecord b : BattleRecords.getAllRecords(brs)) {
+        final Territory site = field(b, "battleSite");
+        final GamePlayer attacker = field(b, "attacker");
+        if (site == null || attacker == null || seen.contains(key(r, site, attacker))) {
+          continue;
+        }
+        final GamePlayer defender = field(b, "defender");
+        final Object result = field(b, "battleResultDescription");
+        final Integer lostA = field(b, "attackerLostTuv");
+        final Integer lostD = field(b, "defenderLostTuv");
+        final JsonObject o = new JsonObject();
+        o.addProperty("territorio", site.getName());
+        o.addProperty("attaccante", attacker.getName());
+        o.addProperty("difensore", defender == null ? "" : defender.getName());
+        o.addProperty("tuv_perso_attaccante", lostA == null ? 0 : lostA);
+        o.addProperty("tuv_perso_difensore", lostD == null ? 0 : lostD);
+        o.addProperty("esito", result == null ? "" : result.toString().toLowerCase(Locale.ROOT));
+        battles.add(o);
+      }
+    }
+    battles.sort(
+        Comparator.comparingInt(
+            (JsonObject o) ->
+                -(o.get("tuv_perso_attaccante").getAsInt()
+                    + o.get("tuv_perso_difensore").getAsInt())));
+    final JsonArray topBattles = new JsonArray();
+    battles.stream().limit(6).forEach(topBattles::add);
+    out.add("battaglie", topBattles);
+    // ownership changes
+    final JsonObject owners = before.getAsJsonObject("proprietari");
+    final JsonArray conquests = new JsonArray();
+    for (final Territory t : data.getMap().getTerritories()) {
+      if (t.isWater() || !owners.has(t.getName())) {
+        continue;
+      }
+      final String was = owners.get(t.getName()).getAsString();
+      if (!was.equals(t.getOwner().getName()) && conquests.size() < 10) {
+        final JsonObject c = new JsonObject();
+        c.addProperty("territorio", t.getName());
+        c.addProperty("da", was);
+        c.addProperty("a", t.getOwner().getName());
+        conquests.add(c);
+      }
+    }
+    out.add("conquiste", conquests);
+    // enemy stacks and fleets that moved (TUV changed)
+    final JsonObject enemiesBefore = before.getAsJsonObject("nemici");
+    final List<JsonObject> moved = new ArrayList<>();
+    final JsonObject alliesBefore = before.getAsJsonObject("alleati");
+    final List<JsonObject> reinforced = new ArrayList<>();
+    for (final Territory t : data.getMap().getTerritories()) {
+      final double was =
+          enemiesBefore.has(t.getName()) ? enemiesBefore.get(t.getName()).getAsDouble() : 0;
+      final double now = tuvWhere(t, u -> isEnemy(u, alliance, allianceOf));
+      if (Math.abs(now - was) >= DELTA_NEMICO) {
+        final JsonObject o = new JsonObject();
+        o.addProperty("territorio", t.getName());
+        o.addProperty("mare", t.isWater());
+        o.addProperty("tuv_prima", Math.round(was));
+        o.addProperty("tuv_ora", Math.round(now));
+        moved.add(o);
+      }
+      if (t.isWater()) {
+        continue;
+      }
+      final JsonObject byNationBefore =
+          alliesBefore.has(t.getName()) ? alliesBefore.getAsJsonObject(t.getName()) : new JsonObject();
+      final Map<String, Double> byNationNow = new LinkedHashMap<>();
+      for (final Unit u : t.getUnits()) {
+        final String owner = u.getOwner().getName();
+        if (alliance.equals(allianceOf.get(owner))
+            && Matches.unitIsLand().and(Matches.unitIsNotInfrastructure()).test(u)) {
+          byNationNow.merge(owner, tuvOf(List.of(u)), Double::sum);
+        }
+      }
+      byNationNow.forEach(
+          (owner, tuvNow) -> {
+            final double tuvWas =
+                byNationBefore.has(owner) ? byNationBefore.get(owner).getAsDouble() : 0;
+            if (tuvNow - tuvWas >= DELTA_ALLEATO) {
+              final JsonObject o = new JsonObject();
+              o.addProperty("territorio", t.getName());
+              o.addProperty("nazione", owner);
+              o.addProperty("tuv_prima", Math.round(tuvWas));
+              o.addProperty("tuv_ora", Math.round(tuvNow));
+              o.addProperty("proprietario", t.getOwner().getName());
+              o.addProperty("forza_nemica", Math.round(enemyStrength(data, t)));
+              reinforced.add(o);
+            }
+          });
+    }
+    moved.sort(
+        Comparator.comparingDouble(
+            (JsonObject o) ->
+                -Math.abs(o.get("tuv_ora").getAsDouble() - o.get("tuv_prima").getAsDouble())));
+    final JsonArray movedTop = new JsonArray();
+    moved.stream().limit(8).forEach(movedTop::add);
+    out.add("nemici_spostati", movedTop);
+    reinforced.sort(
+        Comparator.comparingDouble(
+            (JsonObject o) -> -(o.get("tuv_ora").getAsDouble() - o.get("tuv_prima").getAsDouble())));
+    final JsonArray reinforcedTop = new JsonArray();
+    reinforced.stream().limit(6).forEach(reinforcedTop::add);
+    out.add("alleati_rinforzati", reinforcedTop);
+    out.add("rapporti_operazioni", reports(data.getProperties(), alliance));
+    return out;
+  }
+
+  /** The strategic directives as the nation sees them (its targets, tools, risk). */
+  private static JsonObject directivesFor(final JsonObject d, final String nation) {
+    final JsonObject out = new JsonObject();
+    for (final String k : List.of("piano", "postura", "motivazione", "lettura_nemico")) {
+      if (d.has(k)) {
+        out.add(k, d.get(k).deepCopy());
+      }
+    }
+    final Direttive dir = Direttive.of(d);
+    final JsonObject risk = new JsonObject();
+    if (d.has("rischio")) {
+      d.getAsJsonObject("rischio")
+          .entrySet()
+          .forEach(
+              e -> {
+                if (e.getValue().isJsonPrimitive()) {
+                  risk.addProperty(e.getKey(), dir.rischio(nation, e.getKey()));
+                }
+              });
+    }
+    out.add("rischio_nazione", risk);
+    final JsonArray targets = new JsonArray();
+    for (final JsonElement e : d.has("bersagli") ? d.getAsJsonArray("bersagli") : new JsonArray()) {
+      final JsonObject t = e.getAsJsonObject();
+      if (!t.has("nazioni") || t.getAsJsonArray("nazioni").toString().contains("\"" + nation + "\"")) {
+        targets.add(t);
+      }
+    }
+    out.add("bersagli", targets);
+    if (d.has("operazioni")) {
+      out.add("operazioni", d.get("operazioni").deepCopy());
+    }
+    final JsonArray tools = new JsonArray();
+    for (final JsonElement e : d.has("tattiche") ? d.getAsJsonArray("tattiche") : new JsonArray()) {
+      if (nation.equals(e.getAsJsonObject().get("nazione").getAsString())) {
+        tools.add(e);
+      }
+    }
+    out.add("tattiche", tools);
+    return out;
+  }
+
+  /** The nations that play after {@code nation} and before its next turn. */
+  private static JsonArray movesAfter(final GameState data, final String nation) {
+    final List<String> order = new ArrayList<>();
+    turnOrder(data).forEach(e -> order.add(e.getAsString()));
+    final JsonArray out = new JsonArray();
+    final int i = order.indexOf(nation);
+    if (i < 0) {
+      return out;
+    }
+    for (int k = 1; k < order.size(); k++) {
+      out.add(order.get((i + k) % order.size()));
+    }
+    return out;
+  }
+
+  /** The nation's 6 largest land stacks: territory, front, TUV, enemy strength on it. */
+  private static JsonArray stacks(
+      final GameState data, final Strategia strategia, final GamePlayer nation) {
+    final List<JsonObject> list = new ArrayList<>();
+    for (final Territory t : data.getMap().getTerritories()) {
+      if (t.isWater()) {
+        continue;
+      }
+      final double tuv =
+          tuvWhere(
+              t,
+              u ->
+                  u.getOwner().equals(nation)
+                      && Matches.unitIsNotInfrastructure().test(u)
+                      && !Matches.unitIsAir().test(u));
+      if (tuv <= 0) {
+        continue;
+      }
+      final JsonObject o = new JsonObject();
+      o.addProperty("territorio", t.getName());
+      o.addProperty("fronte", strategia.fronteOf(t));
+      o.addProperty("tuv", Math.round(tuv));
+      o.addProperty("forza_nemica", Math.round(enemyStrength(data, t)));
+      list.add(o);
+    }
+    list.sort(Comparator.comparingDouble((JsonObject o) -> -o.get("tuv").getAsDouble()));
+    final JsonArray out = new JsonArray();
+    list.stream().limit(6).forEach(out::add);
+    return out;
+  }
+
+  /** The nation's sea zones with ships: TUV, transports, loaded transports. */
+  private static JsonArray fleets(final GameState data, final GamePlayer nation) {
+    final List<JsonObject> list = new ArrayList<>();
+    for (final Territory t : data.getMap().getTerritories()) {
+      if (!t.isWater()) {
+        continue;
+      }
+      final List<Unit> ships = t.getMatches(u -> u.getOwner().equals(nation) && Matches.unitIsSea().test(u));
+      if (ships.isEmpty()) {
+        continue;
+      }
+      final List<Unit> transports = ships.stream().filter(Matches.unitIsSeaTransport()).toList();
+      final JsonObject o = new JsonObject();
+      o.addProperty("zona", t.getName());
+      o.addProperty("tuv", Math.round(tuvOf(ships)));
+      o.addProperty("trasporti", transports.size());
+      o.addProperty(
+          "trasporti_carichi", transports.stream().filter(u -> !u.getTransporting().isEmpty()).count());
+      o.addProperty("forza_nemica", Math.round(enemyStrength(data, t)));
+      list.add(o);
+    }
+    list.sort(Comparator.comparingDouble((JsonObject o) -> -o.get("tuv").getAsDouble()));
+    final JsonArray out = new JsonArray();
+    list.stream().limit(6).forEach(out::add);
+    return out;
+  }
+
+  /**
+   * Enemy land territories next to the nation's land units, best first (production and VC,
+   * against the defending TUV): territory, owner, production, VC, defending TUV.
+   */
+  private static JsonArray nearTargets(
+      final GameState data,
+      final GamePlayer nation,
+      final Map<String, String> allianceOf,
+      final String alliance) {
+    final Map<String, JsonObject> found = new LinkedHashMap<>();
+    for (final Territory t : data.getMap().getTerritories()) {
+      if (t.isWater()
+          || !t.anyUnitsMatch(u -> u.getOwner().equals(nation) && Matches.unitIsLand().test(u))) {
+        continue;
+      }
+      for (final Territory n : data.getMap().getNeighbors(t)) {
+        final String owner = n.getOwner().getName();
+        if (n.isWater()
+            || found.containsKey(n.getName())
+            || n.getOwner().isNull()
+            || alliance.equals(allianceOf.get(owner))
+            || !data.getRelationshipTracker().isAtWar(nation, n.getOwner())) {
+          continue;
+        }
+        final JsonObject o = new JsonObject();
+        o.addProperty("territorio", n.getName());
+        o.addProperty("proprietario", owner);
+        o.addProperty(
+            "produzione",
+            TerritoryAttachment.get(n).map(TerritoryAttachment::getProduction).orElse(0));
+        o.addProperty("vc", vc(n));
+        o.addProperty(
+            "tuv_difesa",
+            Math.round(tuvWhere(n, u -> data.getRelationshipTracker().isAtWar(nation, u.getOwner()))));
+        found.put(n.getName(), o);
+      }
+    }
+    final List<JsonObject> list = new ArrayList<>(found.values());
+    list.sort(
+        Comparator.comparingDouble(
+            (JsonObject o) ->
+                -(o.get("produzione").getAsDouble() * 3
+                    + o.get("vc").getAsDouble() * 10
+                    - o.get("tuv_difesa").getAsDouble() / 3)));
+    final JsonArray out = new JsonArray();
+    list.stream().limit(8).forEach(out::add);
+    return out;
+  }
+
+  private static Set<String> battleKeys(final GameState data, final int round) {
+    final Set<String> keys = new LinkedHashSet<>();
+    final Map<Integer, BattleRecords> records = data.getBattleRecordsList().getBattleRecordsMap();
+    for (final int r : List.of(round - 1, round)) {
+      final BattleRecords brs = records.get(r);
+      if (brs == null) {
+        continue;
+      }
+      for (final BattleRecord b : BattleRecords.getAllRecords(brs)) {
+        final Territory site = field(b, "battleSite");
+        final GamePlayer attacker = field(b, "attacker");
+        if (site != null && attacker != null) {
+          keys.add(key(r, site, attacker));
+        }
+      }
+    }
+    return keys;
+  }
+
+  private static String key(final int round, final Territory site, final GamePlayer attacker) {
+    return round + "|" + site.getName() + "|" + attacker.getName();
+  }
+
+  private static boolean isEnemy(
+      final Unit u, final String alliance, final Map<String, String> allianceOf) {
+    final String other = allianceOf.get(u.getOwner().getName());
+    return other != null && !other.equals(alliance) && Matches.unitIsNotInfrastructure().test(u);
+  }
+
+  private static double tuvWhere(final Territory t, final Predicate<Unit> filter) {
+    return tuvOf(t.getMatches(filter::test));
+  }
+
+  private static Map<String, String> allianceOf(final GameState data) {
+    final Map<String, String> allianceOf = new HashMap<>();
+    ProPlusSettings.configurableAlliances(data)
+        .forEach(
+            a ->
+                data.getAllianceTracker()
+                    .getPlayersInAlliance(a)
+                    .forEach(p -> allianceOf.put(p.getName(), a)));
+    return allianceOf;
+  }
+
   // ------------------------------------------------------------------------------- helpers
 
   private static int vc(final Territory t) {
     return TerritoryAttachment.get(t).map(TerritoryAttachment::getVictoryCity).orElse(0);
   }
 
+  /**
+   * One calculator per input built (its costs are cached per player; a new one at each public
+   * entry point, so a change of production rules between two inputs is seen).
+   */
+  private static final ThreadLocal<TuvCostsCalculator> CALC =
+      ThreadLocal.withInitial(TuvCostsCalculator::new);
+
   private static double tuvOf(final Collection<Unit> units) {
     double sum = 0;
     for (final Unit u : units) {
-      sum += new TuvCostsCalculator().getCostsForTuv(u.getOwner()).getInt(u.getType());
+      sum += CALC.get().getCostsForTuv(u.getOwner()).getInt(u.getType());
     }
     return sum;
   }

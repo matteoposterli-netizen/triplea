@@ -15,6 +15,7 @@ import games.strategy.engine.history.HistoryNode;
 import games.strategy.engine.history.Step;
 import games.strategy.triplea.ai.pro.util.ProUtils;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
+import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.ai.proplus.strategia.llm.Uso;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.OriginalOwnerTracker;
@@ -231,6 +232,9 @@ public final class Valutazione {
     checked.avvisi().forEach(a -> text.append("  Avviso del contratto: ").append(a).append('\n'));
     text.append(Direttive.testo(directives, decider.nome(), checked.ripiego()));
     text.append(strategistLine(source, directives));
+    final JsonObject effective = rischioEffettivo(data, alliance.get(), strategia.get(), directives);
+    entry.add("rischio_effettivo", effective);
+    text.append(riskTable(data, alliance.get(), effective));
     if (Decisore.LLM.equals(decider.nome())) {
       text.append("  Stratega, uso della partita finora: ")
           .append(Uso.testo(Uso.leggi(data.getProperties())))
@@ -238,6 +242,11 @@ public final class Valutazione {
     }
     final Risultato decided = new Risultato(alliance.get(), round, entry, text.toString(), input);
     StatoMaggiore.aggiungiStorico(data, alliance.get(), entry);
+    if (Decisori.getModalita(data.getProperties(), alliance.get()).isLlm()
+        || games.strategy.triplea.ai.proplus.diario.DiarySettings.isEnabled()) {
+      // LLM step: what the alliance sees now, for the "what changed" of the next turn orders
+      Ingresso.salvaIstantanea(data, alliance.get());
+    }
     return Optional.of(decided);
   }
 
@@ -282,6 +291,58 @@ public final class Valutazione {
         + ", piano "
         + d.piano()
         + (d.motivazione().isEmpty() ? "" : ", " + d.motivazione())
+        + '\n';
+  }
+
+  /**
+   * LLM step: the effective risk level (1-5) of each nation of the alliance on each front: the
+   * alliance's slider moved by the offset of the directives for that nation and front (schema
+   * v1.1, else the alliance's), then -1 in DIFENSIVA, as {@link PianoAttivo#livelloFronte}.
+   */
+  static JsonObject rischioEffettivo(
+      final GameState data,
+      final String alliance,
+      final Strategia strategia,
+      final JsonObject directives) {
+    final Direttive d = Direttive.of(directives);
+    final RiskLevel base = ProPlusSettings.getRiskLevel(data.getProperties(), alliance);
+    final boolean defensive = Contromosse.DIFENSIVA.equals(d.postura());
+    final JsonObject out = new JsonObject();
+    for (final String nation : Direttive.allianceNations(data, alliance)) {
+      final JsonObject fronts = new JsonObject();
+      for (final String front : strategia.getFronti()) {
+        RiskLevel level = base.withModifier(d.rischio(nation, front));
+        if (defensive) {
+          level = level.withModifier(-1);
+        }
+        fronts.addProperty(front, level.getLevel());
+      }
+      out.add(nation, fronts);
+    }
+    return out;
+  }
+
+  /** Diary: "Rischio effettivo (base 3 Equilibrato): Germans Ovest 4, Est 2 | Italians ...". */
+  static String riskTable(final GameState data, final String alliance, final JsonObject effective) {
+    final RiskLevel base = ProPlusSettings.getRiskLevel(data.getProperties(), alliance);
+    final List<String> rows = new java.util.ArrayList<>();
+    effective
+        .entrySet()
+        .forEach(
+            e -> {
+              final List<String> cells = new java.util.ArrayList<>();
+              e.getValue()
+                  .getAsJsonObject()
+                  .entrySet()
+                  .forEach(f -> cells.add(f.getKey() + " " + f.getValue().getAsInt()));
+              rows.add(e.getKey() + " " + String.join(", ", cells));
+            });
+    return "  Rischio effettivo per nazione e fronte (base "
+        + base.getLevel()
+        + " "
+        + base.getLabel()
+        + "): "
+        + String.join(" | ", rows)
         + '\n';
   }
 

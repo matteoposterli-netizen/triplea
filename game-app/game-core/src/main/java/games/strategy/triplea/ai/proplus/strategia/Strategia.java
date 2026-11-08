@@ -621,6 +621,9 @@ public final class Strategia {
    * @param vittoria per alliance, what its victory counts (the race): victory cities, or given
    *     victory-city territories (Europe 1940: the Allies need Germany and Southern Italy)
    * @param ritardo the fixed limits of the delay tools (step 3d-2)
+   * @param ampiezzaRischio LLM step: largest risk offset per nation and front (-n..+n) the
+   *     directives may set, capped by the guard rail of +-1
+   * @param nazioniSenzaOrdini LLM step: nations never asked for turn orders (Europe 1940: French)
    */
   public record Parametri(
       int roundCrisi,
@@ -638,10 +641,29 @@ public final class Strategia {
       int distanzaAttaccabile,
       double sogliaContrasto,
       Map<String, Vittoria> vittoria,
-      Ritardo ritardo) {
+      Ritardo ritardo,
+      int ampiezzaRischio,
+      List<String> nazioniSenzaOrdini) {
     public static final Parametri DEFAULT =
         new Parametri(
-            2, 3, 2, 0.1, 0.5, 0.25, 2, 8, 20, 2, 2, 2, 2, 0.35, Map.of(), Ritardo.DEFAULT);
+            2,
+            3,
+            2,
+            0.1,
+            0.5,
+            0.25,
+            2,
+            8,
+            20,
+            2,
+            2,
+            2,
+            2,
+            0.35,
+            Map.of(),
+            Ritardo.DEFAULT,
+            1,
+            List.of());
 
     static Parametri parse(final @Nullable JsonObject o) {
       if (o == null) {
@@ -664,7 +686,9 @@ public final class Strategia {
           integer(o, "distanza_attaccabile", d.distanzaAttaccabile()),
           number(o, "soglia_contrasto", d.sogliaContrasto()),
           vittoria(o),
-          Ritardo.parse(o.has("ritardo") ? o.getAsJsonObject("ritardo") : null));
+          Ritardo.parse(o.has("ritardo") ? o.getAsJsonObject("ritardo") : null),
+          integer(o, "ampiezza_rischio", d.ampiezzaRischio()),
+          o.has("nazioni_senza_ordini") ? strings(o, "nazioni_senza_ordini") : d.nazioniSenzaOrdini());
     }
 
     private static Map<String, Vittoria> vittoria(final JsonObject o) {

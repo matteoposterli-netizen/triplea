@@ -21,8 +21,8 @@ import lombok.experimental.UtilityClass;
  */
 @UtilityClass
 public final class PromptStratega {
-  public static final String RISORSA = "proplus/strategia/prompt-stratega-v1.md";
-  public static final String VERSIONE = "prompt-stratega-v1";
+  public static final String RISORSA = "proplus/strategia/prompt-stratega-v2.md";
+  public static final String VERSIONE = "prompt-stratega-v2";
 
   /** Default of the "Fantasia" slider. */
   public static final int FANTASIA_DEFAULT = 2;
@@ -48,6 +48,11 @@ public final class PromptStratega {
             new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create().toJson(schema()));
   }
 
+  /** The text of fantasy level {@code fantasia} (1-5). */
+  static String fantasia(final int fantasia) {
+    return FANTASIA.get(Math.max(1, Math.min(5, fantasia)) - 1);
+  }
+
   /** The variable part: fantasy level and the strategic state of the round. */
   public static String utente(final JsonObject stato, final int fantasia) {
     final int f = Math.max(1, Math.min(5, fantasia));
@@ -65,7 +70,8 @@ public final class PromptStratega {
   /**
    * The answer's JSON schema (strict structured output: every object closed and fully required,
    * no numeric ranges; the ranges are guard rails checked by the game). Maps of the directives v1
-   * ({@code rischio}, {@code ruoli}) are lists of pairs here, converted by {@link UscitaLlm}.
+   * ({@code rischio}: nation/front/value, {@code ruoli}) are lists here, converted by {@link
+   * UscitaLlm} (risk per nation = directives schema v1.1).
    */
   public static JsonObject schema() {
     final JsonObject root =
@@ -75,6 +81,7 @@ public final class PromptStratega {
             "rischio",
                 array(
                     object(
+                        "nazione", string("nazione dell'alleanza, vuota = tutta l'alleanza"),
                         "fronte", string("nome di un fronte"),
                         "valore", intEnum(-1, 0, 1))),
             "operazioni",
@@ -221,15 +228,20 @@ public final class PromptStratega {
   }
 
   private static String template() {
-    try (InputStream in = PromptStratega.class.getClassLoader().getResourceAsStream(RISORSA)) {
+    return risorsa(RISORSA);
+  }
+
+  /** A prompt resource without its leading maintainers' comment. */
+  static String risorsa(final String name) {
+    try (InputStream in = PromptStratega.class.getClassLoader().getResourceAsStream(name)) {
       if (in == null) {
-        throw new ErroreStratega("prompt dello stratega mancante (" + RISORSA + ")");
+        throw new ErroreStratega("prompt mancante (" + name + ")");
       }
       final String text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
       // the leading HTML comment is for maintainers only
       return text.startsWith("<!--") ? text.substring(text.indexOf("-->") + 3).strip() : text;
     } catch (final IOException e) {
-      throw new ErroreStratega("prompt dello stratega non leggibile", e);
+      throw new ErroreStratega("prompt non leggibile (" + name + ")", e);
     }
   }
 
@@ -245,7 +257,7 @@ public final class PromptStratega {
 
   // ------------------------------------------------------------------------------- schema helpers
 
-  private static JsonObject object(final Object... pairs) {
+  static JsonObject object(final Object... pairs) {
     final JsonObject o = type("object");
     final JsonObject props = new JsonObject();
     final JsonArray required = new JsonArray();
@@ -259,25 +271,25 @@ public final class PromptStratega {
     return o;
   }
 
-  private static JsonObject array(final JsonObject items) {
+  static JsonObject array(final JsonObject items) {
     final JsonObject o = type("array");
     o.add("items", items);
     return o;
   }
 
-  private static JsonObject type(final String type) {
+  static JsonObject type(final String type) {
     final JsonObject o = new JsonObject();
     o.addProperty("type", type);
     return o;
   }
 
-  private static JsonObject string(final String description) {
+  static JsonObject string(final String description) {
     final JsonObject o = type("string");
     o.addProperty("description", description);
     return o;
   }
 
-  private static JsonObject enumOf(final List<String> values) {
+  static JsonObject enumOf(final List<String> values) {
     final JsonObject o = type("string");
     final JsonArray e = new JsonArray();
     values.forEach(e::add);

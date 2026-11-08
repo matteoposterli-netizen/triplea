@@ -152,6 +152,26 @@ public final class StatoMaggiore {
   }
 
   /**
+   * LLM step: changes the last entry of {@code alliance}'s history (the turn orders of a nation are
+   * added to the entry of the round). Nothing without a fixed plan or history.
+   */
+  public static void aggiornaUltimo(
+      final GameState data, final String alliance, final java.util.function.Consumer<JsonObject> change) {
+    final GameProperties props = data.getProperties();
+    getState(props, alliance)
+        .filter(state -> !state.storico().isEmpty())
+        .ifPresent(
+            state -> {
+              final JsonArray storico = state.storico().deepCopy();
+              change.accept(storico.get(storico.size() - 1).getAsJsonObject());
+              set(
+                  props,
+                  STATE_PREFIX + alliance,
+                  new Stato(state.piano(), state.roundInizio(), storico, state.cambi()).toJson());
+            });
+  }
+
+  /**
    * Step 3d-1: {@code alliance}'s plan becomes {@code nuovo} from {@code round}; the change is
    * added to {@code cambi}. Nothing without a fixed plan or when {@code nuovo} is the plan in
    * force.
