@@ -32,8 +32,8 @@ Scelta per alleanza: pannello "Impostazioni Pro+" (riga "Decisore": regole/file 
 
 ## Ingresso (stato strategico), schema v1
 
-JSON compatto, obiettivo <= ~5.000 token. Misurato: Europe 1940 R1-R2 ~4.500-6.800 caratteri
-(~1.100-1.700 token stimati a 4 caratteri/token). Solo letture del gioco; le stime sono rapide (nessuna
+JSON compatto, obiettivo <= ~5.000 token. Misurato nell'autoplay in CI (12 partite Pro+ da 12 round, 288
+ingressi): media 6.969 caratteri (~1.742 token stimati a 4 caratteri/token), massimo 8.900 (~2.225). Solo letture del gioco; le stime sono rapide (nessuna
 simulazione di battaglia, quindi nessun dado consumato).
 
 | Campo | Contenuto |

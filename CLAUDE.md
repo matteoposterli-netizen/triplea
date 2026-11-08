@@ -1168,8 +1168,8 @@ creato, **non usato** in questo step). Schema completo, esempi reali e regole di
   il piu' severo tra paletto e file dati).
 - **Ingresso**: stime rapide senza dadi (`ProBattleUtils.estimateStrengthDifference`), battaglie da `BattleRecordsList`
   per riflessione (come il `Monitor`), ultimo rapporto delle operazioni nella proprieta' `Pro+ rapporti: <alleanza>`
-  (scritta da `ProPlusAi` dopo le operazioni anfibie). Misurato in Europe 1940: 4.500-6.800 caratteri per ingresso
-  (~1.100-1.700 token a 4 caratteri/token), budget ~5.000 token.
+  (scritta da `ProPlusAi` dopo le operazioni anfibie). Misurato in CI (288 ingressi, R1-R12): media 6.969 caratteri
+  (~1.742 token a 4 caratteri/token), max 8.900; budget ~5.000 token.
 - **File**: `stato-R<N>-<alleanza>.json` e `direttive-R<N>-<alleanza>.json` nella cartella della partita del diario
   (`DiaryRecorder.contractFiles`, solo con diario attivo; l'autoplay lo ha sempre). `DecisoreFile` legge gli stessi nomi.
 - **Scelta**: pannello "Impostazioni Pro+" (riga "Decisore" per alleanza: regole/file + percorso + "Sfoglia..."),
@@ -2318,3 +2318,23 @@ contratto: vedi "Contratto strategico" e `proplus/strategia/contratto-v1.md`.
   ~1.460 token stimati), direttive delle regole senza tattiche; A/1 1 round con `--decisore Allies=file:...`
   (DIFENSIVA, Overlord UK in attesa, blocco terrestre e ritirata russi accesi): direttive applicate, 2 blocchi
   "lasciata" (non contati come blocchi), nessun ripiego.
+
+#### Autoplay in CI (run 42513100896, commit 4db1abe, tutto verde) contro f4446c8 (run 42500350471) e 2853ee7 (run 42506232917)
+Primo tentativo: `powershell-tests` fallito per il mock server Windows (scenario 9b "Mock server non pronto", flaky gia'
+visto; il job era partito perche' il push aggiungeva `proplus/strategia/`) ⇒ build e autoplay saltati; "re-run failed
+jobs" verde (attempt 2). Tutte le direzioni con decisore `regole` (strumenti spenti).
+
+| Metrica | f4446c8 | 2853ee7 (3d-2) | 4db1abe (contratto) |
+|---|---|---|---|
+| VC Alleati R12, media delle 6 configurazioni Pro+ | 5.08 | 4.25 | 4.75 |
+| VC Alleati R12 per partita (12 Pro+) | - | - | 4,4 / 4,6 / 6,5 / 6,5 / 4,4 / 6,3 (dev. std 1.06) |
+| Russia (Mosca) caduta, partite Pro+ | n/d | 6/12 | 2/12 (R11, R12); Hard 1/2 |
+| Strumenti di ritardo usati | - | si' | 0 in tutte le partite |
+| Ingresso del decisore (288 file) | - | - | media 6.969 caratteri (~1.742 token), max 8.900 (~2.225) |
+| Ripieghi sulle regole | - | - | 0 / 288 |
+
+- VC Alleati R12: 4.75 contro 5.08 di f4446c8, differenza −0.33 con deviazione standard per partita 1.06 (errore
+  della media su 12 partite ~0.3): **in linea entro la varianza**, non identico (le simulazioni dell'AI restano casuali).
+  Rispetto al 3d-2 (+0.5 VC, Mosca cade 2/12 invece di 6/12) il peggioramento del 3d-2 sparisce con gli strumenti spenti.
+- Cambi di piano: 2 (Alleati in D/1 e D/2, un seme ciascuno). Budget dell'ingresso rispettato con ampio margine.
+- Hard identica: golden Hard, golden Pro+ e `DiaryNeutralityTest` verdi in CI.
