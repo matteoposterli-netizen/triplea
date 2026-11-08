@@ -2086,5 +2086,5 @@ Trasporti persi: 3d-1-bis contati dal `Monitor` (spariti tra due passi); 3d-1 e 
   perdono più, ma gli sbarchi USA in Europa tornano ai livelli di 011a5ac. Criterio "≥ 4/8 entro R7" non
   raggiunto. Causa: il valore della conquista di Hard (solo produzione) ignora il valore di Normandy come
   obiettivo/testa di ponte del piano, e le navi di scorta propria contano come perdita.
-- VC R12 Alleati (media delle 6 configurazioni Pro+): 5.25 (3d-1: 5.6); Hard 7/4.
+- VC R12 Alleati (media delle 6 configurazioni Pro+): 5.08 (3d-1: 5.6); Hard 7/4 (Asse/Alleati).
 - Hard identica: golden e `DiaryNeutralityTest` verdi in CI.
