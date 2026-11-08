@@ -60,8 +60,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
       - name: Download the Gradle distribution (retries)
-        # the wrapper gives up after one 10 s timeout; the cache is read-only off the default branch
+        # the wrapper gives up after one 10 s timeout and the cache is read-only off the default
+        # branch; services.gradle.org can be down (504), so the run (not the repo file) downloads
+        # the same zip from Gradle's GitHub releases, where services.gradle.org redirects
         run: |
+          props=gradle/wrapper/gradle-wrapper.properties
+          sed -i -E 's#^distributionUrl=https\\://services\.gradle\.org/distributions/gradle-([0-9.]+)-(all|bin)\.zip#distributionUrl=https\\://github.com/gradle/gradle-distributions/releases/download/v\1/gradle-\1-\2.zip#' "$props"
+          sed -i -E 's#^networkTimeout=.*#networkTimeout=60000#' "$props"
+          grep -E '^(distributionUrl|networkTimeout)=' "$props"
           for i in 1 2 3 4 5; do
             ./gradlew --no-daemon --version && exit 0
             echo "tentativo $i fallito, nuovo tentativo tra $((i * 20)) s"; sleep $((i * 20))

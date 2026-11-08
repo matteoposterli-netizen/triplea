@@ -269,7 +269,11 @@ Dopo che le Actions del fork si erano fermate (step 3d-1):
 - Prima dei test (release e `prepare` dell'autoplay) il passo "Download the Gradle distribution"
   ripete `./gradlew --version` fino a 5 volte: il wrapper ha un solo tentativo con timeout 10 s e la
   cache di Gradle è in sola lettura fuori dal branch di default (si scarica a ogni run). Run 42465326439
-  fallita 2 volte così (timeout su services.gradle.org dai runner).
+  fallita 2 volte così e 42465652478 5 volte su 5 (services.gradle.org: timeout e HTTP 504 dai runner,
+  da fuori rispondeva) ⇒ lo stesso passo, solo nella run, riscrive in `gradle-wrapper.properties`
+  `distributionUrl` verso `github.com/gradle/gradle-distributions/releases/download/v<ver>/` (dove
+  services.gradle.org reindirizza, stesso zip) e `networkTimeout` a 60 s. Il file nel repo resta
+  quello dell'upstream.
 - Commit raggruppati: 1-2 push per step, l'ultimo con `[autoplay]` nel messaggio; CLAUDE.md dentro
   l'ultimo commit, **niente push di sola documentazione**.
 - La run #38 (42428388452, 4a6660e) è rimasta "queued" senza job e non si può annullare: ignorarla.
