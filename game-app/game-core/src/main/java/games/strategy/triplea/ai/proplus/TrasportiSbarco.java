@@ -37,8 +37,10 @@ import java.util.function.Predicate;
  * landing is made only if
  *
  * <ul>
- *   <li>expected conquest value (conquest value × win%) + expected battle TUV swing > the summed
- *       expected loss, or
+ *   <li>(conquest value + strategic value) × win% + expected battle TUV swing > the summed expected
+ *       loss, where strategic value = {@link #TUV_PER_WEIGHT} × (weight of the target as an
+ *       objective of the phase in the data file + weight as a target of my amphibious operations),
+ *       or
  *   <li>the target is a critical objective of the plan and the win% is above its desired win%.
  * </ul>
  *
@@ -54,6 +56,13 @@ final class TrasportiSbarco {
 
   /** Dropped: the expected loss of the transports is above the gain. */
   static final String DROPPED = "transports_after_landing";
+
+  /**
+   * Step 3d-1-bis (closure): TUV a point of plan weight is worth in the gain of a landing (the
+   * strategic value of the target: weight as a phase objective + weight as an operation target).
+   * Chosen, not tuned: the weights of the data file (10-20) are about the TUV of 1-3 transports.
+   */
+  static final double TUV_PER_WEIGHT = 1.0;
 
   private final ProData proData;
   private final ProOddsCalculator calc;
@@ -118,15 +127,28 @@ final class TrasportiSbarco {
       final BiPredicate<Territory, Collection<Unit>> lostToScramble) {
     final Territory target = landing.getTerritory();
     final double win = battle.getWinPercentage();
-    final double gain = conquestValue * win / 100 + battle.getTuvSwing();
+    final Optional<PianoAttivo> plan = ProPlusTuning.planOf(proData);
+    final double objective = plan.map(p -> p.pesoObiettivoFase(target)).orElse(0.0);
+    final double operation = plan.map(p -> p.pesoBersaglioOperazione(target)).orElse(0.0);
+    final double strategic = TUV_PER_WEIGHT * (objective + operation);
+    final double gain = (conquestValue + strategic) * win / 100 + battle.getTuvSwing();
     final String gainText =
         String.format(
-            Locale.ROOT,
-            "guadagno %.1f = conquista %.1f x win %.0f%% + TUV battaglia %.1f",
-            gain,
-            conquestValue,
-            win,
-            battle.getTuvSwing());
+                Locale.ROOT,
+                "guadagno %.1f = conquista %.1f x win %.0f%% + TUV battaglia %.1f",
+                gain,
+                conquestValue,
+                win,
+                battle.getTuvSwing())
+            + (strategic > 0
+                ? String.format(
+                    Locale.ROOT,
+                    " + valore strategico %.1f x win %.0f%% (obiettivo %.1f + operazione %.1f)",
+                    strategic,
+                    win,
+                    objective,
+                    operation)
+                : "");
     final Map<Territory, List<Unit>> zones = new LinkedHashMap<>();
     unloadZones.forEach((z, u) -> zones.put(z, new ArrayList<>(u)));
     final List<Zona> before = estimate(zones);
@@ -135,7 +157,6 @@ final class TrasportiSbarco {
       return new ProLandingTransports(
           true, KEPT, loss, gain, text(loss, "<=", gain, gainText, before, ""), Map.of());
     }
-    final Optional<PianoAttivo> plan = ProPlusTuning.planOf(proData);
     final double desired = ProPlusTuning.desiredWinPercentage(proData, target);
     if (plan.isPresent() && plan.get().isCritico(target) && win > desired) {
       return new ProLandingTransports(

@@ -1039,8 +1039,15 @@ eccezioni Pro+ (`keepsLandingWithExposedTransports`: regola obiettivo e testa di
   di raccolta comune nel suo turno (come le soste sicure); win% nemica = miglior attacco della stima di Hard
   con i nemici reali (step 3c, la stessa delle soste), 100% senza navi da guerra; **perdita attesa = win% ×
   TUV delle mie unità navali nella zona** (trasporti + scorta propria; il carico è già a terra).
-- Guadagno = valore della conquista × win% + TUV atteso della battaglia (valore della conquista = quello di
-  Hard in quel controllo: produzione + obiettivi nazionali, ×4 se capitale).
+- Guadagno = (valore della conquista + **valore strategico**) × win% + TUV atteso della battaglia (valore
+  della conquista = quello di Hard in quel controllo: produzione + obiettivi nazionali, ×4 se capitale).
+  **Valore strategico (chiusura dello step)** = `TrasportiSbarco.TUV_PER_WEIGHT` (**1.0**: 1 punto di peso
+  = 1 TUV; scelto, non tarato: i pesi del file, 10-20, valgono 1-3 trasporti) × (peso del bersaglio come
+  obiettivo della fase della nazione nel file dati, `PianoAttivo.pesoObiettivoFase` + peso come bersaglio
+  attivo delle sue operazioni anfibie, `peso × 0.8^posizione`, `PianoAttivo.pesoBersaglioOperazione`; contro-
+  obiettivi della postura esclusi). Es. Normandy per gli USA nel piano 1 dal R3: 0 + 15; United Kingdom per la
+  Germania in B R2-3: 20 + 20. L'eccezione "critico" resta invariata. Diario: "... + valore strategico V x win
+  W% (obiettivo P + operazione Q)".
 - Tenuto se guadagno > perdita attesa, oppure se il bersaglio è obiettivo **critico** della fase
   (`PianoAttivo.isCritico`) e win% > desiderata (`ProPlusTuning.desiredWinPercentage`). Altrimenti, per
   ogni zona con perdita: le altre zone di mare confinanti col bersaglio, senza unità nemiche, raggiungibili
@@ -2088,3 +2095,15 @@ Trasporti persi: 3d-1-bis contati dal `Monitor` (spariti tra due passi); 3d-1 e 
   obiettivo/testa di ponte del piano, e le navi di scorta propria contano come perdita.
 - VC R12 Alleati (media delle 6 configurazioni Pro+): 5.08 (3d-1: 5.6); Hard 7/4 (Asse/Alleati).
 - Hard identica: golden e `DiaryNeutralityTest` verdi in CI.
+
+### Step 3d-1-bis, chiusura — valore strategico nel guadagno degli sbarchi (2026-11-08)
+
+Decisione di Matteo: prima opzione del report (valore strategico del bersaglio nel guadagno), eccezione
+"critico" non estesa, tutto il resto invariato (soglie, soste sicure, rientro); **tema sbarchi chiuso, si
+passa al 3d-2**. Codice: `TrasportiSbarco` (formula sopra), `PianoAttivo.pesoObiettivoFase` /
+`pesoBersaglioOperazione`. Test: `AmphibiousOperationsTest` +1 (valore strategico di Normandy nel piano 1:
+sbarco tenuto, testo del guadagno); i test della regola senza valore strategico usano il piano 3 degli
+Alleati (Normandy né obiettivo né bersaglio); il test dell'obiettivo critico ha 6 trasporti esposti (42 TUV >
+guadagno 39.7) perché il valore strategico del Regno Unito in B (40) ora basta da solo. 395 test AI di
+game-core e autoplay verdi in locale.
+

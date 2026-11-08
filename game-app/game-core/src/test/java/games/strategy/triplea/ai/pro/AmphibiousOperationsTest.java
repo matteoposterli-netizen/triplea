@@ -952,7 +952,8 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
 
   @Test
   void aLandingWhoseTransportsAreLostAfterwardsUnloadsFromASaferZone() {
-    // the British move after the Americans: no partner's ships join 110 in a later turn
+    // plan 3: Normandy has no strategic value; no combined operation joins 110 either
+    StatoMaggiore.setChoice(data.getProperties(), "Allies", "3");
     final Unit transport = landingFrom104(british);
     // an American fleet guards 105 (allied ships defend, only my sea units count as the loss)
     add("105 Sea Zone", "battleship", 3, americans);
@@ -1002,6 +1003,8 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
 
   @Test
   void aLandingWhoseTransportsAreLostEverywhereIsDroppedWithTheNumbers() {
+    // plan 3: no strategic value of Normandy (no operation, not an objective)
+    StatoMaggiore.setChoice(data.getProperties(), "Allies", "3");
     final Unit transport = landingFrom104(americans);
     data.getSequence().setRoundAndStep(4, "Combat Move", americans);
 
@@ -1021,6 +1024,8 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
 
   @Test
   void aLandingThatGainsMoreThanTheTransportsLossIsMade() {
+    // plan 3: no strategic value of Normandy (no operation, not an objective)
+    StatoMaggiore.setChoice(data.getProperties(), "Allies", "3");
     final Unit transport = landingFrom104(americans);
     data.getSequence().setRoundAndStep(4, "Combat Move", americans);
 
@@ -1036,6 +1041,33 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
   }
 
   @Test
+  void theStrategicValueOfAnOperationTargetCountsInTheGain() {
+    // plan 1, round 4: Normandy is the first target of Overlord USA (weight 15)
+    final Unit transport = landingFrom104(americans);
+    data.getSequence().setRoundAndStep(4, "Combat Move", americans);
+    final double objective =
+        PianoAttivo.of(data, americans)
+            .orElseThrow()
+            .pesoObiettivoFase(territory("Normandy Bordeaux"));
+
+    final ProLandingTransports check =
+        checkLanding(americans, transport, "Normandy Bordeaux", "110 Sea Zone", 90, 3)
+            .check()
+            .orElseThrow();
+
+    // (3 + 15 + objective) x 90% + 1 > 7 TUV of the transport alone: made
+    assertThat(check.keep()).isTrue();
+    assertThat(check.gain()).isEqualTo((3 + 15 + objective) * 0.9 + 1, within());
+    assertThat(check.detail())
+        .contains(
+            String.format(
+                java.util.Locale.ROOT,
+                "valore strategico %.1f x win 90%% (obiettivo %.1f + operazione 15.0)",
+                15 + objective,
+                objective));
+  }
+
+  @Test
   void aCriticalObjectiveIsLandedOnAboveItsDesiredWinDespiteTheTransports() {
     // plan B: Sea Lion, the United Kingdom a critical objective of the Germans in rounds 1-3
     StatoMaggiore.setChoice(data.getProperties(), "Axis", "B");
@@ -1048,6 +1080,9 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
     loadInPlace(transport, add("112 Sea Zone", "infantry", 2, germans));
     add("109 Sea Zone", "battleship", 2, british);
     add("111 Sea Zone", "battleship", 2, british);
+    // 5 more German transports wait in the unload zone: 6 x 7 = 42 TUV exposed, more than the gain
+    // with the strategic value of the United Kingdom (objective 20 + operation 20)
+    add("110 Sea Zone", "transport", 5, germans);
     data.getSequence().setRoundAndStep(2, "Combat Move", germans);
 
     final ProLandingTransports check =
@@ -1057,7 +1092,8 @@ class AmphibiousOperationsTest extends AbstractClientSettingTestCase {
 
     assertThat(check.keep()).isTrue();
     assertThat(check.detail())
-        .startsWith("perdita attesa 7.0 TUV > guadagno 3.7")
+        .startsWith("perdita attesa 42.0 TUV > guadagno 39.7")
+        .contains("valore strategico 40.0 x win 90% (obiettivo 20.0 + operazione 20.0)")
         .contains("tenuto: obiettivo critico del piano, win 90% > desiderata 80%");
 
     // below the desired win%: dropped

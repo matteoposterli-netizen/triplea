@@ -306,6 +306,37 @@ public final class PianoAttivo {
         .orElse(0);
   }
 
+  /**
+   * Step 3d-1-bis: weight of {@code t} as an objective of this nation in the round's phase of the
+   * data file (the highest if several), 0 if none. Operation targets and counter-objectives of the
+   * posture are not counted here.
+   */
+  public double pesoObiettivoFase(final Territory t) {
+    if (fase == null) {
+      return 0;
+    }
+    return fase.obiettivi().stream()
+        .filter(o -> o.appliesTo(nazione) && matches(o, t))
+        .mapToDouble(Strategia.Obiettivo::peso)
+        .max()
+        .orElse(0);
+  }
+
+  /**
+   * Step 3d-1-bis: weight of {@code t} as an active target of this nation's amphibious operations
+   * ({@code peso × 0.8^position}, the highest if several), 0 if none.
+   */
+  public double pesoBersaglioOperazione(final Territory t) {
+    double max = 0;
+    for (final Strategia.Operazione op : operazioni) {
+      final int i = op.bersagli().indexOf(t.getName());
+      if (op.nazioni().contains(nazione) && i >= 0) {
+        max = Math.max(max, op.pesoBersaglio(i));
+      }
+    }
+    return max;
+  }
+
   /** The nation's purchase / placement / staging orders for this round (step 3b), if any. */
   public Optional<Strategia.Logistica> getLogistica() {
     return piano.logistica(nazione, round);
