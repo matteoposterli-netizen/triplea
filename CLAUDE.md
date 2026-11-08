@@ -2107,3 +2107,23 @@ Alleati (Normandy né obiettivo né bersaglio); il test dell'obiettivo critico h
 guadagno 39.7) perché il valore strategico del Regno Unito in B (40) ora basta da solo. 395 test AI di
 game-core e autoplay verdi in locale.
 
+
+#### Autoplay in CI (run 42500350471, commit f4446c8, tutto verde) — chiusura del tema sbarchi
+Trasporti persi dal `Monitor` per 3d-1-bis e chiusura; per 011a5ac e 3d-1 stima "fine round prima +
+comprati − fine round". TUV perso in trasporti / TUV sbarchi solo dal 3d-1-bis (colonna nuova).
+
+| Metrica | 011a5ac | 3d-1 | 3d-1-bis (fb492f7) | chiusura (f4446c8) |
+|---|---|---|---|---|
+| Trasporti USA persi, piano 1 (8 partite) | 10 | 19 | 2 | 12 |
+| Trasporti USA persi, piano 2 (4 partite) | 10 | 24 | 0 | 5 |
+| Sbarco USA in Europa occ. entro R7 (piano 1) | 1/8 | 5/8 | 1/8 | 2/8 |
+| USA piano 1: TUV perso in trasporti / TUV sbarchi | n/d | n/d | 14 / 84 | 84 / 96 |
+| USA piano 2: TUV perso in trasporti / TUV sbarchi | n/d | n/d | 0 / 89 | 35 / 51 |
+| VC Alleati R12 (media delle 6 configurazioni Pro+) | 4.75 | 5.6 | 5.08 | 5.08 |
+
+- Piano 1 IN CRISI >= 2 round: 4 partite, 1 cambio verso il 2 (B/1 seme 1, R9: 2 0.36 contro 1 0.23), 3 con
+  "nessuna alternativa migliore" e i punteggi; nessun ping-pong (1 cambio Asse D → A in D/2).
+- Il valore strategico rende di nuovo convenienti gli sbarchi sui bersagli del piano (trasporti persi risaliti
+  a 12, sotto i 19 del 3d-1 ma sopra i 10 di 011a5ac), ma gli sbarchi USA entro R7 restano 2/8: il limite
+  principale non è più la regola dei trasporti ma l'accumulo/stallo di Overlord (stallo in 6/8 partite).
+- Hard identica: golden e `DiaryNeutralityTest` verdi in CI. **Tema sbarchi chiuso** (decisione di Matteo).
