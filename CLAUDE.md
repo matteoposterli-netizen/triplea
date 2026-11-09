@@ -320,6 +320,16 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   Cornish-Fisher, tabella sotto 3 gradi) ed esito "esclude / include lo 0", piu' i semi per configurazione per un test
   al 5% con potenza 80% a quella differenza. Pooling di run diverse: comando `confronto` su una cartella con le
   sottocartelle (anche collegamenti) di tutte le partite.
+- **Modalita' "varianza" (step VARIANZA)**: `[varianza]` nel messaggio del commit di testa (precedenza su tutte le altre)
+  ⇒ `modalita: varianza`. Solo regole, 12 round, Equilibrato, 30 partite nella stessa run: Hard vs Hard e Asse Pro+
+  nudo sui semi 1-6 e 101-106 + replica di nudo sui semi 1-6; id `<n>-<config>-r<replica>-seme<seme>`, matrice
+  **mescolata per seme** (le configurazioni girano affiancate nel tempo, non a blocchi). Ogni `riepilogo.json` ha
+  `tempi` (`Tempi`: per nazione turni, secondi medi/max/totali per turno = somma dei passi della nazione nel round,
+  passo piu' lento, `ambiente` con CPU, processori, memoria, java, runner, carico). Sezione **"Varianza tra run"**
+  (`ConfrontoVarianza`, scritta solo con id `-r<n>-seme<s>`): per configurazione x gruppo di semi (1-99 / 100+) x
+  replica VC R12 del lato con IC 95% (t di Student), durata della partita e del turno del lato; differenze (gruppo di
+  semi, replica, contro Hard vs Hard) con IC di Welch; correlazione tra repliche sullo stesso seme; correlazione durata
+  / VC (Fisher); VC per macchina.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2960,3 +2970,68 @@ Lato Asse, VC R12 media ± ds [errore standard]; intervalli al 95% t di Welch.
   partita (seme 1-4 di Pro+ A: 5/4, 3/6, 3/2, 4/4 tra confronto e ablazione). Causa non trovata (semi bassi, carico dei
   runner o caso): finche' non e' chiarita, i confronti validi sono quelli dentro la stessa run con gli stessi semi, e qui
   nessuna differenza esce dal rumore.
+
+### Step VARIANZA — perche' la stessa configurazione cambia tra run (2026-11-09)
+
+Solo misura (nessun comportamento di Pro+ o Hard toccato). File: workflow `proplus-autoplay.yml` / `proplus-release.yml`
+(`[varianza]`), autoplay `Tempi` e `ConfrontoVarianza` (nuovi), `AutoplayRunner` (tempo di ogni passo), `RiepilogoGenerale`
+(1 riga), `AutoplayTest` +1 (23 verdi in locale). Verifica locale: partita nudo da 1 round con `tempi` nel riepilogo.
+
+#### Analisi statica
+- **Tempo: nessuna dipendenza che cambi una decisione.** `AbstractProAi` (149, 178, 193) misura il tempo solo per log e
+  diario. `ConcurrentBattleCalculator`: il tempo di copia dei dati (riga 153, `getThreadsToUse` 107-125: 1 thread se la
+  copia supera 20 s, altrimenti processori e memoria) decide solo **quanti thread** si dividono le simulazioni; il loro
+  numero totale e' fisso (`RunCountDistributor`, riga ~195), quindi cambia solo quale flusso casuale le genera.
+  `calculate` aspetta sempre i dati (`waitForGameDataReady`, 92-104); il ramo con 0 risultati (riga ~191) scatta solo
+  se i dati non sono impostati, non per tempo. Nessun timeout, `sleep` o limite per mossa nelle classi `ai/pro` e
+  `ai/proplus` fuori dal codice LLM. Runner: unico limite `--minuti` 25 (`AutoplayRunner` ~137), mai scattato (tutte le
+  partite delle 4 run "completata", 12 round).
+- **Seme**: `AutoplayRunner.seedDice` (267-290) sostituisce solo la sorgente dei **dadi di gioco** con
+  `new Random(seme).nextInt(max)`, uguale in [confronto], [ablazione], [conferma], [varianza]. Non coperti: simulazioni
+  di battaglia dell'AI (calcolatore non seminato, un flusso per thread), `Math.random` negli acquisti
+  (`ProPurchaseUtils.randomizePurchaseOption`) e nella politica di Hard, ordine di `HashMap`/`HashSet` con hash
+  d'identita' e UUID casuali delle unita'. Verificato: i semi piccoli e consecutivi non danno dadi simili (`nextInt(6)`
+  dei semi 1-6 e 101-112 diversi dal primo tiro; solo il primo `nextDouble` e' quasi uguale, non usato).
+- **Percorsi solo-Pro+ fuori dal tuning**: nessuno nelle classi `ai/pro` (`reportRealThreatDefense` dietro
+  `realEnemies`, vuoto con nudo; nessun controllo `instanceof ProPlusTuning`); `ProPlusAi` con `piano` spento non chiama
+  operazioni, rientro, strumenti, caccia, acquisti delle operazioni, stato maggiore. Tutti i metodi di `ProPlusTuning`
+  senza piano tornano al valore di Hard (anche `warDecision`, `minimumGarrisons`, `attackPriorityPlanBonus`,
+  `dropsLandAttack`, `heldUnits`).
+- **Ambiente delle run passate** (API dei job): tutte `ubuntu-latest`, max-parallel 6, matrice **a blocchi per
+  configurazione** (es. ablazione: Hard vs Hard per ultima, 13:14-14:19); la run [confronto] aveva in coda le partite LLM.
+  Durate medie per configurazione simili (Pro+ 312-397 s, Hard vs Hard 354-402 s), correlazione durata/VC dell'Asse Pro+
+  nelle 3 run −0,15. Modello di CPU dei job passati non ricavabile (log non pubblici).
+
+#### Autoplay in CI (run 42650606455, commit 499df34, tutto verde al 1° tentativo, 30 partite)
+
+| Gruppo | n | VC R12 Asse ± ds | IC 95% | Durata (s) |
+|---|---|---|---|---|
+| Hard vs Hard, semi 1-6 | 6 | 6,17 ± 0,98 | 5,14-7,20 | 277 |
+| Hard vs Hard, semi 101-106 | 6 | 5,33 ± 1,37 | 3,90-6,77 | 349 |
+| nudo, semi 1-6 | 6 | 4,67 ± 2,42 | 2,13-7,21 | 344 |
+| nudo, semi 1-6, replica | 6 | 5,67 ± 1,21 | 4,40-6,94 | 327 |
+| nudo, semi 101-106 | 6 | 4,50 ± 2,07 | 2,33-6,67 | 307 |
+
+- Effetto dei semi (101-106 − 1-6): Hard −0,83 [−2,39, +0,72], nudo −0,17 [−3,08, +2,74]: **nessuno**. Stesso seme
+  giocato due volte: differenza media 2,33 VC, r −0,05 (IC −0,83/+0,80): il seme dei dadi **non fissa l'esito**.
+- Replica (stessi semi, stessa run): +1,00 [−1,59, +3,59]. nudo − Hard: −1,50 [−4,05, +1,05] (semi 1-6), −0,83
+  [−3,14, +1,47] (101-106).
+- Durata e VC: r −0,54 (nudo), −0,46 (tutte); con il tempo medio del turno alleato r −0,63, con quello dell'Asse −0,44:
+  piu' compatibile con causa inversa (Asse in difficolta' ⇒ Alleati con piu' unita' e calcoli piu' lunghi) che con un
+  limite di tempo, che nel codice non c'e'. Macchine: 6 modelli di CPU (EPYC 7763/9V74/9V45, Xeon 8370C/8573C/6973P),
+  4 processori ciascuna; durata media per CPU 207-431 s. Nudo sulle CPU vecchie (7763, 8370C) 3,71 VC (7 partite) contro
+  5,73 sulle nuove (11); Hard vs Hard 5,67 contro 5,78: segnale solo su nudo, campione piccolo, nessun meccanismo nel
+  codice.
+- **Tutte le run insieme** (Asse, VC R12): Hard vs Hard 34 partite 5,94 ± 1,28, cinque gruppi **omogenei** (test di
+  permutazione p 0,79). Nudo 36 partite 5,42 ± 1,75, cinque gruppi **eterogenei** (p 0,03) e piu' dispersi di Hard
+  (p 0,047). nudo − Hard: −0,52 [−1,25, +0,20]. Scelte della Germania al R1 uguali (34 contro 36 partite: France e
+  Yugoslavia 100/100%, Southern France 91/94%, 111 SZ 74/75%, 110 SZ 65/72%, Normandy 41/42%, Baltic States 32/17% =
+  guerra casuale di Hard al R1).
+- **Conclusione**: esclusi l'effetto semi (misurato) e un limite di tempo (codice). Le differenze tra run sono in gran
+  parte **caso**: un esito di una partita ha ds ~1,3-1,8 VC e gruppi da 4-6 semi oscillano di ±1,5 VC. Resta un dubbio
+  non spiegato: nudo e' piu' variabile di Hard ed eterogeneo tra gruppi (p 0,03-0,05, con piu' test fatti) e piu'
+  debole sulle CPU vecchie, pur avendo le stesse risposte del tuning e le stesse scelte al R1. Ipotesi aperta: una
+  differenza nei round successivi non coperta da `NudoHardTest` (che controlla un solo turno), oppure ancora il caso.
+- **Indicazione pratica**: confrontare configurazioni solo **nella stessa run**, con la matrice mescolata, mai con
+  riferimenti di run diverse; repliche dello stesso seme non servono (il seme non fissa la partita). Semi per
+  configurazione per vedere una differenza vera con un test al 5% e potenza 80% (ds 1,5): 1 VC ⇒ ~35; 0,5 VC ⇒ ~140.
