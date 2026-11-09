@@ -145,6 +145,11 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   default = tutto acceso); agganci in `ProPlusTuning` (ogni override torna al valore di `ProTuning.DEFAULT` col suo
   componente spento), `PianoAttivo`, `Contromosse`, `OperazioniAnfibie.safety`, `TettoTrasporti`, `ProPlusAi`. Vedi
   "Ablazione (step ABLAZIONE)".
+- Step PROVA DI VALORE: `ai/proplus/OperazioneCongiunta` (definizioni dal file `proplus/strategia/operazioni-congiunte.json`,
+  interruttore `Pro+ operazione congiunta: <alleanza>`, stato `Pro+ operazione congiunta stato: <id>`), `ai/proplus/OperazioniCongiunte`
+  (motore: fattibilita', riserve, posizionamento, tappe, diario), `ai/proplus/ControlloTuning` (contatore: ogni risposta del tuning
+  confrontata con Hard), hook `ProTuning.combatHeldUnits` (default vuoto) + `ProMyMoveOptions.removeUnits` chiamato in
+  `ProCombatMoveAi`. Vedi "Operazioni congiunte (step PROVA DI VALORE)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -330,6 +335,19 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   replica VC R12 del lato con IC 95% (t di Student), durata della partita e del turno del lato; differenze (gruppo di
   semi, replica, contro Hard vs Hard) con IC di Welch; correlazione tra repliche sullo stesso seme; correlazione durata
   / VC (Fisher); VC per macchina.
+- **Modalita' "prova" (step PROVA DI VALORE)**: `[prova]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒
+  `modalita: prova`. Solo regole, 12 round, Equilibrato, **semi 201-235** (mai usati prima), 4 configurazioni = 140 partite,
+  matrice **mescolata per seme**, `max-parallel` 20 (solo in questa modalita'): 1 `Asse-nudo-vs-Hard`, 2 `Asse-nudo-Egitto-vs-Hard`
+  (`--operazione Axis=egitto`), 3 `Hard-vs-Alleati-nudo`, 4 `Hard-vs-Alleati-nudo-Francia` (`--operazione Allies=francia`).
+  Opzione del runner `--operazione Axis=egitto,Allies=francia`; `riepilogo.json`: `parametri.operazione`, `operazioni_congiunte`
+  (stato salvato di ogni operazione con gli eventi), `controllo_nudo` (conteggi per nazione e round), per round
+  `bersagli_operazioni` (proprietario del bersaglio di ogni operazione). Etichetta della configurazione con " + operazione <id>".
+  Sezione **"Prova di valore: operazioni congiunte"** (`ConfrontoProva`, scritta solo se una partita ha un'operazione): per
+  configurazione VC R12 del lato (media ± ds [es], IC 95%), reddito finale, TUV perso, contatore nudo; effetto dell'operazione
+  (operazione − nudo, stesso lato) con IC di Welch, semi per l'80% di potenza e verdetto (vale = Δ ≥ 1 e IC che esclude 0;
+  promettente = Δ > 0 e IC che arriva a +1; non vale = altrimenti); andamento (avviate, completate, annullate, rinvii, attese,
+  tappa 2 approvata/attacco fatto, TUV perso per tappa, bersaglio preso e tenuto dopo 1 e 2 round, round obiettivo iniziale) con
+  i motivi; bersaglio dell'alleanza a fine partita con e senza operazione; elenco dei round con differenze del contatore.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -1420,6 +1438,95 @@ pannello (solo autoplay/test).
   letterale di due turni NON e' un test affidabile: la stessa Hard, ripetuta sulla stessa partita nella stessa JVM dopo
   altri turni, cambia piano d'attacco 8 volte su 8 (ordine di insiemi hash di oggetti nuovi); misurato scrivendo il
   test, prima versione fallita una volta per questo.
+
+## Operazioni congiunte (step PROVA DI VALORE)
+
+Prova di valore del coordinamento d'alleanza: due operazioni **scritte a mano** (bersaglio e ruoli fissi, niente LLM, niente
+pianificatore generale), sopra Pro+ "nudo". **Spente di default**: si accendono solo con la proprieta' della partita
+`Pro+ operazione congiunta: <alleanza>` = id (`OperazioneCongiunta.set`, autoplay `--operazione`); nessun pannello.
+Hard identica: unico hook nuovo nelle classi Pro `ProTuning.combatHeldUnits` (default `Set.of()`), applicato in
+`ProCombatMoveAi` subito dopo `populateAttackOptions` (`ProMyMoveOptions.removeUnits`, no-op con insieme vuoto).
+
+**Verifiche di regola** (codice + XML `ww2eur40_2nd_edition.xml`, fatte prima del codice):
+- Atterraggio aerei: `AirMovementValidator.canLand` vieta solo i territori di terra **conquistati nel turno in corso**
+  (`BattleTracker.wasConquered`); il `BattleTracker` si azzera a fine turno di ogni nazione (`AbstractEndTurnDelegate`:
+  `getBattleTracker().clear()`). Quindi un territorio preso da un alleato **prima, nello stesso round** e' un normale territorio
+  alleato: gli aerei UK possono atterrare in Normandy presa dagli USA nello stesso round; quelli della nazione che lo conquista
+  no (stesso turno). Aerei su portaerei alleate: ammessi (`Allied Air Independent` assente = falso ⇒ caccia alleati come carico
+  della portaerei, `TransportTracker`), difendono la flotta; aerei a terra coprono le zone di mare adiacenti con lo scramble da un territorio con
+  aeroporto (`Scramble Rules In Effect`, `Scramble To Sea Only` veri). Un aereo non puo' restare in una zona di mare senza portaerei.
+- Ordine di turno (XML, `<step>`): Germans, Russians, Americans, British, Italians, French ⇒ GER apre e ITA chiude nello stesso
+  round (in mezzo RUS, USA, UK: **il Regno Unito puo' rinforzare l'Egitto tra le due tappe**); USA apre e UK chiude nello stesso
+  round **senza turni dell'Asse in mezzo**.
+- **USA neutrali** con Germania e Italia e **non alleati** con UK a inizio partita: guerra possibile dal **R4**
+  (`conditionAttachmentTurn4OrHigher`) o prima se l'Asse dichiara guerra; prima della guerra divieto di movimento in 65, 66, 85,
+  86, 88, 90, 103, 106, 107, 116, 117, 120, 122 Sea Zone (`movementRestrictionTerritories`) ⇒ nessuna rotta 101 → 110 prima della
+  guerra. Rotta 101 → 102 → 103 → 104 → 110 = 4 zone = 2 turni ⇒ esempio R4 preparazione, R5 posizionamento, R6 esecuzione.
+- "France" (Parigi) **non ha coste**: il bersaglio dello sbarco e' **Normandy Bordeaux** (110 e 105 Sea Zone).
+- Egitto (Cairo, VC): confina con Alexandria, Trans-Jordan, Anglo Egyptian Sudan, 81 e 98 Sea Zone; **non con Tobruk** (Libya –
+  Tobruk – Alexandria – Egypt). Raggiungibile dai tedeschi: **aerei** (da Western Germany un caccia arriva a Tobruk in un turno, 4
+  zone; da Tobruk/Libya colpisce l'Egitto e rientra), **trasporti italiani** (unita' tedesche caricate nel turno tedesco, spostate
+  nel turno italiano, sbarcate nel turno tedesco dopo: 2 round, regola gia' verificata in OPERAZIONI ANFIBIE), via terra solo dalla
+  Libia/Tobruk (unita' tedesche in Africa = solo con i trasporti italiani). **Trasporti tedeschi propri: non praticabile**
+  (fabbriche/porto solo sul Mare del Nord, Gibilterra britannica). Obiettivo nazionale tedesco +5: almeno 1 unita' di terra
+  tedesca in Egypt chiunque lo controlli (`conditionAttachment_Germans_4_unit_presence`). Nessuna regola rende impossibile le due
+  operazioni; per l'Egitto la "unita' tedesca in Egypt" e' possibile solo con unita' tedesche gia' in Africa (non nella prova:
+  in nudo nessuno le porta).
+
+**Dati** (`operazioni-congiunte.json`, valori scelti, NON tarati): per operazione `bersaglio`, `apre`, `chiude`, `raccolta_apre` /
+`raccolta_chiude` (dove si radunano: aerei tedeschi Tobruk/Libya/Alexandria; truppe UK/USA United Kingdom), `zona_raccolta`
+(Francia: 110 Sea Zone), `accesso` (Egitto: Alexandria, priorita' d'attacco per l'Italia mentre si prepara), `porto` (navetta:
+Southern Italy 97/95 → Tobruk 96 per l'Italia; Eastern United States 101 → United Kingdom 110 per gli USA), `aerei_apre` (4),
+`round_min`/`round_max` (Egitto 2-6, Francia 5-9), `trasporti` (USA 4, UK 2), `guerra_da_round` (USA 4), `riserve` (acquisti
+obbligati per nazione: Italia 2 terra; USA 1 trasporto + 3 terra, quota 50%; UK 1 trasporto + 2 terra, quota 30%), `valore` 25
+(PU del bersaglio nel valore atteso), `tetto_perdita` 40 TUV, `tolleranza_difensori` 0,25, `soglia_chiusura` 50%, `max_rinvii` 2.
+
+**Meccanica** (`OperazioniCongiunte`, solo partita reale, mai nelle simulazioni; chiamata da `ProPlusAi` prima della mossa di Hard
+della fase; le unita' mosse/tenute vanno a `heldUnits` (non combattimento) e `combatHeldUnits` (combattimento)):
+- **Avvio** (acquisto del primo turno di una nazione dell'operazione): round obiettivo dalla fattibilita', poi fisso: Egitto =
+  1 + max(round degli aerei tedeschi alla raccolta (2° aereo piu' vicino), round delle truppe italiane accanto al bersaglio:
+  distanza via terra − 1, +1 se un territorio di accesso e' nemico, **0 se trasporti italiani in portata possono sbarcare**);
+  Francia = round di guerra possibile + traversata (zone / 2). Limitato a `round_min`-`round_max`.
+- **Stati**: PREPARAZIONE (round < obiettivo − 1), POSIZIONAMENTO (obiettivo − 1), ESECUZIONE (obiettivo), COMPLETATA, ANNULLATA.
+- **Riserve**: `ProPlusTuning.purchaseOrders` restituisce gli acquisti obbligati della nazione (trasporti solo se sotto
+  `trasporti`) finche' round < obiettivo; il non combattimento porta le riserve alla raccolta: aerei tedeschi verso Tobruk/Libya
+  (max `aerei_apre`, territorio sicuro: win% nemica ≤ 40 = 100 − minima Equilibrato), truppe italiane verso il territorio di
+  raccolta piu' vicino al bersaglio, navetta dei trasporti (carico al porto solo se esiste una sosta sicura, sosta piu' lontana
+  sicura con le navi da guerra della zona come scorta, scarico all'arrivo), flotta riunita nella zona di raccolta (trasporti +
+  navi da guerra entro 2 zone, se la zona e' sicura). In POSIZIONAMENTO le unita' gia' in raccolta restano fuori dagli attacchi di
+  Hard (`combatHeldUnits`).
+- **Tappa 1** (chi apre, combattimento del round obiettivo): attaccanti = unita' in portata secondo le opzioni d'attacco di Hard
+  (aerei solo dove possono atterrare) + sbarco dalla zona di raccolta (carico dal territorio di raccolta sui trasporti propri in
+  zona; dalla capitale solo se resta sotto il 25%); stima con ritirata degli aerei se solo aerei; difensori residui stimati +
+  rinforzi nemici dei turni in mezzo (opzioni di difesa nemiche di Hard); attaccanti stimati di chi chiude (opzioni alleate di Hard
+  + portata propria a movimento pieno + sbarchi possibili). **Soglia d'alleanza**: presa = p1 + (1 − p1)·win2, valore atteso =
+  presa × valore + swing TUV tappa 1 + (1 − p1) × swing tappa 2; esegue se valore atteso > 0 e perdita attesa ≤ tetto (anche con
+  win% della battaglia bassa). Bersaglio senza difensori ⇒ tappa 1 "non necessaria" (conta come avviata). Bersaglio gia'
+  dell'alleanza ⇒ **IN ATTESA** (round obiettivo +1 senza contare un rinvio) fino a `round_max`, poi ANNULLATA "superata".
+- **Tappa 2** (chi chiude, stesso round): condizione (`condizioneTappa2`): difensori residui ≤ stima × (1 + tolleranza) (oppure
+  win% ≥ 80), TUV perso nella tappa 1 ≤ tetto (registri di battaglia), win% ≥ `soglia_chiusura`, almeno un attaccante (stima con
+  gli sbarchi che Hard potrebbe fare). Se ok: prima **le mosse dell'operazione** (unita' in portata secondo Hard + sbarco dalla
+  zona di raccolta: carico dal territorio di raccolta e assalto nello stesso turno), poi **il combattimento di Hard forzato** sul
+  bersaglio per le altre unita' (risposte dell'operazione: priorita' +1000, soglia minima = soglia di chiusura, attacco tenuto
+  anche "non conviene" / trasporti esposti: `KEPT_BY_OPERATION`), cosi' usa anche sbarchi e bombardamenti di Hard. Scoperta: il
+  combattimento di Hard britannico a volte non vede lo sbarco UK → 110 → Normandy ("fuori portata": prova locale seme 207 R8,
+  causa non verificata) — per questo le mosse le fa prima l'operazione; con navi nemiche nella zona (3 sottomarini tedeschi in 110,
+  seme 207 R6) lo sbarco e' impossibile in quel turno e l'operazione rinvia. Se nessuno attacca davvero (registri di battaglia) ⇒ rinvio. Se il bersaglio e' gia' preso da chi apre: rinforzo nel non combattimento (truppe sbarcate dalla zona di
+  raccolta, fino a 2 aerei che atterrano). Condizione non rispettata ⇒ **rinvio** di un round (max `max_rinvii`, entro
+  `round_max`) altrimenti ANNULLATA.
+- **Esito**: preso/non preso nel non combattimento di chi chiude (COMPLETATA), tenuto dopo 1 e 2 round (turno di chi apre);
+  Egitto: un'unita' di terra tedesca entra in Egypt se puo' (obiettivo nazionale).
+- **Diario**: righe "Operazione X: ..." con i numeri (avvio con fattibilita', stato, riserve con le mosse, tappa 1 con attaccanti,
+  win%, perdita attesa, residui, rinforzi, stima tappa 2, presa stimata, valore atteso; tappa 2 con residui/stimati/tollerati,
+  TUV perso, win%; rinvio/attesa/annullamento con il motivo; presa, rinforzo, completata, tenuta); JSON `operazione_congiunta`
+  (stessi numeri). Stesso elenco di eventi nello stato salvato (letto dall'autoplay anche senza diario).
+- **Contatore di controllo** (`ControlloTuning`): `ProPlusAi` costruisce `ProData` con un proxy di `ProTuning` che a ogni domanda
+  chiama Pro+ e `ProTuning.DEFAULT` sugli stessi argomenti e conta per round domande, differenze e risposte dell'operazione
+  (segnate da `ProPlusTuning.operationAnswer`); restituisce sempre la risposta di Pro+. Salvato nelle partite con il lato nudo
+  (`Pro+ controllo nudo: <nazione>`, fine di ogni fase). `ProPlusTuning.unwrap` al posto degli `instanceof ProPlusTuning`.
+- Test: `ai/pro/OperazioniCongiunteTest` (definizioni e interruttore, stato e round obiettivo, riserve negli acquisti con acquisto
+  vero, condizione tappa 2, flag spento = Hard con contatore a 0 su un turno intero, operazione accesa: 0 differenze fuori
+  dall'operazione, `combatHeldUnits` di Hard vuoto).
 
 ## Come configurare lo stratega
 
@@ -3035,3 +3142,27 @@ Solo misura (nessun comportamento di Pro+ o Hard toccato). File: workflow `propl
 - **Indicazione pratica**: confrontare configurazioni solo **nella stessa run**, con la matrice mescolata, mai con
   riferimenti di run diverse; repliche dello stesso seme non servono (il seme non fissa la partita). Semi per
   configurazione per vedere una differenza vera con un test al 5% e potenza 80% (ds 1,5): 1 VC ⇒ ~35; 0,5 VC ⇒ ~140.
+
+### Step PROVA DI VALORE — due operazioni congiunte scritte a mano (2026-11-09)
+
+Prova di valore del coordinamento d'alleanza prima della versione generale (OC-1): Egitto (GER apre con gli aerei, ITA chiude)
+e Francia (USA sbarca per primi in Normandy Bordeaux, UK completa), sopra Pro+ nudo, accese solo con l'interruttore. Vedi
+"Operazioni congiunte (step PROVA DI VALORE)" (verifiche di regola, dati, meccanica, contatore) e la modalita' `[prova]`.
+File: `ai/proplus/OperazioneCongiunta`, `OperazioniCongiunte`, `ControlloTuning` (nuovi), `ProPlusTuning` (risposte
+dell'operazione marcate, `unwrap`, `holdForOperation`, `holdCombat`, `combatHeldUnits`), `ProPlusAi` (aggancio in acquisto,
+combattimento, non combattimento; contatore salvato), `DiaryRecorder.jointOperation`, `OperazioniAnfibie` (solo `unwrap`);
+`ai/pro/ProTuning.combatHeldUnits` + `ProMyMoveOptions.removeUnits` + 1 riga in `ProCombatMoveAi` (vuoti per Hard); risorsa
+`proplus/strategia/operazioni-congiunte.json`; autoplay `--operazione`, `Monitor`/`Riepilogo` (stato, contatore, bersagli),
+`ConfrontoProva` (nuovo), `RiepilogoGenerale` (etichetta + sezione); workflow `[prova]` (140 partite, max-parallel 20).
+- Test locali (JDK 25 da apt): `:game-core:test --tests 'games.strategy.triplea.ai.*'` + `:proplus-autoplay:test` +
+  `HeadedPlayerTypesTest`: 512 test, 0 falliti (golden di Hard `HardPriorityGoldenTest`, `HardNeutralityGoldenTest`,
+  `ProPlusGoldenTest`, `NudoHardTest`, diario on/off `DiaryNeutralityTest` compresi); nuovo `OperazioniCongiunteTest` 6 verdi.
+  `spotlessApply` eseguito solo sui file toccati (le altre riformattazioni annullate).
+- Prove locali (sandbox, partite brevi, non statistiche): Egitto seme 205/206 (obiettivo R2 con lo sbarco italiano in
+  fattibilita': tappa 1 aerea tedesca, perdita 10 TUV, Italia prende e tiene l'Egitto 2 round); semi 201-203 con la versione
+  senza la via anfibia: obiettivo R3 e **Hard Italia prende l'Egitto da sola al R1-R2** ⇒ operazione "superata" (da qui l'attesa
+  e la fattibilita' via mare). Francia semi 204, 207, 209: completata al R6 (USA prendono Normandy da soli; UK rinforzo), al R8
+  dopo 2 rinvii (sottomarini in 110 al R6, valore atteso negativo al R7), al R6 con lo sbarco UK delle mosse dell'operazione.
+  **Contatore nudo: 0 differenze** su ~64.000 domande (2 partite complete con operazione, Asse e Alleati) fuori dalle risposte
+  dell'operazione.
+

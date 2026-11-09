@@ -1,0 +1,56 @@
+{
+  "versione": 1,
+  "nota": "Operazioni congiunte scritte a mano (step PROVA DI VALORE). Valori scelti, NON tarati: vedi CLAUDE.md 'Operazioni congiunte'. Attive solo con la proprieta' 'Pro+ operazione congiunta: <alleanza>' = id (default spento).",
+  "operazioni": [
+    {
+      "id": "egitto",
+      "nome": "Egitto",
+      "alleanza": "Axis",
+      "bersaglio": "Egypt",
+      "apre": "Germans",
+      "chiude": "Italians",
+      "raccolta_apre": ["Tobruk", "Libya", "Alexandria"],
+      "raccolta_chiude": ["Alexandria", "Tobruk", "Libya"],
+      "accesso": ["Alexandria"],
+      "porto": {"territorio": "Southern Italy", "zone": ["97 Sea Zone", "95 Sea Zone"], "arrivo": "Tobruk", "zona_arrivo": "96 Sea Zone", "nazione": "Italians"},
+      "aerei_apre": 4,
+      "round_min": 2,
+      "round_max": 6,
+      "riserve": {
+        "Italians": {"acquisti": [{"categoria": "terra", "tipi": ["infantry", "armour"], "minimo": 2}], "piazzamento": ["Southern Italy"], "quota": 30}
+      },
+      "valore": 25,
+      "tetto_perdita": 40,
+      "tolleranza_difensori": 0.25,
+      "soglia_chiusura": 50,
+      "max_rinvii": 2
+    },
+    {
+      "id": "francia",
+      "nome": "Francia",
+      "alleanza": "Allies",
+      "bersaglio": "Normandy Bordeaux",
+      "apre": "Americans",
+      "chiude": "British",
+      "raccolta_apre": ["United Kingdom"],
+      "raccolta_chiude": ["United Kingdom"],
+      "zona_raccolta": "110 Sea Zone",
+      "accesso": [],
+      "porto": {"territorio": "Eastern United States", "zone": ["101 Sea Zone"], "arrivo": "United Kingdom", "zona_arrivo": "110 Sea Zone", "nazione": "Americans"},
+      "aerei_apre": 0,
+      "round_min": 5,
+      "round_max": 9,
+      "trasporti": {"Americans": 4, "British": 2},
+      "guerra_da_round": {"Americans": 4},
+      "riserve": {
+        "Americans": {"acquisti": [{"categoria": "trasporti", "tipi": ["transport"], "minimo": 1}, {"categoria": "terra", "tipi": ["infantry", "artillery", "armour"], "minimo": 3}], "piazzamento": ["Eastern United States", "101 Sea Zone"], "quota": 50},
+        "British": {"acquisti": [{"categoria": "trasporti", "tipi": ["transport"], "minimo": 1}, {"categoria": "terra", "tipi": ["infantry", "artillery"], "minimo": 2}], "piazzamento": ["United Kingdom", "110 Sea Zone"], "quota": 30}
+      },
+      "valore": 25,
+      "tetto_perdita": 40,
+      "tolleranza_difensori": 0.25,
+      "soglia_chiusura": 50,
+      "max_rinvii": 2
+    }
+  ]
+}

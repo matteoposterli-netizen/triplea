@@ -141,6 +141,7 @@ final class RiepilogoGenerale {
     ConfrontoAblazione.write(md, games, alliances, vcRounds);
     ConfrontoConferma.write(md, games, alliances, vcRounds);
     ConfrontoVarianza.write(md, games, alliances, vcRounds);
+    ConfrontoProva.write(md, games, alliances, vcRounds);
     configurations(md, games, alliances, vcRounds, maxRound);
     plansAndPostures(md, games, alliances);
     landingsAndTransports(md, games, alliances, maxRound);
@@ -264,8 +265,18 @@ final class RiepilogoGenerale {
               + " "
               + text(p.getAsJsonObject("piani"), a)
               + ("regole".equals(decider) ? "" : " (" + decider + ")")
-              + ablationLabel(json, a);
+              + ablationLabel(json, a)
+              + operationLabel(json, a);
         });
+  }
+
+  /** Step PROVA DI VALORE: the joint operation of {@code alliance}, eg " + operazione egitto". */
+  static String operationLabel(final JsonObject json, final String alliance) {
+    final JsonObject p = json.getAsJsonObject("parametri");
+    if (!p.has("operazione") || !p.getAsJsonObject("operazione").has(alliance)) {
+      return "";
+    }
+    return " + operazione " + p.getAsJsonObject("operazione").get(alliance).getAsString();
   }
 
   /** Step ABLAZIONE: the components off of {@code alliance}, eg " [nudo]", " [senza x, y]". */
@@ -301,7 +312,10 @@ final class RiepilogoGenerale {
    * cost, final VC) and the mean final VC of each configuration with the LLM against the rules.
    */
   static void strategist(
-      final StringBuilder md, final List<Game> games, final List<String> alliances, final int maxRound) {
+      final StringBuilder md,
+      final List<Game> games,
+      final List<String> alliances,
+      final int maxRound) {
     final List<Game> llm =
         games.stream()
             .filter(g -> g.json() != null)
@@ -315,8 +329,9 @@ final class RiepilogoGenerale {
 
 """);
     if (llm.isEmpty()) {
-      md.append("Nessuna partita con lo stratega LLM (secret ANTHROPIC_API_KEY assente o partite"
-          + " non richieste).\n");
+      md.append(
+          "Nessuna partita con lo stratega LLM (secret ANTHROPIC_API_KEY assente o partite"
+              + " non richieste).\n");
       return;
     }
     md.append(
@@ -324,7 +339,11 @@ final class RiepilogoGenerale {
             + " Operazioni | Chiamate | Token | Costo $ | Stratega: chiamate / $ | Ordini del turno:"
             + " chiamate / ripieghi / $ | VC R"
             + maxRound
-            + " |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+            +
+"""
+ |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+""");
     double cost = 0;
     int calls = 0;
     final double[] byLevel = new double[2];
@@ -386,9 +405,12 @@ final class RiepilogoGenerale {
             .append(level(uso, "stratega"))
             .append(" | ")
             .append(level(uso, "ordini"))
-            .append(x.has("ordini_turno") && x.getAsJsonObject("ordini_turno").has("ripieghi")
-                ? " (ripieghi " + x.getAsJsonObject("ordini_turno").get("ripieghi").getAsInt() + ")"
-                : "")
+            .append(
+                x.has("ordini_turno") && x.getAsJsonObject("ordini_turno").has("ripieghi")
+                    ? " (ripieghi "
+                        + x.getAsJsonObject("ordini_turno").get("ripieghi").getAsInt()
+                        + ")"
+                    : "")
             .append(" | ")
             .append(
                 last == null
@@ -404,7 +426,9 @@ final class RiepilogoGenerale {
             .append(" |\n");
         if (x.has("motivi_ripiego")) {
           for (final JsonElement r : x.getAsJsonArray("motivi_ripiego")) {
-            md.append("|  | ripiego: ").append(r.getAsString().replace("|", "/")).append(" |||||||||||||\n");
+            md.append("|  | ripiego: ")
+                .append(r.getAsString().replace("|", "/"))
+                .append(" |||||||||||||\n");
           }
         }
       }
@@ -427,7 +451,8 @@ final class RiepilogoGenerale {
             byLevel[1] / llm.size()));
     md.append("\nVC finali (R")
         .append(maxRound)
-        .append(") medie per configurazione, LLM contro regole con gli stessi piani:\n\n| Configurazione | Partite | ")
+        .append(
+            ") medie per configurazione, LLM contro regole con gli stessi piani:\n\n| Configurazione | Partite | ")
         .append(String.join(" | ", alliances.stream().map(Riepilogo::allianceLabel).toList()))
         .append(" |\n|---|---|")
         .append("---|".repeat(alliances.size()))
@@ -435,8 +460,12 @@ final class RiepilogoGenerale {
     final Map<String, List<Game>> byConfig = new LinkedHashMap<>();
     games.stream()
         .filter(g -> g.json() != null)
-        .forEach(g -> byConfig.computeIfAbsent(configuration(g.json(), alliances), k -> new ArrayList<>()).add(g));
-    final java.util.Set<String> plansWithLlm = new java.util.HashSet<>();
+        .forEach(
+            g ->
+                byConfig
+                    .computeIfAbsent(configuration(g.json(), alliances), k -> new ArrayList<>())
+                    .add(g));
+    final Set<String> plansWithLlm = new java.util.HashSet<>();
     llm.forEach(g -> plansWithLlm.add(plans(g.json(), alliances)));
     byConfig.forEach(
         (config, list) -> {
@@ -461,14 +490,14 @@ final class RiepilogoGenerale {
 
   /**
    * LLM step 3: per configuration with the same plans as an LLM game (rules, Haiku, Sonnet...): VC
-   * at the end, real landings per alliance, operation decisions (strategist + turn orders, %
-   * lancia / attendi / annulla), postures and cost per game, means of the seeds.
+   * at the end, real landings per alliance, operation decisions (strategist + turn orders, % lancia
+   * / attendi / annulla), postures and cost per game, means of the seeds.
    */
   static void comparison(
       final StringBuilder md,
       final List<Game> games,
       final List<String> alliances,
-      final java.util.Set<String> plansWithLlm) {
+      final Set<String> plansWithLlm) {
     md.append(
         "\nConfronto per configurazione (media dei semi; operazioni = decisioni di stratega e ordini"
             + " del turno dell'alleanza LLM, o delle regole):\n\n| Configurazione | Partite | VC finali "
@@ -487,8 +516,8 @@ final class RiepilogoGenerale {
                     .add(g));
     byConfig.forEach(
         (config, list) -> {
-          final java.util.List<String> vcs = new ArrayList<>();
-          final java.util.List<String> landings = new ArrayList<>();
+          final List<String> vcs = new ArrayList<>();
+          final List<String> landings = new ArrayList<>();
           for (final String a : alliances) {
             final List<Double> vc = new ArrayList<>();
             final List<Double> land = new ArrayList<>();
@@ -522,7 +551,8 @@ final class RiepilogoGenerale {
               if (x.has(key)) {
                 x.getAsJsonObject(key)
                     .entrySet()
-                    .forEach(e -> decisions.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
+                    .forEach(
+                        e -> decisions.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
               }
             }
             if (x.has("ordini_turno") && x.getAsJsonObject("ordini_turno").has("operazioni")) {
@@ -608,7 +638,7 @@ final class RiepilogoGenerale {
 
   /** LLM step: the mean effective risk (1-5) of each nation, per game (every Pro+ game). */
   static void meanRisk(final StringBuilder md, final List<Game> games) {
-    final java.util.Set<String> nations = new java.util.LinkedHashSet<>();
+    final Set<String> nations = new java.util.LinkedHashSet<>();
     for (final Game g : games) {
       if (g.json() != null && g.json().has("stratega")) {
         g.json()
@@ -627,7 +657,13 @@ final class RiepilogoGenerale {
     if (nations.isEmpty()) {
       return;
     }
-    md.append("\n\n## Rischio effettivo medio per nazione\n\n")
+    md.append(
+"""
+
+
+## Rischio effettivo medio per nazione
+
+""")
         .append("Livello 1-5 (cursore + scostamento delle direttive per nazione e fronte, -1 in")
         .append(" DIFENSIVA), media di tutti i round e fronti.\n\n| Partita | ")
         .append(String.join(" | ", nations))
@@ -657,15 +693,15 @@ final class RiepilogoGenerale {
         continue;
       }
       md.append("| ").append(g.folder()).append(" | ");
-      nations.forEach(
-          n -> md.append(mean.has(n) ? mean.get(n).getAsString() : "-").append(" | "));
+      nations.forEach(n -> md.append(mean.has(n) ? mean.get(n).getAsString() : "-").append(" | "));
       md.append('\n');
     }
   }
 
   private static String plans(final JsonObject json, final List<String> alliances) {
     final JsonObject p = json.getAsJsonObject("parametri");
-    return join(alliances, a -> text(p.getAsJsonObject("tipi"), a) + text(p.getAsJsonObject("piani"), a));
+    return join(
+        alliances, a -> text(p.getAsJsonObject("tipi"), a) + text(p.getAsJsonObject("piani"), a));
   }
 
   /**

@@ -245,7 +245,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     final String risk;
     final JsonObject json = event("inizio_turno");
     String planText = "";
-    if (ai.getProData().getTuning() instanceof ProPlusTuning tuning) {
+    if (ProPlusTuning.unwrap(ai.getProData().getTuning()) instanceof ProPlusTuning tuning) {
       final Optional<PianoAttivo> plan = tuning.plan(data, player);
       // step ABLAZIONE: the components turned off for the alliance
       final Set<Ablazione.Componente> off =
@@ -1260,6 +1260,28 @@ public final class DiaryRecorder implements ProDecisionRecorder {
    * plan, reading of the enemy's), written before the turn of the alliance's first nation. Only
    * while the diary is on; never changes a decision.
    */
+  /**
+   * Step PROVA DI VALORE: lines and events of a joint operation ({@code operazione_congiunta}).
+   * Only while the diary is on; never changes a decision.
+   */
+  public static void jointOperation(
+      final GameState data, final List<String> lines, final List<JsonObject> events) {
+    if (!DiarySettings.isEnabled() || !(data instanceof GameData gameData)) {
+      return;
+    }
+    GameDiary.forGame(gameData)
+        .ifPresent(
+            diary -> {
+              try {
+                diary.turnStarted(() -> {});
+                diary.text(String.join("\n", lines));
+                events.forEach(e -> diary.json(e.deepCopy()));
+              } catch (final RuntimeException e) {
+                ProLogger.warn("Diario Pro+: righe dell'operazione congiunta non scritte: " + e);
+              }
+            });
+  }
+
   public static void allianceRound(final GameState data, final Valutazione.Risultato result) {
     if (!DiarySettings.isEnabled() || !(data instanceof GameData gameData)) {
       return;
@@ -1557,7 +1579,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
       final ProData proData,
       final ProStagingOrders.Result result) {
     final Optional<PianoAttivo> plan =
-        ai.getProData().getTuning() instanceof ProPlusTuning tuning
+        ProPlusTuning.unwrap(ai.getProData().getTuning()) instanceof ProPlusTuning tuning
             ? tuning.plan(proData.getData(), proData.getPlayer())
             : Optional.empty();
     return counts.entrySet().stream()
@@ -1676,7 +1698,8 @@ public final class DiaryRecorder implements ProDecisionRecorder {
           }
           final AttackRecord rec = record(proData, patd);
           AttackRecord.ProPlusInfo proPlus = null;
-          if (worth.hardDrops() && proData.getTuning() instanceof ProPlusTuning) {
+          if (worth.hardDrops()
+              && ProPlusTuning.unwrap(proData.getTuning()) instanceof ProPlusTuning) {
             final ProPlusTuning.UnworthAttackCheck check = ProPlusTuning.check(proData, worth);
             final RiskLevel level = check.level();
             proPlus =
@@ -1708,7 +1731,8 @@ public final class DiaryRecorder implements ProDecisionRecorder {
                   keptBy,
                   proPlus,
                   ProPlusTuning.KEPT_BY_BRIDGEHEAD.equals(keptBy)
-                          && proData.getTuning() instanceof ProPlusTuning tuning
+                          && ProPlusTuning.unwrap(proData.getTuning())
+                              instanceof ProPlusTuning tuning
                       ? Optional.ofNullable(
                               tuning
                                   .bridgeheads(
@@ -1874,7 +1898,7 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     rec.neutral = isNeutral(proData.getData(), t);
     rec.desired = proData.getAttackWinPercentage(t);
     rec.minimum = proData.getAttackMinWinPercentage(t);
-    if (proData.getTuning() instanceof ProPlusTuning) {
+    if (ProPlusTuning.unwrap(proData.getTuning()) instanceof ProPlusTuning) {
       rec.risk = ProPlusTuning.riskLevel(proData, t).getLabel();
       final Optional<PianoAttivo> plan = ProPlusTuning.planOf(proData);
       plan.ifPresent(

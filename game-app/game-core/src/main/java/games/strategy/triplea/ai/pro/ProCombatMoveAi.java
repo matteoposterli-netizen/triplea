@@ -97,6 +97,8 @@ public class ProCombatMoveAi {
 
     // Find the maximum number of units that can attack each territory and max enemy defenders
     territoryManager.populateAttackOptions();
+    // Pro+: units a joint operation already sent into a battle (none for Hard)
+    territoryManager.getAttackOptions().removeUnits(proData.getTuning().combatHeldUnits(proData));
     territoryManager.populateEnemyDefenseOptions();
 
     // Remove territories that aren't worth attacking and prioritize the remaining ones

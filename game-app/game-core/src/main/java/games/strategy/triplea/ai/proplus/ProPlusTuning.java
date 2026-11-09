@@ -76,6 +76,9 @@ public final class ProPlusTuning implements ProTuning {
   /** {@link #keepsAttackNotWorthIt}: kept by the victory city / national objective rule. */
   public static final String KEPT_BY_OBJECTIVE = "objective";
 
+  /** Step PROVA DI VALORE: kept as the second step of a joint operation. */
+  public static final String KEPT_BY_OPERATION = "joint_operation";
+
   /** {@link #keepsBridgehead}: kept as the first step of a two-step bridgehead. */
   public static final String KEPT_BY_BRIDGEHEAD = "bridgehead";
 
@@ -94,6 +97,42 @@ public final class ProPlusTuning implements ProTuning {
    * ProData} parameter which game and player the ablation switches are read for.
    */
   private @Nullable ProData owner;
+
+  /**
+   * Step PROVA DI VALORE: set when the last answer came from a joint operation ({@link
+   * OperazioniCongiunte}), read and cleared by the check against Hard ({@link ControlloTuning}).
+   */
+  private static final ThreadLocal<Boolean> ANSWER_OF_OPERATION =
+      ThreadLocal.withInitial(() -> false);
+
+  /** Marks the answer being returned as the joint operation's. */
+  static <T> T operationAnswer(final T answer) {
+    ANSWER_OF_OPERATION.set(true);
+    return answer;
+  }
+
+  /** Whether the last answer was the joint operation's (and clears the mark). */
+  static boolean takeOperationMark() {
+    final boolean mark = ANSWER_OF_OPERATION.get();
+    ANSWER_OF_OPERATION.set(false);
+    return mark;
+  }
+
+  /**
+   * The Pro+ tuning of {@code tuning}: itself, or the one inside the check against Hard ({@link
+   * ControlloTuning}); null for another tuning (Hard's).
+   */
+  public static @Nullable ProPlusTuning unwrap(final @Nullable ProTuning tuning) {
+    if (tuning instanceof ProPlusTuning plus) {
+      return plus;
+    }
+    return ControlloTuning.inner(tuning);
+  }
+
+  /** Round of the game of the AI data this tuning belongs to (0 before it has one). */
+  int ownerRound() {
+    return owner == null || owner.getData() == null ? 0 : owner.getData().getSequence().getRound();
+  }
 
   /** Ties this tuning to the AI data that uses it ({@link ProPlusAi}). */
   public void attach(final ProData proData) {
@@ -136,7 +175,7 @@ public final class ProPlusTuning implements ProTuning {
 
   /** {@link #plan} of {@code proData}'s player, also when its tuning is not this class. */
   public static Optional<PianoAttivo> planOf(final ProData proData) {
-    return proData.getTuning() instanceof ProPlusTuning tuning
+    return unwrap(proData.getTuning()) instanceof ProPlusTuning tuning
         ? tuning.plan(proData.getData(), proData.getPlayer())
         : PianoAttivo.of(proData.getData(), proData.getPlayer());
   }
@@ -186,6 +225,11 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public double targetAttackMinWinPercentage(
       final ProData proData, final Territory target, final double attackMinWinPercentage) {
+    // step PROVA DI VALORE: the target of an approved second step, down to the closing threshold
+    if (OperazioniCongiunte.forzaBersaglio(proData, target)) {
+      return operationAnswer(
+          Math.min(attackMinWinPercentage, OperazioniCongiunte.sogliaForzata(proData)));
+    }
     if (!on(proData, Ablazione.Componente.SOGLIE_RISCHIO)) {
       return attackMinWinPercentage;
     }
@@ -247,7 +291,13 @@ public final class ProPlusTuning implements ProTuning {
     if (ProUtils.isNeutralLand(target)) {
       return 0;
     }
-    return planOf(proData).map(p -> p.peso(target)).orElse(0.0);
+    if (OperazioniCongiunte.forzaBersaglio(proData, target)) {
+      return operationAnswer(OperazioniCongiunte.BONUS_FORZATO);
+    }
+    final double plan = planOf(proData).map(p -> p.peso(target)).orElse(0.0);
+    // step PROVA DI VALORE: an access territory of the joint operation (only with its switch on)
+    final double access = OperazioniCongiunte.bonusAccesso(proData, target);
+    return access > plan ? operationAnswer(access) : plan;
   }
 
   /**
@@ -258,6 +308,11 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public Optional<ProPurchaseOrders> purchaseOrders(final ProData proData) {
+    // step PROVA DI VALORE: the joint operation's reserves (only with its switch on)
+    final Optional<ProPurchaseOrders> reserves = OperazioniCongiunte.ordiniAcquisto(proData);
+    if (reserves.isPresent()) {
+      return operationAnswer(reserves);
+    }
     if (!on(proData, Ablazione.Componente.LOGISTICA_ACQUISTI)) {
       return Optional.empty();
     }
@@ -390,15 +445,60 @@ public final class ProPlusTuning implements ProTuning {
     heldPlayer = player;
     heldRound = data.getSequence().getRound();
     held = java.util.Set.copyOf(units);
+    heldByOperation = false;
+  }
+
+  /** Step PROVA DI VALORE: whether the units held this turn include a joint operation's. */
+  private boolean heldByOperation;
+
+  /**
+   * Step PROVA DI VALORE: a joint operation moved or keeps {@code units} this turn (added to the
+   * units held by the plan's operations, same turn).
+   */
+  public void holdForOperation(
+      final GameState data, final GamePlayer player, final java.util.Set<Unit> units) {
+    final java.util.Set<Unit> all = new java.util.LinkedHashSet<>(units);
+    if (heldData == data && heldPlayer == player && heldRound == data.getSequence().getRound()) {
+      all.addAll(held);
+    }
+    hold(data, player, all);
+    heldByOperation = !units.isEmpty();
   }
 
   @Override
   public java.util.Set<Unit> heldUnits(final ProData proData) {
-    return proData.getData() == heldData
-            && proData.getPlayer() == heldPlayer
-            && proData.getData().getSequence().getRound() == heldRound
-        ? held
-        : java.util.Set.of();
+    final java.util.Set<Unit> units =
+        proData.getData() == heldData
+                && proData.getPlayer() == heldPlayer
+                && proData.getData().getSequence().getRound() == heldRound
+            ? held
+            : java.util.Set.of();
+    return heldByOperation && !units.isEmpty() ? operationAnswer(units) : units;
+  }
+
+  private @Nullable GameState combatHeldData;
+  private @Nullable GamePlayer combatHeldPlayer;
+  private int combatHeldRound = -1;
+  private java.util.Set<Unit> combatHeld = java.util.Set.of();
+
+  /** Step PROVA DI VALORE: units a joint operation sent into battle, or keeps, this combat move. */
+  public void holdCombat(
+      final GameState data, final GamePlayer player, final java.util.Set<Unit> units) {
+    combatHeldData = data;
+    combatHeldPlayer = player;
+    combatHeldRound = data.getSequence().getRound();
+    combatHeld = java.util.Set.copyOf(units);
+  }
+
+  @Override
+  public java.util.Set<Unit> combatHeldUnits(final ProData proData) {
+    if (proData.getData() == combatHeldData
+        && proData.getPlayer() == combatHeldPlayer
+        && proData.getData().getSequence().getRound() == combatHeldRound
+        && !combatHeld.isEmpty()) {
+      return operationAnswer(combatHeld);
+    }
+    return java.util.Set.of();
   }
 
   /**
@@ -502,6 +602,11 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public ProWarDecision warDecision(final ProData proData, final GamePlayer enemy) {
+    // step PROVA DI VALORE: the war the joint operation needs (only with its switch on)
+    final Optional<ProWarDecision> war = OperazioniCongiunte.guerra(proData, enemy);
+    if (war.isPresent()) {
+      return operationAnswer(war.get());
+    }
     final Optional<PianoAttivo> plan = planOf(proData);
     if (plan.isEmpty()) {
       return ProWarDecision.HARD;
@@ -682,6 +787,9 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public Optional<String> keepsAttackNotWorthIt(final ProData proData, final ProAttackWorth worth) {
+    if (OperazioniCongiunte.forzaBersaglio(proData, worth.territory())) {
+      return operationAnswer(Optional.of(KEPT_BY_OPERATION));
+    }
     if (!on(proData, Ablazione.Componente.NON_CONVIENE)) {
       return Optional.empty();
     }
@@ -703,6 +811,9 @@ public final class ProPlusTuning implements ProTuning {
       final double winPercentage,
       final double enemyTuvSwing,
       final double attackValue) {
+    if (OperazioniCongiunte.forzaBersaglio(proData, territory)) {
+      return operationAnswer(Optional.of(KEPT_BY_OPERATION));
+    }
     // step ABLAZIONE: without the Pro+ transport rule the landing follows Hard's rule alone
     if (!on(proData, Ablazione.Componente.NON_CONVIENE)
         || !on(proData, Ablazione.Componente.TRASPORTI_SBARCO)) {

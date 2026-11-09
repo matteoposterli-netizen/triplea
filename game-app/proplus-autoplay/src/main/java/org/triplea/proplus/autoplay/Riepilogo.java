@@ -103,6 +103,9 @@ final class Riepilogo {
     json.add("usa_sbarcate_ovest", usLandedInWestEurope(landings, rounds.size()));
     firstHeldBridgehead(landings, rounds).ifPresent(b -> json.add("prima_testa_di_ponte", b));
     json.add("operazioni", diaryData.operations);
+    // step PROVA DI VALORE: joint operations' state and the check of Pro+ nudo against Hard
+    json.add("operazioni_congiunte", data.get("operazioni_congiunte"));
+    json.add("controllo_nudo", data.get("controllo_nudo"));
     json.add("attacchi_regno_unito", diaryData.attacksOnBritain);
     json.add("esito", outcome(o, monitor, rounds, winner, gameOver));
     json.add("contratto", contract(diary));
@@ -140,7 +143,8 @@ final class Riepilogo {
         if (e.has("rischio_effettivo")) {
           for (final Map.Entry<String, JsonElement> n :
               e.getAsJsonObject("rischio_effettivo").entrySet()) {
-            for (final Map.Entry<String, JsonElement> f : n.getValue().getAsJsonObject().entrySet()) {
+            for (final Map.Entry<String, JsonElement> f :
+                n.getValue().getAsJsonObject().entrySet()) {
               final JsonObject sums = child(child(a, "rischio_somme"), n.getKey());
               sums.addProperty(
                   "somma",
@@ -151,8 +155,7 @@ final class Riepilogo {
           }
         }
         increment(a, "decisioni", 1);
-        final JsonObject who =
-            e.has("decisore") ? e.getAsJsonObject("decisore") : new JsonObject();
+        final JsonObject who = e.has("decisore") ? e.getAsJsonObject("decisore") : new JsonObject();
         final String name = who.has("nome") ? who.get("nome").getAsString() : "regole";
         a.addProperty("decisore", name);
         final boolean fallback = who.has("ripiego") && who.get("ripiego").getAsBoolean();
@@ -165,7 +168,10 @@ final class Riepilogo {
               a.has("motivi_ripiego") ? a.getAsJsonArray("motivi_ripiego") : new JsonArray();
           if (reasons.size() < 3 && who.has("avvisi") && !who.getAsJsonArray("avvisi").isEmpty()) {
             reasons.add(
-                "R" + e.get("round").getAsInt() + ": " + who.getAsJsonArray("avvisi").get(0).getAsString());
+                "R"
+                    + e.get("round").getAsInt()
+                    + ": "
+                    + who.getAsJsonArray("avvisi").get(0).getAsString());
           }
           a.add("motivi_ripiego", reasons);
         }
@@ -205,7 +211,8 @@ final class Riepilogo {
     out.entrySet()
         .forEach(
             x -> {
-              if (!x.getValue().isJsonObject() || !x.getValue().getAsJsonObject().has("rischio_somme")) {
+              if (!x.getValue().isJsonObject()
+                  || !x.getValue().getAsJsonObject().has("rischio_somme")) {
                 return;
               }
               final JsonObject a = x.getValue().getAsJsonObject();
@@ -217,7 +224,8 @@ final class Riepilogo {
                         final JsonObject v = n.getValue().getAsJsonObject();
                         mean.addProperty(
                             n.getKey(),
-                            Math.round(v.get("somma").getAsDouble() / v.get("n").getAsDouble() * 100)
+                            Math.round(
+                                    v.get("somma").getAsDouble() / v.get("n").getAsDouble() * 100)
                                 / 100.0);
                       });
               a.remove("rischio_somme");
@@ -259,8 +267,7 @@ final class Riepilogo {
       }
       if (orders.has("operazioni")) {
         for (final JsonElement x : orders.getAsJsonArray("operazioni")) {
-          increment(
-              child(o, "operazioni"), x.getAsJsonObject().get("decisione").getAsString(), 1);
+          increment(child(o, "operazioni"), x.getAsJsonObject().get("decisione").getAsString(), 1);
         }
       }
       if (orders.has("tattiche")) {
@@ -403,6 +410,16 @@ final class Riepilogo {
     }
     if (ablations.size() > 0) {
       p.add("ablazione", ablations);
+    }
+    // step PROVA DI VALORE: the joint operation turned on (only alliances with one)
+    final JsonObject operations = new JsonObject();
+    for (final String a : monitor.alliances().keySet()) {
+      if (!AutoplayOptions.HARD.equals(o.tipo(a)) && !o.operazione(a).isEmpty()) {
+        operations.addProperty(a, o.operazione(a));
+      }
+    }
+    if (operations.size() > 0) {
+      p.add("operazione", operations);
     }
     return p;
   }
@@ -611,7 +628,8 @@ final class Riepilogo {
     monitor.alliances().keySet().forEach(a -> lost.addProperty(a, 0));
     for (final JsonElement e : battles) {
       final JsonObject b = e.getAsJsonObject();
-      addLost(lost, monitor.allianceOf(b.get("attaccante").getAsString()), b, "tuv_perso_attaccante");
+      addLost(
+          lost, monitor.allianceOf(b.get("attaccante").getAsString()), b, "tuv_perso_attaccante");
       addLost(lost, monitor.allianceOf(b.get("difensore").getAsString()), b, "tuv_perso_difensore");
     }
     return lost;

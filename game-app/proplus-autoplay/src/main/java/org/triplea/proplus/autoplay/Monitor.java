@@ -307,6 +307,58 @@ final class Monitor {
     json.add("battaglie", b);
     json.add("sbarchi", landings.deepCopy());
     json.add("territori_chiave", keyTerritoryEvents.deepCopy());
+    json.add("operazioni_congiunte", jointOperations());
+    json.add("controllo_nudo", nudoCheck());
+    return json;
+  }
+
+  /** Step PROVA DI VALORE: owner of each joint operation's target now (id → nation). */
+  private JsonObject jointTargets() {
+    final JsonObject json = new JsonObject();
+    for (final var d : games.strategy.triplea.ai.proplus.OperazioneCongiunta.definizioni()) {
+      final Territory t = data.getMap().getTerritoryOrNull(d.bersaglio());
+      if (t != null) {
+        json.addProperty(d.id(), name(t.getOwner()));
+      }
+    }
+    return json;
+  }
+
+  /** Step PROVA DI VALORE: the saved state of each joint operation turned on in this game. */
+  private JsonObject jointOperations() {
+    final JsonObject json = new JsonObject();
+    for (final var d : games.strategy.triplea.ai.proplus.OperazioneCongiunta.definizioni()) {
+      final Object state =
+          data.getProperties()
+              .get(games.strategy.triplea.ai.proplus.OperazioneCongiunta.STATE_PREFIX + d.id());
+      if (state instanceof String text && !text.isBlank()) {
+        try {
+          json.add(d.id(), com.google.gson.JsonParser.parseString(text));
+        } catch (final RuntimeException e) {
+          json.addProperty(d.id(), "illeggibile: " + e);
+        }
+      }
+    }
+    return json;
+  }
+
+  /** Step PROVA DI VALORE: the counts of the check of Pro+ against Hard, per nation. */
+  private JsonObject nudoCheck() {
+    final JsonObject json = new JsonObject();
+    for (final List<String> members : alliances.values()) {
+      for (final String nation : members) {
+        final Object value =
+            data.getProperties()
+                .get(games.strategy.triplea.ai.proplus.ControlloTuning.PROPERTY_PREFIX + nation);
+        if (value instanceof String text && !text.isBlank()) {
+          try {
+            json.add(nation, com.google.gson.JsonParser.parseString(text));
+          } catch (final RuntimeException e) {
+            // skipped
+          }
+        }
+      }
+    }
     return json;
   }
 
@@ -590,6 +642,7 @@ final class Monitor {
     }
     json.add("nazioni", nations);
     json.add("vc", victoryCities());
+    json.add("bersagli_operazioni", jointTargets());
     json.add("stato_maggiore", generalStaff(round));
     json.add("alleati_in_europa", westernAlliesInEurope());
     json.add("ovest_alleato", westEuropeHeldByWesternAllies());

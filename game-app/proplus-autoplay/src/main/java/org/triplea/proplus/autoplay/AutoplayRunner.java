@@ -55,6 +55,7 @@ public final class AutoplayRunner {
 
   /** Step VARIANZA: time per nation and turn, machine (measures only). */
   private final Tempi tempi = new Tempi();
+
   private volatile boolean finished;
 
   private AutoplayRunner(final AutoplayOptions options) {
@@ -208,6 +209,9 @@ public final class AutoplayRunner {
       // step ABLAZIONE: Pro+ components turned off for the alliance
       games.strategy.triplea.ai.proplus.Ablazione.set(
           data.getProperties(), alliance, options.ablazione(alliance));
+      // step PROVA DI VALORE: the joint operation turned on for the alliance (default off)
+      games.strategy.triplea.ai.proplus.OperazioneCongiunta.set(
+          data.getProperties(), alliance, options.operazione(alliance));
     }
     for (final String alliance : options.tipi().keySet()) {
       if (!monitor.alliances().containsKey(alliance)) {

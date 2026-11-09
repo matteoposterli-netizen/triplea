@@ -22,6 +22,8 @@ import javax.annotation.Nullable;
  *                      llm:MODEL = another model of the provider, eg llm:claude-sonnet-5-5)
  * --ablazione A=C+C,.. Pro+ components turned off per alliance (step ABLAZIONE): ids of
  *                      games.strategy.triplea.ai.proplus.Ablazione joined by "+", or "nudo" (all)
+ * --operazione A=ID,.. joint operation turned on per alliance (step PROVA DI VALORE): id of
+ *                      games.strategy.triplea.ai.proplus.OperazioneCongiunta (egitto, francia)
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
@@ -36,6 +38,7 @@ record AutoplayOptions(
     Map<String, String> tipi,
     Map<String, String> decisori,
     Map<String, String> ablazioni,
+    Map<String, String> operazioni,
     long seme,
     Path output,
     int minuti,
@@ -68,6 +71,7 @@ record AutoplayOptions(
         types,
         deciders(values.get("decisore")),
         ablations(values.get("ablazione")),
+        operations(values.get("operazione")),
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
         Integer.parseInt(values.getOrDefault("minuti", "55")),
@@ -98,6 +102,31 @@ record AutoplayOptions(
    */
   String ablazione(final String alliance) {
     return ablazioni.getOrDefault(alliance, "");
+  }
+
+  /** Joint operation of {@code alliance} ("" = none). */
+  String operazione(final String alliance) {
+    return operazioni.getOrDefault(alliance, "");
+  }
+
+  /** "Axis=egitto,Allies=francia": every id must be an operation of that alliance. */
+  static Map<String, String> operations(@Nullable final String text) {
+    final Map<String, String> map = pairs(text);
+    map.forEach(
+        (alliance, id) -> {
+          final var def = games.strategy.triplea.ai.proplus.OperazioneCongiunta.definizione(id);
+          if (def.isEmpty() || !def.get().alleanza().equals(alliance)) {
+            throw new IllegalArgumentException(
+                "Operazione non valida per "
+                    + alliance
+                    + ": "
+                    + id
+                    + " (note: "
+                    + games.strategy.triplea.ai.proplus.OperazioneCongiunta.ids()
+                    + ")");
+          }
+        });
+    return map;
   }
 
   /** "Axis=rallentamento+rischio_fronte,Allies=nudo": every id must be a known component. */

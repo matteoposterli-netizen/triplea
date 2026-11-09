@@ -1812,7 +1812,7 @@ public final class OperazioniAnfibie {
                 : calc.calculateBattleResults(proData, t, enemyUnits, holders, bombard)
                     .getWinPercentage();
         final double win =
-            proData.getTuning() instanceof ProPlusTuning tuning
+            ProPlusTuning.unwrap(proData.getTuning()) instanceof ProPlusTuning tuning
                 ? Optional.ofNullable(
                         tuning.bridgeheads(player, data.getSequence().getRound()).get(t.getName()))
                     .map(TestaDiPonte.Valutazione::winSbarco)
@@ -1839,7 +1839,7 @@ public final class OperazioniAnfibie {
   private List<String> combatEstimates(
       final Strategia.Operazione op, final Map<String, Integer> landed) {
     final List<String> list = new ArrayList<>();
-    if (!(proData.getTuning() instanceof ProPlusTuning tuning)) {
+    if (!(ProPlusTuning.unwrap(proData.getTuning()) instanceof ProPlusTuning tuning)) {
       return list;
     }
     final Map<String, TestaDiPonte.Valutazione> estimates =

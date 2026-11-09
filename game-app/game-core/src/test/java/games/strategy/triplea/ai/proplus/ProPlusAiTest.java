@@ -27,7 +27,10 @@ class ProPlusAiTest {
     assertThat(ai.isAi()).isTrue();
     assertThat(ai.getPlayerLabel()).isEqualTo("Pro+ (AI)");
     assertThat(ai.getProData().isBeta()).as("Pro+ must not switch on Hard Beta").isFalse();
-    assertThat(ai.getProData().getTuning()).isInstanceOf(ProPlusTuning.class);
+    assertThat(ProPlusTuning.unwrap(ai.getProData().getTuning())).isInstanceOf(ProPlusTuning.class);
+    assertThat(ControlloTuning.of(ai.getProData().getTuning()))
+        .as("every answer checked against Hard's (step PROVA DI VALORE)")
+        .isNotNull();
   }
 
   @Test

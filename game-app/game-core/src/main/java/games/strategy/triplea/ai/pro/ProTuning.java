@@ -302,4 +302,12 @@ public interface ProTuning {
   default Set<Unit> heldUnits(final ProData proData) {
     return Set.of();
   }
+
+  /**
+   * Units the combat move must not use: already sent into a battle before it by a hand-written
+   * joint operation (Pro+, step PROVA DI VALORE). None by default.
+   */
+  default Set<Unit> combatHeldUnits(final ProData proData) {
+    return Set.of();
+  }
 }

@@ -4,6 +4,7 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.triplea.ai.pro.ProData;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,5 +32,34 @@ public class ProMyMoveOptions {
     bombardMap.putAll(myMoveOptions.bombardMap);
     transportList.addAll(myMoveOptions.transportList);
     bomberMoveMap.putAll(myMoveOptions.bomberMoveMap);
+  }
+
+  /**
+   * Takes {@code units} out of every option (Pro+: units a joint operation already moved; never
+   * called for Hard).
+   */
+  public void removeUnits(final Collection<Unit> units) {
+    if (units.isEmpty()) {
+      return;
+    }
+    units.forEach(
+        u -> {
+          unitMoveMap.remove(u);
+          transportMoveMap.remove(u);
+          bombardMap.remove(u);
+          bomberMoveMap.remove(u);
+        });
+    transportList.removeIf(t -> units.contains(t.getTransport()));
+    for (final ProTerritory t : territoryMap.values()) {
+      t.getMaxUnits().removeAll(units);
+      t.getMaxAmphibUnits().removeAll(units);
+      t.getMaxBombardUnits().removeAll(units);
+      t.getBombardOptionsMap().keySet().removeAll(units);
+      t.getAmphibAttackMap().keySet().removeAll(units);
+      t.getAmphibAttackMap()
+          .replaceAll(
+              (transport, cargo) ->
+                  new ArrayList<>(cargo.stream().filter(u -> !units.contains(u)).toList()));
+    }
   }
 }

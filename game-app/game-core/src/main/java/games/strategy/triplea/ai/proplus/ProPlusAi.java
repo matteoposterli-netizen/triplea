@@ -8,10 +8,10 @@ import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.logging.ProLogUi;
 import games.strategy.triplea.ai.pro.logging.ProLogger;
 import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
+import games.strategy.triplea.ai.proplus.strategia.OrdiniTurno;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
 import games.strategy.triplea.ai.proplus.strategia.Strategie;
-import games.strategy.triplea.ai.proplus.strategia.OrdiniTurno;
 import games.strategy.triplea.ai.proplus.strategia.Valutazione;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
@@ -41,8 +41,9 @@ public class ProPlusAi extends ProAi {
   private int huntRound = -1;
 
   public ProPlusAi(final String name, final String playerLabel) {
-    super(name, playerLabel, new ProData(false, new ProPlusTuning()));
-    if (getProData().getTuning() instanceof ProPlusTuning tuning) {
+    // step PROVA DI VALORE: every answer of the tuning checked against Hard's (counted only)
+    super(name, playerLabel, new ProData(false, ControlloTuning.wrap(new ProPlusTuning())));
+    if (ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning) {
       tuning.attach(getProData());
     }
     DiaryRecorder.attach(this);
@@ -67,7 +68,9 @@ public class ProPlusAi extends ProAi {
         ProLogger.warn(LOG_PREFIX + "Transport hunt check failed: " + e);
       }
     }
-    if (!purchaseForBid && plan && getProData().getTuning() instanceof ProPlusTuning tuning) {
+    if (!purchaseForBid
+        && plan
+        && ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning) {
       try {
         initializeData();
         tuning.prepareOperationPurchases(getProData());
@@ -75,7 +78,17 @@ public class ProPlusAi extends ProAi {
         ProLogger.warn(LOG_PREFIX + "Amphibious operations purchase check failed: " + e);
       }
     }
+    if (!purchaseForBid) {
+      // step PROVA DI VALORE: the joint operation's start, state and outcome (switch off: nothing)
+      try {
+        initializeData();
+        report(data, OperazioniCongiunte.aggiorna(getProData(), getCalc()));
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "Joint operation update failed: " + e);
+      }
+    }
     super.purchase(purchaseForBid, pusToSpend, purchaseDelegate, data, player);
+    saveCheck(data, player);
   }
 
   @Override
@@ -88,7 +101,70 @@ public class ProPlusAi extends ProAi {
     if (nonCombat) {
       playAmphibiousOperations(moveDel, data, player);
     }
+    playJointOperation(nonCombat, moveDel, data, player);
     super.move(nonCombat, moveDel, data, player);
+    saveCheck(data, player);
+  }
+
+  /**
+   * Step PROVA DI VALORE: the hand-written joint operation moves first (steps in the combat move,
+   * reserves and completion in the non-combat move); the Pro AI then leaves its units where they
+   * are. Nothing with the operation's switch off.
+   */
+  private void playJointOperation(
+      final boolean nonCombat,
+      final IMoveDelegate moveDel,
+      final GameData data,
+      final GamePlayer player) {
+    if (!(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)
+        || OperazioneCongiunta.per(data, player).isEmpty()) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      final OperazioniCongiunte.Esito result =
+          nonCombat
+              ? OperazioniCongiunte.nonCombattimento(getProData(), getCalc(), moveDel)
+              : OperazioniCongiunte.combattimento(getProData(), getCalc(), moveDel);
+      if (nonCombat) {
+        tuning.holdForOperation(data, player, result.tenute());
+      } else {
+        tuning.holdCombat(data, player, result.tenute());
+      }
+      report(data, result);
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "Joint operation failed: " + e);
+    }
+  }
+
+  /** The joint operation's lines and events in the diary (only while the diary is on). */
+  private static void report(final GameData data, final OperazioniCongiunte.Esito result) {
+    if (!result.righe().isEmpty()) {
+      DiaryRecorder.jointOperation(data, result.righe(), result.eventi());
+    }
+  }
+
+  /**
+   * Step PROVA DI VALORE: the counts of the check against Hard saved in the game, in the games
+   * where they mean something (Pro+ nudo, with or without a joint operation).
+   */
+  private void saveCheck(final GameState data, final GamePlayer player) {
+    final ControlloTuning check = ControlloTuning.of(getProData().getTuning());
+    if (check == null) {
+      return;
+    }
+    final var alliance = ProPlusSettings.allianceOf(data, player);
+    if (alliance.isEmpty()
+        || !Ablazione.spenti(data.getProperties(), alliance.get())
+            .containsAll(java.util.EnumSet.allOf(Ablazione.Componente.class))) {
+      return;
+    }
+    try {
+      check.salva(data.getProperties(), player.getName());
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "Check against Hard not saved: " + e);
+    }
   }
 
   /**
@@ -97,7 +173,7 @@ public class ProPlusAi extends ProAi {
    */
   private void playAmphibiousOperations(
       final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
-    if (!(getProData().getTuning() instanceof ProPlusTuning tuning)) {
+    if (!(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
       return;
     }
     final var plan = PianoAttivo.of(data, player);
@@ -283,6 +359,7 @@ public class ProPlusAi extends ProAi {
       final GamePlayer player) {
     logPhase(data, player, placeForBid ? "bid place" : "place");
     super.place(placeForBid, placeDelegate, data, player);
+    saveCheck(data, player);
   }
 
   /**
@@ -301,7 +378,7 @@ public class ProPlusAi extends ProAi {
         return;
       }
       fixPlan(data, player);
-      if (getProData().getTuning() instanceof ProPlusTuning tuning) {
+      if (ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning) {
         tuning.forgetPlan();
       }
       // step 3c, observation only: the alliance's general staff at the start of the round
