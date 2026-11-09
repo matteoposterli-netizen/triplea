@@ -309,6 +309,10 @@ final class Monitor {
     json.add("territori_chiave", keyTerritoryEvents.deepCopy());
     json.add("operazioni_congiunte", jointOperations());
     json.add("controllo_nudo", nudoCheck());
+    // step PROVALLM: calls, tokens, cost and fallbacks of the LLM at the operations' decisions
+    json.add(
+        "operazioni_llm_uso",
+        games.strategy.triplea.ai.proplus.DecisoreOperazione.uso(data.getProperties()));
     return json;
   }
 

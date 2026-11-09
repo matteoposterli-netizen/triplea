@@ -1,5 +1,6 @@
 package games.strategy.triplea.ai.proplus;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GameMap;
@@ -22,6 +23,11 @@ import games.strategy.triplea.ai.pro.util.ProUtils;
 import games.strategy.triplea.ai.proplus.OperazioneCongiunta.Definizione;
 import games.strategy.triplea.ai.proplus.OperazioneCongiunta.Registro;
 import games.strategy.triplea.ai.proplus.OperazioneCongiunta.Stato;
+import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
+import games.strategy.triplea.ai.proplus.strategia.DecisioneOperazione;
+import games.strategy.triplea.ai.proplus.strategia.DecisioneOperazione.Azione;
+import games.strategy.triplea.ai.proplus.strategia.DecisioneOperazione.Punto;
+import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TransportTracker;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
@@ -328,6 +334,16 @@ public final class OperazioniCongiunte {
               f.round(),
               f.testo()));
     }
+    if (llm()) {
+      // step PROVALLM: what the enemy did since this nation's last turn, real outcome of the
+      // decisions (only while an LLM decides: it reads them)
+      try {
+        StoricoNemico.valuta(data, player, def.id());
+        settleDecisions();
+      } catch (final RuntimeException e) {
+        ProLogger.warn("[Pro+] Joint operation history of the enemy failed: " + e);
+      }
+    }
     // outcome of a taken target: held after 1 and 2 rounds (checked at the opener's turn)
     if (def.isApre(player.getName()) && reg.flag("presa")) {
       final int taken = reg.intOf("round_presa", 0);
@@ -600,13 +616,45 @@ public final class OperazioniCongiunte {
         e.addProperty("presidio", OperazioniAnfibie.unitsText(garrison));
         e.addProperty("tuv_presidio", Math.round(tuv(garrison)));
         e.addProperty("valore_alleanza", Math.round(ev));
-        if (ev <= 0) {
+        boolean go = ev > 0;
+        String llmWhy = "";
+        if (!garrison.isEmpty() && llm()) {
+          final JsonObject n = new JsonObject();
+          n.addProperty(
+              "difensori",
+              "nessuno: tappa 1 non necessaria, decide se "
+                  + def.chiude()
+                  + " prende il bersaglio nello stesso round");
+          n.addProperty("attaccanti_tappa2", OperazioniAnfibie.unitsText(garrison));
+          n.addProperty("tuv_attaccanti_tappa2", Math.round(tuv(garrison)));
+          n.addProperty("valore_alleanza_formula", Math.round(ev));
+          final Scelta s =
+              decide(
+                  Punto.TAPPA1,
+                  target,
+                  new DecisioneOperazione(
+                      ev > 0 ? Azione.LANCIA : Azione.RINVIA, hold.tenuta() / 100, "formula v2"),
+                  garrison,
+                  hold.minaccia(),
+                  n);
+          if (s.llm()) {
+            if (s.azione() == Azione.ANNULLA) {
+              cancelByDecision("decisione LLM: annulla (" + s.decisione().motivazione() + ")");
+              return;
+            }
+            go = s.azione() == Azione.LANCIA;
+            llmWhy = "decisione LLM: " + s.azione().id() + " (" + s.decisione().motivazione() + ")";
+          }
+        }
+        if (!go) {
           final String why =
-              String.format(
-                  Locale.ROOT,
-                  "contrattacco atteso: tenuta stimata %.0f%%, valore d'alleanza %.1f <= 0",
-                  hold.tenuta(),
-                  ev);
+              !llmWhy.isEmpty()
+                  ? llmWhy
+                  : String.format(
+                      Locale.ROOT,
+                      "contrattacco atteso: tenuta stimata %.0f%%, valore d'alleanza %.1f <= 0",
+                      hold.tenuta(),
+                      ev);
           e.addProperty("eseguita", false);
           e.addProperty("motivo", why);
           note(
@@ -788,7 +836,7 @@ public final class OperazioniCongiunte {
                     hold.tenuta(),
                     ev,
                     evNoHold));
-    final String why =
+    final String whyFormula =
         a1.units().isEmpty()
             ? "nessuna unita' di " + player.getName() + " puo' attaccare"
             : loss1 > def.tettoPerdita()
@@ -808,6 +856,63 @@ public final class OperazioniCongiunte {
                                 : "valore d'alleanza %.1f <= 0",
                             ev)
                         : "";
+    // step PROVALLM: the LLM decides where the formula did (not past the hard limits)
+    String why = whyFormula;
+    if (!a1.units().isEmpty() && loss1 <= def.tettoPerdita() && llm()) {
+      final JsonObject n = new JsonObject();
+      n.addProperty("attaccanti", OperazioniAnfibie.unitsText(a1.units()));
+      n.addProperty("tuv_attaccanti", Math.round(tuvA1));
+      n.addProperty("difensori", OperazioniAnfibie.unitsText(defenders));
+      n.addProperty("tuv_difensori", Math.round(defTuv));
+      n.addProperty("win", Math.round(win1));
+      n.addProperty("perdita_attesa", Math.round(loss1));
+      n.addProperty("tuv_residui_stimati", Math.round(tuv(left)));
+      n.addProperty("rinforzi_nemici_tra_le_tappe", OperazioniAnfibie.unitsText(reinforcements));
+      n.addProperty("tuv_rinforzi_nemici_tra_le_tappe", Math.round(tuv(reinforcements)));
+      n.addProperty("attaccanti_tappa2", OperazioniAnfibie.unitsText(a2));
+      n.addProperty("win_tappa2_stimata", Math.round(win2));
+      n.addProperty("perdita_attesa_tappa2", Math.round(loss2));
+      n.addProperty("presa_stimata", Math.round(take * 100));
+      n.addProperty("valore_alleanza_formula", Math.round(ev));
+      n.addProperty("valore_senza_contrattacco", Math.round(evNoHold));
+      final Scelta s =
+          decide(
+              Punto.TAPPA1,
+              target,
+              new DecisioneOperazione(
+                  whyFormula.isEmpty() ? Azione.LANCIA : Azione.RINVIA,
+                  take * (hold == null ? 1 : hold.tenuta() / 100),
+                  "formula v2"),
+              garrison,
+              hold == null ? null : hold.minaccia(),
+              n);
+      if (s.llm()) {
+        if (s.azione() == Azione.ANNULLA) {
+          final String w = "decisione LLM: annulla (" + s.decisione().motivazione() + ")";
+          e.addProperty("eseguita", false);
+          e.addProperty("motivo", w);
+          note(
+              e,
+              "Operazione "
+                  + def.nome()
+                  + ", tappa 1 di "
+                  + player.getName()
+                  + " NON eseguita: "
+                  + w
+                  + " - "
+                  + numbers);
+          cancelByDecision(w);
+          return;
+        }
+        why =
+            s.azione() == Azione.LANCIA
+                ? ""
+                : "decisione LLM: rinvia ("
+                    + s.decisione().motivazione()
+                    + ")"
+                    + (whyFormula.isEmpty() ? "" : "; formula: " + whyFormula);
+      }
+    }
     e.addProperty("eseguita", why.isEmpty());
     if (!why.isEmpty()) {
       e.addProperty("motivo", why);
@@ -924,8 +1029,71 @@ public final class OperazioniCongiunte {
             win2,
             def.sogliaChiusura(),
             loss2);
-    final List<String> fails =
+    final List<String> failsFormula =
         condizioneTappa2(def, player.getName(), a2.units().isEmpty(), left, estimated, lost1, win2);
+    // step PROVALLM: the LLM decides where the formula did (not past the hard limits)
+    List<String> fails = failsFormula;
+    if (!a2.units().isEmpty() && lost1 <= def.tettoPerdita() && llm()) {
+      final List<Unit> garrison2 =
+          new ArrayList<>(
+              (r2 == null ? a2.units() : r2.getAverageAttackersRemaining())
+                  .stream().filter(Matches.unitIsLand()).toList());
+      if (garrison2.isEmpty()) {
+        a2.units().stream()
+            .filter(Matches.unitIsLand())
+            .max(Comparator.comparingInt((Unit u) -> u.getUnitAttachment().getDefense(player)))
+            .ifPresent(garrison2::add);
+      }
+      final StimaTenuta h2 = stimaTenuta(target, garrison2);
+      final JsonObject n = new JsonObject();
+      n.addProperty("difensori_residui", OperazioniAnfibie.unitsText(defenders));
+      n.addProperty("tuv_residui", Math.round(left));
+      n.addProperty("tuv_residui_stimati_alla_tappa1", Math.round(estimated));
+      n.addProperty("tuv_tollerati_formula", Math.round(tolerated));
+      n.addProperty("tuv_perso_tappa1", Math.round(lost1));
+      n.addProperty("attaccanti", OperazioniAnfibie.unitsText(a2.units()));
+      n.addProperty("tuv_attaccanti", Math.round(tuv(a2.units())));
+      n.addProperty("win", Math.round(win2));
+      n.addProperty("perdita_attesa", Math.round(loss2));
+      n.addProperty("soglia_chiusura_formula", Math.round(def.sogliaChiusura()));
+      n.addProperty(
+          "condizioni_formula_non_rispettate",
+          failsFormula.isEmpty() ? "nessuna" : String.join(", ", failsFormula));
+      final Scelta s =
+          decide(
+              Punto.TAPPA2,
+              target,
+              new DecisioneOperazione(
+                  failsFormula.isEmpty() ? Azione.PROCEDI : Azione.RINVIA,
+                  win2 / 100 * h2.tenuta() / 100,
+                  "formula v2"),
+              garrison2,
+              h2.minaccia(),
+              n);
+      if (s.llm()) {
+        if (s.azione() == Azione.ANNULLA) {
+          final String w = "decisione LLM: annulla (" + s.decisione().motivazione() + ")";
+          e.addProperty("eseguita", false);
+          e.addProperty("motivo", w);
+          note(
+              e,
+              "Operazione "
+                  + def.nome()
+                  + ", tappa 2 di "
+                  + player.getName()
+                  + " NON eseguita: "
+                  + w
+                  + " - "
+                  + numbers);
+          cancelByDecision(w);
+          return;
+        }
+        fails =
+            s.azione() == Azione.PROCEDI
+                ? List.of()
+                : List.of("decisione LLM: rinvia (" + s.decisione().motivazione() + ")");
+      }
+    }
     if (!fails.isEmpty()) {
       final String why = String.join(", ", fails);
       e.addProperty("eseguita", false);
@@ -1496,6 +1664,15 @@ public final class OperazioniCongiunte {
         prepare(target);
       }
       germanPresence(target);
+      if (llm()) {
+        // step PROVALLM: the enemy units in reach of what the alliance holds, seen at the next turn
+        final List<Territory> watch = new ArrayList<>(List.of(target));
+        final Territory held = tenutaTarget();
+        if (held != null && !watch.contains(held)) {
+          watch.add(held);
+        }
+        StoricoNemico.registra(proData, calc, def.id(), watch);
+      }
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Joint operation " + def.id() + " non-combat failed: " + e);
     } finally {
@@ -2305,7 +2482,8 @@ public final class OperazioniCongiunte {
   }
 
   /** Estimated hold of a target: 100 − enemy win% of the counterattack against the defenders. */
-  record StimaTenuta(double tenuta, List<Unit> attaccanti, List<Unit> acquisti) {}
+  record StimaTenuta(
+      double tenuta, List<Unit> attaccanti, List<Unit> acquisti, Minaccia minaccia) {}
 
   /** The counterattack expected on {@code target} once it is the alliance's. */
   Minaccia minaccia(final Territory target) {
@@ -2343,7 +2521,7 @@ public final class OperazioniCongiunte {
 
   private StimaTenuta stimaTenuta(final Territory target, final Collection<Unit> defenders) {
     final Minaccia m = minaccia(target);
-    return new StimaTenuta(tenuta(target, m, defenders), m.attaccanti(), m.acquisti());
+    return new StimaTenuta(tenuta(target, m, defenders), m.attaccanti(), m.acquisti(), m);
   }
 
   /**
@@ -2354,6 +2532,12 @@ public final class OperazioniCongiunte {
    * other fronts). Temporary units, never on the map.
    */
   List<Unit> enemyPurchases(final Territory target) {
+    return enemyPurchases(target, null);
+  }
+
+  /** As {@link #enemyPurchases(Territory)}, also by factory in {@code byFactory} (if given). */
+  List<Unit> enemyPurchases(
+      final Territory target, final @Nullable Map<Territory, List<Unit>> byFactory) {
     final double share = def.tenuta().quotaAcquistiNemici();
     final List<Unit> units = new ArrayList<>();
     if (share <= 0) {
@@ -2423,7 +2607,11 @@ public final class OperazioniCongiunte {
         if (n <= 0) {
           continue;
         }
-        units.addAll(best.createTemp(n, e));
+        final List<Unit> bought = best.createTemp(n, e);
+        units.addAll(bought);
+        if (byFactory != null) {
+          byFactory.computeIfAbsent(f, x -> new ArrayList<>()).addAll(bought);
+        }
         budget -= (double) n * bestCost;
       }
     }
@@ -2519,29 +2707,50 @@ public final class OperazioniCongiunte {
         reg.json().has("ultima_stima_tenuta")
             ? reg.json().get("ultima_stima_tenuta").getAsDouble()
             : 100;
-    if (last <= def.tenuta().sogliaRitirata()) {
+    // step PROVALLM: the LLM's decision at this nation's last non-combat move, else the formula
+    final String dec =
+        reg.intOf("tenuta_decisione_round_" + player.getName(), 0) == round - 1
+                && reg.json().has("tenuta_decisione_" + player.getName())
+            ? reg.json().get("tenuta_decisione_" + player.getName()).getAsString()
+            : "";
+    final boolean retreat =
+        dec.isEmpty() ? last <= def.tenuta().sogliaRitirata() : Azione.RITIRA.id().equals(dec);
+    if (retreat) {
       if (reg.intOf("ritirata_round", 0) != round) {
         reg.set("ritirata_round", round);
         reg.set("ritirate", reg.intOf("ritirate", 0) + 1);
         final JsonObject e = event("ritirata");
         e.addProperty("tenuta_stimata", Math.round(last));
+        e.addProperty("decisione", dec.isEmpty() ? "formula" : "llm");
         note(
             e,
-            String.format(
-                Locale.ROOT,
-                "Operazione %s: presidio di %s in %s lasciato a Hard (tenuta stimata %.0f%% <="
-                    + " %.0f%%: tenuta persa)",
-                def.nome(),
-                player.getName(),
-                t.getName(),
-                last,
-                def.tenuta().sogliaRitirata()));
+            !dec.isEmpty()
+                ? String.format(
+                    Locale.ROOT,
+                    "Operazione %s: presidio di %s in %s lasciato a Hard (decisione LLM: ritira;"
+                        + " tenuta stimata dal motore %.0f%%)",
+                    def.nome(),
+                    player.getName(),
+                    t.getName(),
+                    last)
+                : String.format(
+                    Locale.ROOT,
+                    "Operazione %s: presidio di %s in %s lasciato a Hard (tenuta stimata %.0f%% <="
+                        + " %.0f%%: tenuta persa)",
+                    def.nome(),
+                    player.getName(),
+                    t.getName(),
+                    last,
+                    def.tenuta().sogliaRitirata()));
       }
     } else {
       held.addAll(garrison(t));
     }
     final Territory fin = map.getTerritoryOrNull(def.bersaglioFinale());
-    if (fin == null || !reg.flag("testa_di_ponte_tenuta") || !t.getName().equals(def.bersaglio())) {
+    if (fin == null
+        || !reg.flag("testa_di_ponte_tenuta")
+        || reg.flag(FINALE + "annullata")
+        || !t.getName().equals(def.bersaglio())) {
       return;
     }
     pre = FINALE;
@@ -2578,7 +2787,44 @@ public final class OperazioniCongiunte {
     double now = before;
     final List<Unit> came = new ArrayList<>();
     if (before < def.tenuta().sogliaRinforzi()) {
-      now = reinforceHold(t, m, came, moves);
+      final Candidati c = candidati(t);
+      Boolean keep = null;
+      if (llm()) {
+        // step PROVALLM: keep (the engine's reinforcements) or leave, decided by the LLM
+        final double best = tenuta(t, m, c.tutti());
+        final JsonObject n = new JsonObject();
+        n.addProperty("difensori", OperazioniAnfibie.unitsText(alliedDefenders(t)));
+        n.addProperty("tuv_difensori", Math.round(tuv(alliedDefenders(t))));
+        n.addProperty("tenuta_motore_ora", Math.round(before));
+        n.addProperty("rinforzi_possibili", OperazioniAnfibie.unitsText(c.rinforzi()));
+        n.addProperty("tuv_rinforzi_possibili", Math.round(tuv(c.rinforzi())));
+        n.addProperty("tenuta_motore_con_tutti_i_rinforzi", Math.round(best));
+        n.addProperty("round_gia_tenuti", round - reg.intOf("tenuta_dal", round));
+        n.addProperty("round_da_tenere", def.tenuta().round());
+        final Scelta s =
+            decide(
+                Punto.TENUTA,
+                t,
+                new DecisioneOperazione(
+                    best > def.tenuta().sogliaRitirata() ? Azione.TIENI : Azione.RITIRA,
+                    before / 100,
+                    "formula v2"),
+                alliedDefenders(t),
+                m,
+                n);
+        if (s.llm()) {
+          keep = s.azione() == Azione.TIENI;
+          reg.set("tenuta_decisione_" + player.getName(), s.azione().id());
+          reg.set("tenuta_decisione_round_" + player.getName(), round);
+        }
+      }
+      if (keep == null) {
+        now = reinforceHold(t, m, came, moves, c, false);
+      } else if (keep) {
+        now = reinforceHold(t, m, came, moves, c, true);
+      } else {
+        moves.add("decisione LLM: ritira, nessun rinforzo");
+      }
     }
     held.addAll(came);
     reg.set("ultima_stima_tenuta", (int) Math.round(now));
@@ -2621,15 +2867,18 @@ public final class OperazioniCongiunte {
   }
 
   /**
-   * Reinforcements into the held target {@code t}, in order, while the estimated hold is under the
-   * threshold: troops landed from the gathering zone, land units within 2 moves through the
-   * alliance's land (not out of an own capital at risk), then up to {@code aerei_copertura} planes
-   * that can land there. None if even all of them together would leave the hold at or under {@code
-   * soglia_ritirata} (units not thrown into a lost target). Returns the hold% after them.
+   * Reinforcements possible into the held target: landing from the gathering zone, land units in
+   * reach, planes as air cover (the order of {@link #reinforceHold}).
    */
-  private double reinforceHold(
-      final Territory t, final Minaccia m, final List<Unit> came, final List<String> moves) {
-    final double threshold = def.tenuta().sogliaRinforzi();
+  record Candidati(
+      @Nullable Territory zone,
+      Map<Unit, List<Unit>> landing,
+      Map<Territory, List<Unit>> land,
+      List<Unit> air,
+      List<Unit> tutti,
+      List<Unit> rinforzi) {}
+
+  private Candidati candidati(final Territory t) {
     // candidates: landing from the gathering zone, land units in reach, planes as air cover
     final Territory zone = map.getTerritoryOrNull(def.zonaRaccolta());
     final Map<Unit, List<Unit>> landing =
@@ -2687,11 +2936,40 @@ public final class OperazioniCongiunte {
               .thenComparing(u -> u.getId().toString()));
     }
     final List<Unit> all = new ArrayList<>(alliedDefenders(t));
+    final int defenders = all.size();
     landing.values().forEach(all::addAll);
     land.values().forEach(all::addAll);
     all.addAll(air.stream().limit(def.tenuta().aereiCopertura()).toList());
-    final double best = tenuta(t, m, all);
-    if (best <= def.tenuta().sogliaRitirata()) {
+    return new Candidati(
+        zone,
+        landing,
+        land,
+        air,
+        List.copyOf(all),
+        List.copyOf(all.subList(defenders, all.size())));
+  }
+
+  /**
+   * Reinforcements into the held target {@code t}, in order, while the estimated hold is under the
+   * threshold: troops landed from the gathering zone, land units within 2 moves through the
+   * alliance's land (not out of an own capital at risk), then up to {@code aerei_copertura} planes
+   * that can land there. None if even all of them together would leave the hold at or under {@code
+   * soglia_ritirata} (units not thrown into a lost target). Returns the hold% after them.
+   */
+  private double reinforceHold(
+      final Territory t,
+      final Minaccia m,
+      final List<Unit> came,
+      final List<String> moves,
+      final Candidati c,
+      final boolean decidedToKeep) {
+    final double threshold = def.tenuta().sogliaRinforzi();
+    final Territory zone = c.zone();
+    final Map<Unit, List<Unit>> landing = c.landing();
+    final Map<Territory, List<Unit>> land = c.land();
+    final List<Unit> air = c.air();
+    final double best = tenuta(t, m, c.tutti());
+    if (!decidedToKeep && best <= def.tenuta().sogliaRitirata()) {
       moves.add(
           String.format(
               Locale.ROOT,
@@ -2758,6 +3036,502 @@ public final class OperazioniCongiunte {
       }
     }
     return now;
+  }
+
+  // ======================================================== decision points (step PROVALLM)
+
+  /** Whether an LLM decides this operation's decision points (off by default: the formula). */
+  private boolean llm() {
+    return DecisoreOperazione.modello(data.getProperties(), def.alleanza()).isPresent();
+  }
+
+  /**
+   * What was decided at a decision point.
+   *
+   * @param llm the LLM decided (false: LLM off, or a fallback to the formula)
+   * @param record the saved record (estimates, outcome later), null with the LLM off
+   */
+  record Scelta(DecisioneOperazione decisione, boolean llm, @Nullable JsonObject record) {
+    Azione azione() {
+      return decisione.azione();
+    }
+  }
+
+  /**
+   * The decision at {@code punto}: the formula's when the LLM is off (no call, nothing recorded);
+   * else the LLM's answer, or the formula's on a fallback. Recorded with the state sent (summary),
+   * both estimates and, later, the real outcome (calibration).
+   *
+   * @param formula the formula's action and its estimate (0-1) of the target held after the enemy's
+   *     turns
+   * @param garrison the alliance's units that would hold the target
+   * @param m the counterattack expected (maximum), null if none was estimated
+   * @param numeri the numbers of the point (forces, win%, losses)
+   */
+  private Scelta decide(
+      final Punto punto,
+      final Territory target,
+      final DecisioneOperazione formula,
+      final Collection<Unit> garrison,
+      final @Nullable Minaccia m,
+      final JsonObject numeri) {
+    if (!llm()) {
+      return new Scelta(formula, false, null);
+    }
+    JsonObject in;
+    try {
+      in = stato(punto, target, formula, garrison, m, numeri);
+    } catch (final RuntimeException e) {
+      ProLogger.warn("[Pro+] Joint operation state for the LLM failed: " + e);
+      in = numeri.deepCopy();
+      in.addProperty("punto", punto.id());
+      in.addProperty("azioni_ammesse", DecisioneOperazione.ids(punto));
+      in.addProperty("bersaglio", target.getName());
+    }
+    final DecisoreOperazione.Esito x =
+        DecisoreOperazione.decidi(data.getProperties(), def.alleanza(), punto, in, formula);
+    final DecisioneOperazione d = x.decisione();
+    final JsonObject rec = new JsonObject();
+    rec.addProperty("round", round);
+    rec.addProperty("nazione", player.getName());
+    rec.addProperty("punto", punto.id());
+    rec.addProperty("fase", pre.isEmpty() ? "bersaglio" : "finale");
+    rec.addProperty("bersaglio", target.getName());
+    rec.addProperty("azione", d.azione().id());
+    rec.addProperty("fonte", x.fonte());
+    rec.addProperty("azione_formula", formula.azione().id());
+    rec.addProperty("prob_formula", round3(formula.probTenuta()));
+    if (x.llm()) {
+      rec.addProperty("azione_llm", d.azione().id());
+      rec.addProperty("prob_llm", round3(d.probTenuta()));
+      rec.addProperty("motivazione", d.motivazione());
+    }
+    rec.addProperty("ripiego", x.ripiego());
+    if (x.ripiego()) {
+      rec.addProperty("motivo_ripiego", x.motivoRipiego());
+      rec.addProperty("dettaglio_ripiego", x.dettaglio());
+    }
+    rec.addProperty("costo_usd", Math.round(x.costoUsd() * 100_000) / 100_000.0);
+    rec.addProperty("token", x.token());
+    rec.addProperty("ms", x.millis());
+    rec.addProperty("stato_riassunto", riassunto(in));
+    final JsonArray list =
+        reg.json().has("decisioni") && reg.json().get("decisioni").isJsonArray()
+            ? reg.json().getAsJsonArray("decisioni")
+            : new JsonArray();
+    list.add(rec);
+    reg.json().add("decisioni", list);
+    DiaryRecorder.operationInput(
+        data,
+        String.format(
+            Locale.ROOT,
+            "operazione-ingresso-R%d-%s-%s%s.json",
+            round,
+            player.getName(),
+            pre,
+            punto.id()),
+        in);
+    final JsonObject e = event("decisione_operazione");
+    e.addProperty("punto", punto.id());
+    e.addProperty("azione", d.azione().id());
+    e.addProperty("fonte", x.fonte());
+    e.addProperty("azione_formula", formula.azione().id());
+    e.addProperty("prob_formula", round3(formula.probTenuta()));
+    if (x.llm()) {
+      e.addProperty("prob_llm", round3(d.probTenuta()));
+    }
+    if (x.ripiego()) {
+      e.addProperty("motivo_ripiego", x.motivoRipiego());
+    }
+    note(
+        e,
+        String.format(
+            Locale.ROOT,
+            "Operazione %s, decisione %s%s su %s (%s): %s%s - formula: %s, tenuta stimata %.0f%%%s;"
+                + " stato: %s",
+            def.nome(),
+            punto.id(),
+            pre.isEmpty() ? "" : " (finale)",
+            target.getName(),
+            x.fonte(),
+            d.azione().id().toUpperCase(Locale.ROOT),
+            x.llm()
+                ? String.format(
+                    Locale.ROOT,
+                    ", tenuta stimata dall'LLM %.0f%% (%s)",
+                    d.probTenuta() * 100,
+                    d.motivazione())
+                : "",
+            formula.azione().id(),
+            formula.probTenuta() * 100,
+            x.ripiego()
+                ? " - RIPIEGO sulla formula (" + x.motivoRipiego() + ": " + x.dettaglio() + ")"
+                : "",
+            riassunto(in)));
+    return new Scelta(d, x.llm(), rec);
+  }
+
+  /**
+   * At the start of the closer's turn: the real outcome of the decisions taken in earlier rounds
+   * (target the alliance's after one full round of enemy turns).
+   */
+  private void settleDecisions() {
+    if (!def.isChiude(player.getName()) || !reg.json().has("decisioni")) {
+      return;
+    }
+    for (final var el : reg.json().getAsJsonArray("decisioni")) {
+      final JsonObject rec = el.getAsJsonObject();
+      if (rec.has("esito_reale") || rec.get("round").getAsInt() >= round) {
+        continue;
+      }
+      final Territory t = map.getTerritoryOrNull(rec.get("bersaglio").getAsString());
+      if (t != null) {
+        rec.addProperty("esito_reale", Matches.isTerritoryAllied(player).test(t));
+        rec.addProperty("esito_round", round);
+      }
+    }
+  }
+
+  /** Cancels the operation on a decision (on the final target: no more steps on it). */
+  private void cancelByDecision(final String why) {
+    if (!pre.isEmpty()) {
+      reg.set(k("annullata"), true);
+      final JsonObject e = event("finale_annullata");
+      e.addProperty("motivo", why);
+      note(
+          e,
+          String.format(
+              Locale.ROOT,
+              "Operazione %s: tappe su %s ANNULLATE (%s); si tiene la testa di ponte %s",
+              def.nome(),
+              def.bersaglioFinale(),
+              why,
+              def.bersaglio()));
+      return;
+    }
+    reg.setStato(Stato.ANNULLATA);
+    reg.set("motivo_fine", why);
+    final JsonObject e = event("annullata");
+    e.addProperty("motivo", why);
+    note(e, "Operazione " + def.nome() + " ANNULLATA (" + why + ")");
+  }
+
+  /** The state of the operation at a decision point, compact, as the LLM reads it. */
+  private JsonObject stato(
+      final Punto punto,
+      final Territory target,
+      final DecisioneOperazione formula,
+      final Collection<Unit> garrison,
+      final @Nullable Minaccia m,
+      final JsonObject numeri) {
+    final JsonObject s = new JsonObject();
+    s.addProperty("contratto", DecisioneOperazione.VERSIONE);
+    s.addProperty("operazione", def.nome());
+    s.addProperty("punto", punto.id());
+    s.addProperty("azioni_ammesse", DecisioneOperazione.ids(punto));
+    s.addProperty(
+        "fase",
+        pre.isEmpty()
+            ? "bersaglio " + def.bersaglio()
+            : "bersaglio finale "
+                + def.bersaglioFinale()
+                + " dalla testa di ponte "
+                + def.bersaglio());
+    s.addProperty("bersaglio", target.getName());
+    s.addProperty("round", round);
+    s.addProperty("nazione_che_decide", player.getName());
+    s.addProperty("apre", def.apre());
+    s.addProperty("chiude", def.chiude());
+    s.addProperty("stato_operazione", reg.stato().testo());
+    s.addProperty("rinvii", pre.isEmpty() ? reg.rinvii() : reg.intOf(k("rinvii"), 0));
+    s.addProperty("max_rinvii", pre.isEmpty() ? String.valueOf(def.maxRinvii()) : "nessun limite");
+    s.addProperty("round_max", def.roundMax());
+    s.addProperty("tetto_perdita_TUV", Math.round(def.tettoPerdita()));
+    final double lost =
+        reg.intOf(k("tappa1_tuv_perso"), 0) + (double) reg.intOf(k("tappa2_tuv_perso"), 0);
+    s.addProperty("tuv_gia_perso_operazione", Math.round(lost));
+    s.addProperty(
+        "esito_valutato",
+        "bersaglio dell'alleanza all'inizio del turno di " + def.chiude() + " al R" + (round + 1));
+    final JsonObject b = new JsonObject();
+    b.addProperty("proprietario", target.getOwner().getName());
+    TerritoryAttachment.get(target)
+        .ifPresent(
+            a -> {
+              b.addProperty("victory_city", a.getVictoryCity() > 0);
+              b.addProperty("produzione_PU", a.getProduction());
+              b.addProperty("capitale", a.isCapital());
+            });
+    b.addProperty("valore_operazione_PU", Math.round(def.valore()));
+    s.add("bersaglio_info", b);
+    s.add("numeri", numeri);
+    s.addProperty(
+        "presidio", garrison.isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(garrison));
+    s.addProperty("tuv_presidio", Math.round(tuv(garrison)));
+    if (m != null) {
+      s.add("contrattacco_massimo", counterattack(target, m));
+      s.add("tenuta_per_impegno", curve(target, m, garrison));
+    }
+    final JsonObject f = new JsonObject();
+    f.addProperty("azione", formula.azione().id());
+    f.addProperty("prob_tenuta_stimata", round3(formula.probTenuta()));
+    f.addProperty(
+        "nota",
+        "decisione della formula v2 (contrattacco massimo); misurata troppo pessimista nelle fasce"
+            + " basse");
+    s.add("formula_v2", f);
+    s.add("storico_nemico", StoricoNemico.riassunto(data.getProperties(), def.id()));
+    s.add("priorita_nemico", priorities(target));
+    s.add("partita", game());
+    return s;
+  }
+
+  /** The maximum counterattack by origin (territory or zone, distance) and the purchases. */
+  private JsonObject counterattack(final Territory target, final Minaccia m) {
+    final Map<Unit, Territory> where = StoricoNemico.locations(map);
+    final Map<Territory, List<Unit>> byOrigin = new java.util.LinkedHashMap<>();
+    for (final Unit u : m.attaccanti()) {
+      final Territory from = where.get(u);
+      if (from != null) {
+        byOrigin.computeIfAbsent(from, x -> new ArrayList<>()).add(u);
+      }
+    }
+    final JsonArray origins = new JsonArray();
+    byOrigin.entrySet().stream()
+        .sorted(
+            Comparator.comparingInt(
+                    (Map.Entry<Territory, List<Unit>> x) -> distance(x.getKey(), target))
+                .thenComparing(x -> -tuv(x.getValue())))
+        .limit(14)
+        .forEach(
+            x -> {
+              final JsonObject o = new JsonObject();
+              o.addProperty("da", x.getKey().getName());
+              o.addProperty("distanza", distance(x.getKey(), target));
+              o.addProperty("proprietari", owners(x.getValue()));
+              o.addProperty("unita", OperazioniAnfibie.unitsText(x.getValue()));
+              o.addProperty("tuv", Math.round(tuv(x.getValue())));
+              origins.add(o);
+            });
+    final Map<Territory, List<Unit>> byFactory = new java.util.LinkedHashMap<>();
+    enemyPurchases(target, byFactory);
+    final JsonArray buys = new JsonArray();
+    byFactory.forEach(
+        (fac, units) -> {
+          final JsonObject o = new JsonObject();
+          o.addProperty("fabbrica", fac.getName());
+          o.addProperty("nazione", fac.getOwner().getName());
+          o.addProperty("distanza", distance(fac, target));
+          o.addProperty("unita", OperazioniAnfibie.unitsText(units));
+          o.addProperty("tuv", Math.round(tuv(units)));
+          buys.add(o);
+        });
+    final JsonObject c = new JsonObject();
+    c.addProperty("tuv_unita_in_portata", Math.round(tuv(m.attaccanti())));
+    c.addProperty("tuv_acquisti_possibili", Math.round(tuv(m.acquisti())));
+    c.add("per_origine", origins);
+    c.add("acquisti_per_fabbrica", buys);
+    if (!m.bombardamento().isEmpty()) {
+      c.addProperty("bombardamento", OperazioniAnfibie.unitsText(m.bombardamento()));
+    }
+    return c;
+  }
+
+  /**
+   * Hold% if the enemy commits 25/50/75/100% (TUV) of the counterattack, the closest units first
+   * (the purchases count as next to the target).
+   */
+  private JsonArray curve(
+      final Territory target, final Minaccia m, final Collection<Unit> defenders) {
+    final Map<Unit, Territory> where = StoricoNemico.locations(map);
+    final List<Unit> all = new ArrayList<>(m.tutti());
+    all.sort(
+        Comparator.comparingInt(
+                (Unit u) -> where.get(u) == null ? 1 : distance(where.get(u), target))
+            .thenComparing(u -> -tuv(List.of(u))));
+    final double total = tuv(all);
+    final JsonArray out = new JsonArray();
+    for (final int pct : new int[] {25, 50, 75, 100}) {
+      final List<Unit> part = new ArrayList<>();
+      double sum = 0;
+      for (final Unit u : all) {
+        if (pct < 100 && sum >= total * pct / 100.0) {
+          break;
+        }
+        part.add(u);
+        sum += tuv(List.of(u));
+      }
+      final double hold =
+          part.isEmpty()
+              ? 100
+              : defenders.isEmpty()
+                  ? 0
+                  : 100
+                      - calc.calculateBattleResults(
+                              proData, target, part, new ArrayList<>(defenders), m.bombardamento())
+                          .getWinPercentage();
+      final JsonObject o = new JsonObject();
+      o.addProperty("impegno_pct", pct);
+      o.addProperty("tuv_nemico", Math.round(sum));
+      o.addProperty("tenuta_pct", Math.round(hold));
+      out.add(o);
+    }
+    return out;
+  }
+
+  /**
+   * Where the alliance threatens the enemy elsewhere (capitals, VC, factories of nations at war): a
+   * rough count of the alliance's units within 2 (land) or 3 (air) territories against the
+   * defenders, the 6 most pressed.
+   */
+  private JsonArray priorities(final Territory target) {
+    record P(Territory t, double near, double def) {}
+    final List<P> list = new ArrayList<>();
+    for (final Territory t : map.getTerritories()) {
+      if (t.isWater()
+          || t.equals(target)
+          || t.getOwner().isNull()
+          || !data.getRelationshipTracker().isAtWar(player, t.getOwner())) {
+        continue;
+      }
+      final var ta = TerritoryAttachment.get(t);
+      if (ta.isEmpty()
+          || !(ta.get().isCapital()
+              || ta.get().getVictoryCity() > 0
+              || ta.get().getProduction() >= 3)) {
+        continue;
+      }
+      double near = 0;
+      for (final Territory x : map.getNeighbors(t, 3)) {
+        final int d = map.getDistance(x, t);
+        near +=
+            tuv(
+                x.getMatches(
+                    Matches.isUnitAllied(player)
+                        .and(Matches.unitIsNotInfrastructure())
+                        .and(u -> Matches.unitIsAir().test(u) || (d <= 2 && !x.isWater()))));
+      }
+      if (near <= 0) {
+        continue;
+      }
+      final double def =
+          tuv(
+              t.getMatches(
+                  Matches.isUnitAllied(t.getOwner()).and(Matches.unitIsNotInfrastructure())));
+      list.add(new P(t, near, def));
+    }
+    final JsonArray out = new JsonArray();
+    list.stream()
+        .sorted(Comparator.comparingDouble((P p) -> -p.near() / (p.def() + 1)))
+        .limit(6)
+        .forEach(
+            p -> {
+              final JsonObject o = new JsonObject();
+              o.addProperty("territorio", p.t().getName());
+              o.addProperty("nazione", p.t().getOwner().getName());
+              TerritoryAttachment.get(p.t())
+                  .ifPresent(
+                      a -> {
+                        o.addProperty("capitale", a.isCapital());
+                        o.addProperty("victory_city", a.getVictoryCity() > 0);
+                      });
+              o.addProperty("tuv_alleato_vicino", Math.round(p.near()));
+              o.addProperty("tuv_difesa", Math.round(p.def()));
+              out.add(o);
+            });
+    return out;
+  }
+
+  /** VC and income of the two sides now. */
+  private JsonObject game() {
+    int vcOwn = 0;
+    int vcEnemy = 0;
+    for (final Territory t : map.getTerritories()) {
+      if (TerritoryAttachment.get(t).map(a -> a.getVictoryCity() > 0).orElse(false)) {
+        if (Matches.isTerritoryAllied(player).test(t)) {
+          vcOwn++;
+        } else if (!t.getOwner().isNull()
+            && data.getRelationshipTracker().isAtWar(player, t.getOwner())) {
+          vcEnemy++;
+        }
+      }
+    }
+    final JsonObject income = new JsonObject();
+    double own = 0;
+    double enemy = 0;
+    for (final GamePlayer p : data.getPlayerList().getPlayers()) {
+      if (p.isNull()) {
+        continue;
+      }
+      final double prod = ProUtils.getPlayerProduction(p, data);
+      income.addProperty(p.getName(), Math.round(prod));
+      if (data.getRelationshipTracker().isAllied(player, p)) {
+        own += prod;
+      } else if (data.getRelationshipTracker().isAtWar(player, p)) {
+        enemy += prod;
+      }
+    }
+    final JsonObject g = new JsonObject();
+    g.addProperty("vc_alleanza", vcOwn);
+    g.addProperty("vc_nemico", vcEnemy);
+    g.addProperty("reddito_alleanza", Math.round(own));
+    g.addProperty("reddito_nemico", Math.round(enemy));
+    g.add("reddito_per_nazione", income);
+    return g;
+  }
+
+  /** A one-line summary of the state sent (diary). */
+  private static String riassunto(final JsonObject in) {
+    final StringBuilder sb = new StringBuilder();
+    if (in.has("numeri")) {
+      final JsonObject n = in.getAsJsonObject("numeri");
+      for (final String key :
+          List.of(
+              "tuv_attaccanti", "win", "perdita_attesa", "win_tappa2_stimata", "presa_stimata")) {
+        if (n.has(key)) {
+          sb.append(key).append(' ').append(n.get(key).getAsString()).append(", ");
+        }
+      }
+    }
+    if (in.has("contrattacco_massimo")) {
+      final JsonObject c = in.getAsJsonObject("contrattacco_massimo");
+      sb.append("contrattacco max TUV ")
+          .append(c.get("tuv_unita_in_portata").getAsString())
+          .append(" + acquisti ")
+          .append(c.get("tuv_acquisti_possibili").getAsString())
+          .append(", ");
+    }
+    if (in.has("tenuta_per_impegno")) {
+      sb.append("tenuta a 25/50/75/100%: ");
+      final List<String> v = new ArrayList<>();
+      in.getAsJsonArray("tenuta_per_impegno")
+          .forEach(x -> v.add(x.getAsJsonObject().get("tenuta_pct").getAsString()));
+      sb.append(String.join("/", v)).append(", ");
+    }
+    if (in.has("storico_nemico")) {
+      final JsonObject h = in.getAsJsonObject("storico_nemico");
+      sb.append("storico: ")
+          .append(h.get("osservazioni").getAsString())
+          .append(" osservazioni, frazione impegnata ")
+          .append(h.get("frazione_impegnata_pesata_tuv").getAsString())
+          .append(", ripresi ")
+          .append(h.get("ripresi").getAsString());
+    }
+    return sb.toString();
+  }
+
+  private int distance(final Territory from, final Territory to) {
+    final int d = map.getDistance(from, to);
+    return d < 0 ? 9 : d;
+  }
+
+  private static String owners(final Collection<Unit> units) {
+    return String.join(
+        ",", units.stream().map(u -> u.getOwner().getName()).distinct().sorted().toList());
+  }
+
+  private static double round3(final double v) {
+    return Math.round(v * 1000) / 1000.0;
   }
 
   // ================================================================================== helpers
@@ -2881,7 +3655,7 @@ public final class OperazioniCongiunte {
 
   private static boolean isCapital(final Territory t, final GamePlayer p) {
     return games.strategy.triplea.attachments.TerritoryAttachment.get(t)
-        .flatMap(games.strategy.triplea.attachments.TerritoryAttachment::getCapital)
+        .flatMap(TerritoryAttachment::getCapital)
         .map(c -> c.equals(p.getName()))
         .orElse(false);
   }

@@ -154,6 +154,10 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   stato TENUTA, rinforzi, copertura aerea, tappa sul bersaglio finale; `OperazioneCongiunta.Tenuta`, stati TENUTA/FALLITA,
   `bersaglio_finale`), riepilogo `ConfrontoTenuta` (autoplay). Nessun hook nuovo nelle classi Pro. Vedi "Variante v2: presa
   e tenuta (step PROVA2)".
+- Step PROVALLM: `ai/proplus/DecisoreOperazione` (interruttore `Pro+ operazione decisore: <alleanza>`, budget, uso, paracadute),
+  `ai/proplus/StoricoNemico` (risposta reale del nemico), `ai/proplus/strategia/DecisioneOperazione` (contratto v1.2),
+  `strategia/llm/PromptOperazione` + risorsa `proplus/strategia/prompt-operazione-v1.md`; punti di decisione in `OperazioniCongiunte`
+  (`decide`, `stato`); riepilogo `ConfrontoLlm` (autoplay). Vedi "Operazioni decise da LLM (step PROVALLM)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -363,6 +367,15 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   tenuta a fine partita); TUV perso per alleanza con Δ e IC di Welch; **calibrazione** per fasce di 20%: tenuta stimata al lancio (bersaglio
   preso nello stesso round; reale = ancora dell'alleanza dopo `tenuta.round` round) e a ogni `stima_tenuta` (reale = ancora dell'alleanza a
   fine del round dopo).
+- **Modalita' "provallm" (step PROVALLM)**: `[provallm]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒ `modalita:
+  provallm`. 12 round, Equilibrato, **semi 401-435** (mai usati), matrice mescolata per seme, `max-parallel` 20: 1 `Asse-nudo-vs-Hard`, 2
+  `Asse-nudo-Egitto-LLM-vs-Hard` (`--operazione Axis=egitto --operazione-decisore Axis=llm:claude-sonnet-5-5`), 3 `Hard-vs-Alleati-nudo`, 4
+  `Hard-vs-Alleati-nudo-Francia-LLM`; 2 e 4 solo col secret (senza: 70 partite, nessun errore). **Tetto rigido della run 40 USD** diviso tra
+  le partite LLM (`--budget-operazioni` = 40 / 70 = 0,5714 per partita): la somma non puo' superarlo. La chiave va solo ai job con
+  `matrix.opllm` o `matrix.decisore`. `riepilogo.json`: `parametri.operazione_decisore`, `budget_operazioni_usd`, `operazioni_llm_uso`; le
+  decisioni sono in `operazioni_congiunte.<id>.decisioni`. Etichetta "... + operazione egitto decisa da LLM". Dopo "Presa e tenuta" la
+  sezione **"Decisioni LLM delle operazioni congiunte"** (`ConfrontoLlm`): decisioni per tipo e azione, diverse dalla formula, ripieghi con i
+  motivi, calibrazione LLM contro formula sulle stesse decisioni (fasce 20%, errore medio pesato, Brier), costo totale/per partita.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -1599,6 +1612,42 @@ Parigi presa ⇒ TENUTA su France per `tenuta.round` round, poi COMPLETATA; Norm
 fanteria meccanizzata in United Kingdom, 2 trasporti in 110): il combattimento di Hard vedeva "Normandy Bordeaux: win% max 0% < soglia
 minima" mentre l'operazione stimava la tappa 2 all'86% con quelle stesse unita'. Correzione: `rinvio_round` salvato da `postpone`; nel round
 del rinvio il posizionamento non trattiene nulla (evento `posizionamento_libero`).
+
+## Operazioni decise da LLM (step PROVALLM)
+
+Causa misurata in [prova2]: la formula v2 non sa prevedere cosa fara' DAVVERO il nemico (stima contro il massimo teorico, tenuta stimata ~1%
+→ reale 52%), quindi non sa quando lanciare. Qui un LLM decide **solo** nei punti dove decideva la formula; esecuzione, presidio, rinforzi,
+ritirata restano del motore. **Spento di default** (proprieta' `Pro+ operazione decisore: <alleanza>` assente = formula; nessun pannello).
+- **Punti** (`OperazioniCongiunte.decide`, `DecisioneOperazione.Punto`): `tappa1` di chi apre (anche bersaglio senza difensori e tappa su
+  Parigi, prefisso `finale_`): lancia/rinvia/annulla; `tappa2` di chi chiude: procedi/rinvia/annulla; `tenuta` (non combattimento di ogni
+  nazione dell'operazione, solo con stima del motore < `soglia_rinforzi` 70%): tieni (rinforzi del motore anche se la formula li direbbe
+  "inutili") / ritira (niente rinforzi, presidio a Hard al combattimento successivo, `tenuta_decisione_<nazione>`). `annulla` sul bersaglio
+  finale = `finale_annullata` (niente piu' Parigi, la testa di ponte resta). Nessuna chiamata se la tappa e' oltre il tetto di perdita o
+  senza attaccanti (paletti rigidi, decide la formula).
+- **Ingresso** (`OperazioniCongiunte.stato`, contratto v1.2 in `proplus/strategia/contratto-v1.md`): numeri della tappa, contrattacco
+  massimo per origine + acquisti per fabbrica, `tenuta_per_impegno` (25/50/75/100%), formula v2, `storico_nemico` (`StoricoNemico`: a fine
+  turno di una nazione dell'operazione, solo con LLM acceso, unita' nemiche in portata dei territori presi nel turno (max 4) e del bersaglio;
+  al turno dopo della stessa nazione: entrate o morte attaccandoli = impegnate, spostate altrove (dove), ferme; ripreso/attaccato; proprieta'
+  `Pro+ operazione storico: <id>`), `priorita_nemico` (territori di valore del nemico sotto pressione: TUV alleato entro 2/3 contro difesa),
+  VC e reddito. File `operazione-ingresso-R<N>-<nazione>-[finale_]<punto>.json` nel diario.
+- **Prompt** `prompt-operazione-v1.md`: operazioni a tappe e ordine dei turni, perdite di una nazione accettabili se convengono all'alleanza,
+  stimare la risposta REALE (storico, priorita', curva per impegno, distanza), il dato misurato della prova2 (fasce di calibrazione della
+  formula), paletti, schema strict. `prob_tenuta_stimata` = bersaglio dell'alleanza all'inizio del turno di chi chiude nel round dopo.
+- **Modello**: Sonnet 5.5 (`claude-sonnet-5-5`, configurabile con `llm:<modello>`), Messages API `2026-10-21`, `effort: low`, output
+  strutturato. **Temperatura non impostabile**: dalla versione API 2026-10-21 `temperature`/`top_p`/`top_k` danno errore 400 su tutti i modelli
+  (verificato su platform.claude.com, 9 nov) ⇒ "temperatura bassa" non applicabile, solo prompt deterministico + effort low.
+- **Paracadute** (`DecisoreOperazione.decidi`): errore/timeout (45 s, 2 tentativi), risposta non valida, tetto 80 chiamate, budget della
+  partita (`Pro+ operazione budget usd`, default 1 USD; si chiama solo se speso + max(0,03, 1,5 × costo medio) ≤ budget) ⇒ formula, con il
+  motivo. Uso in `Pro+ operazione uso` (chiamate, errori, risposte non valide, token, costo, ripieghi per motivo). Chiave: profilo utente o
+  `ANTHROPIC_API_KEY`, solo nell'header.
+- **Diario**: "Operazione X, decisione <punto> su <bersaglio> (<fonte>): AZIONE, tenuta stimata dall'LLM N% (motivazione) - formula: azione,
+  M%; stato: <riassunto>" + evento `decisione_operazione`; record in `decisioni` del registro con `prob_llm`, `prob_formula`, azioni, ripiego,
+  costo, e `esito_reale` (bersaglio dell'alleanza all'inizio del turno di chi chiude nel round dopo; `settleDecisions`).
+- Prezzi verificati (platform.claude.com, 9 nov 2026): Sonnet 5.5 $2 ingresso / $10 uscita / cache 5 min $2,50 / 1 h $4 / lettura $0,10 per
+  MTok, nessun sovrapprezzo di contesto lungo; Haiku 5.5 $0,10/$0,50 (fino a 100K). Corretto `prezzi-stratega.json` (lettura cache Sonnet era
+  0,20).
+- Test: `ai/pro/OperazioniLlmTest` (chiamate simulate): parsing e schema, ripiego su risposta non valida/timeout/budget, nessuna chiamata
+  col flag spento, stato con storico del nemico, tieni/ritira nel motore, esito reale salvato.
 
 ## Come configurare lo stratega
 
@@ -3330,3 +3379,20 @@ workflow `[prova2]` (semi 301-335). Nessun hook nuovo nelle classi Pro, Hard inv
 - **Giudizio**: con la regola decisa prima della run ("se anche v2 non supera il rumore, la linea coordinamento si chiude") la linea delle
   operazioni congiunte scritte a mano **si chiude**: due varianti, 280 partite, nessun effetto distinguibile da 0 in VC, entrambi gli IC
   sotto +1. Le operazioni restano nel codice, spente di default.
+
+### Step PROVALLM — operazioni v2 decise da un LLM nei punti di decisione (2026-11-09)
+
+Dopo [prova] e [prova2] (nessun effetto in VC; causa misurata: la formula non prevede la risposta REALE del nemico) un LLM (Claude Sonnet
+5.5) decide lancia/rinvia/procedi/tieni/ritira/annulla nei punti dove decideva la formula v2 di Egitto e Francia (tappe su Parigi
+comprese), leggendo i numeri del motore; tutto il resto resta del motore. Vedi "Operazioni decise da LLM (step PROVALLM)" e la modalita'
+`[provallm]`.
+File: `ai/proplus/DecisoreOperazione`, `StoricoNemico`, `strategia/DecisioneOperazione`, `strategia/llm/PromptOperazione` (nuovi);
+`OperazioniCongiunte` (punti di decisione, stato per l'LLM, storico, esito reale, `enemyPurchases` anche per fabbrica, `reinforceHold`
+diviso in candidati + esecuzione senza cambiarne il comportamento); `DiaryRecorder.operationInput`; risorse `prompt-operazione-v1.md`,
+`prezzi-stratega.json` (cache letta Sonnet 0,10); `proplus/strategia/contratto-v1.md` (schema v1.2); autoplay `--operazione-decisore`,
+`--budget-operazioni`, `Monitor`/`Riepilogo` (uso e parametri), `ConfrontoProva` (etichetta LLM), `ConfrontoLlm` (nuovo); workflow
+`[provallm]`. Nessun hook nuovo nelle classi Pro, Hard invariata; con l'interruttore spento nessuna chiamata e nessun calcolo in piu'.
+- **Run [prova] 42673273717 "failure"**: nessun job fallito (143 riusciti, `powershell-tests` saltato, 140 partite verdi, release e
+  autoplay validi). Manca il job `changes` (primo job di `proplus-release.yml`): non compare tra i job ne' tra i check ne' nel consumo ⇒
+  errore lato GitHub nella creazione/avvio del job (nessun log disponibile dall'API; il messaggio e' solo nelle "Annotations" della
+  pagina della run, bloccata dal proxy della sandbox). La run [prova2] 42691097392 ha `changes` verde ed e' "success".

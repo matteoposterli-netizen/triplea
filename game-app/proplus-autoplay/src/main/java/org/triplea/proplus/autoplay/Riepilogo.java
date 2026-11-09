@@ -106,6 +106,7 @@ final class Riepilogo {
     // step PROVA DI VALORE: joint operations' state and the check of Pro+ nudo against Hard
     json.add("operazioni_congiunte", data.get("operazioni_congiunte"));
     json.add("controllo_nudo", data.get("controllo_nudo"));
+    json.add("operazioni_llm_uso", data.get("operazioni_llm_uso"));
     json.add("attacchi_regno_unito", diaryData.attacksOnBritain);
     json.add("esito", outcome(o, monitor, rounds, winner, gameOver));
     json.add("contratto", contract(diary));
@@ -420,6 +421,17 @@ final class Riepilogo {
     }
     if (operations.size() > 0) {
       p.add("operazione", operations);
+    }
+    // step PROVALLM: who decides the operation (only alliances with an LLM)
+    final JsonObject opDeciders = new JsonObject();
+    for (final String a : monitor.alliances().keySet()) {
+      if (!AutoplayOptions.HARD.equals(o.tipo(a)) && !o.decisoreOperazione(a).isEmpty()) {
+        opDeciders.addProperty(a, o.decisoreOperazione(a));
+      }
+    }
+    if (opDeciders.size() > 0) {
+      p.add("operazione_decisore", opDeciders);
+      p.addProperty("budget_operazioni_usd", o.budgetOperazioni());
     }
     return p;
   }

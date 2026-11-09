@@ -1282,6 +1282,32 @@ public final class DiaryRecorder implements ProDecisionRecorder {
             });
   }
 
+  /**
+   * Step PROVALLM: the state sent to the LLM at a decision point of a joint operation, as a file
+   * {@code name} in the game's diary folder. Only while the diary is on.
+   */
+  public static void operationInput(final GameState data, final String name, final JsonObject in) {
+    if (!DiarySettings.isEnabled() || !(data instanceof GameData gameData)) {
+      return;
+    }
+    GameDiary.forGame(gameData)
+        .ifPresent(
+            diary -> {
+              try {
+                java.nio.file.Files.writeString(
+                    diary.getFolder().resolve(name),
+                    new com.google.gson.GsonBuilder()
+                        .setPrettyPrinting()
+                        .disableHtmlEscaping()
+                        .create()
+                        .toJson(in),
+                    java.nio.charset.StandardCharsets.UTF_8);
+              } catch (final java.io.IOException | RuntimeException e) {
+                ProLogger.warn("Diario Pro+: ingresso della decisione non scritto: " + e);
+              }
+            });
+  }
+
   public static void allianceRound(final GameState data, final Valutazione.Risultato result) {
     if (!DiarySettings.isEnabled() || !(data instanceof GameData gameData)) {
       return;

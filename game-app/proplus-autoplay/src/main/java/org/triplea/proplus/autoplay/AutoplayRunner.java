@@ -212,7 +212,12 @@ public final class AutoplayRunner {
       // step PROVA DI VALORE: the joint operation turned on for the alliance (default off)
       games.strategy.triplea.ai.proplus.OperazioneCongiunta.set(
           data.getProperties(), alliance, options.operazione(alliance));
+      // step PROVALLM: an LLM at the operation's decision points (default: the v2 formula)
+      games.strategy.triplea.ai.proplus.DecisoreOperazione.set(
+          data.getProperties(), alliance, options.decisoreOperazione(alliance));
     }
+    games.strategy.triplea.ai.proplus.DecisoreOperazione.setBudget(
+        data.getProperties(), options.budgetOperazioni());
     for (final String alliance : options.tipi().keySet()) {
       if (!monitor.alliances().containsKey(alliance)) {
         throw new IllegalArgumentException(

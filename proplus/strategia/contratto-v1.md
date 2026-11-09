@@ -173,3 +173,35 @@ Esempio di file scritto a mano (`esempi/direttive-file-R1-Allies.json`, provato 
 - `obiettivi_nazionali` [{nazione, obiettivo, pu_per_turno, territori_richiesti, territori_tenuti, mancano,
   territori_da_prendere, altre_condizioni}] della alleanza (stratega) o della nazione (ordini del turno): obiettivi
   definiti da proprieta' di territori, gia' attivi o a <= 3 conquiste.
+
+## Schema v1.2: decisione delle operazioni congiunte (step PROVALLM)
+
+Versione minore: le direttive v1/v1.1 non cambiano. Si aggiunge un oggetto separato, chiesto SOLO nei punti di decisione
+delle operazioni congiunte v2 (`OperazioniCongiunte`) quando l'alleanza ha la proprieta' `Pro+ operazione decisore:
+<alleanza>` = `llm` | `llm:<modello>` (default spento = decide la formula v2; modello di default `claude-sonnet-5-5`).
+
+```json
+{"decisione_operazione": {"azione": "lancia", "prob_tenuta_stimata": 0.55, "motivazione": "..."}}
+```
+
+| Campo | Valori | Note |
+|---|---|---|
+| `azione` | `lancia` \| `rinvia` \| `procedi` \| `tieni` \| `ritira` \| `annulla` | ammesse per punto: `tappa1` lancia/rinvia/annulla; `tappa2` procedi/rinvia/annulla; `tenuta` tieni/ritira (`DecisioneOperazione.Punto`) |
+| `prob_tenuta_stimata` | 0-1 | probabilita' che il bersaglio sia dell'alleanza all'inizio del turno di chi chiude nel round dopo la decisione, se l'azione viene eseguita (per le tappe comprende la presa) |
+| `motivazione` | testo | max 300 caratteri tenuti |
+
+- Parsing: `DecisioneOperazione.leggi` (JSON estratto dal testo come per lo stratega; oggetto `decisione_operazione` o campi alla
+  radice). Azione sconosciuta o non ammessa nel punto, probabilita' mancante o fuori 0-1 ⇒ risposta non valida ⇒ formula.
+- Ingresso (`OperazioniCongiunte.stato`, file `operazione-ingresso-R<N>-<nazione>-[finale_]<punto>.json` nel diario): bersaglio,
+  punto, azioni ammesse, round, nazione, rinvii/massimo/round massimo, tetto di perdita e TUV gia' perso, valore e info del
+  bersaglio, `numeri` del punto (forze proprie e alleate, win%, perdite attese, residui, rinforzi nemici tra le tappe),
+  presidio, `contrattacco_massimo` per origine (territorio/zona, distanza, unita', TUV) + `acquisti_per_fabbrica`,
+  `tenuta_per_impegno` (25/50/75/100% delle forze in portata, le piu' vicine per prime), `formula_v2` (azione e stima),
+  `storico_nemico` (`StoricoNemico`: per i territori presi dall'alleanza, forze nemiche in portata e quante il nemico ne ha
+  davvero mandate entro il turno successivo, se li ha ripresi, dove ha spostato le altre), `priorita_nemico` (territori di
+  valore del nemico sotto pressione dell'alleanza), `partita` (VC e reddito).
+- Paletti invariati e prima dell'LLM: nessuna chiamata se la tappa e' oltre il tetto di perdita o senza attaccanti (decide la
+  formula); guarnigione della capitale nel codice; max rinvii e round massimo; tenuta chiesta solo sotto `soglia_rinforzi`.
+- Paracadute (`DecisoreOperazione`): errore, timeout (45 s, 2 tentativi), risposta non valida, tetto 80 chiamate per partita,
+  budget in USD della partita (`Pro+ operazione budget usd`, default 1; prossima chiamata stimata come 1,5 × costo medio, min
+  $0,03) ⇒ decisione della formula, con il motivo. Uso in `Pro+ operazione uso`.

@@ -29,11 +29,17 @@ final class ConfrontoProva {
   private ConfrontoProva() {}
 
   /** One game of the test: the Pro+ side, its operation ("" = none). */
-  record Entry(String side, String operation, JsonObject json) {
+  record Entry(String side, String operation, JsonObject json, boolean llm) {
+    Entry(final String side, final String operation, final JsonObject json) {
+      this(side, operation, json, false);
+    }
+
     String key() {
       return Riepilogo.allianceLabel(side)
           + " Pro+ nudo"
-          + (operation.isEmpty() ? "" : " + operazione " + operation);
+          + (operation.isEmpty()
+              ? ""
+              : " + operazione " + operation + (llm ? " decisa da LLM" : ""));
     }
   }
 
@@ -66,7 +72,12 @@ final class ConfrontoProva {
           p.has("operazione") && p.getAsJsonObject("operazione").has(side)
               ? p.getAsJsonObject("operazione").get(side).getAsString()
               : "";
-      entries.add(new Entry(side, op, g.json()));
+      // step PROVALLM: an LLM at the operation's decision points
+      final boolean llm =
+          !op.isEmpty()
+              && p.has("operazione_decisore")
+              && p.getAsJsonObject("operazione_decisore").has(side);
+      entries.add(new Entry(side, op, g.json(), llm));
     }
     if (entries.stream().noneMatch(e -> !e.operation().isEmpty())) {
       return;
@@ -149,7 +160,11 @@ final class ConfrontoProva {
           list.stream()
               .filter(e -> !e.operation().isEmpty())
               .forEach(
-                  e -> byOp.computeIfAbsent(e.operation(), k -> new ArrayList<>()).add(e.json()));
+                  e ->
+                      byOp.computeIfAbsent(
+                              e.operation() + (e.llm() ? " (decisa da LLM)" : ""),
+                              k -> new ArrayList<>())
+                          .add(e.json()));
           byOp.forEach(
               (op, withOp) -> {
                 final ToDoubleFunction<JsonObject> vc = j -> ConfrontoHard.vc(j, side, last);
@@ -452,6 +467,7 @@ Motivi (tappe non eseguite, annullamenti), partite o tappe per motivo:
     }
     // step PROVA2: the take-and-hold variant
     ConfrontoTenuta.write(md, entries, alliances, last);
+    ConfrontoLlm.write(md, entries);
   }
 
   /** {differences out of the operation, questions, operation's answers} over the games. */

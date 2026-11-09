@@ -24,6 +24,11 @@ import javax.annotation.Nullable;
  *                      games.strategy.triplea.ai.proplus.Ablazione joined by "+", or "nudo" (all)
  * --operazione A=ID,.. joint operation turned on per alliance (step PROVA DI VALORE): id of
  *                      games.strategy.triplea.ai.proplus.OperazioneCongiunta (egitto, francia)
+ * --operazione-decisore A=llm[:MODEL],..  who decides the operation's decision points (step
+ *                      PROVALLM): absent = the v2 formula; llm = Claude Sonnet 5.5 with
+ *                      ANTHROPIC_API_KEY (llm:MODEL another model)
+ * --budget-operazioni USD  hard cap in USD of the LLM calls of the operations in this game
+ *                      (default 1.0); over it the formula decides
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
@@ -39,6 +44,8 @@ record AutoplayOptions(
     Map<String, String> decisori,
     Map<String, String> ablazioni,
     Map<String, String> operazioni,
+    Map<String, String> decisoriOperazione,
+    double budgetOperazioni,
     long seme,
     Path output,
     int minuti,
@@ -72,6 +79,12 @@ record AutoplayOptions(
         deciders(values.get("decisore")),
         ablations(values.get("ablazione")),
         operations(values.get("operazione")),
+        operationDeciders(values.get("operazione-decisore")),
+        Double.parseDouble(
+            values.getOrDefault(
+                "budget-operazioni",
+                String.valueOf(
+                    games.strategy.triplea.ai.proplus.DecisoreOperazione.BUDGET_DEFAULT))),
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
         Integer.parseInt(values.getOrDefault("minuti", "55")),
@@ -107,6 +120,28 @@ record AutoplayOptions(
   /** Joint operation of {@code alliance} ("" = none). */
   String operazione(final String alliance) {
     return operazioni.getOrDefault(alliance, "");
+  }
+
+  /** Who decides the joint operation of {@code alliance}: "" = the formula, "llm[:MODEL]". */
+  String decisoreOperazione(final String alliance) {
+    return decisoriOperazione.getOrDefault(alliance, "");
+  }
+
+  /** "Axis=llm,Allies=llm:claude-sonnet-5-5". */
+  static Map<String, String> operationDeciders(@Nullable final String text) {
+    final Map<String, String> map = pairs(text);
+    map.forEach(
+        (alliance, d) -> {
+          if (!d.equals(LLM) && !(d.startsWith(LLM + ":") && d.length() > LLM.length() + 1)) {
+            throw new IllegalArgumentException(
+                "Decisore delle operazioni non valido per "
+                    + alliance
+                    + ": "
+                    + d
+                    + " (llm | llm:MODELLO)");
+          }
+        });
+    return map;
   }
 
   /** "Axis=egitto,Allies=francia": every id must be an operation of that alliance. */

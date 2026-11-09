@@ -55,7 +55,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD)"
         default: "normale"
 permissions:
   contents: write
@@ -145,6 +145,37 @@ jobs:
                           "tipo": tipo, "piano": piano, "seme": seed, "decisore": decisore}
                          for (n, key, name, tipo, piano, decisore) in confronto
                          for seed in (1, 2, 3, 4)]
+              print("matrix=" + json.dumps({"include": include}))
+              print(f"round={rounds}")
+              raise SystemExit(0)
+          if os.environ["MODALITA"] == "provallm":
+              # step PROVALLM: Pro+ nudo with and without the joint operation v2 whose decision
+              # points are taken by an LLM (Claude Sonnet 5.5), 35 new seeds (401-435), interleaved;
+              # the LLM games only with the secret; hard cap of the run 40 USD split per game
+              llm = os.environ["HAS_LLM_KEY"] == "true"
+              prova = [
+                  ("1", "Asse-nudo-vs-Hard", "Asse Pro+ nudo / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=nudo", "", ""),
+                  ("3", "Hard-vs-Alleati-nudo", "Asse Hard / Alleati Pro+ nudo",
+                   "Axis=hard,Allies=proplus", "Allies=1", "Allies=nudo", "", ""),
+              ] + ([
+                  ("2", "Asse-nudo-Egitto-LLM-vs-Hard", "Asse Pro+ nudo + Egitto LLM / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=nudo", "Axis=egitto",
+                   "Axis=llm:claude-sonnet-5-5"),
+                  ("4", "Hard-vs-Alleati-nudo-Francia-LLM", "Asse Hard / Alleati Pro+ nudo + Francia LLM",
+                   "Axis=hard,Allies=proplus", "Allies=1", "Allies=nudo", "Allies=francia",
+                   "Allies=llm:claude-sonnet-5-5"),
+              ] if llm else [])
+              seeds = range(401, 436)
+              n_llm = sum(1 for c in prova if c[7]) * len(seeds)
+              budget = f"{40.0 / n_llm:.4f}" if n_llm else ""
+              include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
+                          "tipo": tipo, "piano": piano, "seme": seed, "decisore": "",
+                          "ablazione": abl, "operazione": op, "opllm": opllm,
+                          "budget": budget if opllm else ""}
+                         for (n, key, name, tipo, piano, abl, op, opllm) in prova
+                         for seed in seeds]
+              include.sort(key=lambda g: (g["seme"], g["id"]))
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
               raise SystemExit(0)
@@ -312,7 +343,7 @@ jobs:
     strategy:
       fail-fast: false
       # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
-      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2') && 20 || 6 }}
+      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm') && 20 || 6 }}
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     name: play (${{ matrix.id }})
     steps:
@@ -327,8 +358,8 @@ jobs:
           path: autoplay-kit
       - name: Play
         env:
-          # only the LLM games get the key
-          ANTHROPIC_API_KEY: ${{ matrix.decisore != '' && secrets.ANTHROPIC_API_KEY || '' }}
+          # only the LLM games get the key (strategist, or the operations' decisions: [provallm])
+          ANTHROPIC_API_KEY: ${{ (matrix.decisore != '' || matrix.opllm != '') && secrets.ANTHROPIC_API_KEY || '' }}
         run: |
           set -uo pipefail
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
@@ -344,6 +375,8 @@ jobs:
           if [ -n "${{ matrix.decisore }}" ]; then args+=(--decisore "${{ matrix.decisore }}"); fi
           if [ -n "${{ matrix.ablazione }}" ]; then args+=(--ablazione "${{ matrix.ablazione }}"); fi
           if [ -n "${{ matrix.operazione }}" ]; then args+=(--operazione "${{ matrix.operazione }}"); fi
+          if [ -n "${{ matrix.opllm }}" ]; then args+=(--operazione-decisore "${{ matrix.opllm }}"); fi
+          if [ -n "${{ matrix.budget }}" ]; then args+=(--budget-operazioni "${{ matrix.budget }}"); fi
           start=$(date +%s)
           autoplay-kit/runner/bin/proplus-autoplay "${args[@]}" 2>&1 | tee "$out/partita.log" \
             | { grep --line-buffered -E "AUTOPLAY|ERROR" || true; }
@@ -399,7 +432,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.loads(os.environ['MATRIX'])['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
           # LLM strategist: offline quality test on 30 strategic states of these games (skipped,

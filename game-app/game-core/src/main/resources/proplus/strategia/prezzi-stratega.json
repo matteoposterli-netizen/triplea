@@ -25,9 +25,9 @@
     "claude-sonnet-5-5": {
       "ingresso": 2.0,
       "uscita": 10.0,
-      "cache_lettura": 0.2,
+      "cache_lettura": 0.1,
       "cache_scrittura": 4.0,
-      "verificato": "2026-11-09, listino ufficiale Anthropic (cache letta 0,1x, scrittura 1h 2x)"
+      "verificato": "2026-11-09, listino ufficiale Anthropic (platform.claude.com/docs/en/about-claude/pricing e pagina del modello): ingresso $2, uscita $10, scrittura cache 5 min $2,50, 1 h $4, lettura cache $0,10 (0,05x); nessun sovrapprezzo per contesto lungo"
     }
   }
 }
