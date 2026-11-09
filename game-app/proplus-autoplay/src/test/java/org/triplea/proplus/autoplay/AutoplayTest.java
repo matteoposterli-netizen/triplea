@@ -170,6 +170,78 @@ class AutoplayTest {
   }
 
   @Test
+  void ablationOptionAcceptsKnownComponentsOnly() {
+    final AutoplayOptions o =
+        AutoplayOptions.parse(
+            new String[] {
+              "--mappa", "m.xml", "--ablazione", "Axis=rallentamento+rischio_fronte,Allies=nudo"
+            });
+    assertThat(o.ablazione("Axis")).isEqualTo("rallentamento,rischio_fronte");
+    assertThat(o.ablazione("Allies")).isEqualTo("nudo");
+    assertThat(o.ablazione("Other")).isEmpty();
+    assertThatThrownBy(
+            () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--ablazione", "Axis=boh"}))
+        .hasMessageContaining("Ablazione non valida per Axis")
+        .hasMessageContaining("boh");
+  }
+
+  @Test
+  void ablationSummaryRanksTheComponentsAgainstProPlusAndHard() {
+    // Axis VC at the end: Hard vs Hard 3, 3; Pro+ A 3, 4 (RALLENTAMENTO 4 rounds); without
+    // RALLENTAMENTO 6, 6; nudo 3, 3
+    final List<RiepilogoGenerale.Game> games = new java.util.ArrayList<>();
+    final String[] offs = {null, null, "", "", "rallentamento", "rallentamento", "nudo", "nudo"};
+    final int[] vcs = {3, 3, 3, 4, 6, 6, 3, 3};
+    for (int i = 0; i < offs.length; i++) {
+      final JsonObject g = JsonParser.parseString(SAMPLE).getAsJsonObject();
+      final boolean hard = offs[i] == null;
+      final JsonObject p = g.getAsJsonObject("parametri");
+      p.getAsJsonObject("tipi").addProperty("Axis", hard ? "hard" : "proplus");
+      p.getAsJsonObject("tipi").addProperty("Allies", "hard");
+      p.getAsJsonObject("piani").addProperty("Allies", "-");
+      if (!hard && !offs[i].isEmpty()) {
+        final JsonObject abl = new JsonObject();
+        abl.addProperty("Axis", offs[i]);
+        p.add("ablazione", abl);
+      }
+      if ("".equals(offs[i])) {
+        g.add("stratega", JsonParser.parseString("{\"Axis\":{\"posture\":{\"RALLENTAMENTO\":4}}}"));
+      }
+      g.getAsJsonArray("round")
+          .get(0)
+          .getAsJsonObject()
+          .getAsJsonObject("vc")
+          .getAsJsonObject("Axis")
+          .addProperty("numero", vcs[i]);
+      final JsonObject lost = new JsonObject();
+      lost.addProperty("Axis", 50);
+      lost.addProperty("Allies", 60);
+      g.add("tuv_perso", lost);
+      g.remove("esito");
+      g.add("esito", JsonParser.parseString("{\"testo\":\"nessuna entro 1 round\"}"));
+      games.add(new RiepilogoGenerale.Game(i / 2 + "-x-seme" + (i % 2 + 1), g));
+    }
+    final String md = RiepilogoGenerale.markdown("T", games);
+    assertThat(md)
+        .contains("## Ablazione dei componenti Pro+ (riferimento: Hard / Hard)")
+        .contains("Rumore (Hard / Hard, 2 partite): VC R1 Asse 3 ds 0.0")
+        .contains("| Pro+ A / Hard | Asse | 2 | 3.5 (3-4), ds 0.7 | Δ +0.5 (rumore) | - |")
+        .contains(
+            "| Pro+ A [senza rallentamento] / Hard | Asse | 2 | 6, ds 0.0 | Δ +3 (forte) |"
+                + " Δ +2.5 (forte) | 50 / 60 |")
+        .containsPattern("\\| Pro\\+ A / Hard \\| Asse \\|.*\\| 4 \\|\n")
+        .contains("| Pro+ A [nudo] / Hard | Asse | 2 | 3, ds 0.0 | Δ +0 (rumore) | Δ -0.5 (rumore)")
+        .doesNotContain("⚠")
+        .contains("- Asse, rallentamento: -2.50 VC ⇒ **costa**")
+        .contains("- Asse, tutti i componenti (nudo): +0.50 VC ⇒ **rumore**");
+    // the ablation configurations are not mixed with "Pro+ attuale"
+    assertThat(RiepilogoGenerale.configuration(games.get(4).json(), List.of("Axis", "Allies")))
+        .isEqualTo("Pro+ A [senza rallentamento] / Hard");
+    // without ablation games the section is not written
+    assertThat(RiepilogoGenerale.markdown("T", games.subList(0, 4))).doesNotContain("Ablazione");
+  }
+
+  @Test
   void plansAndPosturesPerGameAndConfiguration() {
     final JsonObject game = JsonParser.parseString(SAMPLE).getAsJsonObject();
     final JsonArray rounds = new JsonArray();
@@ -404,7 +476,8 @@ class AutoplayTest {
     assertThat(orders.getAsJsonObject("strumenti_accesi").get("blocco_navale").getAsInt())
         .isEqualTo(1);
     assertThat(allies.getAsJsonObject("rischio_medio").get("British").getAsDouble()).isEqualTo(3.5);
-    assertThat(allies.getAsJsonObject("rischio_medio").get("Russians").getAsDouble()).isEqualTo(2.5);
+    assertThat(allies.getAsJsonObject("rischio_medio").get("Russians").getAsDouble())
+        .isEqualTo(2.5);
     assertThat(s.has("Axis")).isTrue();
 
     final JsonObject game = JsonParser.parseString(SAMPLE).getAsJsonObject();
@@ -414,7 +487,8 @@ class AutoplayTest {
     game.add("stratega", s);
     assertThat(Riepilogo.markdown(game))
         .contains("ordini del turno 2 (ripieghi 1)")
-        .contains("- Rischio effettivo medio per nazione (1-5, tutti i round e fronti): British 3.5, Russians 2.5");
+        .contains(
+            "- Rischio effettivo medio per nazione (1-5, tutti i round e fronti): British 3.5, Russians 2.5");
     assertThat(RiepilogoGenerale.markdown("T", List.of(new RiepilogoGenerale.Game("8-LLM", game))))
         .contains("| 1 / $0.0020 | 1 / $0.0010 (ripieghi 1) |")
         .contains("Stratega 1 chiamate $0.0020 ($0.0020 per partita), Ordini del turno 1 chiamate")
@@ -423,7 +497,10 @@ class AutoplayTest {
     // comparison per configuration: rules and LLM with the same plans
     final JsonObject rules = JsonParser.parseString(SAMPLE).getAsJsonObject();
     final JsonObject sonnet = game.deepCopy();
-    sonnet.getAsJsonObject("parametri").getAsJsonObject("decisori").addProperty("Allies", "llm:claude-sonnet-5-5");
+    sonnet
+        .getAsJsonObject("parametri")
+        .getAsJsonObject("decisori")
+        .addProperty("Allies", "llm:claude-sonnet-5-5");
     final String cmp =
         RiepilogoGenerale.markdown(
             "T",
@@ -462,7 +539,15 @@ class AutoplayTest {
               return new games.strategy.triplea.ai.proplus.strategia.llm.Risposta(
                   "{\"bersagli\": [], \"operazioni\": [{\"id\": \"Overlord UK\", \"decisione\":"
                       + " \"lancia\"}], \"tattiche\": [], \"motivazione\": \"Vado.\"}",
-                  "Haiku", "claude-haiku-5-5", 500, 100, 2000, 0, 0.0004, false, 1500);
+                  "Haiku",
+                  "claude-haiku-5-5",
+                  500,
+                  100,
+                  2000,
+                  0,
+                  0.0004,
+                  false,
+                  1500);
             },
             TestQualita.ORDINI);
 
@@ -471,7 +556,9 @@ class AutoplayTest {
     assertThat(r.get("json_validi_primo_colpo").getAsInt()).isEqualTo(2);
     // R4: Overlord UK is not an operation of the input
     assertThat(r.get("direttive_limitate_dai_paletti").getAsInt()).isEqualTo(1);
-    assertThat(TestQualita.markdown(r)).contains("(ordini del turno)").contains("Ordini del turno, Haiku");
+    assertThat(TestQualita.markdown(r))
+        .contains("(ordini del turno)")
+        .contains("Ordini del turno, Haiku");
   }
 
   @Test
@@ -501,7 +588,15 @@ class AutoplayTest {
               }
               return new games.strategy.triplea.ai.proplus.strategia.llm.Risposta(
                   n[0] == 1 ? good : "{\"piano\": \"Z\", \"postura\": \"OFFENSIVA\"}",
-                  "Haiku", "claude-haiku-5-5", 3000, 300, 6000, 0, 0.001, false, 2000);
+                  "Haiku",
+                  "claude-haiku-5-5",
+                  3000,
+                  300,
+                  6000,
+                  0,
+                  0.001,
+                  false,
+                  2000);
             });
 
     assertThat(r.get("stati").getAsInt()).isEqualTo(3);

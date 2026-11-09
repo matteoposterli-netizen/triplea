@@ -89,6 +89,27 @@ public final class ProPlusTuning implements ProTuning {
    */
   public static final String DROP_NOT_HELD = "bridgehead_not_held";
 
+  /**
+   * The Pro AI data this tuning belongs to (step ABLAZIONE): tells the methods without a {@link
+   * ProData} parameter which game and player the ablation switches are read for.
+   */
+  private @Nullable ProData owner;
+
+  /** Ties this tuning to the AI data that uses it ({@link ProPlusAi}). */
+  public void attach(final ProData proData) {
+    owner = proData;
+  }
+
+  /** Whether {@code c} is on for {@code proData}'s player ({@link Ablazione}). */
+  private static boolean on(final ProData proData, final Ablazione.Componente c) {
+    return Ablazione.attivo(proData, c);
+  }
+
+  /** Whether {@code c} is on for the owner's player (no owner: on). */
+  private boolean on(final Ablazione.Componente c) {
+    return Ablazione.attivo(owner, c);
+  }
+
   /** Cache of {@link #plan}: the orders are the same for one game state, player and round. */
   private @Nullable GameState planData;
 
@@ -139,6 +160,9 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public double targetAttackWinPercentage(
       final ProData proData, final Territory target, final double attackWinPercentage) {
+    if (!on(proData, Ablazione.Componente.SOGLIE_RISCHIO)) {
+      return attackWinPercentage;
+    }
     return desiredWinPercentage(proData, target);
   }
 
@@ -162,6 +186,9 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public double targetAttackMinWinPercentage(
       final ProData proData, final Territory target, final double attackMinWinPercentage) {
+    if (!on(proData, Ablazione.Componente.SOGLIE_RISCHIO)) {
+      return attackMinWinPercentage;
+    }
     // strategic contract, guard rail: never below the absolute minimum, whatever the decider
     final double minimum =
         Math.max(
@@ -205,6 +232,9 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public double attackWinPercentageCeiling(
       final ProData proData, final double attackWinPercentage) {
+    if (!on(proData, Ablazione.Componente.SOGLIE_RISCHIO)) {
+      return attackWinPercentage;
+    }
     final boolean lowLuck = isLowLuck(proData.getData());
     return Math.max(
         attackWinPercentage,
@@ -228,6 +258,9 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public Optional<ProPurchaseOrders> purchaseOrders(final ProData proData) {
+    if (!on(proData, Ablazione.Componente.LOGISTICA_ACQUISTI)) {
+      return Optional.empty();
+    }
     return planOf(proData)
         .flatMap(
             plan ->
@@ -442,6 +475,9 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public Optional<ProStagingOrders> stagingOrders(final ProData proData) {
+    if (!on(proData, Ablazione.Componente.AMMASSAMENTO)) {
+      return Optional.empty();
+    }
     return planOf(proData)
         .flatMap(
             plan ->
@@ -517,6 +553,9 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public Optional<Map<GamePlayer, String>> realEnemies(
       final ProData proData, final GamePlayer player) {
+    if (!on(proData, Ablazione.Componente.MINACCIA_REALE)) {
+      return Optional.empty();
+    }
     final GameState data = proData.getData();
     final int round = data.getSequence().getRound();
     final String step = data.getSequence().getStep().getName();
@@ -540,23 +579,35 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public boolean garrisonNeeded(
       final ProData proData, final Territory territory, final List<Unit> landingEnemies) {
+    if (!on(proData, Ablazione.Componente.MINACCIA_REALE)) {
+      return ProTuning.super.garrisonNeeded(proData, territory, landingEnemies);
+    }
     return !landingEnemies.isEmpty();
   }
 
   @Override
   public OptionalDouble capitalGuardThreshold(final ProData proData) {
+    if (!on(proData, Ablazione.Componente.GUARNIGIONE_CAPITALE)) {
+      return OptionalDouble.empty();
+    }
     return OptionalDouble.of(CAPITAL_GUARD_THRESHOLD);
   }
 
   @Override
   public double attackWinPercentage(
       final GameState data, final GamePlayer player, final double winPercentage) {
+    if (!Ablazione.attivo(data, player, Ablazione.Componente.SOGLIE_RISCHIO)) {
+      return winPercentage;
+    }
     return ProPlusSettings.riskLevelFor(data, player).desiredWinPercentage(isLowLuck(data));
   }
 
   @Override
   public double attackMinWinPercentage(
       final GameState data, final GamePlayer player, final double minWinPercentage) {
+    if (!Ablazione.attivo(data, player, Ablazione.Componente.SOGLIE_RISCHIO)) {
+      return minWinPercentage;
+    }
     return Math.max(
         Direttive.SOGLIA_MINIMA_ASSOLUTA,
         ProPlusSettings.riskLevelFor(data, player).minimumWinPercentage(isLowLuck(data)));
@@ -564,6 +615,9 @@ public final class ProPlusTuning implements ProTuning {
 
   @Override
   public boolean valuesVictoryCities(final boolean beta) {
+    if (!on(Ablazione.Componente.VICTORY_CITY)) {
+      return ProTuning.super.valuesVictoryCities(beta);
+    }
     return true;
   }
 
@@ -574,6 +628,9 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public boolean checksLandingScramble(final boolean beta) {
+    if (!on(Ablazione.Componente.SCRAMBLE_SBARCHI)) {
+      return ProTuning.super.checksLandingScramble(beta);
+    }
     return true;
   }
 
@@ -585,17 +642,26 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public boolean dropsAmphibiousStrafe(
       final ProData proData, final Territory target, final double winPercentage) {
+    if (!on(proData, Ablazione.Componente.STRAFE_ANFIBIO)) {
+      return false;
+    }
     return winPercentage < proData.getAttackMinWinPercentage(target);
   }
 
   @Override
   public boolean hasVictoryCityWinCondition(final GameProperties props) {
+    if (!on(Ablazione.Componente.VICTORY_CITY)) {
+      return ProTuning.super.hasVictoryCityWinCondition(props);
+    }
     return ProTuning.super.hasVictoryCityWinCondition(props)
         || Properties.getTriggeredVictory(props);
   }
 
   @Override
   public double attackPriorityVictoryCityWeight() {
+    if (!on(Ablazione.Componente.VICTORY_CITY)) {
+      return ProTuning.super.attackPriorityVictoryCityWeight();
+    }
     return ATTACK_PRIORITY_VICTORY_CITY_WEIGHT;
   }
 
@@ -616,6 +682,9 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public Optional<String> keepsAttackNotWorthIt(final ProData proData, final ProAttackWorth worth) {
+    if (!on(proData, Ablazione.Componente.NON_CONVIENE)) {
+      return Optional.empty();
+    }
     return check(proData, worth).keptBy();
   }
 
@@ -634,6 +703,11 @@ public final class ProPlusTuning implements ProTuning {
       final double winPercentage,
       final double enemyTuvSwing,
       final double attackValue) {
+    // step ABLAZIONE: without the Pro+ transport rule the landing follows Hard's rule alone
+    if (!on(proData, Ablazione.Componente.NON_CONVIENE)
+        || !on(proData, Ablazione.Componente.TRASPORTI_SBARCO)) {
+      return Optional.empty();
+    }
     final GameState data = proData.getData();
     final RiskLevel level = riskLevel(proData, territory);
     final boolean kept =
@@ -676,6 +750,9 @@ public final class ProPlusTuning implements ProTuning {
       final games.strategy.triplea.ai.pro.data.ProBattleResult battle,
       final double conquestValue,
       final java.util.function.BiPredicate<Territory, java.util.Collection<Unit>> lostToScramble) {
+    if (!on(proData, Ablazione.Componente.TRASPORTI_SBARCO)) {
+      return Optional.empty();
+    }
     final games.strategy.triplea.ai.pro.ProLandingTransports check =
         TrasportiSbarco.valuta(
             proData,
@@ -698,6 +775,9 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public Optional<Territory> unloadZone(
       final ProData proData, final Unit transport, final Territory target) {
+    if (!on(proData, Ablazione.Componente.TRASPORTI_SBARCO)) {
+      return Optional.empty();
+    }
     syncUnloadZones(proData);
     // only for the landing it was chosen for (a zone next to the target)
     return Optional.ofNullable(unloadZones.get(transport))
@@ -735,6 +815,9 @@ public final class ProPlusTuning implements ProTuning {
       final ProAttackWorth worth,
       final java.util.Collection<Unit> holders) {
     final Territory target = worth.territory();
+    if (!on(proData, Ablazione.Componente.TESTA_DI_PONTE)) {
+      return Optional.empty();
+    }
     if (worth.capturesTooRarely() || worth.neutral()) {
       return Optional.empty();
     }
@@ -813,6 +896,9 @@ public final class ProPlusTuning implements ProTuning {
       final java.util.Collection<Unit> holders,
       final java.util.Collection<ProTerritory> planned) {
     final Territory target = attack.getTerritory();
+    if (!on(proData, Ablazione.Componente.TESTA_DI_PONTE)) {
+      return Optional.empty();
+    }
     final Optional<PianoAttivo> plan = planOf(proData);
     if (plan.isEmpty() || target.isWater()) {
       return Optional.empty();

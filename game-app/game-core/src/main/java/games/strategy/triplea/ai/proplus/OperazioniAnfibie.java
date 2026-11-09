@@ -1304,6 +1304,15 @@ public final class OperazioniAnfibie {
 
   private Safety safety(
       final Strategia.Operazione op, final Territory zone, final Collection<Unit> escorts) {
+    // step ABLAZIONE: without safe stops every zone is safe (no escort, no enemy estimate)
+    if (!Ablazione.attivo(proData, Ablazione.Componente.SOSTE_SICURE)) {
+      final int warships =
+          (int)
+              zone.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsNotLand())).stream()
+                  .filter(OperazioniAnfibie::isWarship)
+                  .count();
+      return new Safety(true, 0, 100, warships, List.of(), 0, OptionalInt.empty());
+    }
     // step OPERAZIONI ANFIBIE-BIS: the risk the zone's level accepts (Equilibrato: 40%)
     final double base = 100 - ProPlusTuning.riskLevel(proData, zone).minimumWinPercentage(lowLuck);
     // memory of danger: a zone where units of the operation were sunk in the last 3 rounds is a

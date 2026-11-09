@@ -5,6 +5,7 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.properties.GameProperties;
+import games.strategy.triplea.ai.proplus.Ablazione;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.delegate.Matches;
@@ -110,16 +111,24 @@ public final class PianoAttivo {
         Direttive.of(
             directives(props, alleanza, nazione, piano.id(), round)
                 .orElseGet(() -> DecisoreRegole.base(strategia, alleanza, piano, round)));
+    final GameProperties ablazione = props;
     this.operazioni =
-        piano.operazioni(nazione, round).stream()
-            .filter(o -> !Direttive.ANNULLA.equals(direttive.operazione(o.nome()).decisione()))
-            .map(o -> attiva(data, o))
-            .toList();
+        !Ablazione.attivo(ablazione, alleanza, Ablazione.Componente.OPERAZIONI_ANFIBIE)
+            ? List.of()
+            : piano.operazioni(nazione, round).stream()
+                .filter(o -> !Direttive.ANNULLA.equals(direttive.operazione(o.nome()).decisione()))
+                .map(o -> attiva(data, o))
+                .toList();
     final List<Strategia.Obiettivo> list = new ArrayList<>();
     direttive.bersagli().stream()
         .filter(b -> !b.isContromossa())
         .map(Direttive.Bersaglio::obiettivo)
         .filter(o -> o.appliesTo(nazione))
+        // step ABLAZIONE: without the plan's fleet objectives
+        .filter(
+            o ->
+                o.flotta() == null
+                    || Ablazione.attivo(ablazione, alleanza, Ablazione.Componente.BERSAGLI_FLOTTA))
         .forEach(list::add);
     // the targets of an operation whose units are mine are objectives too (step OPERAZIONI),
     // not while the directives keep it waiting
@@ -147,7 +156,11 @@ public final class PianoAttivo {
                         b.territorio(), b.flotta(), b.peso(), Set.of(), false)));
     this.letturaNemico = direttive.letturaPiano();
     this.probabilitaNemico = direttive.letturaProbabilita();
-    this.tattiche = direttive.tattiche();
+    // step ABLAZIONE: the delay tools off whatever the decider says
+    this.tattiche =
+        Ablazione.attivo(ablazione, alleanza, Ablazione.Componente.STRUMENTI_RITARDO)
+            ? direttive.tattiche()
+            : null;
     // step 3d-2: hunted enemy transports are counter-objectives with the file's fixed weight
     this.caccia = huntedTransports(data);
     caccia.stream()
@@ -414,6 +427,10 @@ public final class PianoAttivo {
       final GamePlayer player,
       final String alliance) {
     final var props = data.getProperties();
+    // step ABLAZIONE: no general staff at all
+    if (!Ablazione.attivo(props, alliance, Ablazione.Componente.PIANO)) {
+      return Optional.empty();
+    }
     return StatoMaggiore.activePlan(props, alliance, strategia)
         .map(
             plan ->
@@ -439,6 +456,10 @@ public final class PianoAttivo {
    * decider by rules writes the phase's modifier for the whole alliance, 0 without a phase).
    */
   public int modificatore(final String front) {
+    // step ABLAZIONE: every front at the slider's level
+    if (!Ablazione.attivo(props, alleanza, Ablazione.Componente.RISCHIO_FRONTE)) {
+      return 0;
+    }
     // schema v1.1: the nation's own offset if the directives give one
     return direttive.rischio(nazione, front);
   }

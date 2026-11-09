@@ -394,6 +394,16 @@ final class Riepilogo {
               : o.decisore(a).startsWith("file:") ? "file" : o.decisore(a));
     }
     p.add("decisori", deciders);
+    // step ABLAZIONE: the components turned off (only alliances with some)
+    final JsonObject ablations = new JsonObject();
+    for (final String a : monitor.alliances().keySet()) {
+      if (!AutoplayOptions.HARD.equals(o.tipo(a)) && !o.ablazione(a).isEmpty()) {
+        ablations.addProperty(a, o.ablazione(a));
+      }
+    }
+    if (ablations.size() > 0) {
+      p.add("ablazione", ablations);
+    }
     return p;
   }
 

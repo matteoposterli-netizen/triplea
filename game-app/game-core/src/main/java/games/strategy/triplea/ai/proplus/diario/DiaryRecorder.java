@@ -28,15 +28,16 @@ import games.strategy.triplea.ai.pro.logging.ProLogger;
 import games.strategy.triplea.ai.pro.util.ProMatches;
 import games.strategy.triplea.ai.pro.util.ProTerritoryValueUtils;
 import games.strategy.triplea.ai.pro.util.ProUtils;
+import games.strategy.triplea.ai.proplus.Ablazione;
 import games.strategy.triplea.ai.proplus.OperazioniAnfibie;
 import games.strategy.triplea.ai.proplus.ProPlusSettings;
 import games.strategy.triplea.ai.proplus.ProPlusTuning;
 import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.ai.proplus.StrumentiRitardo;
 import games.strategy.triplea.ai.proplus.TestaDiPonte;
+import games.strategy.triplea.ai.proplus.strategia.OrdiniTurno;
 import games.strategy.triplea.ai.proplus.strategia.PianoAttivo;
 import games.strategy.triplea.ai.proplus.strategia.Strategia;
-import games.strategy.triplea.ai.proplus.strategia.OrdiniTurno;
 import games.strategy.triplea.ai.proplus.strategia.Valutazione;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
@@ -246,17 +247,45 @@ public final class DiaryRecorder implements ProDecisionRecorder {
     String planText = "";
     if (ai.getProData().getTuning() instanceof ProPlusTuning tuning) {
       final Optional<PianoAttivo> plan = tuning.plan(data, player);
+      // step ABLAZIONE: the components turned off for the alliance
+      final Set<Ablazione.Componente> off =
+          ProPlusSettings.allianceOf(data, player)
+              .map(a -> Ablazione.spenti(data.getProperties(), a))
+              .orElse(java.util.Set.of());
+      final String offText =
+          off.isEmpty()
+              ? ""
+              : String.format(
+                  "  Ablazione: componenti Pro+ spenti: %s%n",
+                  off.size() == Ablazione.Componente.values().length
+                      ? "tutti (Pro+ nudo)"
+                      : String.join(
+                          ", ", off.stream().map(Ablazione.Componente::id).sorted().toList()));
       planText =
-          plan.map(p -> planText(p, lowLuck))
-              .orElse(
-                  String.format(
-                      "  Stato maggiore: nessun piano (nessun file di strategia per questa"
-                          + " mappa)%n"));
+          offText
+              + plan.map(p -> planText(p, lowLuck))
+                  .orElse(
+                      off.contains(Ablazione.Componente.PIANO)
+                          ? String.format("  Stato maggiore: spento (ablazione)%n")
+                          : String.format(
+                              "  Stato maggiore: nessun piano (nessun file di strategia per"
+                                  + " questa mappa)%n"));
       plan.ifPresent(p -> json.add("piano", planJson(p, lowLuck)));
+      if (!off.isEmpty()) {
+        final JsonArray offJson = new JsonArray();
+        off.stream().map(Ablazione.Componente::id).sorted().forEach(offJson::add);
+        json.add("ablazione", offJson);
+      }
       final RiskLevel level = ProPlusSettings.riskLevelFor(data, player);
-      desired = level.desiredWinPercentage(lowLuck);
-      minimum = level.minimumWinPercentage(lowLuck);
-      risk = "rischio " + level.getLabel();
+      if (off.contains(Ablazione.Componente.SOGLIE_RISCHIO)) {
+        desired = games.strategy.triplea.ai.pro.ProTuning.DEFAULT.winPercentage(lowLuck);
+        minimum = games.strategy.triplea.ai.pro.ProTuning.DEFAULT.minWinPercentage(lowLuck);
+        risk = "soglie di Hard (ablazione)";
+      } else {
+        desired = level.desiredWinPercentage(lowLuck);
+        minimum = level.minimumWinPercentage(lowLuck);
+        risk = "rischio " + level.getLabel();
+      }
       json.addProperty("rischio_livello", level.getLevel());
       json.addProperty("rischio", level.getLabel());
     } else {

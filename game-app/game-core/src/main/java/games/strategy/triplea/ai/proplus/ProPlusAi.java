@@ -42,6 +42,9 @@ public class ProPlusAi extends ProAi {
 
   public ProPlusAi(final String name, final String playerLabel) {
     super(name, playerLabel, new ProData(false, new ProPlusTuning()));
+    if (getProData().getTuning() instanceof ProPlusTuning tuning) {
+      tuning.attach(getProData());
+    }
     DiaryRecorder.attach(this);
   }
 
@@ -53,7 +56,8 @@ public class ProPlusAi extends ProAi {
       final GameData data,
       final GamePlayer player) {
     logPhase(data, player, purchaseForBid ? "bid purchase" : "purchase");
-    if (!purchaseForBid) {
+    final boolean plan = Ablazione.attivo(data, player, Ablazione.Componente.PIANO);
+    if (!purchaseForBid && plan) {
       // step 3d-2: the enemy transports hunted this turn, seen before any move
       try {
         huntRound = data.getSequence().getRound();
@@ -63,7 +67,7 @@ public class ProPlusAi extends ProAi {
         ProLogger.warn(LOG_PREFIX + "Transport hunt check failed: " + e);
       }
     }
-    if (!purchaseForBid && getProData().getTuning() instanceof ProPlusTuning tuning) {
+    if (!purchaseForBid && plan && getProData().getTuning() instanceof ProPlusTuning tuning) {
       try {
         initializeData();
         tuning.prepareOperationPurchases(getProData());
@@ -290,6 +294,12 @@ public class ProPlusAi extends ProAi {
     ProLogUi.notifyStartOfRound(round, player.getName());
     if (round != loggedRound) {
       loggedRound = round;
+      // step ABLAZIONE: without the general staff, no plan, no evaluation, no orders
+      if (!Ablazione.attivo(data, player, Ablazione.Componente.PIANO)) {
+        ProLogger.info(turnStartLine(data, player) + ", ablation: no general staff");
+        ProLogger.info(LOG_PREFIX + player.getName() + " " + phase);
+        return;
+      }
       fixPlan(data, player);
       if (getProData().getTuning() instanceof ProPlusTuning tuning) {
         tuning.forgetPlan();

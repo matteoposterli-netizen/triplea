@@ -19,8 +19,8 @@ import games.strategy.triplea.ai.proplus.RiskLevel;
 import games.strategy.triplea.ai.proplus.diario.DiarySettings;
 import games.strategy.triplea.ai.proplus.strategia.Decisore;
 import games.strategy.triplea.ai.proplus.strategia.Decisori;
-import games.strategy.triplea.ai.proplus.strategia.llm.Modalita;
 import games.strategy.triplea.ai.proplus.strategia.StatoMaggiore;
+import games.strategy.triplea.ai.proplus.strategia.llm.Modalita;
 import games.strategy.triplea.settings.ClientSetting;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -196,6 +196,9 @@ public final class AutoplayRunner {
       } else {
         Decisori.set(data.getProperties(), alliance, Decisore.REGOLE, "");
       }
+      // step ABLAZIONE: Pro+ components turned off for the alliance
+      games.strategy.triplea.ai.proplus.Ablazione.set(
+          data.getProperties(), alliance, options.ablazione(alliance));
     }
     for (final String alliance : options.tipi().keySet()) {
       if (!monitor.alliances().containsKey(alliance)) {

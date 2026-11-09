@@ -212,6 +212,25 @@ class DelayToolsTest extends AbstractClientSettingTestCase {
     assertThat(hard.getTuning().dropsLandAttack(hard, worth(poland, 10, 99))).isEmpty();
   }
 
+  @Test
+  void theAblationSwitchTurnsTheDelayToolsOffWhateverTheDecider() {
+    setUpEastFront();
+    staff("Allies", "1", Contromosse.OFFENSIVA, "A", 0.6);
+    games.strategy.triplea.ai.proplus.Ablazione.set(
+        data.getProperties(), "Allies", "strumenti_ritardo");
+    data.getSequence().setRoundAndStep(3, "Combat Move", russians);
+    final ProData proData = new ProData(false, new ProPlusTuning());
+    proData.initializeSimulation(null, data, russians);
+
+    assertThat(
+            proData
+                .getTuning()
+                .dropsLandAttack(proData, worth(territory("Eastern Poland"), 70, 80)))
+        .isEmpty();
+    nonCombat(russians, 3);
+    assertThat(play(russians).azioni()).isEmpty();
+  }
+
   // ----------------------------------------------------------------------------- naval blocks
 
   @Test

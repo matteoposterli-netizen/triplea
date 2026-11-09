@@ -34,6 +34,11 @@ public final class TettoTrasporti {
     if (alliance.isEmpty()) {
       return Direttive.PERDITA_TRASPORTI_MAX;
     }
+    // step ABLAZIONE: without the guard rail the whole directive's loss is accepted
+    if (!Ablazione.attivo(
+        data.getProperties(), alliance.get(), Ablazione.Componente.TETTO_TRASPORTI)) {
+      return Double.MAX_VALUE;
+    }
     final JsonObject entries = voci(data, alliance.get());
     final String own = key(player, target);
     double used = 0;

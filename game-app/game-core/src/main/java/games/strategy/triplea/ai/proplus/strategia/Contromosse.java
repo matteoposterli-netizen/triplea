@@ -433,7 +433,14 @@ public final class Contromosse {
       points.stream()
           .filter(p -> p.get("attaccabile").getAsBoolean())
           .forEach(p -> counter.add(withWeight(p, par.pesoContrasto(), "principale")));
-    } else if (race.pari() && reading.probabilita() > par.sogliaLettura() && !points.isEmpty()) {
+    } else if (race.pari()
+        && reading.probabilita() > par.sogliaLettura()
+        && !points.isEmpty()
+        // step ABLAZIONE: without RALLENTAMENTO the even race is OFFENSIVA (no effect)
+        && games.strategy.triplea.ai.proplus.Ablazione.attivo(
+            data.getProperties(),
+            alliance,
+            games.strategy.triplea.ai.proplus.Ablazione.Componente.RALLENTAMENTO)) {
       posture = RALLENTAMENTO;
       why =
           race.testo()

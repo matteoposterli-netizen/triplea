@@ -26,6 +26,8 @@ on:
         type: string
         default: ""
       # "confronto" (commit with [confronto]): Pro+ against the original Hard, 7 configurations x 4 seeds
+      # "ablazione" (commit with [ablazione]): Pro+ components off one at a time against Hard, rules
+      # only (no LLM, no API cost), 10 configurations x 6 seeds
       modalita:
         type: string
         default: "normale"
@@ -44,7 +46,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole)"
         default: "normale"
 permissions:
   contents: write
@@ -134,6 +136,38 @@ jobs:
                           "tipo": tipo, "piano": piano, "seme": seed, "decisore": decisore}
                          for (n, key, name, tipo, piano, decisore) in confronto
                          for seed in (1, 2, 3, 4)]
+              print("matrix=" + json.dumps({"include": include}))
+              print(f"round={rounds}")
+              raise SystemExit(0)
+          if os.environ["MODALITA"] == "ablazione":
+              # step ABLAZIONE: one Pro+ component off at a time, against the original Hard, same 6
+              # seeds for every configuration, rules only (no LLM key passed: decisore stays empty)
+              ablazione = [
+                  ("1", "Asse-ProPlus-A-vs-Hard", "Asse Pro+ A / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", ""),
+                  ("2", "Asse-A-senza-rallentamento", "Asse Pro+ A senza RALLENTAMENTO / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=rallentamento"),
+                  ("3", "Asse-A-senza-rischio-fronte", "Asse Pro+ A senza rischio per fronte / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=rischio_fronte"),
+                  ("3b", "Asse-A-senza-flotta", "Asse Pro+ A senza bersaglio flotta British / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=bersagli_flotta"),
+                  ("4", "Asse-ProPlus-nudo-vs-Hard", "Asse Pro+ nudo / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=nudo"),
+                  ("5", "Hard-vs-Alleati-ProPlus-1", "Asse Hard / Alleati Pro+ 1",
+                   "Axis=hard,Allies=proplus", "Allies=1", ""),
+                  ("6a", "Alleati-1-senza-trasporti-sbarco", "Asse Hard / Alleati Pro+ 1 senza trasporti dopo lo sbarco",
+                   "Axis=hard,Allies=proplus", "Allies=1", "Allies=trasporti_sbarco"),
+                  ("6b", "Alleati-1-senza-soste-sicure", "Asse Hard / Alleati Pro+ 1 senza soste sicure",
+                   "Axis=hard,Allies=proplus", "Allies=1", "Allies=soste_sicure"),
+                  ("7", "Hard-vs-Alleati-ProPlus-nudo", "Asse Hard / Alleati Pro+ nudo",
+                   "Axis=hard,Allies=proplus", "Allies=1", "Allies=nudo"),
+                  ("8", "Hard-vs-Hard", "Hard vs Hard", "Axis=hard,Allies=hard", "", ""),
+              ]
+              include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
+                          "tipo": tipo, "piano": piano, "seme": seed, "decisore": "",
+                          "ablazione": abl}
+                         for (n, key, name, tipo, piano, abl) in ablazione
+                         for seed in (1, 2, 3, 4, 5, 6)]
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
               raise SystemExit(0)
@@ -229,6 +263,7 @@ jobs:
                 --output "$out" --nome "${{ matrix.nome }}" --minuti 25)
           if [ -n "${{ matrix.piano }}" ]; then args+=(--piano "${{ matrix.piano }}"); fi
           if [ -n "${{ matrix.decisore }}" ]; then args+=(--decisore "${{ matrix.decisore }}"); fi
+          if [ -n "${{ matrix.ablazione }}" ]; then args+=(--ablazione "${{ matrix.ablazione }}"); fi
           start=$(date +%s)
           autoplay-kit/runner/bin/proplus-autoplay "${args[@]}" 2>&1 | tee "$out/partita.log" \
             | { grep --line-buffered -E "AUTOPLAY|ERROR" || true; }
@@ -284,12 +319,12 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.loads(os.environ['MATRIX'])['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
           # LLM strategist: offline quality test on 30 strategic states of these games (skipped,
           # exit 0, without the secret)
-          if [ "${HAS_LLM_KEY}" = "true" ] && [ "${MODALITA}" != "confronto" ]; then
+          if [ "${HAS_LLM_KEY}" = "true" ] && [ "${MODALITA}" = "normale" ]; then
             ANTHROPIC_API_KEY="${LLM_KEY}" autoplay-kit/runner/bin/proplus-autoplay qualita autoplay \
               --n 30 --output autoplay/qualita || echo "test di qualita' fallito (non blocca)"
             test -f autoplay/qualita/qualita.md && cat autoplay/qualita/qualita.md >> "$GITHUB_STEP_SUMMARY"

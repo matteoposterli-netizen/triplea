@@ -141,6 +141,10 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   utente, `ClaudeCode`, `ClientApi` + `Http`, `PromptStratega`, `UscitaLlm`, `Uso`, `Prezzi`), risorse
   `proplus/strategia/prompt-stratega-v1.md` e `prezzi-stratega.json` (game-core), `ai/proplus/TettoTrasporti`
   (paletto per alleanza), UI `StrategistPanel` (game-headed). Vedi "Stratega LLM" e "Come configurare lo stratega".
+- Step ABLAZIONE: `ai/proplus/Ablazione` (interruttori per alleanza nella proprieta' `Pro+ ablazione: <alleanza>`,
+  default = tutto acceso); agganci in `ProPlusTuning` (ogni override torna al valore di `ProTuning.DEFAULT` col suo
+  componente spento), `PianoAttivo`, `Contromosse`, `OperazioniAnfibie.safety`, `TettoTrasporti`, `ProPlusAi`. Vedi
+  "Ablazione (step ABLAZIONE)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -293,6 +297,18 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   in Hard vs Hard, rapporto TUV = perso dal nemico / perso dal lato) e "Risposta" per lato e tipo di AI (piani
   insieme). Verdetto sulle VC finali del lato: "piu' forte"/"piu' debole" se |Δ| > max(0,5, ds media dei due gruppi),
   altrimenti "non distinguibile" (indice semplice, non un test statistico).
+- **Modalita' "ablazione" (step ABLAZIONE)**: `[ablazione]` nel messaggio del commit di testa (ha la precedenza su
+  `[confronto]`) ⇒ input `modalita: ablazione`. Solo regole (nessuna chiave LLM passata, nessun costo API), 12 round,
+  Equilibrato, **semi 1-6 per ogni configurazione**, 10 configurazioni = 60 partite: 1 `Asse-ProPlus-A-vs-Hard`, 2
+  `Asse-A-senza-rallentamento`, 3 `Asse-A-senza-rischio-fronte`, 3b `Asse-A-senza-flotta`, 4 `Asse-ProPlus-nudo-vs-Hard`
+  (piano A impostato, ignorato), 5 `Hard-vs-Alleati-ProPlus-1`, 6a `Alleati-1-senza-trasporti-sbarco`, 6b
+  `Alleati-1-senza-soste-sicure`, 7 `Hard-vs-Alleati-ProPlus-nudo`, 8 `Hard-vs-Hard`. Opzione del runner `--ablazione
+  Axis=c1+c2,Allies=nudo`; `riepilogo.json` `parametri.ablazione`; etichetta della configurazione con " [senza c1, c2]" o
+  " [nudo]" (non si mescola con "Pro+ attuale"). Nel `riepilogo-generale.md`, dopo "Confronto contro Hard", la sezione
+  **"Ablazione dei componenti Pro+"** (`ConfrontoAblazione`): rumore di Hard vs Hard, per configurazione VC R12 del lato
+  (min-max, ds), Δ da Hard vs Hard e da "Pro+ attuale" (stesso piano) con "rumore" se |Δ| <= max(0,5, ds media), TUV
+  perso per alleanza, reddito finale, sbarchi veri, round in RALLENTAMENTO; poi i componenti dal piu' dannoso al piu'
+  utile ("costa / aiuta / rumore"); avviso ⚠ se "Pro+ nudo" e' distinguibile da Hard. Niente test di qualita'.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -1343,6 +1359,46 @@ nuovo cambia una decisione.
   Allies=llm:claude-sonnet-5-5`; nome nel diario dalla famiglia del modello ("Sonnet"), prezzo dal suo ID in
   `prezzi-stratega.json` (Sonnet 5.5 $2/$10 per MTok, cache letta 0,20, scrittura 1h 4,00; ID e prezzi dalla
   documentazione ufficiale Anthropic). Non usato per i giocatori.
+
+## Ablazione (step ABLAZIONE)
+
+Interruttori on/off dei componenti Pro+ per misurare quanto vale ciascuno contro Hard. **Default = tutto acceso =
+comportamento di prima** (nessuna proprieta'). Proprieta' della partita `Pro+ ablazione: <alleanza>` = id separati da
+virgola, oppure `nudo` (tutti); id sconosciuti rifiutati da `Ablazione.parse`/`set` (in un salvataggio sono ignorati).
+Letta a ogni uso (`Ablazione.attivo`, cache per testo). Autoplay: `--ablazione Axis=rallentamento+rischio_fronte`. Nessun
+pannello (solo autoplay/test).
+
+| Id | Componente | Dove si spegne | Spento = |
+|---|---|---|---|
+| `piano` | stato maggiore (piani, fasi, obiettivi, guerre, posture, valutazione, ordini) | `PianoAttivo.of` vuoto; `ProPlusAi.logPhase` salta fixPlan/Valutazione/OrdiniTurno; acquisti delle operazioni e caccia saltati | nessun piano (come senza file di strategia) |
+| `rallentamento` | postura RALLENTAMENTO | `Contromosse.statoStrategico` | corsa pari ⇒ OFFENSIVA, nessun contro-obiettivo |
+| `strumenti_ritardo` | blocchi, ritirata, blocco navale, caccia | `PianoAttivo` (tattiche nulle) | spenti qualunque decisore (con le regole lo sono gia') |
+| `rischio_fronte` | modificatore di rischio per fronte | `PianoAttivo.modificatore` = 0 | ogni fronte al livello del cursore (DIFENSIVA −1 resta) |
+| `bersagli_flotta` | obiettivi `flotta` del piano (A/B/C R1-2: flotta British) | `PianoAttivo` (obiettivi) | nessun obiettivo flotta, il resto invariato |
+| `trasporti_sbarco` | regola Pro+ dei trasporti dopo lo sbarco (`TrasportiSbarco`) | `checksLandingTransports`/`unloadZone`/`keepsLandingWithExposedTransports` | regola "transports exposed" di Hard |
+| `soste_sicure` | soste sicure e scorta delle operazioni anfibie | `OperazioniAnfibie.safety` | ogni zona sicura, nessuna scorta richiesta (il rientro resta) |
+| `tetto_trasporti` | paletto 30 TUV per alleanza/round | `TettoTrasporti.residuo` | nessun tetto (con le regole la perdita accettata e' 0: nessun effetto) |
+| `logistica_acquisti` | ordini d'acquisto del piano + acquisti delle operazioni | `purchaseOrders` | acquisti di Hard |
+| `ammassamento` | ammassamento del piano | `stagingOrders` | non combattimento di Hard |
+| `operazioni_anfibie` | operazioni anfibie del piano | `PianoAttivo` (operazioni) | nessuna operazione |
+| `testa_di_ponte` | testa di ponte e stesso bersaglio | `keepsBridgehead`, `dropsLanding` | regole di Hard |
+| `victory_city` | VC nei valori e nella priorita' | `valuesVictoryCities`, `hasVictoryCityWinCondition`, `attackPriorityVictoryCityWeight` (con `ProPlusTuning.attach`) | come Hard |
+| `soglie_rischio` | soglie d'attacco del cursore e per bersaglio | `attackWinPercentage`, `attackMinWinPercentage`, `targetAttack*`, `attackWinPercentageCeiling` | 90/65 di Hard (dadi normali) |
+| `non_conviene` | regole 2d "tenuto da Pro+" | `keepsAttackNotWorthIt`, `keepsLandingWithExposedTransports` | regole di Hard |
+| `guarnigione_capitale` | guarnigione 25% | `capitalGuardThreshold` | nessuna |
+| `minaccia_reale` | solo nemici reali (3c) | `realEnemies`, `garrisonNeeded` | tutti i non alleati, presidi sempre |
+| `scramble_sbarchi` | controllo scramble (Hard Beta) | `checksLandingScramble` | Hard |
+| `strafe_anfibio` | scarto degli strafe anfibi | `dropsAmphibiousStrafe` | mai |
+
+- `ProPlusTuning.attach(ProData)` (chiamato da `ProPlusAi` dopo `super`): i metodi di `ProTuning` senza `ProData`
+  (VC, scramble) leggono gli interruttori della partita/nazione del `ProData` proprietario; senza proprietario = acceso.
+- **"Pro+ nudo" = Hard** (`ai/pro/NudoHardTest`): un turno intero (piano d'attacco della simulazione d'acquisto, acquisto
+  con `SeededPurchaseChoice`, combattimento, non combattimento) con dadi seminati, in cui OGNI risposta di
+  `ProPlusTuning` nudo e' confrontata con quella di `ProTuning.DEFAULT` alla stessa domanda (proxy dell'interfaccia):
+  0 differenze su >1000 domande per Asse e Alleati; con tutto acceso le differenze ci sono (controllo). Il confronto
+  letterale di due turni NON e' un test affidabile: la stessa Hard, ripetuta sulla stessa partita nella stessa JVM dopo
+  altri turni, cambia piano d'attacco 8 volte su 8 (ordine di insiemi hash di oggetti nuovi); misurato scrivendo il
+  test, prima versione fallita una volta per questo.
 
 ## Come configurare lo stratega
 
@@ -2741,3 +2797,71 @@ contro lo stesso lato in Hard vs Hard; rapporto TUV = perso dal nemico / perso d
   Pro+ 3-8 min, LLM 5-10 min.
 - Limiti: 4 semi (le simulazioni dell'AI restano casuali, quindi stesso seme ≠ stessa partita); verdetto = indice
   semplice sulle VC finali, non un test statistico; nessuna vittoria entro R12 in nessuna configurazione.
+
+### Step ABLAZIONE — quali componenti Pro+ costano VC (2026-11-09)
+
+Richiesta di Matteo dopo il confronto contro Hard: misurare, non migliorare. **Nessuna correzione al comportamento di
+Pro+, nessuna taratura**: solo interruttori on/off con default invariato (vedi "Ablazione (step ABLAZIONE)") e la
+modalita' autoplay `[ablazione]`. Log della run 42605879121 (d4109aa) archiviati prima del push (`autoplay.zip` della
+release `autoplay-latest`, sha256 `6cfa12c5...9e89b8a`, 28 partite con `decisioni.jsonl`) e analizzati con script
+nella sandbox (non committati).
+
+#### Fase 1a — Asse Pro+ piano A (4 partite contro Hard): il RALLENTAMENTO non e' la causa
+- **Chi lo fa scattare**: `Contromosse.statoStrategico`, ramo "corsa pari + piano nemico letto > 50%". La corsa e'
+  sempre "pari" perche' la misura degli Alleati (Germany + Southern Italy tenute) vale 0 per tutta la partita ⇒
+  "mai"; quella dell'Asse e' "mai" appena la tendenza VC su 3 round e' <= 0. Quindi RALLENTAMENTO = **Asse fermo da 3
+  round** con lettura > 50%. Round: seme 1 R2, R6-7, R10-12 (6); seme 2 R10-12 (3); seme 3 R10-12 (3); seme 4 R7-12 (6):
+  18 round su 48. Lettura al momento: 0,51-0,80 (piano 2 nei semi 1-2, piano 1 nei semi 3-4). Contro-obiettivi (peso 8):
+  Egypt, Malta, 91/92 SZ (piano 2 letto), 104/110 SZ (piano 1 letto).
+- **Cosa cambia in concreto** (con le regole RALLENTAMENTO aggiunge SOLO contro-obiettivi: gli strumenti di ritardo sono
+  gia' spenti dal decisore a regole, gli acquisti non leggono la postura, solo DIFENSIVA toglie la quota del piano):
+  16 attacchi valutati sui contro-obiettivi, 4 eseguiti (Egypt ×2, 110 SZ ×2), tutti vinti, swing reale +66 TUV; 12
+  scartati (9 sotto la minima). Attacchi per round: 6,3 in RALLENTAMENTO contro 6,6 in OFFENSIVA, swing reale 20 contro
+  20,4 per round. PU avanzati: 3 in 36 turni (OFFENSIVA 4 in 60): nessun risparmio. Acquisti R7-R12 (48 turni):
+  stesso mix di Hard (fanteria 76% contro 77%), ma 1.674 PU spesi contro 2.031 perche' il reddito e' piu' basso.
+- **Dove l'Asse perde davvero**: TUV netto delle battaglie dell'Asse per partita, R1-4 / R5-8 / R9-12: Hard +155 / +90 /
+  +122; Pro+ A +89 / +79 / +75; Haiku (stesso piano A) +165 / +41 / +110. Il divario nasce in **R1-4**, prima di
+  qualunque RALLENTAMENTO (semi 2 e 3: reddito gia' in calo da R5-R8 con postura OFFENSIVA). R1 Germania: Pro+ divide
+  gli aerei tra 110 SZ e 111 SZ (entrambe flotta britannica) in 3 semi su 4, con 110 SZ a 63-64% in 2 semi; Hard
+  concentra tutto su una zona (100%) in 4 su 4, Haiku divide in 1 su 4. Swing R1-2 su 110+111 SZ: Hard +199, Pro+ +51,
+  Haiku +129. Cause sospette: obiettivo del piano "flotta British" (peso 10, fase R1-2: ogni zona con navi UK diventa
+  obiettivo) + rischio Ovest +1 (Audace: minima 52). Da qui le config 3 e 3b (scelte con Matteo).
+- Righe di diario mancanti: nessuna per 1a.
+
+#### Fase 1b — Alleati Pro+ (piano 1 e 2, 4 partite ciascuno, contro Asse Hard): sbarchi bloccati per motivo
+Sbarchi del combattimento (ultimo stato per round/nazione/bersaglio), totale sui 4 semi:
+
+| Motivo | Piano 1 | Piano 2 | Hard Alleati (config 1) |
+|---|---|---|---|
+| eseguiti | 43 | 39 | 81 |
+| trasporti dopo lo sbarco (`TrasportiSbarco`, Pro+) | 94 | 108 | - |
+| regola trasporti di Hard (`transports_exposed`) | - | - | 51 |
+| testa di ponte (`bridgehead_other_target` 20 / `bridgehead_not_held` 4) | 24 | 1 | - |
+| scramble (Hard Beta) | 8 | 11 | - |
+| strafe anfibio Pro+ | 6 | 7 | - |
+| soglie Pro+ (win max >= 65 di Hard ma < minima Pro+) | 1 | 0 | - |
+| tetto 30 TUV per alleanza | **0** | **0** | - |
+| regole di Hard (sotto la minima, unita' insufficienti, basso valore...) | 309 | 426 | 392 |
+
+Operazioni anfibie bloccate (turni): piano 1 **scorta insufficiente 25** (Overlord USA 23), trasporto vuoto fermo 8,
+nessuna rotta 4, bersaglio troppo forte 2; piano 2 scorta insufficiente 30 (Rinforzi Egitto 15, Torch 13, Overlord 2),
+nessuna rotta 4. Sbarchi veri (riepilogo): piano 1 British 35 + Americans 12, piano 2 20 + 30, Hard 55 + 38.
+- **Tetto 30 TUV: 0 casi per costruzione**: con le regole la perdita accettata delle direttive e' 0 e il tetto si
+  applica solo se > 0.
+- **Blocco principale: la regola Pro+ dei trasporti dopo lo sbarco** (perdita attesa mediana 7 TUV contro guadagno
+  2,1-2,7; bersagli piu' scartati: Denmark, Morocco, Algeria, Norway, Greece, quasi tutti NON obiettivi del piano: 89/94
+  e 105/108). Secondo blocco: **soste sicure / scorta** (Overlord USA ferma 23 turni). Testa di ponte terzo (24 casi,
+  solo piano 1). Logistica del piano: effetto indiretto, non attribuibile al singolo sbarco dai log.
+- **Righe di diario mancanti**: per gli sbarchi scartati da `TrasportiSbarco` il diario non scrive cosa avrebbe deciso la
+  regola di Hard (0,75 × swing nemico contro valore dello sbarco): con i numeri di Pro+ si puo' solo dire che Hard li
+  terrebbe con certezza in 2 casi su 202; gli altri sono indeterminati. Per contarli servirebbe una riga
+  "regola di Hard: 0,75 × X vs Y" accanto a `trasporti_dopo_sbarco`.
+
+#### Fase 2 — interruttori
+Vedi "Ablazione (step ABLAZIONE)". Esistevano gia' solo i default "tutto acceso" (nessun interruttore per componente);
+gli strumenti di ritardo erano spenti dal decisore a regole ma senza interruttore. **Nessuna classe Pro toccata.**
+File: nuovi `ai/proplus/Ablazione`, test `ai/pro/NudoHardTest`, `ai/proplus/strategia/AblazioneTest`, autoplay
+`ConfrontoAblazione`; modificati `ProPlusTuning`, `ProPlusAi`, `PianoAttivo`, `Contromosse`, `OperazioniAnfibie`,
+`TettoTrasporti`, autoplay `AutoplayOptions`/`AutoplayRunner`/`Riepilogo`/`RiepilogoGenerale`, workflow
+`proplus-autoplay.yml` (modalita' ablazione) e `proplus-release.yml` (`[ablazione]`), test `ContromosseTest` +1,
+`DelayToolsTest` +1, `AutoplayTest` +2.

@@ -138,6 +138,7 @@ final class RiepilogoGenerale {
         .append(" (PU = somma della cassa delle nazioni a fine round).\n");
 
     ConfrontoHard.write(md, games, alliances, vcRounds);
+    ConfrontoAblazione.write(md, games, alliances, vcRounds);
     configurations(md, games, alliances, vcRounds, maxRound);
     plansAndPostures(md, games, alliances);
     landingsAndTransports(md, games, alliances, maxRound);
@@ -260,8 +261,28 @@ final class RiepilogoGenerale {
           return Riepilogo.typeLabel(type)
               + " "
               + text(p.getAsJsonObject("piani"), a)
-              + ("regole".equals(decider) ? "" : " (" + decider + ")");
+              + ("regole".equals(decider) ? "" : " (" + decider + ")")
+              + ablationLabel(json, a);
         });
+  }
+
+  /** Step ABLAZIONE: the components off of {@code alliance}, eg " [nudo]", " [senza x, y]". */
+  static String ablationLabel(final JsonObject json, final String alliance) {
+    final String off = ablation(json, alliance);
+    if (off.isEmpty()) {
+      return "";
+    }
+    return games.strategy.triplea.ai.proplus.Ablazione.NUDO.equals(off)
+        ? " [nudo]"
+        : " [senza " + off.replace(",", ", ") + "]";
+  }
+
+  /** The components turned off for {@code alliance} in the game ("" = none). */
+  static String ablation(final JsonObject json, final String alliance) {
+    final JsonObject p = json.getAsJsonObject("parametri");
+    return p.has("ablazione") && p.getAsJsonObject("ablazione").has(alliance)
+        ? p.getAsJsonObject("ablazione").get(alliance).getAsString()
+        : "";
   }
 
   /** The decider of {@code alliance} in the game: regole, llm, file:... */

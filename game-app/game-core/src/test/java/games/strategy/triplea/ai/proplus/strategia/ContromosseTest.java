@@ -460,6 +460,39 @@ class ContromosseTest {
   }
 
   @Test
+  void withoutRallentamentoAnEvenRaceStaysOffensive() {
+    final Strategia s = europe();
+    StatoMaggiore.setChoice(data.getProperties(), "Allies", "1");
+    data.getSequence().setRoundAndStep(2, "Purchase", russians);
+    StatoMaggiore.fix(data, "Allies", s);
+    data.performChange(
+        ChangeFactory.changeOwner(data.getMap().getTerritoryOrThrow("Romania"), germans));
+    games.strategy.triplea.ai.proplus.Ablazione.set(
+        data.getProperties(), "Allies", "rallentamento");
+
+    final JsonObject strategic =
+        Contromosse.statoStrategico(
+            data,
+            "Allies",
+            s,
+            plan(s, "Allies", "1"),
+            new StatoMaggiore.Stato("1", 1, new JsonArray()),
+            readA(entry(2, "1", false), 0.7),
+            new Contromosse.Cambio(Optional.empty(), "x", new JsonObject()),
+            2);
+
+    assertThat(strategic.get("postura").getAsString()).isEqualTo(Contromosse.OFFENSIVA);
+    assertThat(strategic.getAsJsonArray("contro_obiettivi")).isEmpty();
+    // the other alliance keeps it
+    assertThat(
+            games.strategy.triplea.ai.proplus.Ablazione.attivo(
+                data.getProperties(),
+                "Axis",
+                games.strategy.triplea.ai.proplus.Ablazione.Componente.RALLENTAMENTO))
+        .isTrue();
+  }
+
+  @Test
   void theOrdersFollowThePosture() {
     final Strategia s = europe();
     ProPlusSettings.setRiskLevel(data.getProperties(), "Allies", RiskLevel.EQUILIBRATO);

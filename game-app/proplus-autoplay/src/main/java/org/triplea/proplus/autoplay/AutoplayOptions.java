@@ -20,6 +20,8 @@ import javax.annotation.Nullable;
  *                      directives file or folder, see DecisoreFile; llm = LLM strategist through
  *                      the API key, Claude Haiku with ANTHROPIC_API_KEY of the environment;
  *                      llm:MODEL = another model of the provider, eg llm:claude-sonnet-5-5)
+ * --ablazione A=C+C,.. Pro+ components turned off per alliance (step ABLAZIONE): ids of
+ *                      games.strategy.triplea.ai.proplus.Ablazione joined by "+", or "nudo" (all)
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
@@ -33,6 +35,7 @@ record AutoplayOptions(
     Map<String, String> rischi,
     Map<String, String> tipi,
     Map<String, String> decisori,
+    Map<String, String> ablazioni,
     long seme,
     Path output,
     int minuti,
@@ -64,6 +67,7 @@ record AutoplayOptions(
         pairs(values.get("rischio")),
         types,
         deciders(values.get("decisore")),
+        ablations(values.get("ablazione")),
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
         Integer.parseInt(values.getOrDefault("minuti", "55")),
@@ -86,6 +90,31 @@ record AutoplayOptions(
   /** {@code regole}, {@code file:PATH} or {@code llm} of {@code alliance} (default regole). */
   String decisore(final String alliance) {
     return decisori.getOrDefault(alliance, "regole");
+  }
+
+  /**
+   * Components turned off for {@code alliance}, comma separated as in the game property (empty =
+   * none).
+   */
+  String ablazione(final String alliance) {
+    return ablazioni.getOrDefault(alliance, "");
+  }
+
+  /** "Axis=rallentamento+rischio_fronte,Allies=nudo": every id must be a known component. */
+  static Map<String, String> ablations(@Nullable final String text) {
+    final Map<String, String> map = pairs(text);
+    map.replaceAll(
+        (alliance, a) -> {
+          final String list = a.replace('+', ',');
+          try {
+            games.strategy.triplea.ai.proplus.Ablazione.parse(list);
+          } catch (final IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                "Ablazione non valida per " + alliance + ": " + e.getMessage(), e);
+          }
+          return list;
+        });
+    return map;
   }
 
   /** "Allies=file:/x/y,Axis=regole": each value is "regole" or "file:PATH". */
