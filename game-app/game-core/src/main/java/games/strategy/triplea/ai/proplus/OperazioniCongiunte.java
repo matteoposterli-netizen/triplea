@@ -97,6 +97,15 @@ public final class OperazioniCongiunte {
   private final List<JsonObject> eventi = new ArrayList<>();
   private @Nullable ProTerritoryManager enemy;
 
+  /**
+   * Prefix of the saved keys of the steps being played: "" for the first target, {@link #FINALE}
+   * for the final target of a bridgehead (variant v2, France: Paris).
+   */
+  private String pre = "";
+
+  /** Prefix of the saved keys of the steps on the final target (variant v2). */
+  static final String FINALE = "finale_";
+
   private OperazioniCongiunte(
       final ProData proData,
       final @Nullable ProOddsCalculator calc,
@@ -140,6 +149,9 @@ public final class OperazioniCongiunte {
     }
     final Registro reg = Registro.leggi(data.getProperties(), def.get().id());
     final int round = data.getSequence().getRound();
+    if (reg.stato() == Stato.TENUTA) {
+      return ordiniTenuta(proData, def.get(), r, reg);
+    }
     if (reg.isNuovo() || reg.stato().isFinale() || round >= reg.roundObiettivo()) {
       return Optional.empty();
     }
@@ -171,6 +183,55 @@ public final class OperazioniCongiunte {
             List.copyOf(mandatory),
             r.piazzamento(),
             List.copyOf(staging),
+            r.quota()));
+  }
+
+  /**
+   * Variant v2: while the target is held and its estimated hold at the enemy's turn (last
+   * non-combat estimate) is under {@code soglia_rinforzi}, {@code tenuta.riserve} land units placed
+   * first in the target (if it has a factory) or at the nation's placement, nearest to the target.
+   */
+  private static Optional<ProPurchaseOrders> ordiniTenuta(
+      final ProData proData,
+      final Definizione def,
+      final OperazioneCongiunta.Riserva r,
+      final Registro reg) {
+    final double estimate =
+        reg.json().has("ultima_stima_tenuta")
+            ? reg.json().get("ultima_stima_tenuta").getAsDouble()
+            : 100;
+    if (def.tenuta().riserve() <= 0 || estimate >= def.tenuta().sogliaRinforzi()) {
+      return Optional.empty();
+    }
+    final List<String> types =
+        r.acquisti().stream()
+            .filter(a -> a.tipi().stream().noneMatch(t -> t.contains("transport")))
+            .flatMap(a -> a.tipi().stream())
+            .distinct()
+            .toList();
+    if (types.isEmpty()) {
+      return Optional.empty();
+    }
+    final String held =
+        reg.json().has("tenuta_bersaglio")
+            ? reg.json().get("tenuta_bersaglio").getAsString()
+            : def.bersaglio();
+    final List<String> placement = new ArrayList<>();
+    placement.add(held);
+    placement.addAll(r.piazzamento());
+    return Optional.of(
+        new ProPurchaseOrders(
+            String.format(
+                Locale.ROOT,
+                "operazione %s: riserve per la tenuta di %s (tenuta stimata %.0f%% < %.0f%%)",
+                def.nome(),
+                held,
+                estimate,
+                def.tenuta().sogliaRinforzi()),
+            List.of(),
+            List.of(new ProPurchaseOrders.Mandatory("terra", types, def.tenuta().riserve())),
+            List.copyOf(placement),
+            List.of(held),
             r.quota()));
   }
 
@@ -290,13 +351,16 @@ public final class OperazioniCongiunte {
         }
       }
     }
-    if (!reg.stato().isFinale()) {
+    if (reg.stato() == Stato.TENUTA) {
+      tenutaUpdate();
+    }
+    if (!reg.stato().isFinale() && reg.stato() != Stato.TENUTA) {
       if (round > reg.roundObiettivo()) {
         // the target round passed without the steps (eg the opener had no turn): postpone
         postpone(
             "round obiettivo R" + reg.roundObiettivo() + " passato senza tappe", Stato.ESECUZIONE);
       }
-      if (!reg.stato().isFinale()) {
+      if (!reg.stato().isFinale() && reg.stato() != Stato.TENUTA) {
         final Stato now =
             round < reg.roundObiettivo() - 1
                 ? Stato.PREPARAZIONE
@@ -434,8 +498,31 @@ public final class OperazioniCongiunte {
     if (target == null) {
       return Esito.NESSUNO;
     }
+    if (reg.stato() == Stato.TENUTA) {
+      try {
+        tenutaCombat();
+      } finally {
+        pre = "";
+        reg.salva(data.getProperties());
+      }
+      return result();
+    }
     if (round == reg.roundObiettivo() - 1) {
-      // positioning: the units gathered stay out of the Pro AI's attacks
+      // positioning: the units gathered stay out of the Pro AI's attacks; not in the round of a
+      // postponement (fix of step PROVA2: the closer, after the opener postponed in the same
+      // round, was "positioning" and its troops and transports at the gathering place were
+      // withheld, so the Pro AI's combat move saw no landing on the target)
+      if (reg.intOf("rinvio_round", 0) == round) {
+        note(
+            event("posizionamento_libero"),
+            "Operazione "
+                + def.nome()
+                + ": rinvio in questo round, le unita' in raccolta di "
+                + player.getName()
+                + " restano a Hard per il combattimento");
+        reg.salva(data.getProperties());
+        return result();
+      }
       held.addAll(gathered());
       return result();
     }
@@ -459,6 +546,11 @@ public final class OperazioniCongiunte {
   /** Step 1: the opener weakens the target, judged on the value of the whole operation. */
   private void step1(final Territory target) {
     final GamePlayer closer = data.getPlayerList().getPlayerId(def.chiude());
+    if (Matches.isTerritoryAllied(player).test(target) && v2()) {
+      // variant v2: taken without the operation (eg by the Pro AI): the operation holds it
+      taken(target, "senza operazione (" + target.getOwner().getName() + ")");
+      return;
+    }
     if (Matches.isTerritoryAllied(player).test(target)) {
       // taken without the operation (eg by the Pro AI): it waits for the enemy to take it back
       // (no postponement counted); past the last round it was superseded
@@ -496,11 +588,57 @@ public final class OperazioniCongiunte {
     if (defenders.isEmpty()) {
       // nothing to weaken: the closer may take it (step 2 decides)
       final JsonObject e = event("tappa1");
+      if (v2() && closer != null) {
+        // variant v2: worth it only if the closer's troops can hold it against the counterattack
+        final List<Unit> garrison =
+            alliedAttackers(target, closer).stream().filter(Matches.unitIsLand()).toList();
+        final StimaTenuta hold = stimaTenuta(target, garrison);
+        final double ev = valoreAlleanza(def.valore(), 1, 1, 0, 0, hold.tenuta(), tuv(garrison));
+        e.addProperty("tenuta_stimata", Math.round(hold.tenuta()));
+        e.addProperty("contrattacco_tuv", Math.round(tuv(hold.attaccanti())));
+        e.addProperty("contrattacco_acquisti_tuv", Math.round(tuv(hold.acquisti())));
+        e.addProperty("presidio", OperazioniAnfibie.unitsText(garrison));
+        e.addProperty("tuv_presidio", Math.round(tuv(garrison)));
+        e.addProperty("valore_alleanza", Math.round(ev));
+        if (ev <= 0) {
+          final String why =
+              String.format(
+                  Locale.ROOT,
+                  "contrattacco atteso: tenuta stimata %.0f%%, valore d'alleanza %.1f <= 0",
+                  hold.tenuta(),
+                  ev);
+          e.addProperty("eseguita", false);
+          e.addProperty("motivo", why);
+          note(
+              e,
+              String.format(
+                  Locale.ROOT,
+                  "Operazione %s, tappa 1 di %s NON eseguita: %s senza difensori ma %s -"
+                      + " contrattacco %s (TUV %.0f) + acquisti %s (TUV %.0f) contro %s (TUV"
+                      + " %.0f)",
+                  def.nome(),
+                  player.getName(),
+                  target.getName(),
+                  why,
+                  hold.attaccanti().isEmpty()
+                      ? "nessuno"
+                      : OperazioniAnfibie.unitsText(hold.attaccanti()),
+                  tuv(hold.attaccanti()),
+                  hold.acquisti().isEmpty()
+                      ? "nessuno"
+                      : OperazioniAnfibie.unitsText(hold.acquisti()),
+                  tuv(hold.acquisti()),
+                  garrison.isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(garrison),
+                  tuv(garrison)));
+          postpone("tappa 1: " + why, Stato.ESECUZIONE);
+          return;
+        }
+      }
       e.addProperty("eseguita", true);
       e.addProperty("motivo", "nessun difensore: tappa 1 non necessaria");
-      reg.set("avviata", true);
-      reg.set("avvii", reg.intOf("avvii", 0) + 1);
-      reg.set("tappa1_round", round);
+      reg.set(k("avviata"), true);
+      reg.set(k("avvii"), reg.intOf(k("avvii"), 0) + 1);
+      reg.set(k("tappa1_round"), round);
       final JsonObject t1 = new JsonObject();
       t1.addProperty("round", round);
       t1.addProperty("tuv_attaccanti", 0);
@@ -508,7 +646,7 @@ public final class OperazioniCongiunte {
       t1.addProperty("tuv_residui_stimati", 0);
       t1.addProperty("perdita_attesa", 0);
       t1.addProperty("win", 100);
-      reg.set("tappa1", t1);
+      reg.set(k("tappa1"), t1);
       note(
           e,
           "Operazione "
@@ -547,11 +685,56 @@ public final class OperazioniCongiunte {
     final double take1 = a1.hasLand() ? win1 / 100 : 0;
     final double win2 = r2 == null ? 0 : r2.getWinPercentage();
     final double take = take1 + (1 - take1) * win2 / 100;
-    final double ev =
+    final double evV1 =
         take * def.valore()
             + (r1 == null ? 0 : r1.getTuvSwing())
             + (1 - take1) * (r2 == null ? 0 : r2.getTuvSwing());
+    // variant v2: the value of the alliance counts the enemy's counterattack on the target held by
+    // the survivors of the steps and the planned garrison
+    final double loss2 = r2 == null ? 0 : tuv(a2) - tuv(r2.getAverageAttackersRemaining());
+    final List<Unit> garrison = new ArrayList<>();
+    StimaTenuta hold = null;
+    double ev = evV1;
+    double evNoHold = evV1;
+    if (v2()) {
+      final Collection<Unit> survivors =
+          r2 != null
+              ? r2.getAverageAttackersRemaining()
+              : r1 == null ? List.of() : r1.getAverageAttackersRemaining();
+      survivors.stream().filter(Matches.unitIsLand()).forEach(garrison::add);
+      if (garrison.isEmpty() && take > 0) {
+        // the battle calculator's representative run often keeps only planes (land units are
+        // taken as casualties first), but a capture needs a land unit: at least the strongest one
+        final List<Unit> land =
+            (a2.isEmpty() ? a1.units() : a2).stream().filter(Matches.unitIsLand()).toList();
+        land.stream()
+            .max(
+                Comparator.comparingInt((Unit u) -> u.getUnitAttachment().getDefense(u.getOwner()))
+                    .thenComparing(u -> -tuv(List.of(u))))
+            .ifPresent(garrison::add);
+      }
+      if (closer != null) {
+        reach(target, closer).stream()
+            .filter(Matches.unitIsLand())
+            .filter(u -> !a2.contains(u) && !garrison.contains(u))
+            .forEach(garrison::add);
+      }
+      hold = stimaTenuta(target, garrison);
+      evNoHold = valoreAlleanza(def.valore(), take, take1, loss1, loss2, 100, 0);
+      ev = valoreAlleanza(def.valore(), take, take1, loss1, loss2, hold.tenuta(), tuv(garrison));
+    }
     final JsonObject e = event("tappa1");
+    if (hold != null) {
+      e.addProperty("tenuta_stimata", Math.round(hold.tenuta()));
+      e.addProperty("contrattacco_tuv", Math.round(tuv(hold.attaccanti())));
+      e.addProperty("contrattacco_acquisti_tuv", Math.round(tuv(hold.acquisti())));
+      e.addProperty("contrattacco", OperazioniAnfibie.unitsText(hold.attaccanti()));
+      e.addProperty("contrattacco_acquisti", OperazioniAnfibie.unitsText(hold.acquisti()));
+      e.addProperty("presidio", OperazioniAnfibie.unitsText(garrison));
+      e.addProperty("tuv_presidio", Math.round(tuv(garrison)));
+      e.addProperty("valore_alleanza", Math.round(ev));
+      e.addProperty("valore_senza_contrattacco", Math.round(evNoHold));
+    }
     e.addProperty("attaccanti", OperazioniAnfibie.unitsText(a1.units()));
     e.addProperty("tuv_attaccanti", Math.round(tuvA1));
     e.addProperty("difensori", OperazioniAnfibie.unitsText(defenders));
@@ -566,32 +749,65 @@ public final class OperazioniCongiunte {
     e.addProperty("valore_atteso", Math.round(ev));
     final String numbers =
         String.format(
-            Locale.ROOT,
-            "attaccanti %s (TUV %.0f) contro %s (TUV %.0f): win%% %.0f, perdita attesa %.0f TUV"
-                + " (tetto %.0f), difensori residui stimati TUV %.0f + rinforzi nemici %.0f; tappa"
-                + " 2 di %s con %s: win%% %.0f; presa stimata %.0f%%, valore atteso"
-                + " dell'operazione %.1f",
-            a1.units().isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(a1.units()),
-            tuvA1,
-            defenders.isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(defenders),
-            defTuv,
-            win1,
-            loss1,
-            def.tettoPerdita(),
-            tuv(left),
-            tuv(reinforcements),
-            def.chiude(),
-            a2.isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(a2),
-            win2,
-            take * 100,
-            ev);
+                Locale.ROOT,
+                "attaccanti %s (TUV %.0f) contro %s (TUV %.0f): win%% %.0f, perdita attesa %.0f TUV"
+                    + " (tetto %.0f), difensori residui stimati TUV %.0f + rinforzi nemici %.0f; tappa"
+                    + " 2 di %s con %s: win%% %.0f; presa stimata %.0f%%, valore atteso"
+                    + " dell'operazione %.1f",
+                a1.units().isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(a1.units()),
+                tuvA1,
+                defenders.isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(defenders),
+                defTuv,
+                win1,
+                loss1,
+                def.tettoPerdita(),
+                tuv(left),
+                tuv(reinforcements),
+                def.chiude(),
+                a2.isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(a2),
+                win2,
+                take * 100,
+                ev)
+            + (hold == null
+                ? ""
+                : String.format(
+                    Locale.ROOT,
+                    "; contrattacco atteso %s (TUV %.0f) + acquisti possibili %s (TUV %.0f) contro"
+                        + " presidio %s (TUV %.0f): tenuta stimata %.0f%%; valore d'alleanza"
+                        + " %.1f (senza contrattacco %.1f)",
+                    hold.attaccanti().isEmpty()
+                        ? "nessuno"
+                        : OperazioniAnfibie.unitsText(hold.attaccanti()),
+                    tuv(hold.attaccanti()),
+                    hold.acquisti().isEmpty()
+                        ? "nessuno"
+                        : OperazioniAnfibie.unitsText(hold.acquisti()),
+                    tuv(hold.acquisti()),
+                    garrison.isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(garrison),
+                    tuv(garrison),
+                    hold.tenuta(),
+                    ev,
+                    evNoHold));
     final String why =
         a1.units().isEmpty()
             ? "nessuna unita' di " + player.getName() + " puo' attaccare"
             : loss1 > def.tettoPerdita()
                 ? String.format(
                     Locale.ROOT, "perdita attesa %.0f > tetto %.0f", loss1, def.tettoPerdita())
-                : ev <= 0 ? String.format(Locale.ROOT, "valore atteso %.1f <= 0", ev) : "";
+                : ev <= 0 && hold != null && evNoHold > 0
+                    ? String.format(
+                        Locale.ROOT,
+                        "contrattacco atteso: tenuta stimata %.0f%%, valore d'alleanza %.1f <= 0",
+                        hold.tenuta(),
+                        ev)
+                    : ev <= 0
+                        ? String.format(
+                            Locale.ROOT,
+                            hold == null
+                                ? "valore atteso %.1f <= 0"
+                                : "valore d'alleanza %.1f <= 0",
+                            ev)
+                        : "";
     e.addProperty("eseguita", why.isEmpty());
     if (!why.isEmpty()) {
       e.addProperty("motivo", why);
@@ -618,9 +834,9 @@ public final class OperazioniCongiunte {
       return;
     }
     held.addAll(moved);
-    reg.set("avviata", true);
-    reg.set("avvii", reg.intOf("avvii", 0) + 1);
-    reg.set("tappa1_round", round);
+    reg.set(k("avviata"), true);
+    reg.set(k("avvii"), reg.intOf(k("avvii"), 0) + 1);
+    reg.set(k("tappa1_round"), round);
     final JsonObject t1 = new JsonObject();
     t1.addProperty("round", round);
     t1.addProperty("tuv_attaccanti", tuv(moved));
@@ -628,8 +844,11 @@ public final class OperazioniCongiunte {
     t1.addProperty("tuv_residui_stimati", tuv(left));
     t1.addProperty("perdita_attesa", loss1);
     t1.addProperty("win", win1);
+    if (hold != null) {
+      t1.addProperty("tenuta_stimata", hold.tenuta());
+    }
     t1.addProperty("ids", String.join(",", moved.stream().map(u -> u.getId().toString()).toList()));
-    reg.set("tappa1", t1);
+    reg.set(k("tappa1"), t1);
     note(
         e,
         "Operazione "
@@ -644,13 +863,13 @@ public final class OperazioniCongiunte {
 
   /** Step 2: the closer takes the target if the first step left it within the tolerance. */
   private void step2(final Territory target) {
-    final JsonObject t1 = reg.oggetto("tappa1").orElse(new JsonObject());
+    final JsonObject t1 = reg.oggetto(k("tappa1")).orElse(new JsonObject());
     final GamePlayer opener = data.getPlayerList().getPlayerId(def.apre());
     final int[] battle1 = opener == null ? new int[2] : battleLoss(target, opener);
     final double lost1 = Math.max(battle1[0], lostTuv(t1));
-    reg.set("tappa2_round", round);
-    reg.set("tappa1_tuv_perso", (int) Math.round(lost1));
-    reg.set("tappa1_tuv_inflitto", battle1[1]);
+    reg.set(k("tappa2_round"), round);
+    reg.set(k("tappa1_tuv_perso"), (int) Math.round(lost1));
+    reg.set(k("tappa1_tuv_inflitto"), battle1[1]);
     if (Matches.isTerritoryAllied(player).test(target)) {
       final JsonObject e = event("tappa2");
       e.addProperty("eseguita", false);
@@ -730,9 +949,9 @@ public final class OperazioniCongiunte {
     final List<Unit> moved = execute(target, attackers(target, player, false, false));
     held.addAll(moved);
     if (!moved.isEmpty()) {
-      reg.set("tappa2_eseguita_round", round);
+      reg.set(k("tappa2_eseguita_round"), round);
     }
-    reg.set("tappa2_forzata_round", round);
+    reg.set(k("tappa2_forzata_round"), round);
     e.addProperty("eseguita", true);
     e.addProperty("mosse", OperazioniAnfibie.unitsText(moved));
     e.addProperty(
@@ -753,6 +972,40 @@ public final class OperazioniCongiunte {
             + Math.round(def.sogliaChiusura())
             + "%): "
             + numbers);
+  }
+
+  /**
+   * Variant v2: the value of the alliance of a launch = value of the target × P(taken) × P(held
+   * against the counterattack) − expected losses (the TUV of step 1, of step 2 when step 1 does not
+   * take it, and the garrison lost with the hold). The operation goes on only when it is positive.
+   *
+   * @param take probability that the target is taken by the two steps
+   * @param take1 probability that step 1 takes it alone
+   * @param loss1 expected TUV lost in step 1
+   * @param loss2 expected TUV lost in step 2
+   * @param tenuta estimated hold% at the enemy's turns
+   * @param tuvPresidio TUV of the garrison (survivors and the planned reinforcements)
+   */
+  public static double valoreAlleanza(
+      final double valore,
+      final double take,
+      final double take1,
+      final double loss1,
+      final double loss2,
+      final double tenuta,
+      final double tuvPresidio) {
+    final double hold = tenuta / 100;
+    return take * valore * hold - (loss1 + (1 - take1) * loss2 + (1 - hold) * tuvPresidio);
+  }
+
+  /**
+   * Test hook: the counterattack this nation's operation expects on {@code target} (enemy units in
+   * reach and the units the enemies may buy for it). Empty without an operation.
+   */
+  public static Optional<Minaccia> minacciaPer(
+      final ProData proData, final ProOddsCalculator calc, final Territory target) {
+    return OperazioneCongiunta.per(proData.getData(), proData.getPlayer())
+        .map(d -> new OperazioniCongiunte(proData, calc, null, d).minaccia(target));
   }
 
   /**
@@ -794,6 +1047,23 @@ public final class OperazioniCongiunte {
    * max_rinvii} postponements or past {@code round_max}.
    */
   private void postpone(final String why, final Stato next) {
+    if (!pre.isEmpty()) {
+      // the final target (variant v2): no target round, the bridgehead stays held; tried again
+      // next round
+      reg.set(k("rinvii"), reg.intOf(k("rinvii"), 0) + 1);
+      final JsonObject e = event("rinvio_finale");
+      e.addProperty("motivo", why);
+      note(
+          e,
+          String.format(
+              Locale.ROOT,
+              "Operazione %s: tappa su %s RINVIATA (%s); si tiene la testa di ponte %s",
+              def.nome(),
+              def.bersaglioFinale(),
+              why,
+              def.bersaglio()));
+      return;
+    }
     final int target = Math.max(round, reg.roundObiettivo()) + 1;
     if (reg.rinvii() >= def.maxRinvii() || target > def.roundMax()) {
       reg.setStato(Stato.ANNULLATA);
@@ -814,6 +1084,7 @@ public final class OperazioniCongiunte {
       return;
     }
     reg.setRinvii(reg.rinvii() + 1);
+    reg.set("rinvio_round", round);
     reg.setRoundObiettivo(target);
     reg.setStato(next);
     final JsonObject e = event("rinvio");
@@ -995,7 +1266,7 @@ public final class OperazioniCongiunte {
     // comes back at the start of its turn): their reach with full movement
     reach(target, ally).stream().filter(u -> !units.contains(u)).forEach(units::add);
     final Territory zone = map.getTerritoryOrNull(def.zonaRaccolta());
-    if (zone != null) {
+    if (zone != null && map.getNeighbors(zone).contains(target)) {
       int room = 0;
       for (final Unit t :
           zone.getMatches(Matches.unitIsOwnedBy(ally).and(OperazioniAnfibie::isTransport))) {
@@ -1208,14 +1479,27 @@ public final class OperazioniCongiunte {
       return Esito.NESSUNO;
     }
     try {
-      outcome(target);
-      if (!reg.stato().isFinale()) {
+      if (reg.stato() != Stato.TENUTA) {
+        outcome(target);
+      }
+      if (reg.stato() == Stato.TENUTA) {
+        final Territory fin = map.getTerritoryOrNull(def.bersaglioFinale());
+        if (fin != null && reg.intOf(FINALE + "tappa1_round", 0) == round) {
+          pre = FINALE;
+          outcome(fin);
+          pre = "";
+        }
+        if (reg.stato() == Stato.TENUTA) {
+          tenutaNonCombat();
+        }
+      } else if (!reg.stato().isFinale()) {
         prepare(target);
       }
       germanPresence(target);
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Joint operation " + def.id() + " non-combat failed: " + e);
     } finally {
+      pre = "";
       reg.salva(data.getProperties());
     }
     return result();
@@ -1226,47 +1510,62 @@ public final class OperazioniCongiunte {
    * landing, planes landing there), then the outcome (taken or not) closes the operation.
    */
   private void outcome(final Territory target) {
-    if (round != reg.intOf("tappa1_round", 0) || reg.stato().isFinale()) {
+    if (round != reg.intOf(k("tappa1_round"), 0) || reg.stato().isFinale()) {
       return;
     }
     final boolean allied = Matches.isTerritoryAllied(player).test(target);
     if (def.isApre(player.getName())) {
-      if (allied && !reg.flag("presa")) {
+      if (allied && !reg.flag(k("presa"))) {
         taken(target, player.getName());
       }
       return;
     }
-    if (!def.isChiude(player.getName()) || reg.intOf("tappa2_round", 0) != round) {
+    if (!def.isChiude(player.getName()) || reg.intOf(k("tappa2_round"), 0) != round) {
       return;
     }
-    if (reg.intOf("tappa2_forzata_round", 0) == round) {
+    if (reg.intOf(k("tappa2_forzata_round"), 0) == round) {
       final int[] battle2 = battleLoss(target, player);
-      reg.set("tappa2_tuv_perso", battle2[0]);
-      reg.set("tappa2_tuv_inflitto", battle2[1]);
+      reg.set(k("tappa2_tuv_perso"), battle2[0]);
+      reg.set(k("tappa2_tuv_inflitto"), battle2[1]);
     }
     if (allied) {
-      if (!reg.flag("presa")) {
+      if (!reg.flag(k("presa"))) {
         taken(target, player.getName());
       } else {
         reinforce(target);
       }
-      reg.setStato(Stato.COMPLETATA);
-      reg.set("motivo_fine", "bersaglio preso");
-      note(
-          event("completata"),
-          "Operazione " + def.nome() + " COMPLETATA: " + def.bersaglio() + " preso al R" + round);
-    } else if (reg.intOf("tappa2_forzata_round", 0) == round) {
-      if (attackedThisRound(target) || reg.intOf("tappa2_eseguita_round", 0) == round) {
-        reg.set("tappa2_eseguita_round", round);
+      if (!v2()) {
         reg.setStato(Stato.COMPLETATA);
-        reg.set("motivo_fine", "tappa 2 eseguita, bersaglio non preso");
+        reg.set("motivo_fine", "bersaglio preso");
         note(
             event("completata"),
-            "Operazione "
-                + def.nome()
-                + " COMPLETATA senza presa: "
-                + def.bersaglio()
-                + " resta nemico dopo l'attacco della tappa 2");
+            "Operazione " + def.nome() + " COMPLETATA: " + def.bersaglio() + " preso al R" + round);
+      }
+    } else if (reg.intOf(k("tappa2_forzata_round"), 0) == round) {
+      if (attackedThisRound(target) || reg.intOf(k("tappa2_eseguita_round"), 0) == round) {
+        reg.set(k("tappa2_eseguita_round"), round);
+        if (!pre.isEmpty()) {
+          note(
+              event("finale_non_presa"),
+              "Operazione "
+                  + def.nome()
+                  + ": tappa su "
+                  + target.getName()
+                  + " eseguita, bersaglio non preso; si tiene la testa di ponte "
+                  + def.bersaglio());
+        } else if (v2()) {
+          fail("tappa 2 eseguita, bersaglio non preso");
+        } else {
+          reg.setStato(Stato.COMPLETATA);
+          reg.set("motivo_fine", "tappa 2 eseguita, bersaglio non preso");
+          note(
+              event("completata"),
+              "Operazione "
+                  + def.nome()
+                  + " COMPLETATA senza presa: "
+                  + def.bersaglio()
+                  + " resta nemico dopo l'attacco della tappa 2");
+        }
       } else {
         postpone("tappa 2: il combattimento non ha attaccato il bersaglio", Stato.ESECUZIONE);
       }
@@ -1325,13 +1624,20 @@ public final class OperazioniCongiunte {
   public static boolean forzaBersaglio(final ProData proData, final Territory t) {
     final GameState data = proData.getData();
     final Optional<Definizione> def = OperazioneCongiunta.per(data, proData.getPlayer());
-    if (def.isEmpty()
-        || !def.get().isChiude(proData.getPlayer().getName())
-        || !def.get().bersaglio().equals(t.getName())) {
+    if (def.isEmpty() || !def.get().isChiude(proData.getPlayer().getName())) {
+      return false;
+    }
+    final String prefix;
+    if (def.get().bersaglio().equals(t.getName())) {
+      prefix = "";
+    } else if (!def.get().bersaglioFinale().isEmpty()
+        && def.get().bersaglioFinale().equals(t.getName())) {
+      prefix = FINALE;
+    } else {
       return false;
     }
     final Registro reg = Registro.leggi(data.getProperties(), def.get().id());
-    return reg.intOf("tappa2_forzata_round", 0) == data.getSequence().getRound()
+    return reg.intOf(prefix + "tappa2_forzata_round", 0) == data.getSequence().getRound()
         && !reg.stato().isFinale();
   }
 
@@ -1346,14 +1652,56 @@ public final class OperazioniCongiunte {
   static final double BONUS_FORZATO = 1000;
 
   private void taken(final Territory target, final String by) {
-    reg.set("presa", true);
-    reg.set("round_presa", round);
-    reg.set("presa_da", by);
+    reg.set(k("presa"), true);
+    reg.set(k("round_presa"), round);
+    reg.set(k("presa_da"), by);
+    if (by.startsWith("senza operazione")) {
+      reg.set(k("presa_senza_operazione"), true);
+    }
     final JsonObject e = event("presa");
     e.addProperty("da", by);
+    e.addProperty("bersaglio", target.getName());
     note(
         e,
-        "Operazione " + def.nome() + ": " + def.bersaglio() + " preso da " + by + " al R" + round);
+        "Operazione "
+            + def.nome()
+            + ": "
+            + target.getName()
+            + (by.startsWith("senza operazione")
+                ? " gia' dell'alleanza al R" + round + ", preso " + by
+                : " preso da " + by + " al R" + round));
+    if (v2()) {
+      reg.setStato(Stato.TENUTA);
+      reg.set("tenuta_bersaglio", target.getName());
+      reg.set("tenuta_dal", round);
+      reg.set("tenute", reg.intOf("tenute", 0) + 1);
+      reg.json().remove("ultima_stima_tenuta");
+      final JsonObject h = event("tenuta_inizio");
+      h.addProperty("bersaglio", target.getName());
+      note(
+          h,
+          String.format(
+              Locale.ROOT,
+              "Operazione %s: TENUTA di %s dal R%d per %d round (presidio bloccato, rinforzi e"
+                  + " copertura aerea sotto il %.0f%% di tenuta stimata)",
+              def.nome(),
+              target.getName(),
+              round,
+              def.tenuta().round(),
+              def.tenuta().sogliaRinforzi()));
+    }
+  }
+
+  /** Variant v2: the operation ends without the target (not taken, or lost while held). */
+  private void fail(final String why) {
+    reg.setStato(Stato.FALLITA);
+    reg.set("motivo_fine", why);
+    if (reg.json().has("tenuta_bersaglio")) {
+      reg.set("tenuta_esito", "fallita");
+    }
+    final JsonObject e = event("fallita");
+    e.addProperty("motivo", why);
+    note(e, "Operazione " + def.nome() + " FALLITA: " + why + " (le unita' tornano a Hard)");
   }
 
   /** The closer's troops and planes into a target the opener took this round. */
@@ -1926,6 +2274,492 @@ public final class OperazioniCongiunte {
     }
   }
 
+  // ===================================================================== hold (variant v2)
+
+  /** Variant v2 ("presa e tenuta"): the operation counts the counterattack and holds the target. */
+  private boolean v2() {
+    return def.tenuta().attiva();
+  }
+
+  /** A saved key of the steps being played (first or final target). */
+  private String k(final String key) {
+    return pre + key;
+  }
+
+  private @Nullable Territory tenutaTarget() {
+    return reg.json().has("tenuta_bersaglio")
+        ? map.getTerritoryOrNull(reg.json().get("tenuta_bersaglio").getAsString())
+        : null;
+  }
+
+  /**
+   * The enemy's counterattack on a target held by the alliance: the units that can reach it at the
+   * enemy's next turns (the Pro AI's enemy attack options, the target counted as the alliance's)
+   * and the units the enemies can buy and place at their factories in reach of it ({@link
+   * #enemyPurchases}).
+   */
+  public record Minaccia(List<Unit> attaccanti, List<Unit> acquisti, List<Unit> bombardamento) {
+    public List<Unit> tutti() {
+      return concat(attaccanti, acquisti);
+    }
+  }
+
+  /** Estimated hold of a target: 100 − enemy win% of the counterattack against the defenders. */
+  record StimaTenuta(double tenuta, List<Unit> attaccanti, List<Unit> acquisti) {}
+
+  /** The counterattack expected on {@code target} once it is the alliance's. */
+  Minaccia minaccia(final Territory target) {
+    final ProTerritoryManager tm = new ProTerritoryManager(calc, proData);
+    tm.populateEnemyAttackOptions(List.of(target), List.of(target));
+    final ProTerritory max = tm.getEnemyAttackOptions().getMax(target);
+    final List<Unit> attackers = new ArrayList<>();
+    final List<Unit> bombard = new ArrayList<>();
+    if (max != null) {
+      max.getMaxUnits().stream().filter(Matches.unitIsNotInfrastructure()).forEach(attackers::add);
+      max.getMaxAmphibUnits().stream()
+          .filter(Matches.unitIsNotInfrastructure())
+          .filter(u -> !attackers.contains(u))
+          .forEach(attackers::add);
+      bombard.addAll(max.getMaxBombardUnits());
+    }
+    return new Minaccia(List.copyOf(attackers), enemyPurchases(target), List.copyOf(bombard));
+  }
+
+  /** Hold% of {@code target} with {@code defenders} against the counterattack {@code m}. */
+  private double tenuta(
+      final Territory target, final Minaccia m, final Collection<Unit> defenders) {
+    final List<Unit> attackers = m.tutti();
+    if (attackers.isEmpty()) {
+      return 100;
+    }
+    if (defenders.isEmpty()) {
+      return 0;
+    }
+    return 100
+        - calc.calculateBattleResults(
+                proData, target, attackers, new ArrayList<>(defenders), m.bombardamento())
+            .getWinPercentage();
+  }
+
+  private StimaTenuta stimaTenuta(final Territory target, final Collection<Unit> defenders) {
+    final Minaccia m = minaccia(target);
+    return new StimaTenuta(tenuta(target, m, defenders), m.attaccanti(), m.acquisti());
+  }
+
+  /**
+   * Units the enemies at war with this nation can buy and place in reach of {@code target} for
+   * their following turn: for each factory of theirs within 2 land moves of the target, its
+   * production as capacity, filled with the land unit of best attack per PU that can reach the
+   * target from there, within {@code quota_acquisti_nemici} of their PUs now (the rest goes to
+   * other fronts). Temporary units, never on the map.
+   */
+  List<Unit> enemyPurchases(final Territory target) {
+    final double share = def.tenuta().quotaAcquistiNemici();
+    final List<Unit> units = new ArrayList<>();
+    if (share <= 0) {
+      return units;
+    }
+    for (final GamePlayer e : data.getPlayerList().getPlayers()) {
+      if (e.isNull()
+          || e.equals(player)
+          || !data.getRelationshipTracker().isAtWar(player, e)
+          || e.getProductionFrontier() == null) {
+        continue;
+      }
+      double budget = e.getResources().getQuantity(games.strategy.triplea.Constants.PUS) * share;
+      final List<Territory> factories =
+          map.getTerritories().stream()
+              .filter(ProMatches.territoryHasFactoryAndIsNotConqueredOwnedLand(e))
+              .filter(f -> !f.equals(target))
+              .filter(
+                  f -> {
+                    final int d = map.getDistance(f, target, Matches.territoryIsLand());
+                    return d > 0 && d <= 2;
+                  })
+              .sorted(
+                  Comparator.comparingInt(
+                          (Territory f) -> map.getDistance(f, target, Matches.territoryIsLand()))
+                      .thenComparing(Territory::getName))
+              .toList();
+      for (final Territory f : factories) {
+        final int distance = map.getDistance(f, target, Matches.territoryIsLand());
+        games.strategy.engine.data.UnitType best = null;
+        int bestCost = 0;
+        double bestRatio = 0;
+        for (final games.strategy.engine.data.ProductionRule rule :
+            e.getProductionFrontier().getRules()) {
+          if (rule.getResults().size() != 1
+              || !(rule.getResults().keySet().iterator().next()
+                  instanceof games.strategy.engine.data.UnitType type)) {
+            continue;
+          }
+          final var ua = type.getUnitAttachment();
+          final int cost =
+              rule.getCosts()
+                  .getInt(
+                      data.getResourceList()
+                          .getResourceOrThrow(games.strategy.triplea.Constants.PUS));
+          if (ua.isSea()
+              || ua.isAir()
+              || ua.getAttack(e) <= 0
+              || cost <= 0
+              || ua.getMovement(e) < distance
+              || rule.getResults().getInt(type) != 1) {
+            continue;
+          }
+          final double ratio = (double) ua.getAttack(e) / cost;
+          if (ratio > bestRatio || (ratio == bestRatio && cost < bestCost)) {
+            best = type;
+            bestCost = cost;
+            bestRatio = ratio;
+          }
+        }
+        if (best == null) {
+          continue;
+        }
+        final int capacity =
+            Math.max(0, games.strategy.triplea.attachments.TerritoryAttachment.getProduction(f));
+        final int n = (int) Math.min(capacity, Math.floor(budget / bestCost));
+        if (n <= 0) {
+          continue;
+        }
+        units.addAll(best.createTemp(n, e));
+        budget -= (double) n * bestCost;
+      }
+    }
+    return units;
+  }
+
+  /** This nation's units that fight in {@code t} (no infrastructure, no planes: they leave). */
+  private List<Unit> garrison(final Territory t) {
+    return t.getMatches(
+        Matches.unitIsOwnedBy(player)
+            .and(Matches.unitIsNotInfrastructure())
+            .and(Matches.unitIsLand()));
+  }
+
+  /** The alliance's units that would defend {@code t}. */
+  private List<Unit> alliedDefenders(final Territory t) {
+    return t.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsNotInfrastructure()));
+  }
+
+  /**
+   * Start of the turn of a nation of the operation while the target is held: lost ⇒ FALLITA; held
+   * for {@code tenuta.round} rounds (checked at the closer's turn, after every enemy has played as
+   * many turns) ⇒ COMPLETATA, or for a bridgehead the final target becomes possible.
+   */
+  private void tenutaUpdate() {
+    final Territory t = tenutaTarget();
+    if (t == null) {
+      return;
+    }
+    final int since = reg.intOf("tenuta_dal", round);
+    if (!Matches.isTerritoryAllied(player).test(t)) {
+      reg.set("tenuta_persa_round", round);
+      fail(
+          String.format(
+              Locale.ROOT,
+              "%s perso (controllato da %s) al R%d dopo %d round di tenuta",
+              t.getName(),
+              t.getOwner().getName(),
+              round,
+              round - since));
+      return;
+    }
+    if (!def.isChiude(player.getName()) || round - since < def.tenuta().round()) {
+      return;
+    }
+    final boolean bridgehead =
+        !def.bersaglioFinale().isEmpty() && t.getName().equals(def.bersaglio());
+    if (bridgehead) {
+      if (!reg.flag("testa_di_ponte_tenuta")) {
+        reg.set("testa_di_ponte_tenuta", true);
+        reg.set("testa_di_ponte_round", round);
+        final JsonObject e = event("testa_di_ponte");
+        note(
+            e,
+            String.format(
+                Locale.ROOT,
+                "Operazione %s: testa di ponte %s tenuta %d round; tappa su %s quando la presa e"
+                    + " la tenuta lo giustificano",
+                def.nome(),
+                t.getName(),
+                round - since,
+                def.bersaglioFinale()));
+      }
+      return;
+    }
+    reg.setStato(Stato.COMPLETATA);
+    reg.set("motivo_fine", t.getName() + " tenuto " + (round - since) + " round");
+    reg.set("tenuta_esito", "completata");
+    final JsonObject e = event("completata");
+    e.addProperty("bersaglio", t.getName());
+    note(
+        e,
+        String.format(
+            Locale.ROOT,
+            "Operazione %s COMPLETATA: %s tenuto %d round (dal R%d); le unita' tornano a Hard",
+            def.nome(),
+            t.getName(),
+            round - since,
+            since));
+  }
+
+  /**
+   * Combat move while the target is held: the garrison stays out of the Pro AI's attacks (unless
+   * the hold was estimated lost for sure); with a bridgehead held long enough, the steps on the
+   * final target (same logic as the first one).
+   */
+  private void tenutaCombat() {
+    final Territory t = tenutaTarget();
+    if (t == null || !Matches.isTerritoryAllied(player).test(t)) {
+      return;
+    }
+    final double last =
+        reg.json().has("ultima_stima_tenuta")
+            ? reg.json().get("ultima_stima_tenuta").getAsDouble()
+            : 100;
+    if (last <= def.tenuta().sogliaRitirata()) {
+      if (reg.intOf("ritirata_round", 0) != round) {
+        reg.set("ritirata_round", round);
+        reg.set("ritirate", reg.intOf("ritirate", 0) + 1);
+        final JsonObject e = event("ritirata");
+        e.addProperty("tenuta_stimata", Math.round(last));
+        note(
+            e,
+            String.format(
+                Locale.ROOT,
+                "Operazione %s: presidio di %s in %s lasciato a Hard (tenuta stimata %.0f%% <="
+                    + " %.0f%%: tenuta persa)",
+                def.nome(),
+                player.getName(),
+                t.getName(),
+                last,
+                def.tenuta().sogliaRitirata()));
+      }
+    } else {
+      held.addAll(garrison(t));
+    }
+    final Territory fin = map.getTerritoryOrNull(def.bersaglioFinale());
+    if (fin == null || !reg.flag("testa_di_ponte_tenuta") || !t.getName().equals(def.bersaglio())) {
+      return;
+    }
+    pre = FINALE;
+    if (def.isApre(player.getName()) && reg.intOf(k("tappa1_round"), 0) != round) {
+      reg.set(k("tentativi_valutati"), reg.intOf(k("tentativi_valutati"), 0) + 1);
+      step1(fin);
+    } else if (def.isChiude(player.getName())
+        && reg.intOf(k("tappa1_round"), 0) == round
+        && reg.intOf(k("tappa2_round"), 0) != round) {
+      step2(fin);
+    }
+    pre = "";
+  }
+
+  /**
+   * Non-combat move while the target is held: the garrison stays; the shuttle and the fleet go on;
+   * under {@code soglia_rinforzi} of estimated hold at the enemy's turn, reinforcements (landing
+   * from the gathering zone, land units in reach, then planes as air cover) until the estimate
+   * reaches it. The estimate is saved for the purchase and the next combat move.
+   */
+  private void tenutaNonCombat() {
+    final Territory t = tenutaTarget();
+    if (t == null || !Matches.isTerritoryAllied(player).test(t)) {
+      return;
+    }
+    held.addAll(garrison(t));
+    final List<String> moves = new ArrayList<>();
+    def.porto().filter(p -> p.nazione().equals(player.getName())).ifPresent(p -> shuttle(p, moves));
+    if (!def.zonaRaccolta().isEmpty()) {
+      gatherFleet(moves);
+    }
+    final Minaccia m = minaccia(t);
+    final double before = tenuta(t, m, alliedDefenders(t));
+    double now = before;
+    final List<Unit> came = new ArrayList<>();
+    if (before < def.tenuta().sogliaRinforzi()) {
+      now = reinforceHold(t, m, came, moves);
+    }
+    held.addAll(came);
+    reg.set("ultima_stima_tenuta", (int) Math.round(now));
+    reg.set("ultima_stima_round", round);
+    final JsonObject e = event("stima_tenuta");
+    e.addProperty("bersaglio", t.getName());
+    e.addProperty("tenuta_prima", Math.round(before));
+    e.addProperty("tenuta_stimata", Math.round(now));
+    e.addProperty("contrattacco_tuv", Math.round(tuv(m.attaccanti())));
+    e.addProperty("contrattacco_acquisti_tuv", Math.round(tuv(m.acquisti())));
+    e.addProperty("tuv_difensori", Math.round(tuv(alliedDefenders(t))));
+    e.addProperty("rinforzi", OperazioniAnfibie.unitsText(came));
+    e.addProperty("tuv_rinforzi", Math.round(tuv(came)));
+    note(
+        e,
+        String.format(
+            Locale.ROOT,
+            "Operazione %s, tenuta di %s (R%d, dal R%d): contrattacco atteso %s (TUV %.0f) +"
+                + " acquisti possibili %s (TUV %.0f) contro %s (TUV %.0f): tenuta stimata %.0f%%%s"
+                + "; rinforzi di %s: %s%s",
+            def.nome(),
+            t.getName(),
+            round,
+            reg.intOf("tenuta_dal", round),
+            m.attaccanti().isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(m.attaccanti()),
+            tuv(m.attaccanti()),
+            m.acquisti().isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(m.acquisti()),
+            tuv(m.acquisti()),
+            OperazioniAnfibie.unitsText(alliedDefenders(t)),
+            tuv(alliedDefenders(t)),
+            now,
+            before == now ? "" : String.format(Locale.ROOT, " (prima dei rinforzi %.0f%%)", before),
+            player.getName(),
+            came.isEmpty()
+                ? before < def.tenuta().sogliaRinforzi()
+                    ? "nessuna unita' disponibile"
+                    : "non servono"
+                : OperazioniAnfibie.unitsText(came),
+            moves.isEmpty() ? "" : " (" + String.join("; ", moves) + ")"));
+  }
+
+  /**
+   * Reinforcements into the held target {@code t}, in order, while the estimated hold is under the
+   * threshold: troops landed from the gathering zone, land units within 2 moves through the
+   * alliance's land (not out of an own capital at risk), then up to {@code aerei_copertura} planes
+   * that can land there. None if even all of them together would leave the hold at or under {@code
+   * soglia_ritirata} (units not thrown into a lost target). Returns the hold% after them.
+   */
+  private double reinforceHold(
+      final Territory t, final Minaccia m, final List<Unit> came, final List<String> moves) {
+    final double threshold = def.tenuta().sogliaRinforzi();
+    // candidates: landing from the gathering zone, land units in reach, planes as air cover
+    final Territory zone = map.getTerritoryOrNull(def.zonaRaccolta());
+    final Map<Unit, List<Unit>> landing =
+        zone != null && map.getNeighbors(zone).contains(t)
+            ? attackers(t, player, def.isApre(player.getName()), false).landing()
+            : Map.of();
+    final Map<Territory, List<Unit>> land = new java.util.LinkedHashMap<>();
+    for (final Territory from :
+        map.getNeighbors(t, 2).stream()
+            .filter(x -> !x.isWater() && Matches.isTerritoryAllied(player).test(x))
+            .sorted(
+                Comparator.comparingInt((Territory x) -> map.getDistance(x, t))
+                    .thenComparing(Territory::getName))
+            .toList()) {
+      final List<Unit> units =
+          new ArrayList<>(
+              from.getMatches(
+                  Matches.unitIsOwnedBy(player)
+                      .and(Matches.unitIsLand())
+                      .and(Matches.unitIsNotInfrastructure())
+                      .and(Matches.unitHasMovementLeft())
+                      .and(Matches.unitIsBeingTransported().negate())));
+      units.removeAll(held);
+      landing.values().forEach(units::removeAll);
+      units.sort(
+          Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getDefense(player))
+              .thenComparing(u -> u.getType().getName()));
+      final List<Unit> can =
+          guardCapital(from, units).stream()
+              .filter(u -> routeFor(u, from, t, false).isPresent())
+              .toList();
+      if (!can.isEmpty()) {
+        land.put(from, can);
+      }
+    }
+    final List<Unit> air = new ArrayList<>();
+    if (def.tenuta().aereiCopertura() > 0) {
+      for (final Territory x : map.getNeighbors(t, 6)) {
+        if (x.isWater()) {
+          continue;
+        }
+        x
+            .getMatches(
+                Matches.unitIsOwnedBy(player)
+                    .and(Matches.unitIsAir())
+                    .and(Matches.unitHasMovementLeft())
+                    .and(u -> u.getUnitAttachment().getDefense(player) > 0))
+            .stream()
+            .filter(u -> !held.contains(u))
+            .filter(u -> routeFor(u, x, t, false).isPresent())
+            .forEach(air::add);
+      }
+      air.sort(
+          Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getDefense(player))
+              .thenComparing(u -> u.getId().toString()));
+    }
+    final List<Unit> all = new ArrayList<>(alliedDefenders(t));
+    landing.values().forEach(all::addAll);
+    land.values().forEach(all::addAll);
+    all.addAll(air.stream().limit(def.tenuta().aereiCopertura()).toList());
+    final double best = tenuta(t, m, all);
+    if (best <= def.tenuta().sogliaRitirata()) {
+      moves.add(
+          String.format(
+              Locale.ROOT,
+              "rinforzi inutili: tenuta stimata %.0f%% anche con tutte le unita' in portata",
+              best));
+      return tenuta(t, m, alliedDefenders(t));
+    }
+    // 1) landing from the gathering zone (troops at the gathering place, on own transports)
+    for (final Map.Entry<Unit, List<Unit>> e : landing.entrySet()) {
+      final List<Unit> aboard = new ArrayList<>();
+      for (final Unit u : e.getValue()) {
+        if (e.getKey().getTransporting().contains(u)) {
+          aboard.add(u);
+          continue;
+        }
+        final Territory from = proData.getUnitTerritory(u);
+        if (from != null
+            && moveOk(
+                new MoveDescription(List.of(u), new Route(from, zone), Map.of(u, e.getKey())))) {
+          aboard.add(u);
+        }
+      }
+      if (!aboard.isEmpty() && move(aboard, new Route(zone, t), moves)) {
+        came.addAll(aboard);
+        held.add(e.getKey());
+      }
+    }
+    double now = tenuta(t, m, alliedDefenders(t));
+    // 2) land units in reach through the alliance's land
+    for (final Map.Entry<Territory, List<Unit>> e : land.entrySet()) {
+      if (now >= threshold) {
+        break;
+      }
+      final Territory from = e.getKey();
+      final List<Unit> moving = new ArrayList<>();
+      for (final Unit u : e.getValue()) {
+        final Optional<Route> route = routeFor(u, from, t, false);
+        if (route.isPresent() && move(List.of(u), route.get(), null)) {
+          moving.add(u);
+        }
+      }
+      if (!moving.isEmpty()) {
+        moves.add(
+            OperazioniAnfibie.unitsText(moving) + " " + from.getName() + " -> " + t.getName());
+        came.addAll(moving);
+        now = tenuta(t, m, alliedDefenders(t));
+      }
+    }
+    // 3) air cover: planes that can land in the target
+    int planes = 0;
+    for (final Unit u : air) {
+      if (planes >= def.tenuta().aereiCopertura() || now >= threshold) {
+        break;
+      }
+      final Territory from = proData.getUnitTerritory(u);
+      if (from == null) {
+        continue;
+      }
+      final Optional<Route> route = routeFor(u, from, t, false);
+      if (route.isPresent() && move(List.of(u), route.get(), moves)) {
+        came.add(u);
+        planes++;
+        now = tenuta(t, m, alliedDefenders(t));
+      }
+    }
+    return now;
+  }
+
   // ================================================================================== helpers
 
   private Optional<Route> routeFor(
@@ -2092,6 +2926,7 @@ public final class OperazioniCongiunte {
     e.addProperty("round", round);
     e.addProperty("nazione", player.getName());
     e.addProperty("stato", reg.stato().testo());
+    e.addProperty("fase", pre.isEmpty() ? "bersaglio" : "finale");
     return e;
   }
 

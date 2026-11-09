@@ -1,6 +1,6 @@
 {
-  "versione": 1,
-  "nota": "Operazioni congiunte scritte a mano (step PROVA DI VALORE). Valori scelti, NON tarati: vedi CLAUDE.md 'Operazioni congiunte'. Attive solo con la proprieta' 'Pro+ operazione congiunta: <alleanza>' = id (default spento).",
+  "versione": 2,
+  "nota": "Operazioni congiunte scritte a mano (step PROVA DI VALORE), variante v2 'presa e tenuta' (step PROVA2): lancio solo con valore d'alleanza positivo contando il contrattacco atteso, poi tenuta per 'tenuta.round' round con presidio, rinforzi e copertura aerea. Valori scelti, NON tarati: vedi CLAUDE.md 'Operazioni congiunte'. Attive solo con la proprieta' 'Pro+ operazione congiunta: <alleanza>' = id (default spento).",
   "operazioni": [
     {
       "id": "egitto",
@@ -23,7 +23,8 @@
       "tetto_perdita": 40,
       "tolleranza_difensori": 0.25,
       "soglia_chiusura": 50,
-      "max_rinvii": 2
+      "max_rinvii": 2,
+      "tenuta": {"round": 2, "soglia_rinforzi": 70, "soglia_ritirata": 5, "aerei_copertura": 2, "quota_acquisti_nemici": 0.5, "riserve": 2}
     },
     {
       "id": "francia",
@@ -50,7 +51,9 @@
       "tetto_perdita": 40,
       "tolleranza_difensori": 0.25,
       "soglia_chiusura": 50,
-      "max_rinvii": 2
+      "max_rinvii": 2,
+      "bersaglio_finale": "France",
+      "tenuta": {"round": 2, "soglia_rinforzi": 70, "soglia_ritirata": 5, "aerei_copertura": 2, "quota_acquisti_nemici": 0.5, "riserve": 2}
     }
   ]
 }

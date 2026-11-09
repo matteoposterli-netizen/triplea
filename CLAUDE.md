@@ -150,6 +150,10 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   (motore: fattibilita', riserve, posizionamento, tappe, diario), `ai/proplus/ControlloTuning` (contatore: ogni risposta del tuning
   confrontata con Hard), hook `ProTuning.combatHeldUnits` (default vuoto) + `ProMyMoveOptions.removeUnits` chiamato in
   `ProCombatMoveAi`. Vedi "Operazioni congiunte (step PROVA DI VALORE)".
+- Step PROVA2: variante v2 "presa e tenuta" nello stesso motore (`OperazioniCongiunte`: contrattacco atteso al lancio,
+  stato TENUTA, rinforzi, copertura aerea, tappa sul bersaglio finale; `OperazioneCongiunta.Tenuta`, stati TENUTA/FALLITA,
+  `bersaglio_finale`), riepilogo `ConfrontoTenuta` (autoplay). Nessun hook nuovo nelle classi Pro. Vedi "Variante v2: presa
+  e tenuta (step PROVA2)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -348,6 +352,17 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   promettente = Δ > 0 e IC che arriva a +1; non vale = altrimenti); andamento (avviate, completate, annullate, rinvii, attese,
   tappa 2 approvata/attacco fatto, TUV perso per tappa, bersaglio preso e tenuto dopo 1 e 2 round, round obiettivo iniziale) con
   i motivi; bersaglio dell'alleanza a fine partita con e senza operazione; elenco dei round con differenze del contatore.
+- **Modalita' "prova2" (step PROVA2)**: `[prova2]` nel messaggio del commit di testa (precedenza su `[prova]` e tutte le altre) ⇒ `modalita:
+  prova2`. Stesse 4 configurazioni di `[prova]` (le operazioni sono ora la variante v2), **semi 301-335** (mai usati), 140 partite, matrice
+  mescolata per seme, `max-parallel` 20, solo regole. `riepilogo.json`: per round `territori_operazioni` (proprietario di ogni bersaglio e
+  bersaglio finale: Egypt, Normandy Bordeaux, France). Dopo "Prova di valore" la sezione **"Presa e tenuta"** (`ConfrontoTenuta`, scritta
+  se un'operazione ha la tenuta): per operazione i bersagli dell'alleanza per round (Egitto R3/R6/R9/R12, Normandy e France R8/R10/R12) con e
+  senza operazione e Δ a fine partita con IC 95% (differenza di proporzioni, approssimazione normale); esiti (tenuta iniziata, gia' presa
+  senza operazione, COMPLETATA, FALLITA persa con round tenuti, FALLITA senza presa, ancora in tenuta, ANNULLATA, rinvii e annullamenti per
+  contrattacco atteso, presidi lasciati a Hard; Francia: testa di ponte tenuta, tappe su Parigi valutate/eseguite/approvate, Parigi presa e
+  tenuta a fine partita); TUV perso per alleanza con Δ e IC di Welch; **calibrazione** per fasce di 20%: tenuta stimata al lancio (bersaglio
+  preso nello stesso round; reale = ancora dell'alleanza dopo `tenuta.round` round) e a ogni `stima_tenuta` (reale = ancora dell'alleanza a
+  fine del round dopo).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -1527,6 +1542,63 @@ della fase; le unita' mosse/tenute vanno a `heldUnits` (non combattimento) e `co
 - Test: `ai/pro/OperazioniCongiunteTest` (definizioni e interruttore, stato e round obiettivo, riserve negli acquisti con acquisto
   vero, condizione tappa 2, flag spento = Hard con contatore a 0 su un turno intero, operazione accesa: 0 differenze fuori
   dall'operazione, `combatHeldUnits` di Hard vuoto).
+
+### Variante v2: presa e tenuta (step PROVA2)
+
+Diagnosi della prova di valore (run 42673273717): si PRENDE prima ma NON si TIENE (Egitto all'Asse R3 80% contro 40% del nudo,
+R12 9% contro 14%; Normandy tenuta 2 round 12/27). La v2 **sostituisce** la v1 per gli id `egitto` e `francia` (la v1 si
+riproduce dal commit 428885d); le definizioni hanno `tenuta` (assente = comportamento v1, `Tenuta.NESSUNA`).
+
+**Dati** (`operazioni-congiunte.json` versione 2, valori scelti, NON tarati): `tenuta.round` 2 (round da tenere dopo la presa:
+2 = due turni di ogni nemico), `soglia_rinforzi` 70 (tenuta stimata sotto cui partono rinforzi e riserve), `soglia_ritirata` 5
+(a o sotto: presidio lasciato a Hard e niente rinforzi inutili), `aerei_copertura` 2 (aerei per nazione che atterrano nel
+bersaglio), `quota_acquisti_nemici` 0,5 (meta' dei PU nemici spesi per il contrattacco: il resto va su altri fronti),
+`riserve` 2 (unita' di terra obbligate negli acquisti). Francia: `bersaglio_finale` "France" (Parigi).
+
+**A) Lancio con contrattacco atteso** (tappa 1, punto di decisione di chi apre; anche per la tappa su Parigi):
+- contrattacco = unita' nemiche che possono colpire il bersaglio contato come gia' dell'alleanza (`ProTerritoryManager.populateEnemyAttackOptions`
+  con il bersaglio tra i "cleared", unita' max + anfibie, bombardamento) **+ acquisti possibili** (`enemyPurchases`): per ogni nemico in
+  guerra, fabbriche proprie entro 2 mosse di terra dal bersaglio, capacita' = produzione del territorio, unita' di terra con miglior
+  attacco/PU che arriva al bersaglio da li', entro `quota_acquisti_nemici` dei PU attuali (unita' temporanee, mai sulla mappa);
+- presidio = sopravvissuti di terra della tappa 2 (o 1) + unita' di chi chiude in portata non usate nell'attacco; se la "corsa media" del
+  calcolatore tiene solo aerei (la fanteria muore per prima) almeno l'unita' di terra piu' forte (la presa richiede un'unita' di terra);
+- tenuta stimata = 100 − win% del contrattacco contro il presidio;
+- **valore d'alleanza** = valore × presa stimata × tenuta − perdite attese (tappa 1 + tappa 2 se la 1 non prende + presidio perso con la
+  tenuta) (`valoreAlleanza`, pubblico e testato). Si lancia solo se > 0 (e perdita tappa 1 entro il tetto); altrimenti rinvio (stesso
+  meccanismo, max 2 rinvii) con motivo "contrattacco atteso: tenuta stimata X%, valore d'alleanza V <= 0" quando senza contrattacco
+  sarebbe stato positivo. Bersaglio senza difensori: stesso conto con il presidio = truppe di chi chiude. Bersaglio gia' dell'alleanza
+  (preso da Hard) al round obiettivo: entra direttamente in TENUTA ("preso senza operazione").
+- Diario e JSON della tappa 1: `tenuta_stimata`, `contrattacco` (+ TUV), `contrattacco_acquisti` (+ TUV), `presidio`, `valore_alleanza`,
+  `valore_senza_contrattacco`.
+
+**B) TENUTA** (`Stato.TENUTA`, dopo la presa al posto di COMPLETATA; `tenuta_bersaglio`, `tenuta_dal`):
+- presidio bloccato: unita' di terra della nazione nel bersaglio in `combatHeldUnits` e `heldUnits` (Hard non le muove), salvo ultima stima
+  ≤ `soglia_ritirata` ("presidio lasciato a Hard");
+- non combattimento di ogni nazione dell'operazione: stima della tenuta (contrattacco come sopra contro i difensori alleati presenti), poi
+  se sotto `soglia_rinforzi`: sbarco dalla zona di raccolta (Francia), unita' di terra entro 2 mosse in territorio alleato (non dalla
+  capitale a rischio), poi fino a `aerei_copertura` aerei che possono atterrarvi (le regole: non nel territorio conquistato nello stesso
+  turno dalla stessa nazione; il validatore delle mosse rifiuta il resto), fermandosi quando la stima arriva alla soglia. Se nemmeno con
+  tutte le unita' in portata la stima supera `soglia_ritirata`: nessun rinforzo ("rinforzi inutili"). Navetta USA e flotta in 110
+  continuano; le truppe in raccolta non sono piu' tenute (solo trasporti e presidio). Evento `stima_tenuta` (prima/dopo, contrattacco,
+  acquisti, difensori, rinforzi); `ultima_stima_tenuta` salvata;
+- acquisti: con `ultima_stima_tenuta` < `soglia_rinforzi`, `riserve` unita' di terra obbligate (tipi di terra delle riserve), piazzate prima
+  nel bersaglio (se ha una fabbrica) poi nel piazzamento della nazione, ammassate verso il bersaglio;
+- fine: a inizio turno di ogni nazione, bersaglio non dell'alleanza ⇒ **FALLITA** (`tenuta_esito` fallita, `tenuta_persa_round`); al turno di
+  chi chiude, dopo `tenuta.round` round ⇒ **COMPLETATA** (`tenuta_esito` completata). Tappa 2 eseguita senza presa ⇒ FALLITA ("non preso").
+  In tutti gli stati finali le unita' tornano a Hard.
+
+**C) Francia: testa di ponte.** Normandy tenuta `tenuta.round` round ⇒ `testa_di_ponte_tenuta`, l'operazione resta in TENUTA su Normandy;
+da li' a ogni combattimento USA la tappa 1 su France con la logica di A (chiavi con prefisso `finale_`: `finale_tappa1_round`,
+`finale_avvii`, `finale_presa`, `finale_tentativi_valutati`, ...; eventi con `fase` = `finale`), UK la tappa 2 nello stesso round
+(`forzaBersaglio` riconosce anche il bersaglio finale). Non giustificata ⇒ `rinvio_finale` senza limite: si continua a tenere Normandy.
+Parigi presa ⇒ TENUTA su France per `tenuta.round` round, poi COMPLETATA; Normandy o Parigi persa ⇒ FALLITA.
+
+**D) Bug "Hard britannico non vede lo sbarco UK → Normandy" — causa trovata (codice dell'operazione, non Hard).** Riproduzione locale
+(seme 207, commit 65ebfd7): al R6 gli USA rinviano la tappa 1 ⇒ round obiettivo R7 ⇒ nello **stesso R6** il Regno Unito risultava in
+"posizionamento" (round = obiettivo − 1) e `combat()` metteva in `combatHeldUnits` le unita' in raccolta (3 artiglierie, 4 fanterie, 1
+fanteria meccanizzata in United Kingdom, 2 trasporti in 110): il combattimento di Hard vedeva "Normandy Bordeaux: win% max 0% < soglia
+minima" mentre l'operazione stimava la tappa 2 all'86% con quelle stesse unita'. Correzione: `rinvio_round` salvato da `postpone`; nel round
+del rinvio il posizionamento non trattiene nulla (evento `posizionamento_libero`).
 
 ## Come configurare lo stratega
 
@@ -3197,3 +3269,28 @@ combattimento, non combattimento; contatore salvato), `DiaryRecorder.jointOperat
   condizione, contatore a 0), ma il coordinamento forzato **non vale** 1 VC: Egitto e Normandia sono presi prima o piu'
   spesso e poi persi, e il costo (aerei e truppe consumati, TUV perso Alleati in piu') annulla il guadagno.
 
+
+### Step PROVA2 — variante v2 "presa e tenuta" delle operazioni congiunte (2026-11-09)
+
+Dopo la prova di valore (si prende ma non si tiene) le due operazioni passano alla variante v2: lancio solo con valore d'alleanza
+positivo contando il contrattacco atteso (unita' in portata + acquisti possibili alle fabbriche vicine), stato TENUTA con presidio
+bloccato, rinforzi, riserve e copertura aerea, fine COMPLETATA dopo 2 round o FALLITA; Francia con Normandy testa di ponte e tappa
+su Parigi. Correzione del bug "Hard britannico non vede lo sbarco" (causa nell'operazione: posizionamento nel round di un rinvio).
+Vedi "Variante v2: presa e tenuta (step PROVA2)" e la modalita' `[prova2]`.
+File: `ai/proplus/OperazioneCongiunta` (`Tenuta`, stati TENUTA/FALLITA, `bersaglio_finale`), `OperazioniCongiunte` (contrattacco,
+`valoreAlleanza`, `minacciaPer`, tenuta, tappa finale con prefisso `finale_`, fix del posizionamento), `operazioni-congiunte.json`
+(versione 2); autoplay `Monitor` (`territori_operazioni`), `ConfrontoTenuta` (nuovo), `ConfrontoProva` (chiama la sezione);
+workflow `[prova2]` (semi 301-335). Nessun hook nuovo nelle classi Pro, Hard invariata.
+- Test locali (JDK 25 da apt, Maven Central dietro mirror Google in `~/.gradle/init.d`, solo sandbox): `:game-core:test --tests
+  'games.strategy.triplea.ai.*'` + `:proplus-autoplay:test` + `HeadedPlayerTypesTest`: **517 test, 0 falliti** (golden di Hard,
+  `NudoHardTest`, `DiaryNeutralityTest` diario on/off, contatore nudo a 0 su un turno compresi). `OperazioniCongiunteTest` 11 verdi, 5
+  nuovi: lancio con contrattacco (`valoreAlleanza` + contrattacco su Normandy con acquisti tedeschi), presidio bloccato, rinforzi verso il
+  bersaglio + riserve negli acquisti, fine tenuta COMPLETATA/FALLITA, testa di ponte e tappa su Parigi.
+- Prove locali (non statistiche, 12 o meno round): Egitto semi 201, 205, 206: lancio rinviato per contrattacco atteso (tenuta stimata
+  0% al R2: 1 corazzato, 2-4 fanterie, artiglieria, caccia e bombardiere tattico britannici in portata contro un solo superstite di
+  terra), 2 volte Egitto preso da Hard al R3 ⇒ TENUTA, rinforzi tedeschi aerei (tenuta 0% → 7%), perso al R4 (stime 0-7%, reale 0:
+  coerente). Francia semi 204, 209: rinviata/annullata per contrattacco (14 fanterie + 8 artiglierie tedesche in portata + acquisti a
+  Parigi) o perdita > tetto. Seme 207 (commit 65ebfd7) per la riproduzione del bug D.
+- Correzioni durante le prove: presidio stimato vuoto (la "corsa media" del calcolatore tiene solo aerei) ⇒ almeno l'unita' di terra
+  piu' forte; rinforzi mandati in un bersaglio perso (tenuta 0%) ⇒ nessun rinforzo se anche con tutte le unita' in portata la stima
+  resta ≤ `soglia_ritirata`.

@@ -3,14 +3,18 @@ package games.strategy.triplea.ai.pro;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.MoveDescription;
 import games.strategy.engine.data.ProductionRule;
+import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
+import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.triplea.ai.pro.util.ProOddsCalculator;
 import games.strategy.triplea.ai.proplus.Ablazione;
 import games.strategy.triplea.ai.proplus.ControlloTuning;
@@ -35,6 +39,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.triplea.java.collections.IntegerMap;
 
 /**
@@ -189,6 +194,153 @@ class OperazioniCongiunteTest extends AbstractClientSettingTestCase {
     assertThat(on.differenze()).as("no difference out of the operation").isZero();
   }
 
+  // ------------------------------------------------------------------ variant v2 (step PROVA2)
+
+  @Test
+  void theLaunchCountsTheExpectedCounterattack() {
+    // same steps, the hold decides: worth it when the target is held, not when it is lost
+    assertThat(OperazioniCongiunte.valoreAlleanza(25, 0.9, 0, 5, 8, 90, 20)).isPositive();
+    assertThat(OperazioniCongiunte.valoreAlleanza(25, 0.9, 0, 5, 8, 30, 20)).isNegative();
+    // without the counterattack (hold 100%, no garrison lost) the old value of the steps
+    assertThat(OperazioniCongiunte.valoreAlleanza(25, 0.9, 0, 5, 8, 100, 0))
+        .isCloseTo(0.9 * 25 - 13, org.assertj.core.data.Offset.offset(1e-9));
+
+    // the counterattack expected on Normandy counts the Germans in reach and what they can buy
+    // and place at Western Germany (2 land moves away) for their next turn
+    OperazioneCongiunta.set(data.getProperties(), "Allies", "francia");
+    final GamePlayer british = player("British");
+    final ProData proData = proData(british, 1);
+    final OperazioniCongiunte.Minaccia m =
+        OperazioniCongiunte.minacciaPer(proData, calc(), territory("Normandy Bordeaux"))
+            .orElseThrow();
+    assertThat(m.attaccanti()).as("Germans in reach").isNotEmpty();
+    assertThat(m.acquisti())
+        .as("units the Germans can buy for the counterattack")
+        .isNotEmpty()
+        .allMatch(
+            u -> u.getUnitAttachment().isLandTransportable() || !u.getUnitAttachment().isSea())
+        .allMatch(
+            u ->
+                u.getOwner().getName().equals("Germans")
+                    || u.getOwner().getName().equals("Italians"));
+  }
+
+  @Test
+  void theGarrisonOfAHeldTargetIsLockedOutOfHardsAttacks() {
+    final GamePlayer italians = heldEgypt(1);
+    final List<Unit> garrison = territory("Egypt").getMatches(u -> u.getOwner().equals(italians));
+    final OperazioniCongiunte.Esito combat =
+        OperazioniCongiunte.combattimento(
+            proData(italians, 2, "Combat Move"), calc(), recordingMoves());
+    assertThat(combat.tenute()).as("garrison held").containsAll(garrison);
+    assertThat(Registro.leggi(data.getProperties(), "egitto").stato()).isEqualTo(Stato.TENUTA);
+  }
+
+  @Test
+  void aWeakHoldGetsReinforcementsAndReserves() {
+    final GamePlayer italians = heldEgypt(1);
+    final IMoveDelegate moves = recordingMoves();
+    final OperazioniCongiunte.Esito nc =
+        OperazioniCongiunte.nonCombattimento(
+            proData(italians, 2, "Non Combat Move"), calc(), moves);
+    final Registro reg = Registro.leggi(data.getProperties(), "egitto");
+    final var estimate =
+        java.util.stream.StreamSupport.stream(reg.eventi().spliterator(), false)
+            .map(e -> e.getAsJsonObject())
+            .filter(e -> e.get("tipo").getAsString().equals("stima_tenuta"))
+            .findFirst()
+            .orElseThrow();
+    assertThat(estimate.get("tenuta_prima").getAsDouble())
+        .as("1 infantry vs the British")
+        .isLessThan(70);
+    final ArgumentCaptor<MoveDescription> captor = ArgumentCaptor.forClass(MoveDescription.class);
+    verify(moves, atLeastOnce()).performMove(captor.capture());
+    assertThat(captor.getAllValues())
+        .as("reinforcements toward the target")
+        .anyMatch(
+            m ->
+                m.getRoute().getEnd().getName().equals("Egypt")
+                    && m.getRoute().getStart().getName().equals("Alexandria"));
+    assertThat(nc.tenute()).isNotEmpty();
+    assertThat(nc.righe()).anyMatch(r -> r.contains("tenuta di Egypt"));
+
+    // the purchase buys reserves for the hold while the estimate is under the threshold
+    final ProData purchase = proData(italians, 3);
+    final ProPurchaseOrders orders = purchase.getTuning().purchaseOrders(purchase).orElseThrow();
+    assertThat(orders.label()).contains("tenuta di Egypt");
+    assertThat(orders.preferredPlacement()).first().isEqualTo("Egypt");
+  }
+
+  @Test
+  void theHoldEndsCompletedAfterItsRoundsOrFailedWhenLost() {
+    final GamePlayer italians = heldEgypt(1);
+    final int rounds = OperazioneCongiunta.definizione("egitto").orElseThrow().tenuta().round();
+    update(italians, 1 + rounds - 1);
+    assertThat(Registro.leggi(data.getProperties(), "egitto").stato()).isEqualTo(Stato.TENUTA);
+    update(italians, 1 + rounds);
+    final Registro done = Registro.leggi(data.getProperties(), "egitto");
+    assertThat(done.stato()).isEqualTo(Stato.COMPLETATA);
+    assertThat(done.json().get("tenuta_esito").getAsString()).isEqualTo("completata");
+    // completed: the garrison goes back to Hard
+    assertThat(
+            OperazioniCongiunte.combattimento(
+                    proData(italians, 1 + rounds, "Combat Move"), calc(), recordingMoves())
+                .tenute())
+        .isEmpty();
+
+    // held again, then the British take it back: failed
+    holdState("egitto", "Egypt", 1);
+    ownedBy("Egypt", "British");
+    update(player("Germans"), 2);
+    final Registro lost = Registro.leggi(data.getProperties(), "egitto");
+    assertThat(lost.stato()).isEqualTo(Stato.FALLITA);
+    assertThat(lost.json().get("tenuta_esito").getAsString()).isEqualTo("fallita");
+  }
+
+  @Test
+  void theBridgeheadHeldOpensTheStepOnParis() {
+    OperazioneCongiunta.set(data.getProperties(), "Allies", "francia");
+    final GamePlayer americans = player("Americans");
+    // Europe 1940: the Americans are allied with the British once they enter the war
+    data.performChange(
+        ChangeFactory.relationshipChange(
+            americans,
+            player("British"),
+            data.getRelationshipTracker().getRelationshipType(americans, player("British")),
+            data.getRelationshipTypeList().getDefaultAlliedRelationship()));
+    ownedBy("Normandy Bordeaux", "Americans");
+    clear("Normandy Bordeaux");
+    add("Normandy Bordeaux", americans, "infantry", 3);
+    ownedBy("France", "Germans");
+    clear("France");
+    add("France", player("Germans"), "infantry", 6);
+    holdState("francia", "Normandy Bordeaux", 1);
+    final int rounds = OperazioneCongiunta.definizione("francia").orElseThrow().tenuta().round();
+
+    // held long enough (checked at the closer's turn): bridgehead, not completed
+    update(player("British"), 1 + rounds);
+    final Registro bridgehead = Registro.leggi(data.getProperties(), "francia");
+    assertThat(bridgehead.stato()).isEqualTo(Stato.TENUTA);
+    assertThat(bridgehead.flag("testa_di_ponte_tenuta")).isTrue();
+
+    // the opener's combat move evaluates the step on Paris (same logic as the first target)
+    final OperazioniCongiunte.Esito combat =
+        OperazioniCongiunte.combattimento(
+            proData(americans, 2 + rounds, "Combat Move"), calc(), recordingMoves());
+    final Registro now = Registro.leggi(data.getProperties(), "francia");
+    assertThat(now.intOf("finale_tentativi_valutati", 0)).isEqualTo(1);
+    assertThat(combat.righe()).anyMatch(r -> r.contains("tappa 1 di Americans"));
+    assertThat(now.eventi())
+        .anyMatch(
+            e ->
+                e.getAsJsonObject().get("tipo").getAsString().equals("tappa1")
+                    && e.getAsJsonObject().get("fase").getAsString().equals("finale"));
+    // not worth it here (6 German infantry, no war yet): the bridgehead stays held
+    assertThat(now.stato()).isEqualTo(Stato.TENUTA);
+    assertThat(now.eventi())
+        .anyMatch(e -> e.getAsJsonObject().get("tipo").getAsString().equals("rinvio_finale"));
+  }
+
   @Test
   void hardHasNoCombatHeldUnits() {
     final ProData hard = new ProData(false, ProTuning.DEFAULT);
@@ -202,13 +354,79 @@ class OperazioniCongiunteTest extends AbstractClientSettingTestCase {
   }
 
   private ProData proData(final GamePlayer player, final int round) {
-    data.getSequence().setRoundAndStep(round, "Purchase", player);
+    return proData(player, round, "Purchase");
+  }
+
+  private ProData proData(final GamePlayer player, final int round, final String step) {
+    data.getSequence().setRoundAndStep(round, step, player);
     final ProPlusTuning plus = new ProPlusTuning();
     final ProData proData = new ProData(false, plus);
     plus.attach(proData);
     proData.initializeSimulation(
         new TestAi(player.getName(), proData, new SeededBattleCalculator(SEED)), data, player);
     return proData;
+  }
+
+  private ProOddsCalculator calc() {
+    final SeededBattleCalculator calculator = new SeededBattleCalculator(SEED);
+    calculator.setGameData(data).join();
+    return new ProOddsCalculator(calculator);
+  }
+
+  private Territory territory(final String name) {
+    return data.getMap().getTerritoryOrNull(name);
+  }
+
+  private void ownedBy(final String territory, final String nation) {
+    data.performChange(ChangeFactory.changeOwner(territory(territory), player(nation)));
+  }
+
+  /** Removes every unit but infrastructure. */
+  private void clear(final String territory) {
+    final Territory t = territory(territory);
+    final List<Unit> units =
+        t.getMatches(games.strategy.triplea.delegate.Matches.unitIsNotInfrastructure());
+    if (!units.isEmpty()) {
+      data.performChange(ChangeFactory.removeUnits(t, units));
+    }
+  }
+
+  private void add(
+      final String territory, final GamePlayer owner, final String type, final int count) {
+    data.performChange(
+        ChangeFactory.addUnits(
+            territory(territory),
+            data.getUnitTypeList().getUnitTypeOrThrow(type).create(count, owner)));
+  }
+
+  /** An operation in its hold of {@code target} since {@code since}. */
+  private void holdState(final String id, final String target, final int since) {
+    final Registro reg = Registro.leggi(data.getProperties(), id);
+    reg.setStato(Stato.TENUTA);
+    reg.setRoundObiettivo(since);
+    reg.set("tenuta_bersaglio", target);
+    reg.set("tenuta_dal", since);
+    reg.set("presa", true);
+    reg.set("round_presa", since);
+    reg.salva(data.getProperties());
+  }
+
+  /**
+   * Egypt taken by the Italians in round {@code since} and held by 1 infantry, 3 more in Alexandria
+   * (Italian too), 2 British armour in Trans-Jordan: the operation in its hold.
+   */
+  private GamePlayer heldEgypt(final int since) {
+    OperazioneCongiunta.set(data.getProperties(), "Axis", "egitto");
+    final GamePlayer italians = player("Italians");
+    ownedBy("Egypt", "Italians");
+    clear("Egypt");
+    add("Egypt", italians, "infantry", 1);
+    ownedBy("Alexandria", "Italians");
+    clear("Alexandria");
+    add("Alexandria", italians, "infantry", 3);
+    add("Trans-Jordan", player("British"), "armour", 2);
+    holdState("egitto", "Egypt", since);
+    return italians;
   }
 
   private OperazioniCongiunte.Esito update(final GamePlayer player, final int round) {

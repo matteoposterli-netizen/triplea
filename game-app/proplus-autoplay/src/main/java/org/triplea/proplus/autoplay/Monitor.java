@@ -324,6 +324,23 @@ final class Monitor {
     return json;
   }
 
+  /**
+   * Step PROVA2: owner of every territory of the joint operations now (first and final target, eg
+   * Normandy Bordeaux and France), territory → nation.
+   */
+  private JsonObject jointTerritories() {
+    final JsonObject json = new JsonObject();
+    for (final var d : games.strategy.triplea.ai.proplus.OperazioneCongiunta.definizioni()) {
+      for (final String name : List.of(d.bersaglio(), d.bersaglioFinale())) {
+        final Territory t = name.isEmpty() ? null : data.getMap().getTerritoryOrNull(name);
+        if (t != null) {
+          json.addProperty(name, name(t.getOwner()));
+        }
+      }
+    }
+    return json;
+  }
+
   /** Step PROVA DI VALORE: the saved state of each joint operation turned on in this game. */
   private JsonObject jointOperations() {
     final JsonObject json = new JsonObject();
@@ -643,6 +660,7 @@ final class Monitor {
     json.add("nazioni", nations);
     json.add("vc", victoryCities());
     json.add("bersagli_operazioni", jointTargets());
+    json.add("territori_operazioni", jointTerritories());
     json.add("stato_maggiore", generalStaff(round));
     json.add("alleati_in_europa", westernAlliesInEurope());
     json.add("ovest_alleato", westEuropeHeldByWesternAllies());

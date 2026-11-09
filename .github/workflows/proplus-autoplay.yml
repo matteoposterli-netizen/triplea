@@ -35,6 +35,8 @@ on:
       # "prova" (commit with [prova]): Pro+ nudo with and without a hand-written joint operation
       # (Egypt for the Axis, France for the Allies) against Hard, 4 configurations x 35 seeds,
       # matrix interleaved by seed, rules only
+      # "prova2" (commit with [prova2]): the same 4 configurations with the "take and hold" variant
+      # of the operations (step PROVA2), 35 new seeds (301-335), interleaved, rules only
       modalita:
         type: string
         default: "normale"
@@ -53,7 +55,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole)"
         default: "normale"
 permissions:
   contents: write
@@ -146,7 +148,7 @@ jobs:
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
               raise SystemExit(0)
-          if os.environ["MODALITA"] == "prova":
+          if os.environ["MODALITA"] in ("prova", "prova2"):
               # step PROVA DI VALORE: Pro+ nudo with and without a hand-written joint operation, on
               # one side against Hard; 35 new seeds (201-235) for every configuration, interleaved
               # by seed in the same run, rules only (no LLM key)
@@ -164,7 +166,8 @@ jobs:
                           "tipo": tipo, "piano": piano, "seme": seed, "decisore": "",
                           "ablazione": abl, "operazione": op}
                          for (n, key, name, tipo, piano, abl, op) in prova
-                         for seed in range(201, 236)]
+                         for seed in (range(301, 336) if os.environ["MODALITA"] == "prova2"
+                                      else range(201, 236))]
               include.sort(key=lambda g: (g["seme"], g["id"]))
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
@@ -309,7 +312,7 @@ jobs:
     strategy:
       fail-fast: false
       # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
-      max-parallel: ${{ inputs.modalita == 'prova' && 20 || 6 }}
+      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2') && 20 || 6 }}
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     name: play (${{ matrix.id }})
     steps:
@@ -396,7 +399,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.loads(os.environ['MATRIX'])['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
           # LLM strategist: offline quality test on 30 strategic states of these games (skipped,

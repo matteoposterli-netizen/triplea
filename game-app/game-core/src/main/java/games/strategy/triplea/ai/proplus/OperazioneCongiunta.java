@@ -50,7 +50,11 @@ public final class OperazioneCongiunta {
     PREPARAZIONE,
     POSIZIONAMENTO,
     ESECUZIONE,
+    /** Variant v2: the target was taken and is held for some rounds by a garrison. */
+    TENUTA,
     COMPLETATA,
+    /** Variant v2: the target was not taken by the steps, or lost while held. */
+    FALLITA,
     ANNULLATA;
 
     public String testo() {
@@ -58,7 +62,7 @@ public final class OperazioneCongiunta {
     }
 
     public boolean isFinale() {
-      return this == COMPLETATA || this == ANNULLATA;
+      return this == COMPLETATA || this == ANNULLATA || this == FALLITA;
     }
 
     static Stato of(final String text) {
@@ -83,6 +87,36 @@ public final class OperazioneCongiunta {
       String territorio, List<String> zone, String arrivo, String zonaArrivo, String nazione) {}
 
   /**
+   * Variant v2 "presa e tenuta" (step PROVA2): the counterattack expected on the target and how the
+   * alliance holds it after taking it.
+   *
+   * @param round rounds the target must stay in the alliance's hands after it is taken (then
+   *     COMPLETATA; lost before: FALLITA)
+   * @param sogliaRinforzi estimated hold% at the enemy's turn under which the alliance sends
+   *     reinforcements (non-combat), planes and reserves (purchase)
+   * @param sogliaRitirata estimated hold% at or under which the garrison is released to Hard (the
+   *     hold is lost for sure)
+   * @param aereiCopertura planes per nation the hold may land in the target as air cover
+   * @param quotaAcquistiNemici share of their PUs the enemies are assumed to spend on units placed
+   *     at the factories in reach of the target (counterattack of the second enemy turn)
+   * @param riserve land units per nation bought while the hold is under {@code sogliaRinforzi}
+   */
+  public record Tenuta(
+      int round,
+      double sogliaRinforzi,
+      double sogliaRitirata,
+      int aereiCopertura,
+      double quotaAcquistiNemici,
+      int riserve) {
+    /** Variant v1 (step PROVA DI VALORE): no hold, the operation ends when the target is taken. */
+    public static final Tenuta NESSUNA = new Tenuta(0, 0, 0, 0, 0, 0);
+
+    public boolean attiva() {
+      return round > 0;
+    }
+  }
+
+  /**
    * One operation of the data file.
    *
    * @param raccoltaApre where the opener's units gather (land; for planes: where they strike from)
@@ -97,6 +131,9 @@ public final class OperazioneCongiunta {
    * @param tolleranzaDifensori second step: defenders left may exceed the estimate by this share
    * @param sogliaChiusura second step: lowest win% to attack
    * @param maxRinvii postponements of one round before the operation is cancelled
+   * @param bersaglioFinale variant v2: the target taken from the first one, held as a bridgehead
+   *     ("" = none)
+   * @param tenuta variant v2: counterattack and hold ({@link Tenuta#NESSUNA} = variant v1)
    */
   public record Definizione(
       String id,
@@ -120,7 +157,9 @@ public final class OperazioneCongiunta {
       double tettoPerdita,
       double tolleranzaDifensori,
       double sogliaChiusura,
-      int maxRinvii) {
+      int maxRinvii,
+      String bersaglioFinale,
+      Tenuta tenuta) {
 
     public boolean riguarda(final String nation) {
       return apre.equals(nation) || chiude.equals(nation);
@@ -215,9 +254,21 @@ public final class OperazioneCongiunta {
               o.get("tetto_perdita").getAsDouble(),
               o.get("tolleranza_difensori").getAsDouble(),
               o.get("soglia_chiusura").getAsDouble(),
-              o.get("max_rinvii").getAsInt()));
+              o.get("max_rinvii").getAsInt(),
+              o.has("bersaglio_finale") ? o.get("bersaglio_finale").getAsString() : "",
+              o.has("tenuta") ? tenuta(o.getAsJsonObject("tenuta")) : Tenuta.NESSUNA));
     }
     return List.copyOf(list);
+  }
+
+  private static Tenuta tenuta(final JsonObject t) {
+    return new Tenuta(
+        t.get("round").getAsInt(),
+        t.get("soglia_rinforzi").getAsDouble(),
+        t.get("soglia_ritirata").getAsDouble(),
+        t.has("aerei_copertura") ? t.get("aerei_copertura").getAsInt() : 0,
+        t.has("quota_acquisti_nemici") ? t.get("quota_acquisti_nemici").getAsDouble() : 0,
+        t.has("riserve") ? t.get("riserve").getAsInt() : 0);
   }
 
   private static Riserva riserva(final JsonObject r) {

@@ -450,6 +450,8 @@ Motivi (tappe non eseguite, annullamenti), partite o tappe per motivo:
       md.append("⚠ Differenze fuori dall'operazione (primo problema da guardare):\n\n");
       problems.forEach(p -> md.append("- ").append(p).append('\n'));
     }
+    // step PROVA2: the take-and-hold variant
+    ConfrontoTenuta.write(md, entries, alliances, last);
   }
 
   /** {differences out of the operation, questions, operation's answers} over the games. */
