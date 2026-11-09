@@ -187,6 +187,61 @@ class AutoplayTest {
   }
 
   @Test
+  void varianceSectionSplitsSeedsReplicasAndMachines() {
+    // Axis VC: Hard vs Hard seeds 1-3 = 6, 6, 6 and 101-103 = 6, 7, 5; nudo seeds 1-3 = 4, 5, 3,
+    // 101-103 = 7, 6, 7, replica of 1-3 = 6, 5, 7
+    final List<RiepilogoGenerale.Game> games = new java.util.ArrayList<>();
+    final String[] ids = {
+      "a-hh-r1-seme1", "a-hh-r1-seme2", "a-hh-r1-seme3",
+      "a-hh-r1-seme101", "a-hh-r1-seme102", "a-hh-r1-seme103",
+      "b-nudo-r1-seme1", "b-nudo-r1-seme2", "b-nudo-r1-seme3",
+      "b-nudo-r1-seme101", "b-nudo-r1-seme102", "b-nudo-r1-seme103",
+      "c-nudo-r2-seme1", "c-nudo-r2-seme2", "c-nudo-r2-seme3"
+    };
+    final int[] vcs = {6, 6, 6, 6, 7, 5, 4, 5, 3, 7, 6, 7, 6, 5, 7};
+    for (int i = 0; i < ids.length; i++) {
+      final JsonObject g = JsonParser.parseString(SAMPLE).getAsJsonObject();
+      final boolean hard = ids[i].startsWith("a-");
+      final JsonObject p = g.getAsJsonObject("parametri");
+      p.getAsJsonObject("tipi").addProperty("Axis", hard ? "hard" : "proplus");
+      p.getAsJsonObject("tipi").addProperty("Allies", "hard");
+      p.getAsJsonObject("piani").addProperty("Allies", "-");
+      if (!hard) {
+        final JsonObject abl = new JsonObject();
+        abl.addProperty("Axis", "nudo");
+        p.add("ablazione", abl);
+      }
+      g.getAsJsonArray("round")
+          .get(0)
+          .getAsJsonObject()
+          .getAsJsonObject("vc")
+          .getAsJsonObject("Axis")
+          .addProperty("numero", vcs[i]);
+      g.addProperty("durata_s", 100 + 10 * i);
+      g.add(
+          "tempi",
+          JsonParser.parseString(
+              "{\"per_nazione\":{\"Germans\":{\"media_s\":20},\"Italians\":{\"media_s\":5}},"
+                  + "\"ambiente\":{\"cpu\":\"CPU X\",\"processori\":4}}"));
+      g.remove("esito");
+      g.add("esito", JsonParser.parseString("{\"testo\":\"nessuna entro 1 round\"}"));
+      games.add(new RiepilogoGenerale.Game(ids[i], g));
+    }
+    final String md = RiepilogoGenerale.markdown("T", games);
+    assertThat(md)
+        .contains("## Varianza tra run: semi, repliche, tempo e macchina (lato Asse)")
+        .contains("| Hard / Hard | 1-99 | 1 | 3 | 6.00 ± 0.00 [0.00] |")
+        .contains("| Pro+ A [nudo] / Hard | 1-99 | 2 | 3 | 6.00 ± 1.00 [0.58] | [3.52, 8.48] |")
+        .contains("| Pro+ A [nudo] / Hard semi 100+ − Pro+ A [nudo] / Hard semi 1-99 | +2.67 |")
+        .contains("| Pro+ A [nudo] / Hard semi 1-99 replica 2 − replica 1 | +2.00 |")
+        .contains("| Pro+ A [nudo] / Hard − Hard / Hard (semi 1-99) | -2.00 |")
+        .contains("Stesso seme giocato due volte (3 coppie): differenza media assoluta 2.00 VC")
+        .contains("| CPU X, 4 processori | 6, 6.00 ± 0.63 [0.26] | 9,");
+    // turn of the side = Germans + Italians
+    assertThat(md).contains("| 25.00 ± 0.00 [0.00] |");
+  }
+
+  @Test
   void confirmationStatisticsGiveWelchIntervalsAndTheSeedsNeeded() {
     // Axis VC at the end: Hard vs Hard 6, 8, 4 (mean 6, sd 2); nudo 3, 4, 5 (mean 4, sd 1)
     final List<RiepilogoGenerale.Game> games = new java.util.ArrayList<>();

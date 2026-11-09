@@ -30,6 +30,8 @@ on:
       # only (no LLM, no API cost), 10 configurations x 6 seeds
       # "conferma" (commit with [conferma]): Hard vs Hard, Axis Pro+ nudo, A and A without the risk
       # per front against the Allies Hard, rules only, 12 new seeds (101-112)
+      # "varianza" (commit with [varianza]): Hard vs Hard and Axis Pro+ nudo on seeds 1-6 and
+      # 101-106, plus Pro+ nudo on seeds 1-6 again, all in one run, rules only
       modalita:
         type: string
         default: "normale"
@@ -48,7 +50,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole)"
         default: "normale"
 permissions:
   contents: write
@@ -138,6 +140,30 @@ jobs:
                           "tipo": tipo, "piano": piano, "seme": seed, "decisore": decisore}
                          for (n, key, name, tipo, piano, decisore) in confronto
                          for seed in (1, 2, 3, 4)]
+              print("matrix=" + json.dumps({"include": include}))
+              print(f"round={rounds}")
+              raise SystemExit(0)
+          if os.environ["MODALITA"] == "varianza":
+              # step VARIANZA: why the same configuration changes from one run to the next; seeds
+              # 1-6 (ablation) and 101-106 (confirmation) in the SAME run, plus a replica of Pro+
+              # nudo on seeds 1-6 (id ...-r<replica>-seme<seed>), rules only (no LLM key)
+              varianza = [
+                  ("a", "Hard-vs-Hard", "Hard vs Hard", "Axis=hard,Allies=hard", "", "",
+                   [1, 2, 3, 4, 5, 6, 101, 102, 103, 104, 105, 106], 1),
+                  ("b", "Asse-ProPlus-nudo-vs-Hard", "Asse Pro+ nudo / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=nudo",
+                   [1, 2, 3, 4, 5, 6, 101, 102, 103, 104, 105, 106], 1),
+                  ("c", "Asse-ProPlus-nudo-vs-Hard", "Asse Pro+ nudo / Alleati Hard (replica)",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=nudo", [1, 2, 3, 4, 5, 6], 2),
+              ]
+              include = [{"id": f"{n}-{key}-r{rep}-seme{seed}", "nome": f"{name} (seme {seed})",
+                          "tipo": tipo, "piano": piano, "seme": seed, "decisore": "",
+                          "ablazione": abl}
+                         for (n, key, name, tipo, piano, abl, seeds, rep) in varianza
+                         for seed in seeds]
+              # interleaved (by seed, then configuration): the configurations run side by side
+              # in time, not in blocks, so a slow or different runner hits all of them alike
+              include.sort(key=lambda g: (g["seme"], g["id"]))
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
               raise SystemExit(0)
@@ -342,7 +368,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.loads(os.environ['MATRIX'])['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
           # LLM strategist: offline quality test on 30 strategic states of these games (skipped,

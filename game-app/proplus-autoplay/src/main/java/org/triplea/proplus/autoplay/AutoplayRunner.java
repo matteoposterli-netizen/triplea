@@ -52,6 +52,9 @@ public final class AutoplayRunner {
 
   private final AutoplayOptions options;
   private final long start = System.currentTimeMillis();
+
+  /** Step VARIANZA: time per nation and turn, machine (measures only). */
+  private final Tempi tempi = new Tempi();
   private volatile boolean finished;
 
   private AutoplayRunner(final AutoplayOptions options) {
@@ -139,7 +142,13 @@ public final class AutoplayRunner {
           break;
         }
         monitor.beforeStep();
+        final var step = game.getData().getSequence().getStep();
+        final String stepNation = step.getPlayerId() == null ? "" : step.getPlayerId().getName();
+        final int stepRound = game.getData().getSequence().getRound();
+        final long stepStart = System.nanoTime();
         game.runNextStep();
+        tempi.step(
+            stepNation, stepRound, step.getName(), (System.nanoTime() - stepStart) / 1_000_000);
         monitor.afterStep();
         if (monitor.currentRound() != round) {
           round = monitor.currentRound();
@@ -239,6 +248,7 @@ public final class AutoplayRunner {
               winner,
               gameOver,
               Riepilogo.diaryFolder(output.resolve(DIARY_FOLDER)).orElse(null));
+      json.add("tempi", tempi.toJson());
       Riepilogo.write(output, json);
     } catch (final IOException | RuntimeException e) {
       log.error("Riepilogo non scritto", e);
