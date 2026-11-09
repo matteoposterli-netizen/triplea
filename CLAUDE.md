@@ -3166,3 +3166,34 @@ combattimento, non combattimento; contatore salvato), `DiaryRecorder.jointOperat
   **Contatore nudo: 0 differenze** su ~64.000 domande (2 partite complete con operazione, Asse e Alleati) fuori dalle risposte
   dell'operazione.
 
+#### Autoplay in CI (run 42673273717, commit 428885d, tutto verde al 1° tentativo: test, release, 140 partite, nessuna fallita)
+`[prova]`, 12 round, Equilibrato, semi 201-235, matrice mescolata, 4 configurazioni × 35. VC R12 del lato Pro+, media ± ds
+[IC 95%]; differenze con IC di Welch.
+
+| Configurazione | VC R12 del lato | Reddito finale | TUV perso | Contatore nudo (domande; risposte dell'operazione) |
+|---|---|---|---|---|
+| Asse nudo | 5,54 ± 1,17 [5,14, 5,95] | 60 | 894 | **0** (1.637.197; 0) |
+| Asse nudo + Egitto | 5,17 ± 1,64 [4,61, 5,73] | 56 | 880 | **0** (1.673.795; 268) |
+| Alleati nudo | 5,97 ± 1,65 [5,40, 6,54] | 110 | 1045 | **0** (2.260.982; 0) |
+| Alleati nudo + Francia | 5,31 ± 1,57 [4,78, 5,85] | 103 | 1090 | **0** (2.205.059; 749) |
+
+- **Effetto**: Egitto −0,37 VC [−1,05, +0,31], Francia −0,66 VC [−1,43, +0,11]: **non vale** per entrambe (nessun effetto
+  positivo; per vedere differenze di questa grandezza servirebbero 95-231 semi). Contatore nudo **0** in tutte le 140 partite.
+- **Egitto** (35 partite): round obiettivo R2 in tutte. Tappa 1 tedesca con attacco vero 19; tappa 1 "non necessaria"
+  (Egitto senza difensori al R2) 13; bersaglio gia' dell'Asse senza tappa 1 (attesa/superata) 2; annullata senza tappa 1 1.
+  Criterio 70%: 32/35 (91%) contando le tappe "non necessarie"; solo sugli attacchi veri 19/20 (95%) delle partite con
+  difensori al round della tappa. Con attacco vero: Egitto preso nello stesso round 16/19. Tappa 2 approvata 31, attacco
+  fatto 30. TUV perso medio: tappa 1 5,2, tappa 2 1,1. Preso 26/35, tenuto 1 round 26/26, 2 round 21/26.
+  Egypt dell'Asse (nudo / nudo+Egitto): R3 40% / **80%**, R6 17% / 49%, R12 14% / 9%; prima presa 21/35 (R medio 3,2) /
+  34/35 (R medio 3,1). L'operazione anticipa e allunga il possesso del Cairo ma il Regno Unito lo riprende entro R12, e le
+  VC finali non migliorano. VC R12 dell'Asse con tappa 1 eseguita 5,00 ± 1,67 (19) contro 5,38 ± 1,63 senza (16): nessuna
+  differenza utile (gruppi scelti dal gioco, non a caso).
+- **Francia** (35 partite): round obiettivo R6 in tutte. Tappa 1 eseguita 32/35, completata 30, annullata 5, partite con
+  rinvii 20 (33 rinvii; motivi: perdita attesa > tetto 11, nessuna unita' USA 6, valore atteso ≤ 0 6). Normandy presa 27/35
+  (14 volte dagli USA da soli), tenuta 1 round 18/27, 2 round 12/27. Normandy alleata (nudo / nudo+Francia): R8 51% / 57%,
+  R12 51% / 49%. Parigi riconquistata dagli Alleati: 12/35 partite (12 volte) / 9/35 (9 volte). TUV perso alleato +45
+  [−11, +102].
+- Giudizio: la meccanica funziona (operazioni avviate oltre il 90%, tappe tracciate, tappa 2 eseguita o rinviata secondo la
+  condizione, contatore a 0), ma il coordinamento forzato **non vale** 1 VC: Egitto e Normandia sono presi prima o piu'
+  spesso e poi persi, e il costo (aerei e truppe consumati, TUV perso Alleati in piu') annulla il guadagno.
+
