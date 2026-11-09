@@ -2712,3 +2712,32 @@ dell'AI** (nessuna classe Pro o Pro+ di gioco toccata; golden Hard e Pro+ identi
   sandbox), `:ai:test` 13, `:game-headed:test` 93, `:proplus-autoplay:test` 19 verdi. Verifica breve (Europe 1940
   reale, 2 round, seme 1): Hard/Hard 38 s, Asse Pro+ A / Alleati Hard 31 s, Asse Hard / Alleati Pro+ 1 40 s, sezione
   "Confronto contro Hard" scritta correttamente.
+
+#### Autoplay in CI (run 42605879121, commit d4109aa, tutto verde al 1° tentativo: test, release, 28 partite)
+Modalita' `[confronto]`, 12 round, semi 1-4, rischio Equilibrato; nessuna partita fallita, nessuna vittoria entro R12.
+I test resi deterministici sono passati in CI. VC R12 = Asse / Alleati, media (min-max) sui 4 semi; Δ = lato che cambia
+contro lo stesso lato in Hard vs Hard; rapporto TUV = perso dal nemico / perso dal lato.
+
+| Configurazione | VC R4 | VC R8 | VC R12 | Reddito fine | Sbarchi veri A / Al | Lato: Δ VC R12 | Rapporto TUV (rif.) | Verdetto |
+|---|---|---|---|---|---|---|---|---|
+| 1 Hard / Hard | 5 / 6 | 6,25 / 4,75 | 6,25 (6-7) / 4,75 (4-5) | 69 / 92 | 3,5 / 23 | - | Asse 1,27, Alleati 0,80 | riferimento |
+| 2 Asse Pro+ A / Hard | 5 / 6 | 5,25 / 5,75 | 3,75 (3-5) / 7,25 | 44 / 121 | 3,25 / 27 | Asse −2,5 (ds 1,0) | 0,96 | **piu' debole** |
+| 3 Asse Pro+ D / Hard | 4,75 / 6,25 | 6 / 5 | 5,5 (3-7) / 5,5 | 58 / 109 | 6,75 / 22 | Asse −0,75 (ds 1,7) | 1,19 | non distinguibile |
+| 4 Hard / Alleati Pro+ 1 | 5,25 / 5,75 | 7 / 4 | 7,5 / 3,5 (3-5) | 98 / 66 | 6,75 / 12 | Alleati −1,25 (ds 1,0) | 0,73 | **piu' debole** |
+| 5 Hard / Alleati Pro+ 2 | 5 / 6 | 6 / 5 | 7 / 4 (3-5) | 86 / 82 | 4,25 / 13 | Alleati −0,75 (ds 0,8) | 0,77 | **piu' debole** |
+| 6 Asse Pro+ Haiku / Hard | 5 / 6 | 6,75 / 4,25 | 7 (6-8) / 4 | 77 / 89 | 6,5 / 22 | Asse +0,75 (ds 0,8) | 1,13 | piu' forte (al limite) |
+| 7 Hard / Alleati Pro+ Haiku | 5,25 / 5,75 | 6 / 5 | 7 / 4 (4-4) | 89 / 85 | 5 / 15 | Alleati −0,75 (ds 0) | 0,90 | **piu' debole** |
+
+- Risposte (piani insieme): **Asse Pro+ regole (A+D, 8 partite) piu' debole di Hard**: VC R12 4,63 (3-7) contro 6,25
+  (6-7), Δ −1,63, rapporto TUV 1,07 contro 1,27, reddito finale −11/−25. **Alleati Pro+ regole (1+2, 8 partite) piu'
+  deboli di Hard**: VC 3,75 contro 4,75, Δ −1, rapporto TUV 0,75 contro 0,80, sbarchi veri 12-13 contro 23 della Hard.
+  **Asse Pro+ Haiku**: VC 7 contro 6,25 (Δ +0,75, appena oltre la soglia 0,68), ma rapporto TUV peggiore (1,13 contro
+  1,27): al massimo pari, non una vittoria netta. **Alleati Pro+ Haiku**: 4 contro 4,75, piu' deboli.
+- Indizio forte (osservazione, non verificato con un esperimento): con lo **stesso piano A**, Haiku tiene l'Asse in
+  OFFENSIVA 12 round su 12 e chiude a 7 VC; le regole passano a RALLENTAMENTO per 3-6 round su 12 e chiudono a 3,75 (e
+  reddito 44 contro 77). La postura RALLENTAMENTO / gli strumenti di ritardo delle regole sembrano costare all'Asse.
+  Per gli Alleati il limite principale e' negli sbarchi: la Hard sbarca quasi il doppio di Pro+ (23 contro 12-15).
+- Costo LLM: Asse Haiku $0,019-0,024 per partita, Alleati Haiku $0,026-0,028; 0 ripieghi. Durate: Hard/Hard 6-7 min,
+  Pro+ 3-8 min, LLM 5-10 min.
+- Limiti: 4 semi (le simulazioni dell'AI restano casuali, quindi stesso seme ≠ stessa partita); verdetto = indice
+  semplice sulle VC finali, non un test statistico; nessuna vittoria entro R12 in nessuna configurazione.
