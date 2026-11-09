@@ -3294,3 +3294,39 @@ workflow `[prova2]` (semi 301-335). Nessun hook nuovo nelle classi Pro, Hard inv
 - Correzioni durante le prove: presidio stimato vuoto (la "corsa media" del calcolatore tiene solo aerei) ⇒ almeno l'unita' di terra
   piu' forte; rinforzi mandati in un bersaglio perso (tenuta 0%) ⇒ nessun rinforzo se anche con tutte le unita' in portata la stima
   resta ≤ `soglia_ritirata`.
+
+#### Autoplay in CI (run 42691097392, commit f6458c0, tutto verde al 1° tentativo: test, release, 140 partite, nessuna fallita)
+`[prova2]`, 12 round, Equilibrato, semi 301-335 (nuovi), matrice mescolata, 4 configurazioni × 35. VC R12 del lato Pro+, media ± ds
+[IC 95%]; differenze con IC di Welch; proporzioni con IC 95% normale.
+
+| Configurazione | VC R12 del lato | Reddito finale | TUV perso del lato | Contatore nudo (domande; risposte dell'operazione) |
+|---|---|---|---|---|
+| Asse nudo | 5,69 ± 1,35 [5,22, 6,15] | 63 | 867 | **0** (1.617.799; 0) |
+| Asse nudo + Egitto v2 | 5,46 ± 1,65 [4,89, 6,02] | 60 | 904 | **0** (1.686.102; 349) |
+| Alleati nudo | 5,43 ± 1,80 [4,81, 6,05] | 104 | 1044 | **0** (2.319.955; 0) |
+| Alleati nudo + Francia v2 | 5,29 ± 1,49 [4,78, 5,80] | 101 | 1068 | **0** (2.239.005; 896) |
+
+- **Effetto in VC**: Egitto v2 −0,23 [−0,95, +0,49], Francia v2 −0,14 [−0,93, +0,65]: **non vale** per entrambe (servirebbero 682 e
+  2101 semi per vedere differenze di questa grandezza). Contatore nudo **0** su 7,9 milioni di risposte.
+- **Egitto**: Egypt dell'Asse (nudo / v2) R3 34% / 60%, R6 20% / 46%, R9 9% / 17%, **R12 9% / 9%** (Δ 0 punti [−13, +13]). Tappa 1
+  eseguita solo 4/35; rinvii 52 (35 partite), 17 tappe 1 respinte esplicitamente per contrattacco atteso + 41 per valore d'alleanza ≤ 0;
+  annullate 8. Tenuta iniziata 27/35, di cui **23 su Egitto gia' preso da Hard**; COMPLETATA 7, FALLITA 20 (tenuto in media 0,5 round).
+  Presidio lasciato a Hard 12 volte. TUV perso Asse +37 [−23, +97] (aerei di copertura persi), Alleati −9.
+- **Francia**: Normandy alleata (nudo / v2) R8 40% / 31%, R10 46% / 46%, **R12 46% / 43%** (Δ −3 [−26, +20]); Parigi R8 6% / 3%, R10
+  9% / 17%, **R12 9% / 9%** (Δ 0 [−13, +13]). Tappa 1 su Normandy eseguita 8/35 (tutte con tappa 2), annullate 22 (contrattacco atteso 9,
+  perdita > tetto 5, valore ≤ 0 5, round passato 3); tenuta iniziata 13 (5 senza operazione), testa di ponte tenuta 2 round 6/35, tappe su
+  Parigi valutate 11 / tappa 1 eseguita **0** (perdita attesa > tetto 8 volte, il resto valore ≤ 0); Parigi presa 1 (senza operazione),
+  tenuta fino a R12. Presidio lasciato a Hard 23 volte. TUV perso Alleati +24 [−43, +91].
+- **Calibrazione** (la stima e' affidabile?): al lancio 12 stime (10 nella fascia 80-100%: stimata 94%, reale 80%; 2 a 40-59%: 56% /
+  50%): poche ma ragionevoli. **Durante la tenuta la stima e' molto pessimista nelle fasce basse**: 0-19% → stimata 1%, reale **52%** (77
+  stime); 20-39% → 27% / 64%; 40-59% → 48% / 100%; 60-79% → 73% / 100%; 80-100% → 94% / 97%.
+- **Perche' non vale (dal diario e dai numeri)**: (1) il contrattacco e' **sovrastimato**: la stima somma TUTTE le unita' nemiche che
+  possono raggiungere il bersaglio (il massimo di Hard, che non le manda mai tutte su un solo territorio) piu' meta' dei PU nemici in
+  acquisti, quindi una tenuta stimata ~1% in realta' tiene la meta' delle volte; (2) di conseguenza i lanci sono quasi tutti bloccati
+  (Egitto 4/35, Parigi 0/11) e la v2 lavora soprattutto su bersagli gia' presi da Hard; (3) la soglia di ritirata scatta su stime sbagliate
+  (35 presidi lasciati a Hard, "rinforzi inutili") e quando i rinforzi partono costano unita' (Asse +37 TUV): il possesso intermedio
+  migliora (Egitto R6 46% contro 20%) ma non arriva a R12. Non e' un problema di taratura delle soglie: la grandezza stimata (contrattacco
+  massimo) non e' quella che decide l'esito (contrattacco che il nemico fa davvero).
+- **Giudizio**: con la regola decisa prima della run ("se anche v2 non supera il rumore, la linea coordinamento si chiude") la linea delle
+  operazioni congiunte scritte a mano **si chiude**: due varianti, 280 partite, nessun effetto distinguibile da 0 in VC, entrambi gli IC
+  sotto +1. Le operazioni restano nel codice, spente di default.
