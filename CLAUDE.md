@@ -2865,3 +2865,46 @@ File: nuovi `ai/proplus/Ablazione`, test `ai/pro/NudoHardTest`, `ai/proplus/stra
 `TettoTrasporti`, autoplay `AutoplayOptions`/`AutoplayRunner`/`Riepilogo`/`RiepilogoGenerale`, workflow
 `proplus-autoplay.yml` (modalita' ablazione) e `proplus-release.yml` (`[ablazione]`), test `ContromosseTest` +1,
 `DelayToolsTest` +1, `AutoplayTest` +2.
+
+#### Fase 3 — autoplay di ablazione (run 42622705022, commit 304a14a, tutto verde al 1° tentativo: test, release, 60 partite)
+12 round, Equilibrato, semi 1-6, solo regole, nessuna partita fallita, nessuna vittoria entro R12. VC R12 del lato che
+cambia, media (min-max), ds sui 6 semi; Δ Hard = contro lo stesso lato in Hard vs Hard; Δ attuale = contro lo stesso
+lato con tutto acceso (stesso piano). Rumore di Hard vs Hard: Asse 6 (4-8) ds 1,4, Alleati 5 (3-7) ds 1,4.
+
+| Configurazione | VC R12 lato | Δ Hard | Δ attuale | Reddito fine lato | TUV perso Asse / Alleati | Sbarchi veri lato | Round RALL. |
+|---|---|---|---|---|---|---|---|
+| 8 Hard / Hard | A 6 / Al 5 | - | - | A 70 / Al 96 | 816 / 952 | A 4 / Al 26 | - |
+| 1 Asse Pro+ A | 4,5 (2-7) ds 1,8 | −1,5 rumore | - | 48 | 1007 / 1069 | 3,3 | 2,7 |
+| 2 A senza rallentamento | 5,33 (1-7) ds 2,3 | −0,67 rumore | +0,83 rumore | 60 | 957 / 1051 | 3,2 | 0 |
+| 3 A senza rischio_fronte | 6,5 (4-8) ds 1,6 | +0,5 rumore | **+2 (costa)** | 80 | 762 / 940 | 5,2 | 1,7 |
+| 3b A senza bersagli_flotta | 5,83 (2-8) ds 2,1 | −0,17 rumore | +1,33 rumore | 68 | 914 / 1018 | 6,7 | 2,2 |
+| 4 Asse nudo | 4,5 (3-6) ds 1,2 | **−1,5 "piu' debole"** | 0 | 46 | 948 / 1061 | 3,7 | 0 |
+| 5 Alleati Pro+ 1 | 4,33 (3-6) ds 1,2 | −0,67 rumore | - | 79 | 771 / 992 | 11 | 4,7 |
+| 6a 1 senza trasporti_sbarco | 4 (3-5) ds 0,6 | −1 rumore | −0,33 rumore | 85 | 879 / 1018 | 24 | 5,2 |
+| 6b 1 senza soste_sicure | 3,67 (3-5) ds 0,8 | −1,33 "piu' debole" | −0,67 rumore | 75 | 684 / 941 | 16 | 4,7 |
+| 7 Alleati nudo | 4,67 (3-7) ds 1,4 | −0,33 rumore | +0,33 rumore | 97 | 853 / 1122 | 29 | 0 |
+
+Effetto dei componenti (VC acceso − spento), dal piu' dannoso al piu' utile: Asse rischio_fronte **−2,00 costa**;
+Asse bersagli_flotta −1,33 rumore; Asse rallentamento −0,83 rumore; Alleati trasporti_sbarco +0,33 rumore; Alleati
+soste_sicure +0,67 rumore. Strumenti di ritardo e tetto trasporti non misurati in partita: con le regole sono gia'
+spenti / senza effetto (perdita accettata 0).
+- **Rischio per fronte**: unico componente che costa oltre il rumore. Senza modificatori (ogni fronte Equilibrato)
+  l'Asse con piano A chiude a 6,5 VC (Hard 6) con reddito 80 contro 48 e TUV perso 762 contro 1007. Coerente con la Fase
+  1a: con Ovest +1 (Audace, minima 52) la Germania al R1 manda meno unita' su France (80-93% contro 88-100%) e aggiunge
+  Normandy (76-81%) in 5 semi su 6.
+- **Correzione della Fase 1a**: con 6 semi anche Hard divide gli aerei tra 110 e 111 SZ al R1 (semi 1, 4, 6 di Hard vs
+  Hard: 110 al 68-71%), quindi la divisione da sola non e' una differenza di Pro+; la differenza di Pro+ A al R1 e'
+  France a desiderata piu' bassa + Normandy (rischio Ovest +1). Il bersaglio "flotta British" spento vale +1,33 VC ma
+  dentro il rumore (ds 2,1).
+- **RALLENTAMENTO**: spento +0,83, rumore: conferma la Fase 1a (non e' la causa).
+- **Alleati**: nessun componente misurato esce dal rumore. Senza `trasporti_sbarco` gli sbarchi veri raddoppiano (24
+  contro 11) ma le VC non cambiano (4 contro 4,33) e il TUV perso alleato sale di 26. Senza `soste_sicure` 3,67
+  (−0,67 da Pro+ attuale, rumore; −1,33 da Hard vs Hard, appena oltre la soglia).
+- **Pro+ nudo Asse segnalato "piu' debole" di Hard** (4,5 contro 6, soglia 1,3 = ds media). Verifiche fatte: (1) codice
+  di `ProPlusAi` con `piano` spento: nessuna operazione, rientro, strumento o acquisto Pro+ (PianoAttivo vuoto); (2) nei
+  6 diari nudo nessuna riga di comportamento Pro+ (0 righe "tenuto da Pro+", mix del piano, guarnigione, operazioni,
+  minaccia reale); (3) attacchi tedeschi del R1 nudo dello stesso tipo di Hard vs Hard (France 92-96%, Southern France,
+  Yugoslavia, flotta UK divisa o concentrata, Normandy in 1 seme su 6 come in Hard 2 su 6), diversi da Pro+ A (France
+  80-93% + Normandy 5 su 6); (4) `NudoHardTest`: 0 risposte diverse da Hard. Divergenza tardiva (VC R4 4,5 contro 4,33,
+  R8 5,33 contro 5,83). Welch: Δ 1,5 su errore 0,75 ≈ 2 errori standard, 1 confronto su 9: compatibile col rumore, ma
+  **non escluso**. Alleati nudo: −0,33, rumore. Per chiudere servono piu' semi (es. 12) di nudo e Hard vs Hard.
