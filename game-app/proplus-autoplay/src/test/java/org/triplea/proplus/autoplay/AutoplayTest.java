@@ -2,6 +2,7 @@ package org.triplea.proplus.autoplay;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -183,6 +184,48 @@ class AutoplayTest {
             () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--ablazione", "Axis=boh"}))
         .hasMessageContaining("Ablazione non valida per Axis")
         .hasMessageContaining("boh");
+  }
+
+  @Test
+  void confirmationStatisticsGiveWelchIntervalsAndTheSeedsNeeded() {
+    // Axis VC at the end: Hard vs Hard 6, 8, 4 (mean 6, sd 2); nudo 3, 4, 5 (mean 4, sd 1)
+    final List<RiepilogoGenerale.Game> games = new java.util.ArrayList<>();
+    final int[] vcs = {6, 8, 4, 3, 4, 5};
+    for (int i = 0; i < vcs.length; i++) {
+      final JsonObject g = JsonParser.parseString(SAMPLE).getAsJsonObject();
+      final boolean hard = i < 3;
+      final JsonObject p = g.getAsJsonObject("parametri");
+      p.getAsJsonObject("tipi").addProperty("Axis", hard ? "hard" : "proplus");
+      p.getAsJsonObject("tipi").addProperty("Allies", "hard");
+      p.getAsJsonObject("piani").addProperty("Allies", "-");
+      if (!hard) {
+        final JsonObject abl = new JsonObject();
+        abl.addProperty("Axis", "nudo");
+        p.add("ablazione", abl);
+      }
+      g.getAsJsonArray("round")
+          .get(0)
+          .getAsJsonObject()
+          .getAsJsonObject("vc")
+          .getAsJsonObject("Axis")
+          .addProperty("numero", vcs[i]);
+      g.remove("esito");
+      g.add("esito", JsonParser.parseString("{\"testo\":\"nessuna entro 1 round\"}"));
+      games.add(new RiepilogoGenerale.Game(i / 3 + "-x-seme" + (101 + i % 3), g));
+    }
+    final String md = RiepilogoGenerale.markdown("T", games);
+    // Welch: delta -2, se sqrt(1/3 + 4/3) = 1.29, 2.94 degrees of freedom (t 3.182)
+    assertThat(md)
+        .contains("## Statistica del confronto contro Hard (riferimento: Hard / Hard)")
+        .contains("| Hard / Hard | 3 | 6.00 ± 2.00 [1.15] |")
+        .contains("| Pro+ A [nudo] / Hard | 3 | 4.00 ± 1.00 [0.58] |")
+        .contains(
+            "| Pro+ A [nudo] / Hard − Hard / Hard | Asse | VC R1 | -2.00 | [-6.11, 2.11] (t 3.18,"
+                + " gl 2.9) | include lo 0 | 10 |");
+    // the t quantile against the table
+    assertThat(ConfrontoConferma.tQuantile975(5)).isCloseTo(2.571, within(0.005));
+    assertThat(ConfrontoConferma.tQuantile975(10)).isCloseTo(2.228, within(0.002));
+    assertThat(ConfrontoConferma.tQuantile975(30)).isCloseTo(2.042, within(0.002));
   }
 
   @Test

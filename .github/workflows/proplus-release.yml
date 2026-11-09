@@ -151,13 +151,13 @@ jobs:
   # AI vs AI games (proplus-autoplay.yml) on the released commit, after the release: they
   # never block or change 'proplus-latest'. Called as a reusable workflow because
   # workflow_run / workflow_dispatch need the workflow on the default branch ('main' = upstream).
-  # only for commits whose message contains [autoplay], [confronto] or [ablazione] (or a manual run)
+  # only for commits whose message contains [autoplay], [confronto], [ablazione] or [conferma] (or a manual run)
   autoplay:
     needs: build
     # the LLM games read the secret ANTHROPIC_API_KEY (skipped when it is missing)
     secrets: inherit
     # needs.build.result explicitly: the default success() is false when powershell-tests was skipped
-    if: ${{ !cancelled() && needs.build.result == 'success' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[autoplay]') || contains(github.event.head_commit.message, '[confronto]') || contains(github.event.head_commit.message, '[ablazione]')) }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[autoplay]') || contains(github.event.head_commit.message, '[confronto]') || contains(github.event.head_commit.message, '[ablazione]') || contains(github.event.head_commit.message, '[conferma]')) }}
     uses: ./.github/workflows/proplus-autoplay.yml
     with:
       round: "12"
@@ -165,4 +165,5 @@ jobs:
       semi: "2"
       # [confronto] in the commit message: Pro+ against the original Hard (see CLAUDE.md)
       # [ablazione]: Pro+ components off one at a time against Hard (step ABLAZIONE)
-      modalita: ${{ contains(github.event.head_commit.message, '[ablazione]') && 'ablazione' || (contains(github.event.head_commit.message, '[confronto]') && 'confronto' || 'normale') }}
+      # [conferma]: the ablation's two signals on 12 new seeds (step CONFERMA)
+      modalita: ${{ contains(github.event.head_commit.message, '[conferma]') && 'conferma' || (contains(github.event.head_commit.message, '[ablazione]') && 'ablazione' || (contains(github.event.head_commit.message, '[confronto]') && 'confronto' || 'normale')) }}

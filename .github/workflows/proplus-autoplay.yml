@@ -28,6 +28,8 @@ on:
       # "confronto" (commit with [confronto]): Pro+ against the original Hard, 7 configurations x 4 seeds
       # "ablazione" (commit with [ablazione]): Pro+ components off one at a time against Hard, rules
       # only (no LLM, no API cost), 10 configurations x 6 seeds
+      # "conferma" (commit with [conferma]): Hard vs Hard, Axis Pro+ nudo, A and A without the risk
+      # per front against the Allies Hard, rules only, 12 new seeds (101-112)
       modalita:
         type: string
         default: "normale"
@@ -46,7 +48,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole)"
         default: "normale"
 permissions:
   contents: write
@@ -136,6 +138,27 @@ jobs:
                           "tipo": tipo, "piano": piano, "seme": seed, "decisore": decisore}
                          for (n, key, name, tipo, piano, decisore) in confronto
                          for seed in (1, 2, 3, 4)]
+              print("matrix=" + json.dumps({"include": include}))
+              print(f"round={rounds}")
+              raise SystemExit(0)
+          if os.environ["MODALITA"] == "conferma":
+              # step CONFERMA: the two signals of the ablation (Pro+ nudo vs Hard, risk per front)
+              # on 12 seeds never used before (1-6 were the ablation's, 1-4 the comparison's),
+              # rules only (no LLM key passed)
+              conferma = [
+                  ("a", "Hard-vs-Hard", "Hard vs Hard", "Axis=hard,Allies=hard", "", ""),
+                  ("b", "Asse-ProPlus-nudo-vs-Hard", "Asse Pro+ nudo / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=nudo"),
+                  ("c", "Asse-ProPlus-A-vs-Hard", "Asse Pro+ A / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", ""),
+                  ("d", "Asse-A-senza-rischio-fronte", "Asse Pro+ A senza rischio per fronte / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=rischio_fronte"),
+              ]
+              include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
+                          "tipo": tipo, "piano": piano, "seme": seed, "decisore": "",
+                          "ablazione": abl}
+                         for (n, key, name, tipo, piano, abl) in conferma
+                         for seed in range(101, 113)]
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
               raise SystemExit(0)
@@ -319,7 +342,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.loads(os.environ['MATRIX'])['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
           # LLM strategist: offline quality test on 30 strategic states of these games (skipped,

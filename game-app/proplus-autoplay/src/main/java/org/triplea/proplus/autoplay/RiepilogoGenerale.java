@@ -139,6 +139,7 @@ final class RiepilogoGenerale {
 
     ConfrontoHard.write(md, games, alliances, vcRounds);
     ConfrontoAblazione.write(md, games, alliances, vcRounds);
+    ConfrontoConferma.write(md, games, alliances, vcRounds);
     configurations(md, games, alliances, vcRounds, maxRound);
     plansAndPostures(md, games, alliances);
     landingsAndTransports(md, games, alliances, maxRound);
