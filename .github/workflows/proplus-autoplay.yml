@@ -25,6 +25,10 @@ on:
       piani:
         type: string
         default: ""
+      # "confronto" (commit with [confronto]): Pro+ against the original Hard, 7 configurations x 4 seeds
+      modalita:
+        type: string
+        default: "normale"
   workflow_dispatch:
     inputs:
       round:
@@ -39,6 +43,9 @@ on:
       piani:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
+      modalita:
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi)"
+        default: "normale"
 permissions:
   contents: write
 jobs:
@@ -93,6 +100,7 @@ jobs:
           PARTITE: ${{ inputs.partite || '7' }}
           SEMI: ${{ inputs.semi || '2' }}
           PIANI: ${{ inputs.piani || '' }}
+          MODALITA: ${{ inputs.modalita || 'normale' }}
         run: |
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json, os, re
@@ -101,6 +109,34 @@ jobs:
           default = ["A/1", "A/2", "D/1", "D/2", "C/1", "hard", "B/1"]
           custom = [p.strip() for p in os.environ["PIANI"].split(",") if p.strip()]
           configs = custom or default[: max(1, min(7, int(os.environ["PARTITE"])))]
+          if os.environ["MODALITA"] == "confronto":
+              # step CONFRONTO: Pro+ (rules or Claude Haiku) on one side against the original Hard on
+              # the other, same 4 seeds for every configuration, Hard vs Hard as the reference;
+              # the LLM configurations only with the secret (skipped without error)
+              llm = os.environ["HAS_LLM_KEY"] == "true"
+              confronto = [
+                  (1, "Hard-vs-Hard", "Hard vs Hard", "Axis=hard,Allies=hard", "", ""),
+                  (2, "Asse-ProPlus-A-vs-Hard", "Asse Pro+ A / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", ""),
+                  (3, "Asse-ProPlus-D-vs-Hard", "Asse Pro+ D / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=D", ""),
+                  (4, "Hard-vs-Alleati-ProPlus-1", "Asse Hard / Alleati Pro+ 1",
+                   "Axis=hard,Allies=proplus", "Allies=1", ""),
+                  (5, "Hard-vs-Alleati-ProPlus-2", "Asse Hard / Alleati Pro+ 2",
+                   "Axis=hard,Allies=proplus", "Allies=2", ""),
+              ] + ([
+                  (6, "Asse-Haiku-vs-Hard", "Asse Pro+ Haiku / Alleati Hard",
+                   "Axis=proplus,Allies=hard", "Axis=A", "Axis=llm"),
+                  (7, "Hard-vs-Alleati-Haiku", "Asse Hard / Alleati Pro+ Haiku",
+                   "Axis=hard,Allies=proplus", "Allies=1", "Allies=llm"),
+              ] if llm else [])
+              include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
+                          "tipo": tipo, "piano": piano, "seme": seed, "decisore": decisore}
+                         for (n, key, name, tipo, piano, decisore) in confronto
+                         for seed in (1, 2, 3, 4)]
+              print("matrix=" + json.dumps({"include": include}))
+              print(f"round={rounds}")
+              raise SystemExit(0)
           # every configuration with the same seeds 1..N, so the configurations are comparable
           include = []
           for i, g in enumerate(configs, 1):
@@ -240,6 +276,7 @@ jobs:
           MATRIX: ${{ needs.prepare.outputs.matrix }}
           HAS_LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
           LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MODALITA: ${{ inputs.modalita || 'normale' }}
         run: |
           set -euo pipefail
           mkdir -p autoplay
@@ -247,12 +284,12 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.loads(os.environ['MATRIX'])['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+ - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
           # LLM strategist: offline quality test on 30 strategic states of these games (skipped,
           # exit 0, without the secret)
-          if [ "${HAS_LLM_KEY}" = "true" ]; then
+          if [ "${HAS_LLM_KEY}" = "true" ] && [ "${MODALITA}" != "confronto" ]; then
             ANTHROPIC_API_KEY="${LLM_KEY}" autoplay-kit/runner/bin/proplus-autoplay qualita autoplay \
               --n 30 --output autoplay/qualita || echo "test di qualita' fallito (non blocca)"
             test -f autoplay/qualita/qualita.md && cat autoplay/qualita/qualita.md >> "$GITHUB_STEP_SUMMARY"

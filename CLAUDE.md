@@ -279,6 +279,20 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   (test di qualita' su 30 stati strategici delle partite, nello zip e nel sommario della run) e, dallo step LLM-2,
   `qualita autoplay --n 30 --livello ordini --output autoplay/qualita-ordini`. Le 14 partite
   solo-regole restano il riferimento.
+- **Modalita' "confronto" (step CONFRONTO CONTRO HARD)**: `[confronto]` nel messaggio del commit di testa (in
+  alternativa a `[autoplay]`) ⇒ input `modalita: confronto` del workflow riutilizzabile. 12 round, rischio base
+  Equilibrato, **semi 1-4 per ogni configurazione**: 1 `Hard-vs-Hard` (riferimento), 2 `Asse-ProPlus-A-vs-Hard`, 3
+  `Asse-ProPlus-D-vs-Hard`, 4 `Hard-vs-Alleati-ProPlus-1`, 5 `Hard-vs-Alleati-ProPlus-2`, 6 `Asse-Haiku-vs-Hard`
+  (`--decisore Axis=llm`, piano di partenza A), 7 `Hard-vs-Alleati-Haiku` (`Allies=llm`, piano 1); 6 e 7 solo col
+  secret (senza: 20 partite, nessun errore). Niente test di qualita' in questa modalita'. Il `riepilogo.json` di ogni
+  partita ha `tuv_perso` per alleanza (somma su TUTTE le battaglie, `Riepilogo.lostTuv`). Nel
+  `riepilogo-generale.md` la sezione **"Confronto contro Hard"** (`ConfrontoHard`, scritta solo se ci sono "Hard /
+  Hard" e almeno una configurazione con un solo lato non Hard): tabella per configurazione (VC R4/R8/R12 con min-max,
+  vittorie col round, PU e reddito finali, TUV perso, capitali perse = eventi "caduta" delle capitali dell'alleanza,
+  sbarchi veri), tabella del lato che cambia (valori del lato con min-max e ds sui semi, Δ dalla media dello stesso lato
+  in Hard vs Hard, rapporto TUV = perso dal nemico / perso dal lato) e "Risposta" per lato e tipo di AI (piani
+  insieme). Verdetto sulle VC finali del lato: "piu' forte"/"piu' debole" se |Δ| > max(0,5, ds media dei due gruppi),
+  altrimenti "non distinguibile" (indice semplice, non un test statistico).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2668,3 +2682,33 @@ operazioni = decisioni di stratega + ordini del turno dell'alleanza LLM, Alleati
 - Risultato: nessuna configurazione LLM batte le regole. Alleati Haiku v3 8/3 in tutti e 4 i semi (regole 7/4);
   Sonnet 7,5/3,5 su 2 semi con meno sbarchi alleati (4,5) nonostante "lancia". Costo Sonnet ~17 volte Haiku
   ($0,49 contro $0,028 per partita, 2 livelli). Varianza alta, non tarato.
+
+### Step CONFRONTO CONTRO HARD — Pro+ contro la Hard originale (2026-11-09)
+
+Decisione di Matteo dopo LLM-3: opzione (a), niente altri interventi sui prompt, stratega LLM sperimentale (default
+del pannello: Solo regole). Prima di altri sviluppi la misura che conta: Pro+ e' piu' forte della Hard originale? Gli
+autoplay precedenti mettevano Pro+ contro Pro+ (risultati dei due lati confusi). **Nessun cambio al comportamento
+dell'AI** (nessuna classe Pro o Pro+ di gioco toccata; golden Hard e Pro+ identici).
+- **Test instabili resi deterministici** (`PlanLogisticsTest.theNeutralPlanBuysAsWithoutAStrategyFile`,
+  `DiaryNeutralityTest`). Causa: `ProPurchaseUtils.randomizePurchaseOption` sceglie con `Math.random` (non
+  seminabile) da una `HashMap` con chiavi `ProPurchaseOption` (hash d'identita': anche l'ordine delle opzioni cambia
+  tra due esecuzioni). Soluzione, solo nei test: `SeededPurchaseChoice` (test di game-core) ritrasforma una volta per
+  JVM `ProPurchaseUtils` con un Advice di Byte Buddy (gia' nel classpath dei test tramite Mockito; `AgentBuilder` con
+  `disableClassFormatChanges` + `RETRANSFORMATION`, agente caricato a runtime con `ByteBuddyAgent.install()`): dentro
+  `SeededPurchaseChoice.with(seme, ...)` la scelta usa un `Random(seme)` e scorre le opzioni ordinate per regola di
+  produzione, con gli stessi pesi dell'originale (efficienza / totale, primo limite cumulato >= numero); fuori da
+  `with`, o su un altro thread, gira il metodo originale. I test non sono indeboliti, anzi: `DiaryNeutralityTest`
+  confronta SEMPRE gli acquisti (prima solo quando due replay senza diario coincidevano, con fallimento dopo 4
+  tentativi) e ora anche il replay completo; `theNeutralPlanBuysAs...` confronta gli acquisti di N e senza file con lo
+  stesso seme. Controllo che il gancio sia attivo: `choicesOfLastRun() > 0` nei due test che dipendono dalla scelta
+  casuale (con il piano A gli acquisti seguono gli ordini del piano e non fanno scelte casuali: 0). Locale: 6
+  ripetizioni consecutive verdi dei due test.
+- Autoplay: modalita' `[confronto]` (vedi "Autoplay in CI"), `tuv_perso` nel riepilogo, `ConfrontoHard` nel
+  riepilogo generale. File: workflow `proplus-autoplay.yml` (input `modalita`, matrice) e `proplus-release.yml`
+  (condizione `[confronto]`), autoplay `Riepilogo`, `RiepilogoGenerale` (5 helper resi package-private),
+  `ConfrontoHard` (nuovo), `AutoplayTest` (+1: sezione e verdetto); test game-core `SeededPurchaseChoice` (nuovo),
+  `PlanLogisticsTest`, `DiaryNeutralityTest`.
+- Test locali (JDK 25 da apt): `:game-core:test` 3097 (fallito solo `ContentDownloaderIntegrationTest`, rete della
+  sandbox), `:ai:test` 13, `:game-headed:test` 93, `:proplus-autoplay:test` 19 verdi. Verifica breve (Europe 1940
+  reale, 2 round, seme 1): Hard/Hard 38 s, Asse Pro+ A / Alleati Hard 31 s, Asse Hard / Alleati Pro+ 1 40 s, sezione
+  "Confronto contro Hard" scritta correttamente.

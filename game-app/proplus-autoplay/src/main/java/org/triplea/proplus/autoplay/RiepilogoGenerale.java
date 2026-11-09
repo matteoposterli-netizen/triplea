@@ -137,6 +137,7 @@ final class RiepilogoGenerale {
         .append(String.join(" / ", alliances.stream().map(Riepilogo::allianceLabel).toList()))
         .append(" (PU = somma della cassa delle nazioni a fine round).\n");
 
+    ConfrontoHard.write(md, games, alliances, vcRounds);
     configurations(md, games, alliances, vcRounds, maxRound);
     plansAndPostures(md, games, alliances);
     landingsAndTransports(md, games, alliances, maxRound);
@@ -548,7 +549,7 @@ final class RiepilogoGenerale {
   }
 
   /** The last complete round of a game (null if none). */
-  private static JsonObject lastCompleteRound(final JsonObject json) {
+  static JsonObject lastCompleteRound(final JsonObject json) {
     JsonObject last = null;
     for (final JsonElement e : json.getAsJsonArray("round")) {
       if (e.getAsJsonObject().get("completo").getAsBoolean()) {
@@ -559,7 +560,7 @@ final class RiepilogoGenerale {
   }
 
   /** Real landings (the summary's {@code sbarchi}) of {@code alliance} in the game. */
-  private static int landingsOf(final JsonObject json, final String alliance) {
+  static int landingsOf(final JsonObject json, final String alliance) {
     int n = 0;
     if (json.has("sbarchi")) {
       for (final JsonElement e : json.getAsJsonArray("sbarchi")) {
@@ -1509,7 +1510,7 @@ Per configurazione: partite con caduta / round medio di caduta.
     return new ArrayList<>(set.descendingSet());
   }
 
-  private static JsonObject round(final JsonObject json, final int round) {
+  static JsonObject round(final JsonObject json, final int round) {
     for (final JsonElement e : json.getAsJsonArray("round")) {
       final JsonObject r = e.getAsJsonObject();
       if (r.get("round").getAsInt() == round && r.get("completo").getAsBoolean()) {
@@ -1524,7 +1525,7 @@ Per configurazione: partite con caduta / round medio di caduta.
     return rounds.isEmpty() ? null : rounds.get(rounds.size() - 1).getAsJsonObject();
   }
 
-  private static int sum(
+  static int sum(
       final JsonObject json, final JsonObject round, final String alliance, final String key) {
     final JsonArray members = json.getAsJsonObject("alleanze").getAsJsonArray(alliance);
     if (members == null) {
@@ -1545,7 +1546,7 @@ Per configurazione: partite con caduta / round medio di caduta.
     return String.join(" / ", alliances.stream().map(value).toList());
   }
 
-  private static String text(final JsonObject o, final String key) {
+  static String text(final JsonObject o, final String key) {
     return o != null && o.has(key) ? o.get(key).getAsString() : "-";
   }
 

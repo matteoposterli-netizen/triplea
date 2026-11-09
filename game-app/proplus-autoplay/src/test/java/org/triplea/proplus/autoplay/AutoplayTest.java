@@ -124,6 +124,52 @@ class AutoplayTest {
   }
 
   @Test
+  void comparisonAgainstHardPerConfigurationAndForTheSideThatChanges() {
+    // 2 seeds of Hard vs Hard (Axis VC 3 and 3) and 2 of Axis Pro+ A vs Allies Hard (Axis VC 5, 6)
+    final List<RiepilogoGenerale.Game> games = new java.util.ArrayList<>();
+    final int[][] seeds = {{3, 30}, {3, 40}, {5, 10}, {6, 20}};
+    for (int i = 0; i < seeds.length; i++) {
+      final JsonObject g = JsonParser.parseString(SAMPLE).getAsJsonObject();
+      final boolean hard = i < 2;
+      final JsonObject types = g.getAsJsonObject("parametri").getAsJsonObject("tipi");
+      types.addProperty("Axis", hard ? "hard" : "proplus");
+      types.addProperty("Allies", "hard");
+      g.getAsJsonObject("parametri").getAsJsonObject("piani").addProperty("Allies", "-");
+      g.getAsJsonArray("round")
+          .get(0)
+          .getAsJsonObject()
+          .getAsJsonObject("vc")
+          .getAsJsonObject("Axis")
+          .addProperty("numero", seeds[i][0]);
+      final JsonObject lost = new JsonObject();
+      lost.addProperty("Axis", seeds[i][1]);
+      lost.addProperty("Allies", 60);
+      g.add("tuv_perso", lost);
+      if (hard) {
+        g.remove("esito");
+        g.add("esito", JsonParser.parseString("{\"testo\":\"nessuna entro 1 round\"}"));
+      }
+      games.add(new RiepilogoGenerale.Game((hard ? "1-Hard-seme" : "2-A-seme") + (i % 2 + 1), g));
+    }
+    final String md = RiepilogoGenerale.markdown("T", games);
+    assertThat(md)
+        .contains("## Confronto contro Hard (riferimento: Hard / Hard)")
+        .contains("| Hard / Hard | 2 | 3 / 1 | nessuna | 30 / 20 | 40 / 25 | 35 / 60 | 0 / 1 |")
+        .contains("| Pro+ A / Hard | 2 | 5.5 (5-6) / 1 | Asse 2 (R1, R1) |")
+        .contains(
+            "| Pro+ A / Hard | Asse | Pro+ regole | 5.5 (5-6), ds 0.7 | Δ +2.5 | 2 (R1, R1)/2 |"
+                + " 30 Δ +0 | 40 Δ +0 | 4.5 (3-6) Δ +2.75 | 0 Δ +0 | 0 Δ +0 | piu' forte |")
+        .contains(
+            "- Asse, Pro+ regole contro Hard (2 partite, riferimento 2): VC R1 5.5 (5-6) contro 3"
+                + " (Δ +2.5), rapporto TUV 4.5 contro 1.75, vittorie del lato 2 (R1, R1)/2 contro"
+                + " 0/2 ⇒ **piu' forte**");
+    // without a Hard vs Hard reference the section is not written
+    assertThat(RiepilogoGenerale.markdown("T", games.subList(2, 4)))
+        .doesNotContain("Confronto contro Hard");
+    assertThat(ConfrontoHard.kind(games.get(2).json(), "Axis")).isEqualTo("Pro+ regole");
+  }
+
+  @Test
   void plansAndPosturesPerGameAndConfiguration() {
     final JsonObject game = JsonParser.parseString(SAMPLE).getAsJsonObject();
     final JsonArray rounds = new JsonArray();

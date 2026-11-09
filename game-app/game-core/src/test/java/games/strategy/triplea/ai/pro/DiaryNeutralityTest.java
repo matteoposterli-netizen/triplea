@@ -69,27 +69,19 @@ class DiaryNeutralityTest extends AbstractClientSettingTestCase {
   @Test
   void decisionsAreTheSameWithAndWithoutDiary() throws IOException {
     // The attack plan and its moves are reproducible (seeded battle dice); the Pro AI's purchase
-    // is not always: ProPurchaseUtils.randomizePurchaseOption uses Math.random. Moves are compared
-    // on every try; the purchase only on a try where two replays without diary buy the same.
-    for (int attempt = 1; attempt <= MAX_PURCHASE_ATTEMPTS; attempt++) {
-      final String off = germanTurn(false);
-      final String offAgain = germanTurn(false);
-      final String on = germanTurn(true);
+    // picks among options at random (ProPurchaseUtils.randomizePurchaseOption): every turn draws
+    // those choices from the same seed, so moves and purchase are compared on every run.
+    final String off = germanTurn(false);
+    final String offAgain = germanTurn(false);
+    final String on = germanTurn(true);
 
-      assertThat(moves(offAgain)).as("replay without diary is reproducible").isEqualTo(moves(off));
-      assertThat(moves(on)).isEqualTo(moves(off));
-      assertThat(off).contains("move ").contains("buy ");
-      assertThat(diaryFiles()).isNotEmpty();
-      if (purchases(offAgain).equals(purchases(off))) {
-        assertThat(purchases(on)).isEqualTo(purchases(off));
-        return;
-      }
-    }
-    org.junit.jupiter.api.Assertions.fail(
-        "the purchase without diary was never reproducible in " + MAX_PURCHASE_ATTEMPTS + " tries");
+    assertThat(SeededPurchaseChoice.choicesOfLastRun()).as("seeded random choices").isPositive();
+    assertThat(offAgain).as("replay without diary is reproducible").isEqualTo(off);
+    assertThat(moves(on)).isEqualTo(moves(off));
+    assertThat(purchases(on)).isEqualTo(purchases(off));
+    assertThat(off).contains("move ").contains("buy ");
+    assertThat(diaryFiles()).isNotEmpty();
   }
-
-  private static final int MAX_PURCHASE_ATTEMPTS = 4;
 
   private static String moves(final String decisions) {
     return decisions.lines().filter(l -> !l.startsWith("buy ")).collect(Collectors.joining("\n"));
@@ -151,16 +143,7 @@ class DiaryNeutralityTest extends AbstractClientSettingTestCase {
     final String on = germanTurn(true);
 
     assertThat(moves(on)).isEqualTo(moves(off));
-    // the purchase is compared where it is reproducible (see decisionsAreTheSame...)
-    if (!purchases(on).equals(purchases(off))) {
-      final String offAgain = germanTurn(false);
-      final String onAgain = germanTurn(true);
-      assertThat(
-              purchases(onAgain).equals(purchases(offAgain))
-                  || !purchases(offAgain).equals(purchases(off)))
-          .as("same purchase with and without diary when the replay without diary is reproducible")
-          .isTrue();
-    }
+    assertThat(purchases(on)).isEqualTo(purchases(off));
     final String text =
         Files.readString(diaryFiles().get(0).resolve("diario.txt"), StandardCharsets.UTF_8);
     Files.writeString(
@@ -209,8 +192,15 @@ class DiaryNeutralityTest extends AbstractClientSettingTestCase {
     assertThat(france.get("soglia_minima").getAsDouble()).isEqualTo(52);
   }
 
-  /** One German turn: phase hooks, purchase (with its attack plan) and combat move. */
+  /**
+   * One German turn: phase hooks, purchase (with its attack plan) and combat move; the purchase
+   * choices are drawn from {@link #SEED}.
+   */
   private String germanTurn(final boolean diary) {
+    return SeededPurchaseChoice.with(SEED, () -> germanTurnWithSeededPurchase(diary));
+  }
+
+  private String germanTurnWithSeededPurchase(final boolean diary) {
     final ProData proData = new ProData(false, new ProPlusTuning());
     final TestAi ai = new TestAi(proData, new SeededBattleCalculator(SEED));
     if (diary) {

@@ -81,9 +81,12 @@ class PlanLogisticsTest extends AbstractClientSettingTestCase {
 
   @Test
   void theNeutralPlanBuysAsWithoutAStrategyFile() {
-    final Purchase neutral = purchase("N");
+    // Hard's purchase picks among options at random (ProPurchaseUtils.randomizePurchaseOption):
+    // both purchases draw from the same seed, so any difference comes from the plan
+    final Purchase neutral = SeededPurchaseChoice.with(SEED, () -> purchase("N"));
     data.setGameName("Global 1940 senza strategia");
-    final Purchase noFile = purchase("A");
+    final Purchase noFile = SeededPurchaseChoice.with(SEED, () -> purchase("A"));
+    assertThat(SeededPurchaseChoice.choicesOfLastRun()).as("seeded random choices").isPositive();
 
     assertThat(neutral.orders()).isNull();
     assertThat(neutral.bought()).isEqualTo(noFile.bought());
@@ -198,8 +201,8 @@ class PlanLogisticsTest extends AbstractClientSettingTestCase {
 
   @Test
   void theDiaryComparesTheMixWithWhatWasBought() throws IOException {
-    final Purchase off = purchase("A");
-    final Purchase on = purchaseWithDiary("A");
+    final Purchase off = SeededPurchaseChoice.with(SEED, () -> purchase("A"));
+    final Purchase on = SeededPurchaseChoice.with(SEED, () -> purchaseWithDiary("A"));
 
     assertThat(on.bought()).isEqualTo(off.bought());
     final String text = diaryText();

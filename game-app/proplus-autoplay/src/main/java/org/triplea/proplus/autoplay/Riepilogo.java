@@ -95,6 +95,7 @@ final class Riepilogo {
     json.add("capitali", data.get("capitali"));
     json.add("territori_chiave", data.get("territori_chiave"));
     json.add("battaglie_top", topBattles(data.getAsJsonArray("battaglie"), diaryData));
+    json.add("tuv_perso", lostTuv(data.getAsJsonArray("battaglie"), monitor));
     final JsonArray landings = data.getAsJsonArray("sbarchi");
     json.add("sbarchi", landings);
     firstLandingInEurope(landings).ifPresent(l -> json.add("primo_sbarco_europa", l));
@@ -589,6 +590,28 @@ final class Riepilogo {
       top.add(b);
     }
     return top;
+  }
+
+  /**
+   * Step CONFRONTO: TUV lost per alliance in all the battles of the game (attacker's losses to the
+   * attacker's alliance, defender's losses to the defender's alliance).
+   */
+  static JsonObject lostTuv(final JsonArray battles, final Monitor monitor) {
+    final JsonObject lost = new JsonObject();
+    monitor.alliances().keySet().forEach(a -> lost.addProperty(a, 0));
+    for (final JsonElement e : battles) {
+      final JsonObject b = e.getAsJsonObject();
+      addLost(lost, monitor.allianceOf(b.get("attaccante").getAsString()), b, "tuv_perso_attaccante");
+      addLost(lost, monitor.allianceOf(b.get("difensore").getAsString()), b, "tuv_perso_difensore");
+    }
+    return lost;
+  }
+
+  private static void addLost(
+      final JsonObject lost, final String alliance, final JsonObject battle, final String key) {
+    if (lost.has(alliance)) {
+      lost.addProperty(alliance, lost.get(alliance).getAsInt() + battle.get(key).getAsInt());
+    }
   }
 
   private static JsonObject outcome(
