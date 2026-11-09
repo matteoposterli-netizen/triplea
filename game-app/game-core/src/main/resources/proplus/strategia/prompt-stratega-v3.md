@@ -1,5 +1,6 @@
-<!-- prompt-stratega-v2 (Pro+; v2 = v1 + ordine dei turni e finestre di coordinamento, rischio per
-     nazione dello schema v1.1, significato di "lancia" chiarito). Parte FISSA del prompt dello stratega LLM: uguale in tutti i round
+<!-- prompt-stratega-v3 (Pro+; v2 = v1 + ordine dei turni e finestre di coordinamento, rischio per
+     nazione dello schema v1.1, significato di "lancia" chiarito; v3 = "attendi" come rinvio deliberato,
+     avviso dopo 3 round di attesa, dottrina di Matteo in "Come decidere", obiettivi nazionali propri). Parte FISSA del prompt dello stratega LLM: uguale in tutti i round
      (va nella cache del fornitore). I segnaposto {{...}} sono riempiti dal gioco. La parte variabile
      (livello di Fantasia + stato strategico JSON del round) e' nel messaggio dell'utente. -->
 # Ruolo
@@ -75,8 +76,13 @@ possono sostituirlo) e contrasta (piani nemici che mette in crisi).
 - Operazioni anfibie (`operazioni`, quelle del campo `operazioni` dello stato): "lancia" (raccolta e
   sbarco appena possibile: il motore sbarca SOLO se lo sbarco conviene o e' sicuro con la sua regola dei
   trasporti esposti, quindi "lancia" non significa mandare i trasporti al macello; la stima
-  `perdita_attesa_trasporti_stima` dello stato e' un'informazione, non un divieto), "attendi" (raccolta e carico si', ma nessuno sbarco questo round: per
-  ammassare forze o aspettare la scorta), "annulla" (spenta questo round: unita' libere per altro).
+  `perdita_attesa_trasporti_stima` dello stato e' un'informazione, non un divieto. L'attesa della
+  scorta, l'ammassamento delle truppe e la sicurezza dei trasporti li gestisce GIA' il motore con
+  "lancia": non serve "attendi" per questo), "attendi" (RINVIO DELIBERATO dello sbarco anche se flotta e
+  truppe sono pronte: una finta, l'attesa di un altro fronte, il coordinamento col partner che sbarca
+  dopo; va motivato nella `motivazione`), "annulla" (spenta questo round: unita' libere per altro).
+  Se un'operazione ha `avviso` ("in attesa da N round"), o la lanci o spieghi perche' il rinvio vale
+  ancora.
   `perdita_trasporti_accettata_max_TUV` > 0 permette uno sbarco anche se i trasporti restano esposti,
   entro quel tetto di TUV persi (un trasporto vale circa 7 TUV): usalo solo quando lo sbarco cambia la
   corsa (VC, capitale, fronte che crolla).
@@ -112,6 +118,17 @@ una postura sconosciuta fanno scartare TUTTE le tue direttive del round (decidon
    e' perdere lentamente; se stai vincendo, non regalare unita'.
 5. Cambia piano solo se il piano in vigore e' fallimentare, non per un round andato male.
 6. Sii coerente col round precedente (lo stato riporta piano, fase, round in vigore e cambi fatti).
+
+Dottrina (principi da seguire):
+- Rallentare il piano nemico vale quanto avanzare il tuo: un sacrificio di unita' e' accettato se il
+  ritardo che impone al nemico vale piu' delle unita' perse.
+- Difesa solo su minaccia reale: non chiedere difese per territori che il nemico non puo' attaccare
+  prima del prossimo turno della nazione; il motore difende gia' le minacce reali (`minacce`).
+- Territori bonus: a parita' di valore strategico preferisci bersagli che danno reddito o completano un
+  obiettivo nazionale PROPRIO (campo `obiettivi_nazionali`: PU per turno e territori mancanti), non
+  solo toglierlo al nemico; senza forzare la strategia di vittoria.
+- DIFENSIVA solo se una capitale o la partita sono a rischio concreto (capitale con `forza_nemica`
+  alta in `capitali`/`minacce`, o il nemico vicino alla vittoria in `vc`), non per prudenza.
 
 # Risposta
 

@@ -271,7 +271,11 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   in coda con lo stratega LLM (Claude Haiku, `--decisore <alleanza>=llm`, chiave passata come variabile d'ambiente
   solo a quei job): `<n+1>-LLM-Alleati-vs-Asse-A-seme1/2` (Alleati LLM, Asse A regole) e
   `<n+2>-LLM-Asse-vs-Alleati-1-seme1/2` (Asse LLM, Alleati 1 regole), piani di partenza Axis=A, Allies=1 (confronto
-  con A/1). Nel `publish`, dopo il confronto, `proplus-autoplay qualita autoplay --n 30 --output autoplay/qualita`
+  con A/1). Dallo step LLM-3: **4 semi** per le due configurazioni LLM, 2 partite `<n+3>-Sonnet-Alleati-vs-Asse-A-
+  seme1/2` (Alleati con Claude Sonnet 5.5) e A/1 a regole anche con i semi 3 e 4 (`1-Asse-A-Alleati-1-seme3/4`):
+  24 partite. Sezione "Confronto per configurazione" nel `riepilogo-generale.md`: VC finali, sbarchi veri per
+  alleanza, % lancia/attendi/annulla (stratega + ordini dell'alleanza LLM, o regole Alleati), posture, costo per
+  partita. Nel `publish`, dopo il confronto, `proplus-autoplay qualita autoplay --n 30 --output autoplay/qualita`
   (test di qualita' su 30 stati strategici delle partite, nello zip e nel sommario della run) e, dallo step LLM-2,
   `qualita autoplay --n 30 --livello ordini --output autoplay/qualita-ordini`. Le 14 partite
   solo-regole restano il riferimento.
@@ -1311,6 +1315,20 @@ nuovo cambia una decisione.
   stima della perdita dei trasporti non e' un divieto), dopo che nel primo autoplay Haiku teneva Overlord in attesa 44
   volte su 46. Le stesse finestre sono nel prompt degli ordini. Niente "attacco di logoramento" ne' missioni congiunte
   (step successivo).
+- **Prompt v3 / ordini v2 (step LLM-3)** (`prompt-stratega-v3.md`, `prompt-ordini-turno-v2.md`): "attendi" =
+  RINVIO DELIBERATO anche a flotta pronta (finta, altro fronte, partner), da motivare; scorta e ammassamento li fa
+  gia' il motore con "lancia" (tolto "aspettare la scorta"). Ingresso: per operazione `round_in_attesa` (round di
+  fila in attesa: decisione strategica "attendi" non lanciata da ordini del turno, o ordini "attendi";
+  `Ingresso.roundsWaiting`) e da 3 round `avviso` "operazione X in attesa da N round: motivare o lanciare".
+  Dottrina di Matteo in "Come decidere" (rallentare = avanzare, difesa solo su minaccia reale, territori bonus /
+  obiettivi nazionali propri, DIFENSIVA solo con rischio concreto). Ingresso `obiettivi_nazionali`
+  (`Ingresso.obiettiviNazionali`: obiettivi della alleanza o della nazione con valore in PU per turno, territori
+  richiesti/tenuti/mancanti, solo quelli definiti da proprieta' di territori e a <= 3 conquiste; quelli con condizioni
+  composte, es. Germania "Novgorod o Volgograd o Russia", non compaiono).
+- **Modello alternativo** (solo autoplay): `ClientApi.MODEL_PROPERTY` (`proplus.stratega.modello`) / `--decisore
+  Allies=llm:claude-sonnet-5-5`; nome nel diario dalla famiglia del modello ("Sonnet"), prezzo dal suo ID in
+  `prezzi-stratega.json` (Sonnet 5.5 $2/$10 per MTok, cache letta 0,20, scrittura 1h 4,00; ID e prezzi dalla
+  documentazione ufficiale Anthropic). Non usato per i giocatori.
 
 ## Come configurare lo stratega
 
@@ -2605,3 +2623,22 @@ Vedi "Stratega LLM" (punti "Due livelli", "Rischio per nazione", "Prompt strateg
 - Giudizio: integrazione a due livelli affidabile (100% JSON validi su entrambi i livelli, nessun ripiego), costo
   ~2-3 centesimi per partita con un'alleanza LLM (meno dei 5-10 attesi). Sul gioco l'LLM non migliora le regole con 2
   semi; per gli Alleati probabilmente peggiora (meno sbarchi, piu' DIFENSIVA). Non tarato.
+
+### Step LLM-3 — "attendi" deliberato, dottrina, obiettivi nazionali, 4 semi + Sonnet (2026-11-09)
+
+Richiesta di Matteo: "attendi" come rinvio deliberato con avviso dopo 3 round, dottrina nei due prompt, obiettivi
+nazionali propri nell'ingresso, autoplay con 4 semi per le configurazioni LLM + 2 partite con Claude Sonnet 5.5. Vedi
+"Stratega LLM" (punti "Prompt v3 / ordini v2" e "Modello alternativo") e "Autoplay in CI".
+- Modificate: risorse `prompt-stratega-v2.md` → `v3`, `prompt-ordini-turno-v1.md` → `v2`, `prezzi-stratega.json`
+  (Sonnet); `Ingresso` (`round_in_attesa`/`avviso`, `obiettivi_nazionali` in stato e ordini), `ClientApi` (modello
+  alternativo, etichetta e prezzo per modello), `DecisoreLlm` (modello dalla proprieta' di sistema), autoplay
+  `AutoplayOptions`/`AutoplayRunner` (`llm:MODELLO`), `RiepilogoGenerale` (confronto per configurazione), workflow.
+  **Nessuna classe Pro toccata.**
+- Test nuovi: `OrdiniTurnoTest` +2 (Overlord UK in attesa 3 round ⇒ avviso; obiettivi nazionali nei due ingressi),
+  `StrategaComponentiTest` +2 (prompt v3/v2: rinvio deliberato, dottrina, niente "aspettare la scorta"; modello
+  Sonnet chiesto, etichetta "Sonnet", prezzo $2/MTok), `AutoplayTest` (opzione `llm:MODELLO`, tabella di confronto).
+  `:game-core:test` 3097 (fallito solo `ContentDownloaderIntegrationTest`, rete), `:game-headed:test`,
+  `:proplus-autoplay:test`, `:ai:test` verdi; golden Hard e Pro+ identici.
+- Verifica locale (Europe 1940 reale, A/1 regole, 2 round, 32 s): `obiettivi_nazionali` R2 Asse = Germania Control
+  Caucasus 5 PU (manca Caucasus), Italia Roman Empire 5 PU (manca 1 tra Gibraltar ed Egypt); Alleati = USA Homeland 20
+  e Defense Obligations 5 (tenuti), URSS Berlin 10 (manca Germany), Far East Reserves 9 (tenuto).

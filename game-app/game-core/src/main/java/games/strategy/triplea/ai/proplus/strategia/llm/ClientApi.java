@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -26,10 +27,40 @@ public final class ClientApi {
 
   static final int MAX_TOKENS = 8000;
 
+  /**
+   * System property: the model to ask instead of the provider's default (autoplay comparisons, eg
+   * "claude-sonnet-5-5"); never set for players.
+   */
+  public static final String MODEL_PROPERTY = "proplus.stratega.modello";
+
   private final Http http;
+  private final @javax.annotation.Nullable String model;
 
   public ClientApi(final Http http) {
+    this(http, null);
+  }
+
+  /** {@code model} = the model to ask instead of the provider's default (null = default). */
+  public ClientApi(final Http http, @javax.annotation.Nullable final String model) {
     this.http = http;
+    this.model = model == null || model.isBlank() ? null : model.strip();
+  }
+
+  /** The model asked to {@code provider}. */
+  public String modello(final Fornitore provider) {
+    return model != null ? model : provider.modello();
+  }
+
+  /** Name in the diary: "Haiku", "Sonnet", "DeepSeek", "Groq"... */
+  public static String etichetta(final Fornitore provider, final String modelId) {
+    if (provider == Fornitore.ANTHROPIC) {
+      for (final String family : List.of("sonnet", "opus", "haiku", "fable")) {
+        if (modelId.contains(family)) {
+          return Character.toUpperCase(family.charAt(0)) + family.substring(1);
+        }
+      }
+    }
+    return provider.etichetta();
   }
 
   /**
@@ -38,8 +69,9 @@ public final class ClientApi {
    * @throws ErroreStratega no answer (Italian reason: key refused, credit over, timeout, ...)
    */
   public Risposta chiama(final Fornitore provider, final String key, final Richiesta r) {
+    final String used = modello(provider);
     final String body =
-        provider.isOpenAiCompatibile() ? openAiBody(provider, r) : anthropicBody(provider, r);
+        provider.isOpenAiCompatibile() ? openAiBody(used, r) : anthropicBody(used, r);
     final Map<String, String> headers = new LinkedHashMap<>();
     headers.put("content-type", "application/json");
     if (provider.isOpenAiCompatibile()) {
@@ -79,8 +111,8 @@ public final class ClientApi {
     try {
       final JsonObject json = JsonParser.parseString(result.corpo()).getAsJsonObject();
       return provider.isOpenAiCompatibile()
-          ? openAiAnswer(provider, json, millis)
-          : anthropicAnswer(provider, json, millis);
+          ? openAiAnswer(provider, used, json, millis)
+          : anthropicAnswer(provider, used, json, millis);
     } catch (final ErroreStratega e) {
       throw e;
     } catch (final RuntimeException e) {
@@ -90,9 +122,9 @@ public final class ClientApi {
 
   // ------------------------------------------------------------------------------- Anthropic
 
-  static String anthropicBody(final Fornitore provider, final Richiesta r) {
+  static String anthropicBody(final String modelId, final Richiesta r) {
     final JsonObject body = new JsonObject();
-    body.addProperty("model", provider.modello());
+    body.addProperty("model", modelId);
     body.addProperty("max_tokens", MAX_TOKENS);
     final JsonArray system = new JsonArray();
     final JsonObject fixed = new JsonObject();
@@ -125,7 +157,7 @@ public final class ClientApi {
   }
 
   private static Risposta anthropicAnswer(
-      final Fornitore provider, final JsonObject json, final long millis) {
+      final Fornitore provider, final String modelId, final JsonObject json, final long millis) {
     final String stop = json.has("stop_reason") ? json.get("stop_reason").getAsString() : "";
     if ("refusal".equals(stop)) {
       throw new ErroreStratega(provider.etichetta() + " ha rifiutato la richiesta");
@@ -146,25 +178,25 @@ public final class ClientApi {
     final long out = number(usage, "output_tokens");
     final long read = number(usage, "cache_read_input_tokens");
     final long write = number(usage, "cache_creation_input_tokens");
-    final String model = json.has("model") ? json.get("model").getAsString() : provider.modello();
+    final String model = json.has("model") ? json.get("model").getAsString() : modelId;
     return new Risposta(
         text.toString(),
-        provider.etichetta(),
+        etichetta(provider, modelId),
         model,
         in,
         out,
         read,
         write,
-        Prezzi.costo(provider.modello(), in, out, read, write),
+        Prezzi.costo(modelId, in, out, read, write),
         false,
         millis);
   }
 
   // ------------------------------------------------------------------------------- OpenAI-like
 
-  static String openAiBody(final Fornitore provider, final Richiesta r) {
+  static String openAiBody(final String modelId, final Richiesta r) {
     final JsonObject body = new JsonObject();
-    body.addProperty("model", provider.modello());
+    body.addProperty("model", modelId);
     final JsonArray messages = new JsonArray();
     final JsonObject system = new JsonObject();
     system.addProperty("role", "system");
@@ -189,7 +221,7 @@ public final class ClientApi {
   }
 
   private static Risposta openAiAnswer(
-      final Fornitore provider, final JsonObject json, final long millis) {
+      final Fornitore provider, final String modelId, final JsonObject json, final long millis) {
     final JsonObject choice = json.getAsJsonArray("choices").get(0).getAsJsonObject();
     final String finish =
         choice.has("finish_reason") && !choice.get("finish_reason").isJsonNull()
@@ -209,16 +241,16 @@ public final class ClientApi {
     }
     final long in = Math.max(0, prompt - cached);
     final long out = number(usage, "completion_tokens");
-    final String model = json.has("model") ? json.get("model").getAsString() : provider.modello();
+    final String model = json.has("model") ? json.get("model").getAsString() : modelId;
     return new Risposta(
         text,
-        provider.etichetta(),
+        etichetta(provider, modelId),
         model,
         in,
         out,
         cached,
         0,
-        Prezzi.costo(provider.modello(), in, out, cached, 0),
+        Prezzi.costo(modelId, in, out, cached, 0),
         false,
         millis);
   }

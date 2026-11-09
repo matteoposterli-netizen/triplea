@@ -506,6 +506,47 @@ class StrategaComponentiTest {
         .isEqualTo("Stratega 1 chiamate $0.0020; Ordini del turno 2 chiamate (1 errori) $0.0010");
   }
 
+  @Test
+  void thePromptsV3DefineAttendiAsADeliberateDelayAndHaveTheDoctrine() {
+    for (final String system : List.of(PromptStratega.sistema(strategyOrEmpty()), PromptOrdini.sistema())) {
+      assertThat(system)
+          .contains("RINVIO DELIBERATO")
+          .contains("in attesa da N round")
+          .contains("Rallentare il piano nemico vale quanto avanzare")
+          .contains("Difesa solo su minaccia reale")
+          .contains("obiettivi_nazionali")
+          .doesNotContain("aspettare la scorta");
+    }
+    assertThat(PromptStratega.sistema(strategyOrEmpty()))
+        .contains("DIFENSIVA solo se una capitale o la partita sono a rischio concreto");
+    assertThat(PromptStratega.VERSIONE).isEqualTo("prompt-stratega-v3");
+    assertThat(PromptOrdini.VERSIONE).isEqualTo("prompt-ordini-turno-v2");
+  }
+
+  @Test
+  void anotherModelOfTheProviderIsAskedAndPricedAsItself() {
+    final List<String> bodies = new ArrayList<>();
+    final ClientApi client =
+        new ClientApi(
+            (url, h, body, timeout) -> {
+              bodies.add(body);
+              return new Http.Esito(
+                  200,
+                  "{\"content\": [{\"type\": \"text\", \"text\": \"{}\"}],"
+                      + " \"usage\": {\"input_tokens\": 1000000, \"output_tokens\": 0}}");
+            },
+            "claude-sonnet-5-5");
+
+    final Risposta r = client.chiama(Fornitore.ANTHROPIC, KEY, request());
+
+    assertThat(JsonParser.parseString(bodies.get(0)).getAsJsonObject().get("model").getAsString())
+        .isEqualTo("claude-sonnet-5-5");
+    assertThat(r.fonte()).isEqualTo("Sonnet");
+    assertThat(r.costoUsd()).isEqualTo(2.0);
+    assertThat(ClientApi.etichetta(Fornitore.ANTHROPIC, "claude-haiku-5-5")).isEqualTo("Haiku");
+    assertThat(ClientApi.etichetta(Fornitore.GROQ, "x")).isEqualTo("Groq");
+  }
+
   private static JsonObject strategyOrEmpty() {
     try {
       return strategy();

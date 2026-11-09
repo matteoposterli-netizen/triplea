@@ -117,22 +117,36 @@ jobs:
                                       "tipo": "Axis=proplus,Allies=proplus",
                                       "piano": f"Axis={axis},Allies={allies}", "seme": seed,
                                       "decisore": ""})
-          # LLM strategist (Claude Haiku via ANTHROPIC_API_KEY), 2 seeds each, only with the secret:
-          # Allies LLM vs Axis A by rules, Axis LLM vs Allies 1 by rules (compare with A/1)
+          # LLM strategist (Claude Haiku via ANTHROPIC_API_KEY), 4 seeds each, only with the secret:
+          # Allies LLM vs Axis A by rules, Axis LLM vs Allies 1 by rules (compare with A/1); plus
+          # 2 games with Claude Sonnet 5.5 as the Allies' strategist (comparison of models)
           if os.environ["HAS_LLM_KEY"] == "true" and not custom:
               n = len(configs)
-              for seed in (1, 2):
+              for seed in (1, 2, 3, 4):
                   include.append({"id": f"{n + 1}-LLM-Alleati-vs-Asse-A-seme{seed}",
                                   "nome": f"Alleati LLM / Asse A regole (seme {seed})",
                                   "tipo": "Axis=proplus,Allies=proplus",
                                   "piano": "Axis=A,Allies=1", "seme": seed,
                                   "decisore": "Allies=llm"})
-              for seed in (1, 2):
+              for seed in (1, 2, 3, 4):
                   include.append({"id": f"{n + 2}-LLM-Asse-vs-Alleati-1-seme{seed}",
                                   "nome": f"Asse LLM / Alleati 1 regole (seme {seed})",
                                   "tipo": "Axis=proplus,Allies=proplus",
                                   "piano": "Axis=A,Allies=1", "seme": seed,
                                   "decisore": "Axis=llm"})
+              for seed in (1, 2):
+                  include.append({"id": f"{n + 3}-Sonnet-Alleati-vs-Asse-A-seme{seed}",
+                                  "nome": f"Alleati Sonnet / Asse A regole (seme {seed})",
+                                  "tipo": "Axis=proplus,Allies=proplus",
+                                  "piano": "Axis=A,Allies=1", "seme": seed,
+                                  "decisore": "Allies=llm:claude-sonnet-5-5"})
+              # rules A/1 with seeds 3 and 4 too: the reference has the same 4 seeds as the LLM games
+              for seed in (3, 4):
+                  include.append({"id": f"1-Asse-A-Alleati-1-seme{seed}",
+                                  "nome": f"Asse A / Alleati 1 (seme {seed})",
+                                  "tipo": "Axis=proplus,Allies=proplus",
+                                  "piano": "Axis=A,Allies=1", "seme": seed,
+                                  "decisore": ""})
           print("matrix=" + json.dumps({"include": include}))
           print(f"round={rounds}")
           EOF

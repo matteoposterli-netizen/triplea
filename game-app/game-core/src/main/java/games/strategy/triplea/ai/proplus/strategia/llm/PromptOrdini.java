@@ -16,8 +16,8 @@ import lombok.experimental.UtilityClass;
  */
 @UtilityClass
 public final class PromptOrdini {
-  public static final String RISORSA = "proplus/strategia/prompt-ordini-turno-v1.md";
-  public static final String VERSIONE = "prompt-ordini-turno-v1";
+  public static final String RISORSA = "proplus/strategia/prompt-ordini-turno-v2.md";
+  public static final String VERSIONE = "prompt-ordini-turno-v2";
   public static final String SCHEMA_VERSIONE = "ordini-turno-v1";
 
   private static volatile String system;

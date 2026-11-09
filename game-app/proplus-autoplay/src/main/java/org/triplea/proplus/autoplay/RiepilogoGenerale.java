@@ -281,7 +281,7 @@ final class RiepilogoGenerale {
     final List<Game> llm =
         games.stream()
             .filter(g -> g.json() != null)
-            .filter(g -> alliances.stream().anyMatch(a -> "llm".equals(decider(g.json(), a))))
+            .filter(g -> alliances.stream().anyMatch(a -> decider(g.json(), a).startsWith("llm")))
             .toList();
     md.append(
 """
@@ -310,7 +310,7 @@ final class RiepilogoGenerale {
           g.json().has("stratega") ? g.json().getAsJsonObject("stratega") : new JsonObject();
       final JsonObject last = round(g.json(), maxRound);
       for (final String a : alliances) {
-        if (!"llm".equals(decider(g.json(), a))) {
+        if (!decider(g.json(), a).startsWith("llm")) {
           continue;
         }
         final JsonObject x = st.has(a) ? st.getAsJsonObject(a) : new JsonObject();
@@ -432,6 +432,143 @@ final class RiepilogoGenerale {
           }
           md.append('\n');
         });
+    comparison(md, games, alliances, plansWithLlm);
+  }
+
+  /**
+   * LLM step 3: per configuration with the same plans as an LLM game (rules, Haiku, Sonnet...): VC
+   * at the end, real landings per alliance, operation decisions (strategist + turn orders, %
+   * lancia / attendi / annulla), postures and cost per game, means of the seeds.
+   */
+  static void comparison(
+      final StringBuilder md,
+      final List<Game> games,
+      final List<String> alliances,
+      final java.util.Set<String> plansWithLlm) {
+    md.append(
+        "\nConfronto per configurazione (media dei semi; operazioni = decisioni di stratega e ordini"
+            + " del turno dell'alleanza LLM, o delle regole):\n\n| Configurazione | Partite | VC finali "
+            + String.join(" / ", alliances.stream().map(Riepilogo::allianceLabel).toList())
+            + " | Sbarchi veri "
+            + String.join(" / ", alliances.stream().map(Riepilogo::allianceLabel).toList())
+            + " | Lancia / attendi / annulla | Posture | Costo $ per partita |\n"
+            + "|---|---|---|---|---|---|---|\n");
+    final Map<String, List<Game>> byConfig = new LinkedHashMap<>();
+    games.stream()
+        .filter(g -> g.json() != null && plansWithLlm.contains(plans(g.json(), alliances)))
+        .forEach(
+            g ->
+                byConfig
+                    .computeIfAbsent(configuration(g.json(), alliances), k -> new ArrayList<>())
+                    .add(g));
+    byConfig.forEach(
+        (config, list) -> {
+          final java.util.List<String> vcs = new ArrayList<>();
+          final java.util.List<String> landings = new ArrayList<>();
+          for (final String a : alliances) {
+            final List<Double> vc = new ArrayList<>();
+            final List<Double> land = new ArrayList<>();
+            for (final Game g : list) {
+              final JsonObject last = lastCompleteRound(g.json());
+              if (last != null && last.getAsJsonObject("vc").has(a)) {
+                vc.add(last.getAsJsonObject("vc").getAsJsonObject(a).get("numero").getAsDouble());
+              }
+              land.add((double) landingsOf(g.json(), a));
+            }
+            vcs.add(mean(vc));
+            landings.add(mean(land));
+          }
+          final Map<String, Integer> decisions = new LinkedHashMap<>();
+          final Map<String, Integer> postures = new LinkedHashMap<>();
+          double cost = 0;
+          for (final Game g : list) {
+            final String llmAlliance =
+                alliances.stream()
+                    .filter(a -> decider(g.json(), a).startsWith("llm"))
+                    .findFirst()
+                    .orElse(
+                        alliances.contains("Allies")
+                            ? "Allies"
+                            : alliances.get(alliances.size() - 1));
+            final JsonObject st =
+                g.json().has("stratega") ? g.json().getAsJsonObject("stratega") : new JsonObject();
+            final JsonObject x =
+                st.has(llmAlliance) ? st.getAsJsonObject(llmAlliance) : new JsonObject();
+            for (final String key : List.of("operazioni")) {
+              if (x.has(key)) {
+                x.getAsJsonObject(key)
+                    .entrySet()
+                    .forEach(e -> decisions.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
+              }
+            }
+            if (x.has("ordini_turno") && x.getAsJsonObject("ordini_turno").has("operazioni")) {
+              x.getAsJsonObject("ordini_turno")
+                  .getAsJsonObject("operazioni")
+                  .entrySet()
+                  .forEach(e -> decisions.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
+            }
+            if (x.has("posture")) {
+              x.getAsJsonObject("posture")
+                  .entrySet()
+                  .forEach(e -> postures.merge(e.getKey(), e.getValue().getAsInt(), Integer::sum));
+            }
+            if (x.has("uso") && x.getAsJsonObject("uso").has("costo_usd")) {
+              cost += x.getAsJsonObject("uso").get("costo_usd").getAsDouble();
+            }
+          }
+          final int total = decisions.values().stream().mapToInt(Integer::intValue).sum();
+          final String pct =
+              total == 0
+                  ? "-"
+                  : String.format(
+                      Locale.ROOT,
+                      "%.0f%% / %.0f%% / %.0f%% (%d)",
+                      100.0 * decisions.getOrDefault("lancia", 0) / total,
+                      100.0 * decisions.getOrDefault("attendi", 0) / total,
+                      100.0 * decisions.getOrDefault("annulla", 0) / total,
+                      total);
+          final List<String> post = new ArrayList<>();
+          postures.forEach((k, v) -> post.add(k + " " + v));
+          md.append("| ")
+              .append(config)
+              .append(" | ")
+              .append(list.size())
+              .append(" | ")
+              .append(String.join(" / ", vcs))
+              .append(" | ")
+              .append(String.join(" / ", landings))
+              .append(" | ")
+              .append(pct)
+              .append(" | ")
+              .append(post.isEmpty() ? "-" : String.join(", ", post))
+              .append(" | ")
+              .append(cost == 0 ? "-" : String.format(Locale.ROOT, "%.4f", cost / list.size()))
+              .append(" |\n");
+        });
+  }
+
+  /** The last complete round of a game (null if none). */
+  private static JsonObject lastCompleteRound(final JsonObject json) {
+    JsonObject last = null;
+    for (final JsonElement e : json.getAsJsonArray("round")) {
+      if (e.getAsJsonObject().get("completo").getAsBoolean()) {
+        last = e.getAsJsonObject();
+      }
+    }
+    return last;
+  }
+
+  /** Real landings (the summary's {@code sbarchi}) of {@code alliance} in the game. */
+  private static int landingsOf(final JsonObject json, final String alliance) {
+    int n = 0;
+    if (json.has("sbarchi")) {
+      for (final JsonElement e : json.getAsJsonArray("sbarchi")) {
+        if (alliance.equals(e.getAsJsonObject().get("alleanza").getAsString())) {
+          n++;
+        }
+      }
+    }
+    return n;
   }
 
   /** Eg "12 / $0.0110" for the calls of one level of the LLM step. */

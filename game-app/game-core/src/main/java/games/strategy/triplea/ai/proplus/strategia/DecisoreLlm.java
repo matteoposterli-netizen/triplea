@@ -73,7 +73,11 @@ public final class DecisoreLlm implements Decisore {
       list.add(claudeCode(ClaudeCode::stato, r -> ClaudeCode.reale().chiama(r)));
     }
     if (modalita == Modalita.AUTOMATICO || modalita == Modalita.CHIAVE_API) {
-      list.add(api(profile.fornitore(), profile::chiave, new ClientApi(Http.REALE)));
+      list.add(
+          api(
+              profile.fornitore(),
+              profile::chiave,
+              new ClientApi(Http.REALE, System.getProperty(ClientApi.MODEL_PROPERTY))));
     }
     return new DecisoreLlm(modalita, list);
   }
@@ -108,7 +112,7 @@ public final class DecisoreLlm implements Decisore {
     return new Trasporto() {
       @Override
       public String nome() {
-        return provider.etichetta();
+        return ClientApi.etichetta(provider, client.modello(provider));
       }
 
       @Override

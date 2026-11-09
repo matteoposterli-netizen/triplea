@@ -18,7 +18,8 @@ import javax.annotation.Nullable;
  * --tipo A=T,...       player type per alliance: proplus | hard (default proplus)
  * --decisore A=D,...   Pro+ decider per alliance: regole | file:PATH | llm (default regole; PATH =
  *                      directives file or folder, see DecisoreFile; llm = LLM strategist through
- *                      the API key, Claude Haiku with ANTHROPIC_API_KEY of the environment)
+ *                      the API key, Claude Haiku with ANTHROPIC_API_KEY of the environment;
+ *                      llm:MODEL = another model of the provider, eg llm:claude-sonnet-5-5)
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
@@ -94,13 +95,14 @@ record AutoplayOptions(
         (alliance, d) -> {
           if (!d.equals("regole")
               && !d.equals(LLM)
+              && !(d.startsWith(LLM + ":") && d.length() > LLM.length() + 1)
               && !(d.startsWith("file:") && d.length() > "file:".length())) {
             throw new IllegalArgumentException(
                 "Decisore non valido per "
                     + alliance
                     + ": "
                     + d
-                    + " (regole | file:PERCORSO | llm)");
+                    + " (regole | file:PERCORSO | llm | llm:MODELLO)");
           }
         });
     return map;

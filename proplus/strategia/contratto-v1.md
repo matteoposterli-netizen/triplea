@@ -165,3 +165,11 @@ Esempio di file scritto a mano (`esempi/direttive-file-R1-Allies.json`, provato 
   `tattiche` (se presenti) sostituiscono quelle della nazione; stessi limiti e paletti. Salvati nella voce dello storico
   `ordini_turno.<nazione>` {ordini, direttive (fuse), decisore}; `PianoAttivo` della nazione legge le direttive fuse.
   Errore ⇒ la nazione gioca le direttive dello stratega (avviso nel diario).
+
+## Ingresso, aggiunte dello step LLM-3
+
+- `operazioni[].round_in_attesa` (round di fila in "attendi", assente se 0) e, da 3 round, `avviso` "operazione X in
+  attesa da N round: motivare o lanciare" (anche negli ingressi degli ordini del turno).
+- `obiettivi_nazionali` [{nazione, obiettivo, pu_per_turno, territori_richiesti, territori_tenuti, mancano,
+  territori_da_prendere, altre_condizioni}] della alleanza (stratega) o della nazione (ordini del turno): obiettivi
+  definiti da proprieta' di territori, gia' attivi o a <= 3 conquiste.

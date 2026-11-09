@@ -97,6 +97,7 @@ public final class Ingresso {
     json.add("piani_ammessi", admittedPlans(ctx));
     json.add("lettura_nemico", reading(ctx));
     json.add("operazioni", operations(ctx, allianceOf));
+    json.add("obiettivi_nazionali", obiettiviNazionali(data, alliance, null));
     json.add("minacce", threats(data, alliance, allianceOf));
     json.add("eventi", events(ctx, allianceOf));
     json.add("strumenti", tools(ctx));
@@ -487,6 +488,20 @@ public final class Ingresso {
       o.addProperty("scorta_minima", op.scortaMinima());
       o.addProperty("perdita_attesa_trasporti_stima", Math.round(fleetTuv * strength / 100));
       o.addProperty("in_stallo", StalloOperazioni.inStallo(data.getProperties(), op.nome()));
+      // LLM step 3: rounds in a row the operation was kept waiting ("attendi")
+      final int waiting = roundsWaiting(data.getProperties(), alliance, op);
+      if (waiting > 0) {
+        o.addProperty("round_in_attesa", waiting);
+        if (waiting >= ROUND_ATTESA_AVVISO) {
+          o.addProperty(
+              "avviso",
+              "operazione "
+                  + op.nome()
+                  + " in attesa da "
+                  + waiting
+                  + " round: motivare o lanciare");
+        }
+      }
       if (reports.has(op.nome())) {
         o.add("ultimo_rapporto", reports.get(op.nome()));
       }
@@ -823,6 +838,7 @@ public final class Ingresso {
       }
     }
     json.add("operazioni", ops);
+    json.add("obiettivi_nazionali", obiettiviNazionali(data, alliance, name));
     json.add("fronti", strings(strategia.getFronti()));
     return json;
   }
@@ -1005,6 +1021,142 @@ public final class Ingresso {
     out.add("alleati_rinforzati", reinforcedTop);
     out.add("rapporti_operazioni", reports(data.getProperties(), alliance));
     return out;
+  }
+
+  /** Rounds in a row in "attendi" after which the input asks to motivate or launch. */
+  static final int ROUND_ATTESA_AVVISO = 3;
+
+  /** Objectives listed when they are this many captures (or fewer) from being met. */
+  static final int OBIETTIVI_MANCANTI_MAX = 3;
+
+  /**
+   * Rounds in a row (the latest history entries of the alliance, this round excluded) in which
+   * {@code op} was kept waiting: the strategic decision was "attendi" and no turn order of its
+   * nations launched it, or a turn order of its nations said "attendi".
+   */
+  static int roundsWaiting(
+      final GameProperties props, final String alliance, final Strategia.Operazione op) {
+    final Optional<StatoMaggiore.Stato> state = StatoMaggiore.getState(props, alliance);
+    if (state.isEmpty()) {
+      return 0;
+    }
+    final JsonArray storico = state.get().storico();
+    int count = 0;
+    for (int i = storico.size() - 1; i >= 0; i--) {
+      final JsonObject entry = storico.get(i).getAsJsonObject();
+      if (!entry.has(Valutazione.KEY_DIRETTIVE)) {
+        break;
+      }
+      final String strategic =
+          Direttive.of(entry.getAsJsonObject(Valutazione.KEY_DIRETTIVE))
+              .operazione(op.nome())
+              .decisione();
+      boolean launched = false;
+      boolean waited = false;
+      if (entry.has(OrdiniTurno.KEY)) {
+        for (final Map.Entry<String, JsonElement> e : entry.getAsJsonObject(OrdiniTurno.KEY).entrySet()) {
+          if (!op.nazioni().contains(e.getKey()) && !op.vettori().contains(e.getKey())) {
+            continue;
+          }
+          final JsonObject own = e.getValue().getAsJsonObject();
+          if (!own.has("ordini")) {
+            continue;
+          }
+          for (final JsonElement x : own.getAsJsonObject("ordini").getAsJsonArray("operazioni")) {
+            final JsonObject o = x.getAsJsonObject();
+            if (op.nome().equals(o.get("id").getAsString())) {
+              final String d = o.get("decisione").getAsString();
+              launched |= Direttive.LANCIA.equals(d);
+              waited |= Direttive.ATTENDI.equals(d);
+            }
+          }
+        }
+      }
+      final boolean waiting =
+          waited || (Direttive.ATTENDI.equals(strategic) && !launched);
+      if (!waiting) {
+        break;
+      }
+      count++;
+    }
+    return count;
+  }
+
+  /**
+   * LLM step 3: the national objectives of the alliance's nations (or of {@code nation} only) with
+   * their value in PUs that are met now or {@value #OBIETTIVI_MANCANTI_MAX} captures or fewer
+   * away: name, nation, PUs per turn, territories needed / held, territories still missing. Only
+   * objectives defined by territory ownership; the other conditions (war, exclusions) are noted.
+   */
+  static JsonArray obiettiviNazionali(
+      final GameState data, final String alliance, @javax.annotation.Nullable final String nation) {
+    final JsonArray out = new JsonArray();
+    if (!games.strategy.triplea.Properties.getNationalObjectives(data.getProperties())) {
+      return out;
+    }
+    final int multiplier = games.strategy.triplea.Properties.getPuMultiplier(data.getProperties());
+    for (final String n : Direttive.allianceNations(data, alliance)) {
+      if (nation != null && !nation.equals(n)) {
+        continue;
+      }
+      final GamePlayer p = data.getPlayerList().getPlayerId(n);
+      if (p == null) {
+        continue;
+      }
+      final List<games.strategy.triplea.attachments.RulesAttachment> rules =
+          new ArrayList<>(games.strategy.triplea.attachments.RulesAttachment.getNationalObjectives(p));
+      rules.sort(Comparator.comparing(r -> r.getName()));
+      for (final games.strategy.triplea.attachments.RulesAttachment ra : rules) {
+        if (ra.getObjectiveValue() <= 0 || ra.getUses() == 0) {
+          continue;
+        }
+        final Optional<games.strategy.triplea.attachments.RulesAttachment.OwnershipTest> test =
+            ra.getOwnershipTest();
+        if (test.isEmpty() || test.get().territories().isEmpty()) {
+          continue;
+        }
+        final var t = test.get();
+        final Predicate<GamePlayer> counts =
+            t.direct()
+                ? t.players()::contains
+                : owner -> t.players().stream().anyMatch(x -> x.equals(owner) || x.isAllied(owner));
+        final List<String> missing = new ArrayList<>();
+        int have = 0;
+        for (final Territory x : t.territories()) {
+          if (counts.test(x.getOwner())) {
+            have++;
+          } else {
+            missing.add(x.getName());
+          }
+        }
+        final int toGo = Math.max(0, t.needed() - have);
+        if (toGo > OBIETTIVI_MANCANTI_MAX) {
+          continue;
+        }
+        final JsonObject o = new JsonObject();
+        o.addProperty("nazione", n);
+        o.addProperty("obiettivo", readableName(ra.getName(), n));
+        o.addProperty("pu_per_turno", ra.getObjectiveValue() * multiplier);
+        o.addProperty("territori_richiesti", t.needed());
+        o.addProperty("territori_tenuti", have);
+        o.addProperty("mancano", toGo);
+        if (toGo > 0) {
+          o.add("territori_da_prendere", strings(missing.subList(0, Math.min(6, missing.size()))));
+        }
+        if (!t.ownershipOnly()) {
+          o.addProperty("altre_condizioni", true);
+        }
+        out.add(o);
+      }
+    }
+    return out;
+  }
+
+  /** "objectiveAttachment_Germans_3_Control_Caucasus" -> "Control Caucasus". */
+  static String readableName(final String attachment, final String nation) {
+    String n = attachment.replaceFirst("^objectiveAttachment_?", "").replaceFirst("^" + nation + "_?", "");
+    n = n.replaceFirst("^\\d+_", "");
+    return n.replace('_', ' ').strip();
   }
 
   /** The strategic directives as the nation sees them (its targets, tools, risk). */

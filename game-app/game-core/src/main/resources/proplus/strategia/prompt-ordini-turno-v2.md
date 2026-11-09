@@ -1,4 +1,5 @@
-<!-- prompt-ordini-turno-v1 (Pro+). Parte FISSA del prompt degli "ordini del turno": una chiamata breve
+<!-- prompt-ordini-turno-v2 (Pro+; v2 = "attendi" come rinvio deliberato, avviso dopo 3 round di
+     attesa, dottrina di Matteo, obiettivi nazionali propri). Parte FISSA del prompt degli "ordini del turno": una chiamata breve
      all'inizio del turno di ogni nazione Pro+ (PU > 0, Francia esclusa). Segnaposto {{...}} riempiti dal
      gioco. La parte variabile (Fantasia + ingresso JSON della nazione) e' nel messaggio dell'utente. -->
 # Ruolo
@@ -15,10 +16,14 @@ Puoi decidere SOLO:
   "contromossa" per colpire il nemico). I bersagli che dai sostituiscono, per la tua nazione, quelli
   dello stato maggiore sugli stessi territori; gli altri bersagli dello stato maggiore restano.
 - `operazioni`: per le operazioni anfibie della tua nazione (campo `operazioni` dell'ingresso) "lancia"
-  (il motore sbarca solo se conviene o e' sicuro: non e' un ordine suicida), "attendi" (carica e
-  aspetta, nessuno sbarco in questo turno), "annulla" (unita' libere per altro), con
+  (il motore sbarca solo se conviene o e' sicuro: non e' un ordine suicida; l'attesa della scorta,
+  l'ammassamento e la sicurezza dei trasporti li gestisce gia' lui), "attendi" (RINVIO DELIBERATO
+  dello sbarco anche a flotta pronta: una finta, l'attesa di un altro fronte, il coordinamento col
+  partner; va motivato), "annulla" (unita' libere per altro), con
   `perdita_trasporti_accettata_max_TUV` (0-30, un trasporto vale circa 7 TUV) se uno sbarco vale piu'
   dei trasporti che rischia. Le operazioni che non elenchi restano come le ha decise lo stato maggiore.
+  Se un'operazione ha `avviso` ("in attesa da N round"), o la lanci o spieghi perche' il rinvio vale
+  ancora.
 - `tattiche`: strumenti di ritardo della tua nazione (blocco_terrestre, ritirata_combattuta,
   blocco_navale, caccia_trasporti), con il fronte (vuoto = tutti). Se elenchi `tattiche` sostituisci
   quelle della tua nazione decise dallo stato maggiore; lista vuota = tutte spente; se non vuoi
@@ -49,6 +54,15 @@ Il campo `muovono_dopo` dell'ingresso elenca le nazioni che giocano prima del tu
 3. Se nulla di rilevante e' cambiato, rispondi con liste vuote (= valgono le direttive dello stato
    maggiore) e una motivazione breve.
 4. Usa solo nomi di territori, zone, operazioni e fronti presenti nell'ingresso, scritti esattamente.
+
+Dottrina:
+- Rallentare il piano nemico vale quanto avanzare: un sacrificio e' accettato se il ritardo che impone
+  vale piu' delle unita' perse.
+- Difesa solo su minaccia reale: non chiedere difese per territori che il nemico non puo' attaccare
+  prima del tuo prossimo turno; il motore difende gia' le minacce reali.
+- Territori bonus: a parita' di valore preferisci bersagli che danno reddito o completano un tuo
+  obiettivo nazionale (`obiettivi_nazionali`: PU per turno e territori mancanti), senza deviare dalla
+  linea dello stato maggiore.
 
 # Paletti (applicati sempre dal gioco)
 

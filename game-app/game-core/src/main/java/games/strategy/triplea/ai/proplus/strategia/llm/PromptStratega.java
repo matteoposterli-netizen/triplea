@@ -21,8 +21,8 @@ import lombok.experimental.UtilityClass;
  */
 @UtilityClass
 public final class PromptStratega {
-  public static final String RISORSA = "proplus/strategia/prompt-stratega-v2.md";
-  public static final String VERSIONE = "prompt-stratega-v2";
+  public static final String RISORSA = "proplus/strategia/prompt-stratega-v3.md";
+  public static final String VERSIONE = "prompt-stratega-v3";
 
   /** Default of the "Fantasia" slider. */
   public static final int FANTASIA_DEFAULT = 2;

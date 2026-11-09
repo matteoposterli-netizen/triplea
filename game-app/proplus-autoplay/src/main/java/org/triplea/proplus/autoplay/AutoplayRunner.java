@@ -184,9 +184,15 @@ public final class AutoplayRunner {
       if (decider.startsWith("file:")) {
         Decisori.set(
             data.getProperties(), alliance, Decisore.FILE, decider.substring("file:".length()));
-      } else if (AutoplayOptions.LLM.equals(decider)) {
-        // LLM strategist through the API key (Claude Haiku: ANTHROPIC_API_KEY of the environment)
+      } else if (decider.startsWith(AutoplayOptions.LLM)) {
+        // LLM strategist through the API key (Claude Haiku: ANTHROPIC_API_KEY of the environment);
+        // "llm:<model>" asks another model of the provider (one LLM alliance per game)
         Decisori.set(data.getProperties(), alliance, Modalita.CHIAVE_API.id(), "");
+        if (decider.startsWith(AutoplayOptions.LLM + ":")) {
+          System.setProperty(
+              games.strategy.triplea.ai.proplus.strategia.llm.ClientApi.MODEL_PROPERTY,
+              decider.substring(AutoplayOptions.LLM.length() + 1));
+        }
       } else {
         Decisori.set(data.getProperties(), alliance, Decisore.REGOLE, "");
       }

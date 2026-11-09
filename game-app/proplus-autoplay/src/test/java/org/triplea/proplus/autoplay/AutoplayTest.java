@@ -239,6 +239,14 @@ class AutoplayTest {
     assertThatThrownBy(
             () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--decisore", "Axis=gpt"}))
         .isInstanceOf(IllegalArgumentException.class);
+    assertThat(
+            AutoplayOptions.parse(
+                    new String[] {"--mappa", "m", "--decisore", "Allies=llm:claude-sonnet-5-5"})
+                .decisore("Allies"))
+        .isEqualTo("llm:claude-sonnet-5-5");
+    assertThatThrownBy(
+            () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--decisore", "Axis=llm:"}))
+        .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(
             () -> AutoplayOptions.parse(new String[] {"--mappa", "m", "--decisore", "Axis=file:"}))
         .isInstanceOf(IllegalArgumentException.class);
@@ -366,6 +374,23 @@ class AutoplayTest {
         .contains("Stratega 1 chiamate $0.0020 ($0.0020 per partita), Ordini del turno 1 chiamate")
         .contains("## Rischio effettivo medio per nazione")
         .contains("| 8-LLM | 3.5 | 2.5 |");
+    // comparison per configuration: rules and LLM with the same plans
+    final JsonObject rules = JsonParser.parseString(SAMPLE).getAsJsonObject();
+    final JsonObject sonnet = game.deepCopy();
+    sonnet.getAsJsonObject("parametri").getAsJsonObject("decisori").addProperty("Allies", "llm:claude-sonnet-5-5");
+    final String cmp =
+        RiepilogoGenerale.markdown(
+            "T",
+            List.of(
+                new RiepilogoGenerale.Game("1-A-1", rules),
+                new RiepilogoGenerale.Game("8-LLM", game),
+                new RiepilogoGenerale.Game("11-Sonnet", sonnet)));
+    assertThat(cmp)
+        .contains("Confronto per configurazione")
+        .contains("| Pro+ A / Pro+ 1 (llm) | 1 |")
+        .contains("| Pro+ A / Pro+ 1 (llm:claude-sonnet-5-5) | 1 |")
+        .contains("100% / 0% / 0% (1)")
+        .contains("| 0.0030 |");
   }
 
   @Test

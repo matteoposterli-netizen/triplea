@@ -306,6 +306,49 @@ class OrdiniTurnoTest extends AbstractClientSettingTestCase {
   }
 
   @Test
+  void anOperationWaitingForThreeRoundsIsFlaggedToTheStrategist() {
+    llm(STRATEGY, r -> ORDERS);
+    for (final int round : List.of(4, 5, 6)) {
+      data.getSequence().setRoundAndStep(round, "Combat Move", british);
+      Valutazione.inizioRound(data, british).orElseThrow();
+    }
+    data.getSequence().setRoundAndStep(7, "Combat Move", british);
+
+    final JsonObject in = Valutazione.inizioRound(data, british).orElseThrow().ingresso();
+
+    final JsonObject overlord =
+        java.util.stream.StreamSupport.stream(in.getAsJsonArray("operazioni").spliterator(), false)
+            .map(e -> e.getAsJsonObject())
+            .filter(o -> "Overlord UK".equals(o.get("id").getAsString()))
+            .findFirst()
+            .orElseThrow();
+    assertThat(overlord.get("round_in_attesa").getAsInt()).isEqualTo(3);
+    assertThat(overlord.get("avviso").getAsString())
+        .isEqualTo("operazione Overlord UK in attesa da 3 round: motivare o lanciare");
+  }
+
+  @Test
+  void theInputsListTheOwnNationalObjectivesWithTheirPus() {
+    final JsonObject in = Valutazione.inizioRound(data, british).orElseThrow().ingresso();
+    final JsonObject orders = OrdiniTurno.inizioTurno(data, british).orElseThrow().ingresso();
+
+    assertThat(in.has("obiettivi_nazionali")).isTrue();
+    in.getAsJsonArray("obiettivi_nazionali")
+        .forEach(
+            e -> {
+              final JsonObject o = e.getAsJsonObject();
+              assertThat(o.get("pu_per_turno").getAsInt()).isPositive();
+              assertThat(o.get("mancano").getAsInt()).isBetween(0, 3);
+              assertThat(o.get("obiettivo").getAsString()).doesNotStartWith("objectiveAttachment");
+            });
+    orders
+        .getAsJsonArray("obiettivi_nazionali")
+        .forEach(e -> assertThat(e.getAsJsonObject().get("nazione").getAsString()).isEqualTo("British"));
+    assertThat(Ingresso.readableName("objectiveAttachment_Germans_3_Control_Caucasus", "Germans"))
+        .isEqualTo("Control Caucasus");
+  }
+
+  @Test
   void directivesV11CheckRiskPerNation() {
     llm(
         STRATEGY.replace(
