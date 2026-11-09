@@ -309,6 +309,17 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   (min-max, ds), Δ da Hard vs Hard e da "Pro+ attuale" (stesso piano) con "rumore" se |Δ| <= max(0,5, ds media), TUV
   perso per alleanza, reddito finale, sbarchi veri, round in RALLENTAMENTO; poi i componenti dal piu' dannoso al piu'
   utile ("costa / aiuta / rumore"); avviso ⚠ se "Pro+ nudo" e' distinguibile da Hard. Niente test di qualita'.
+- **Modalita' "conferma" (step CONFERMA)**: `[conferma]` nel messaggio del commit di testa (precedenza su `[ablazione]` e
+  `[confronto]`) ⇒ input `modalita: conferma`. Solo regole, 12 round, Equilibrato, **semi 101-112** (mai usati prima), 4
+  configurazioni = 48 partite: a `Hard-vs-Hard`, b `Asse-ProPlus-nudo-vs-Hard`, c `Asse-ProPlus-A-vs-Hard`, d
+  `Asse-A-senza-rischio-fronte`. Nel `riepilogo-generale.md` la sezione **"Statistica del confronto contro Hard"**
+  (`ConfrontoConferma`, scritta quando c'e' "Hard / Hard" e almeno una configurazione con un solo lato non Hard): per
+  configurazione VC R12, reddito finale e TUV perso per alleanza come media ± ds [errore standard]; differenze del lato
+  che cambia (VC R12, reddito) da Hard vs Hard e, per le configurazioni con componenti spenti, da "Pro+ attuale", con
+  intervallo al 95% del **t di Welch** (gradi di liberta' di Welch-Satterthwaite, quantile con l'espansione di
+  Cornish-Fisher, tabella sotto 3 gradi) ed esito "esclude / include lo 0", piu' i semi per configurazione per un test
+  al 5% con potenza 80% a quella differenza. Pooling di run diverse: comando `confronto` su una cartella con le
+  sottocartelle (anche collegamenti) di tutte le partite.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2908,3 +2919,44 @@ spenti / senza effetto (perdita accettata 0).
   80-93% + Normandy 5 su 6); (4) `NudoHardTest`: 0 risposte diverse da Hard. Divergenza tardiva (VC R4 4,5 contro 4,33,
   R8 5,33 contro 5,83). Welch: Δ 1,5 su errore 0,75 ≈ 2 errori standard, 1 confronto su 9: compatibile col rumore, ma
   **non escluso**. Alleati nudo: −0,33, rumore. Per chiudere servono piu' semi (es. 12) di nudo e Hard vs Hard.
+
+### Step CONFERMA — nudo = Hard? il rischio per fronte costa? (2026-11-09)
+
+Solo misura (nessun comportamento di Pro+ o Hard toccato): modalita' autoplay `[conferma]` e sezione statistica
+`ConfrontoConferma` (vedi "Autoplay in CI"). File: workflow `proplus-autoplay.yml` / `proplus-release.yml`, autoplay
+`ConfrontoConferma` (nuovo), `RiepilogoGenerale` (1 riga), `AutoplayTest` +1 (22 test verdi in locale).
+- **Codice equivalente per il pooling** (verificato con `git diff d4109aa 304a14a`): tra le due run precedenti cambiano
+  solo file `ai/proplus/` dell'ablazione, ogni ramo nuovo scatta solo con un componente spento; nessuna classe `ai/pro`
+  toccata; 5330871 cambia solo il modulo autoplay. Quindi "Pro+ A" (confronto + ablazione) e "Hard vs Hard" sono
+  sommabili; nudo e senza rischio_fronte esistono solo dall'ablazione.
+
+#### Autoplay in CI (run 42636636143, commit 5330871, tutto verde al 1° tentativo, 48 partite, nessuna fallita)
+Lato Asse, VC R12 media ± ds [errore standard]; intervalli al 95% t di Welch.
+
+| Configurazione | Solo semi nuovi (101-112) | Aggregato (con run 42605879121 + 42622705022) |
+|---|---|---|
+| a Hard vs Hard | 6,00 ± 1,54 [0,44], n 12 | 6,05 ± 1,33 [0,28], n 22 |
+| b Pro+ nudo | 6,58 ± 1,00 [0,29], n 12 | 5,89 ± 1,45 [0,34], n 18 |
+| c Pro+ A | 6,00 ± 1,21 [0,35], n 12 | 5,18 ± 1,59 [0,34], n 22 |
+| d A senza rischio_fronte | 6,50 ± 0,67 [0,19], n 12 | 6,50 ± 1,04 [0,25], n 18 |
+
+| Differenza | Solo nuovi: Δ VC [IC 95%] | Aggregato: Δ VC [IC 95%] | Aggregato: Δ reddito [IC 95%] |
+|---|---|---|---|
+| b − a (nudo − Hard) | +0,58 [−0,52, +1,69] | −0,16 [−1,06, +0,74] | −4,0 [−16,3, +8,3] |
+| c − d (rischio per fronte acceso − spento) | −0,50 [−1,34, +0,34] | **−1,32 [−2,17, −0,47]** | **−18,1 [−30,0, −6,3]** |
+| d − a | +0,50 [−0,53, +1,53] | +0,45 [−0,30, +1,21] | +5,7 [−3,8, +15,1] |
+| c − a | 0,00 [−1,17, +1,17] | −0,86 [−1,76, +0,03] | **−12,5 [−23,5, −1,4]** |
+
+- **Nudo = Hard: si'.** Il −1,5 dell'ablazione non si ripete: sui semi nuovi nudo e' anzi sopra Hard (+0,58), aggregato
+  −0,16 con intervallo ±0,9 attorno allo 0. Nessun indizio di bug negli agganci; non indagato nei diari (l'intervallo
+  non esclude lo 0).
+- **Rischio per fronte: incerto.** Sui semi nuovi −0,50, intervallo che include lo 0; nell'aggregato −1,32 con intervallo
+  che esclude lo 0, ma l'aggregato e' trascinato dai 6 semi dell'ablazione (−2,0), cioe' dalla run che ha fatto nascere
+  il sospetto (stima gonfiata dalla selezione). Stima onesta: costo tra 0 e ~1,3 VC, piu' probabile intorno a 0,5. Per
+  confermare un costo di 0,5 VC servono ~60 semi per configurazione (ds ~1).
+- **Eterogeneita' tra run (dubbio aperto)**: le configurazioni Pro+ Asse cambiano molto tra run con lo stesso codice,
+  Hard vs Hard no. Nudo: ablazione 4,5 (semi 1-6) → conferma 6,58 (semi 101-112), circa 3,6 errori standard; Pro+ A:
+  confronto 3,75 (semi 1-4) e ablazione 4,5 → conferma 6,0; Hard vs Hard 6,25 / 6,0 / 6,0. Lo stesso seme non ripete la
+  partita (seme 1-4 di Pro+ A: 5/4, 3/6, 3/2, 4/4 tra confronto e ablazione). Causa non trovata (semi bassi, carico dei
+  runner o caso): finche' non e' chiarita, i confronti validi sono quelli dentro la stessa run con gli stessi semi, e qui
+  nessuna differenza esce dal rumore.
