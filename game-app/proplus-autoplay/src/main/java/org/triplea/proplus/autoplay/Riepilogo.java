@@ -386,7 +386,11 @@ final class Riepilogo {
     final JsonObject deciders = new JsonObject();
     for (final String a : monitor.alliances().keySet()) {
       deciders.addProperty(
-          a, AutoplayOptions.HARD.equals(o.tipo(a)) ? "-" : o.decisore(a).replaceFirst(":.*", ""));
+          a,
+          AutoplayOptions.HARD.equals(o.tipo(a))
+              ? "-"
+              // the path of a directives file is not shown; the model of an LLM is (llm:MODELLO)
+              : o.decisore(a).startsWith("file:") ? "file" : o.decisore(a));
     }
     p.add("decisori", deciders);
     return p;

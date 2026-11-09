@@ -2642,3 +2642,29 @@ nazionali propri nell'ingresso, autoplay con 4 semi per le configurazioni LLM + 
 - Verifica locale (Europe 1940 reale, A/1 regole, 2 round, 32 s): `obiettivi_nazionali` R2 Asse = Germania Control
   Caucasus 5 PU (manca Caucasus), Italia Roman Empire 5 PU (manca 1 tra Gibraltar ed Egypt); Alleati = USA Homeland 20
   e Defense Obligations 5 (tenuti), URSS Berlin 10 (manca Germany), Far East Reserves 9 (tenuto).
+
+#### Autoplay in CI (run 42578913119, commit 5529383, verde al 3° tentativo)
+Tentativo 1: `PlanLogisticsTest.theNeutralPlanBuysAsWithoutAStrategyFile` (acquisti di Hard con `Math.random`, instabile
+noto); tentativo 2: HTTP 504 di GitHub sul download degli asset (`:game-headed:downloadAssets`); tentativo 3 verde
+("re-run failed jobs", stesso commit). 24 partite. **Difetto del riepilogo**: `Riepilogo.parameters` toglieva il modello
+dal decisore ("llm:claude-sonnet-5-5" → "llm") e la tabella per configurazione mescolava Haiku e Sonnet; corretto dopo
+la run (il modello resta, si toglie solo il percorso dei file). Confronto ricalcolato partita per partita (media dei semi;
+operazioni = decisioni di stratega + ordini del turno dell'alleanza LLM, Alleati per le regole):
+
+| Configurazione | Partite | VC R12 Asse / Alleati | Sbarchi veri Asse / Alleati | Lancia / attendi / annulla | Posture (round) | $ per partita |
+|---|---|---|---|---|---|---|
+| A/1 regole (run 48) | 2 | 6,5 / 4,5 | 5,5 / 13,0 | 100 / 0 / 0 % | RALL 8, CONTR 11, OFF 5 | - |
+| A/1 regole (run 49) | 4 | 7,0 / 4,0 | 4,2 / 6,8 | 100 / 0 / 0 % | RALL 18, CONTR 20, OFF 6, DIF 4 | - |
+| Alleati Haiku v2 (run 48) | 2 | 8,0 / 3,0 | 7,5 / 8,5 | 2 / 97 / 1 % (90) | OFF 3, RALL 4, CONTR 9, DIF 8 | 0,027 |
+| **Alleati Haiku v3** | 4 | 8,0 / 3,0 | 5,5 / 13,8 | 10 / 76 / 14 % (185) | OFF 10, RALL 9, CONTR 25, DIF 4 | 0,028 |
+| **Alleati Sonnet v3** | 2 | 7,5 / 3,5 | 7,0 / 4,5 | 74 / 26 / 0 % (72) | OFF 3, RALL 17, CONTR 3, DIF 1 | 0,49 |
+| Asse Haiku v2 (run 48) | 2 | 7,0 / 4,0 | 6,0 / 8,0 | - | OFF 21, CONTR 3 | 0,019 |
+| **Asse Haiku v3** | 4 | 7,25 / 3,75 | 7,2 / 9,2 | - | OFF 46, CONTR 2 | 0,020 |
+
+- Test di qualita' (Haiku, prompt v3 / ordini v2): stratega 30/30 JSON validi, limitate dai paletti 12/30 (40%), 4,0 s,
+  $0,029; ordini 30/30, limitate 10/30, 1,8 s, $0,011. 412 chiamate nelle 10 partite LLM, 0 ripieghi.
+- "attendi": Haiku v3 scende da 97% a 76% (+14% "annulla"), resta dominante; Sonnet v3 lancia nel 74% delle decisioni.
+  DIFENSIVA: Haiku 8 → 4 round (v2 → v3), Sonnet 1.
+- Risultato: nessuna configurazione LLM batte le regole. Alleati Haiku v3 8/3 in tutti e 4 i semi (regole 7/4);
+  Sonnet 7,5/3,5 su 2 semi con meno sbarchi alleati (4,5) nonostante "lancia". Costo Sonnet ~17 volte Haiku
+  ($0,49 contro $0,028 per partita, 2 livelli). Varianza alta, non tarato.
