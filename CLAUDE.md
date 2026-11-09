@@ -3396,3 +3396,41 @@ diviso in candidati + esecuzione senza cambiarne il comportamento); `DiaryRecord
   autoplay validi). Manca il job `changes` (primo job di `proplus-release.yml`): non compare tra i job ne' tra i check ne' nel consumo ⇒
   errore lato GitHub nella creazione/avvio del job (nessun log disponibile dall'API; il messaggio e' solo nelle "Annotations" della
   pagina della run, bloccata dal proxy della sandbox). La run [prova2] 42691097392 ha `changes` verde ed e' "success".
+- Test locali (JDK 25 da apt, mirror Google di Maven Central in `~/.gradle/init.d`, solo sandbox): `:game-core:test` 3127 (fallito solo
+  `ContentDownloaderIntegrationTest`, rete della sandbox; `DiaryNeutralityTest` fallito 1 volta nella suite in parallelo sul controllo
+  "replay senza diario", poi 2/2 verde da solo: instabilita' gia' nota, codice dell'operazione spento in quel test), `:ai:test` 13,
+  `:game-headed:test` 93, `:proplus-autoplay:test` 23 verdi; golden Hard, golden Pro+, `NudoHardTest`, `OperazioniLlmTest` 6/6. Partita
+  locale 4 round con LLM acceso e senza chiave: 4 decisioni registrate, tutte ripiego "LLM non disponibile", partita completata.
+
+#### Autoplay in CI (run 42712911200, commit 36b9b28, tutto verde al 1° tentativo: test, release, 140 partite, nessuna fallita)
+`[provallm]`, 12 round, Equilibrato, semi 401-435 (nuovi), matrice mescolata. VC R12 del lato Pro+, media ± ds [IC 95%].
+
+| Configurazione | VC R12 del lato | Reddito finale | TUV perso del lato | Contatore nudo |
+|---|---|---|---|---|
+| Asse nudo | 5,17 ± 1,69 [4,59, 5,75] | 57 | 883 | **0** (1.649.313) |
+| Asse nudo + Egitto decisa da LLM | 5,40 ± 1,88 [4,75, 6,05] | 60 | 871 | **0** (1.680.992; 280 dell'operazione) |
+| Alleati nudo | 5,57 ± 1,65 [5,00, 6,14] | 108 | 1101 | **0** (2.305.064) |
+| Alleati nudo + Francia decisa da LLM | 5,20 ± 1,41 [4,72, 5,68] | 102 | 1043 | **0** (2.207.438; 779) |
+
+- **Effetto in VC**: Egitto LLM **+0,23 [−0,62, +1,08] "promettente"** (IC che arriva a +1, servirebbero ~960 semi per 0,23); Francia LLM
+  **−0,37 [−1,10, +0,36] "non vale"**. Nessuno dei due "vale".
+- **Decisioni** (239 chiamate, **0 ripieghi**, 0 errori, 0 risposte non valide): Egitto tappa 1 lancia 17 / rinvia 14 / annulla 13 (la
+  formula avrebbe rinviato tutte e 44), tappa 2 procedi 16, tenuta tieni 58 / ritira 1 (formula ritira 18); Francia tappa 1 lancia 29 /
+  rinvia 8 / annulla 4 (formula: rinvia 40 su 41), tappa 2 procedi 18 / rinvia 1 / annulla 2, tenuta tieni 47 / ritira 10 (formula ritira
+  49). Diverse dalla formula: 70% delle tappe 1, 0-10% delle tappe 2, 29-68% delle tenute.
+- **Calibrazione** (194 decisioni eseguite con esito; reale = bersaglio dell'alleanza al turno di chi chiude nel round dopo): errore medio
+  per fascia **LLM 9,5 punti contro formula 48,2**, Brier 0,222 contro 0,449 ⇒ **l'LLM stima la tenuta meglio della formula: si'**. Per
+  operazione: Egitto lancio stimato 0,56 / reale 0,76, tappa 2 0,83 / 0,81, tieni 0,73 / 0,76 (ben calibrato); **Francia lancio 0,67 /
+  reale 0,31, tappa 2 0,62 / 0,22** (troppo ottimista), tieni 0,66 / 0,58. Nota: il prompt riportava le fasce misurate della formula in
+  prova2 (fatto, non taratura): parte del vantaggio sulla formula viene da li'.
+- **Costo**: $1,75 per tutta la run (tetto $40), $0,025 a partita (max $0,10), 3,4 chiamate a partita, 2,8 s per chiamata; token ingresso
+  601K + cache letta 842K, uscita 44K. Il budget per partita ($0,57) non e' mai stato toccato.
+- **Egitto**: Egypt dell'Asse (nudo / LLM) R3 34% / 74%, R6 17% / 51%, R9 3% / 26%, **R12 6% / 11%** (+6 punti [−7, +19]); preso 21/35,
+  tenuta COMPLETATA 14/35, FALLITA 7. Decisioni giuste (calibrate, lanci con tenuta reale 76%), possesso molto piu' lungo, ma dopo la
+  COMPLETATA le unita' tornano a Hard e il Regno Unito riprende il Cairo: l'effetto in VC a R12 resta piccolo. TUV perso Asse −13.
+- **Francia**: Normandy alleata (nudo / LLM) R10 57% / 37%, **R12 51% / 40%** (−11 [−35, +12]); France R12 17% / 6%. Normandy presa 21/35 ma
+  tenuta COMPLETATA **0/35**, FALLITA 20 (tenuta media 1,5 round), testa di ponte 2 round 3/35, tappe su Parigi valutate 4 / eseguite 0.
+  **Perche' non vale**: (1) **stima dell'LLM sbagliata sul lancio** (0,67 contro 0,31): la Germania contrattacca Normandy davvero, a
+  differenza di quanto suggerisce lo storico del nemico in altri territori; (2) l'esecuzione della tappa 2 (sbarco UK) lascia presidi che
+  non reggono (procedi 18, tenuto 22%); (3) i lanci tolgono unita' all'offensiva normale di Hard (Normandy e Parigi meno alleate a R12 che
+  in nudo). Le perdite in TUV non sono la causa: TUV perso Alleati −58 [−108, −9], Asse −83 [−141, −26] (scambi piu' pari).
