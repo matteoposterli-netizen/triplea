@@ -116,6 +116,9 @@ public interface ProDecisionRecorder {
   default void purchaseDefenseShare(
       ProData proData, ProPurchaseOrders orders, ProPurchaseOrders.DefenseShare share) {}
 
+  /** Pro+ step C2-bis: how the purchase split its PUs between defense, orders and the rest. */
+  default void strategyBudget(ProData proData, ProStrategyBudget budget) {}
+
   /** The air units of the non-combat move landed with a plan's staging pull. */
   default void airStaging(
       ProData proData, ProStagingOrders orders, ProStagingOrders.AirResult result) {}

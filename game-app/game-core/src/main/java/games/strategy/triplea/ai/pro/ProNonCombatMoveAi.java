@@ -769,10 +769,21 @@ class ProNonCombatMoveAi {
     final List<ProTerritory> prioritizedTerritories = new ArrayList<>(moveMap.values());
     prioritizedTerritories.sort(Comparator.comparingDouble(ProTerritory::getValue).reversed());
 
+    // Pro+ step C2-bis: the strategist's expendable / must-hold land (Hard: none)
+    final Optional<ProDefenseLists> lists = proData.getTuning().defenseLists(proData);
+
     // Remove territories that I'm not going to try to defend
     for (final Iterator<ProTerritory> it = prioritizedTerritories.iterator(); it.hasNext(); ) {
       final ProTerritory patd = it.next();
       final Territory t = patd.getTerritory();
+      if (lists.isPresent() && !t.isWater() && lists.get().isExpendable(t)) {
+        // not defended, and no units sent there to stay
+        ProLogger.debug("Removing expendable territory=" + t.getName());
+        patd.setCanHold(false);
+        it.remove();
+        continue;
+      }
+      final boolean mustHold = lists.isPresent() && !t.isWater() && lists.get().isMustHold(t);
       final boolean hasFactory = ProMatches.territoryHasInfraFactoryAndIsLand().test(t);
       final ProBattleResult minResult = patd.getMinBattleResult();
       final int cantMoveUnitValue =
@@ -798,13 +809,15 @@ class ProNonCombatMoveAi {
               && !hasFactory
               && patd.getMaxUnits().stream().noneMatch(Matches.unitIsLand())
               && cantMoveUnitValue < 5;
-      if (!patd.isCanHold()
-          || patd.getValue() <= 0
-          || isLandAndCanOnlyBeAttackedByAir
-          || isNotFactoryAndShouldHold
-          || canAlreadyBeHeld
-          || isNotFactoryAndHasNoEnemyNeighbors
-          || isNotFactoryAndOnlyAmphib) {
+      if (mustHold
+          ? canAlreadyBeHeld
+          : !patd.isCanHold()
+              || patd.getValue() <= 0
+              || isLandAndCanOnlyBeAttackedByAir
+              || isNotFactoryAndShouldHold
+              || canAlreadyBeHeld
+              || isNotFactoryAndHasNoEnemyNeighbors
+              || isNotFactoryAndOnlyAmphib) {
         final double tuvSwing = minResult.getTuvSwing();
         final boolean hasRemainingLandUnit = minResult.isHasLandUnitRemaining();
         ProLogger.debug(
@@ -832,6 +845,19 @@ class ProNonCombatMoveAi {
                 + patd.getMaxEnemyUnits().size());
         it.remove();
       }
+    }
+    if (lists.isPresent()) {
+      // the must-hold land is tried first, in Hard's order
+      final List<ProTerritory> first = new ArrayList<>();
+      for (final Iterator<ProTerritory> it = prioritizedTerritories.iterator(); it.hasNext(); ) {
+        final ProTerritory patd = it.next();
+        if (!patd.getTerritory().isWater() && lists.get().isMustHold(patd.getTerritory())) {
+          patd.setCanHold(true);
+          first.add(patd);
+          it.remove();
+        }
+      }
+      prioritizedTerritories.addAll(0, first);
     }
 
     // Add best sea production territory for sea factories

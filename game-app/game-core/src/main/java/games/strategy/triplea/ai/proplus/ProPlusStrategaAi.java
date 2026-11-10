@@ -81,6 +81,7 @@ public class ProPlusStrategaAi extends ProPlusAi {
       final String line = Stratega.rigaFineTurno(data, player);
       commento(line);
       StrategaDiario.fineTurno(data, player, line);
+      Difesa.fineTurno(data, player);
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Stratega: riga di fine turno non scritta: " + e);
     }

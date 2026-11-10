@@ -241,11 +241,20 @@ public interface ProTuning {
   }
 
   /**
-   * A computed defense plan (Pro+ step C2, only the "Pro+ Stratega LLM" player): its defensive
-   * purchases replace the purchase's "defend land" part and it caps the PUs of the purchase orders.
-   * Empty by default: Hard and Hard Beta defend as always.
+   * Cap of the purchase orders in percent of the turn's PUs, applied after the Pro AI has bought
+   * its own defense of threatened land with every PU it needs (Pro+ step C2-bis, only the "Pro+
+   * Stratega LLM" player). Empty by default: Hard and Hard Beta buy as always.
    */
-  default Optional<ProDefensePlan> defensePlan(final ProData proData) {
+  default OptionalDouble strategyCapPercent(final ProData proData) {
+    return OptionalDouble.empty();
+  }
+
+  /**
+   * Territories the Pro AI's own defense leaves out or always tries to defend, in the purchase and
+   * in the non-combat move (Pro+ step C2-bis, only the "Pro+ Stratega LLM" player). Empty by
+   * default: Hard and Hard Beta defend as always.
+   */
+  default Optional<ProDefenseLists> defenseLists(final ProData proData) {
     return Optional.empty();
   }
 

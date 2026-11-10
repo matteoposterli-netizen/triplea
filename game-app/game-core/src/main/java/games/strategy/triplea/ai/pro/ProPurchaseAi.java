@@ -51,6 +51,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.function.Predicate;
 import org.triplea.java.collections.CollectionUtils;
@@ -460,11 +461,11 @@ class ProPurchaseAi {
     final List<ProPlaceTerritory> needToDefendLandTerritories =
         prioritizeTerritoriesToDefend(purchaseTerritories, true);
     final Optional<ProPurchaseOrders> planOrders = proData.getTuning().purchaseOrders(proData);
-    final Optional<ProDefensePlan> defensePlan = proData.getTuning().defensePlan(proData);
-    if (defensePlan.isPresent()) {
-      // Pro+ step C2: the computed defense plan replaces the defense of threatened land
-      purchaseDefensePlan(purchaseTerritories, purchaseOptions, defensePlan.get());
-    } else if (planOrders.isPresent() && planOrders.get().minimumShare() > 0) {
+    // Pro+ step C2-bis: with a cap of the orders the defense is Hard's own, with every PU it needs
+    final OptionalDouble strategyCap = proData.getTuning().strategyCapPercent(proData);
+    final Resource pusResource = data.getResourceList().getResourceOrThrow(Constants.PUS);
+    final int startPus = resourceTracker.getRemaining(pusResource);
+    if (strategyCap.isEmpty() && planOrders.isPresent() && planOrders.get().minimumShare() > 0) {
       // Pro+: a share of the PUs is reserved for the plan, unless a factory or capital is at risk
       purchaseDefendersWithinPlanShare(
           purchaseTerritories, needToDefendLandTerritories, purchaseOptions, planOrders.get());
@@ -515,15 +516,17 @@ class ProPurchaseAi {
     }
 
     // A strategy plan's purchase orders (Pro+): after urgent defense, the PUs left follow its mix
-    // Pro+ step C2: the PUs over the strategy budget are kept for the Pro AI's own purchases
-    final Resource pusResource = data.getResourceList().getResourceOrThrow(Constants.PUS);
-    final int overBudget =
-        defensePlan
-            .map(p -> Math.max(0, resourceTracker.getRemaining(pusResource) - p.strategyBudget()))
-            .orElse(0);
-    if (overBudget > 0 && planOrders.isPresent()) {
+    // Pro+ step C2-bis: the PUs over the cap of the orders are kept for the Pro AI's own purchases
+    final int afterDefense = resourceTracker.getRemaining(pusResource);
+    final int strategyBudget =
+        strategyCap.isPresent()
+            ? Math.min(afterDefense, (int) Math.floor(startPus * strategyCap.getAsDouble() / 100))
+            : afterDefense;
+    final int overBudget = planOrders.isPresent() ? afterDefense - strategyBudget : 0;
+    if (overBudget > 0) {
       resourceTracker.reserve(pusResource, overBudget);
     }
+    final List<ProPurchaseOrders.Result> planResult = new ArrayList<>();
     planOrders.ifPresent(
         orders -> {
           final ProPurchaseOrders.Result result =
@@ -537,11 +540,28 @@ class ProPurchaseAi {
                       purchaseOptions,
                       this::addUnitsToPlace)
                   .buy();
+          planResult.add(result);
           proData.getRecorder().purchaseOrders(proData, orders, result);
           proData.getRecorder().purchaseStep(proData, "plan", purchaseTerritories, Map.of());
         });
-    if (overBudget > 0 && planOrders.isPresent()) {
+    final int ordersSpent = afterDefense - overBudget - resourceTracker.getRemaining(pusResource);
+    if (overBudget > 0) {
       resourceTracker.release(pusResource, overBudget);
+    }
+    if (strategyCap.isPresent()) {
+      proData
+          .getRecorder()
+          .strategyBudget(
+              proData,
+              new ProStrategyBudget(
+                  startPus,
+                  startPus - afterDefense,
+                  strategyCap.getAsDouble(),
+                  planOrders.isPresent() ? strategyBudget : 0,
+                  overBudget,
+                  ordersSpent,
+                  overBudget > 0
+                      && planResult.stream().anyMatch(r -> !r.mandatoryMissing().isEmpty())));
     }
 
     // Prioritize land place options purchase AA then land units
@@ -809,57 +829,6 @@ class ProPurchaseAi {
   }
 
   /**
-   * Pro+ step C2: buys the defensive units of a computed plan in their territories, while the PUs
-   * and the territory's production allow (nothing else of the "defend land" part).
-   */
-  private void purchaseDefensePlan(
-      final Map<Territory, ProPurchaseTerritory> purchaseTerritories,
-      final ProPurchaseOptionMap purchaseOptions,
-      final ProDefensePlan plan) {
-    for (final ProDefensePlan.Purchase p : plan.purchases()) {
-      final Optional<ProPurchaseOption> option =
-          purchaseOptions.getLandOptions().stream()
-              .filter(o -> o.getUnitType().getName().equals(p.unitType()))
-              .findFirst();
-      final Optional<ProPurchaseTerritory> where =
-          purchaseTerritories.entrySet().stream()
-              .filter(e -> e.getKey().getName().equals(p.territory()))
-              .map(Map.Entry::getValue)
-              .findFirst();
-      if (option.isEmpty() || where.isEmpty()) {
-        ProLogger.info("Defense plan: cannot buy " + p);
-        continue;
-      }
-      final Optional<ProPlaceTerritory> ppt =
-          where.get().getCanPlaceTerritories().stream()
-              .filter(x -> x.getTerritory().getName().equals(p.territory()))
-              .findFirst();
-      if (ppt.isEmpty()) {
-        continue;
-      }
-      int bought = 0;
-      while (bought < p.count()
-          && resourceTracker.hasEnough(option.get())
-          && where.get().getRemainingUnitProduction() >= option.get().getQuantity()) {
-        resourceTracker.purchase(option.get());
-        addUnitsToPlace(ppt.get(), option.get().createTempUnits());
-        bought += option.get().getQuantity();
-      }
-      ProLogger.info(
-          "Defense plan ("
-              + plan.label()
-              + "): bought "
-              + bought
-              + " of "
-              + p.count()
-              + " "
-              + p.unitType()
-              + " in "
-              + p.territory());
-    }
-  }
-
-  /**
    * Defense of threatened land with a plan's minimum share (Pro+): the territories with a factory
    * or the capital whose enemy win% is above the capital guard threshold are defended first, with
    * every PU; the other threatened territories only with what is left of the defense share ({@code
@@ -1026,6 +995,9 @@ class ProPurchaseAi {
     ProLogger.info("Prioritize territories to defend with isLand=" + isLand);
 
     final ProOtherMoveOptions enemyAttackOptions = territoryManager.getEnemyAttackOptions();
+    // Pro+ step C2-bis: the strategist's expendable / must-hold land (Hard: none)
+    final Optional<ProDefenseLists> lists =
+        isLand ? proData.getTuning().defenseLists(proData) : Optional.empty();
 
     // Determine which territories need defended
     final Set<ProPlaceTerritory> needToDefendTerritories = new HashSet<>();
@@ -1038,6 +1010,11 @@ class ProPurchaseAi {
             || (t.isWater() && placeTerritory.getDefendingUnits().isEmpty())
             || (isLand && t.isWater())
             || (!isLand && !t.isWater())) {
+          continue;
+        }
+        if (lists.isPresent() && lists.get().isExpendable(t)) {
+          // no defenders and no other land units bought or placed there
+          setCantHoldPlaceTerritory(placeTerritory, purchaseTerritories);
           continue;
         }
 
@@ -1086,6 +1063,9 @@ class ProPurchaseAi {
             || result.getTuvSwing() > holdValue
             || (t.equals(proData.getMyCapital())
                 && !isLandAndCanOnlyBeAttackedByAir
+                && result.getWinPercentage() > (100 - proData.getWinPercentage()))
+            || (lists.isPresent()
+                && lists.get().isMustHold(t)
                 && result.getWinPercentage() > (100 - proData.getWinPercentage()))) {
           needToDefendTerritories.add(placeTerritory);
         }
@@ -1342,7 +1322,8 @@ class ProPurchaseAi {
           || (finalResult.getTuvSwing() - resourceTracker.getTempPUs(data) / 2f)
               < placeTerritory.getMinBattleResult().getTuvSwing()
           || t.equals(proData.getMyCapital())
-          || (!t.isWater() && hasLocalSuperiority)) {
+          || (!t.isWater() && hasLocalSuperiority)
+          || (isLand && isMustHold(t))) {
         resourceTracker.confirmTempPurchases();
         ProLogger.trace(
             t
@@ -3110,7 +3091,8 @@ class ProPurchaseAi {
       // Check to see if its worth trying to defend the territory
       if (!finalResult.isHasLandUnitRemaining()
           || finalResult.getTuvSwing() < placeTerritory.getMinBattleResult().getTuvSwing()
-          || t.equals(proData.getMyCapital())) {
+          || t.equals(proData.getMyCapital())
+          || (!t.isWater() && isMustHold(t))) {
         ProLogger.trace(
             t + ", placedUnits=" + unitsToPlace + ", TUVSwing=" + finalResult.getTuvSwing());
         doPlace(t, unitsToPlace, placeDelegate);
@@ -3210,6 +3192,11 @@ class ProPurchaseAi {
       ProLogger.trace(" toConsume=" + toConsume);
       proData.getUnitsToBeConsumed().addAll(toConsume);
     }
+  }
+
+  /** Pro+ step C2-bis: land the strategist wants defended even when Hard would give it up. */
+  private boolean isMustHold(final Territory t) {
+    return proData.getTuning().defenseLists(proData).map(l -> l.isMustHold(t)).orElse(false);
   }
 
   private static void setCantHoldPlaceTerritory(

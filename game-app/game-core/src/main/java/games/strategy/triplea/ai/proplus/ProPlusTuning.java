@@ -505,29 +505,54 @@ public final class ProPlusTuning implements ProTuning {
         units.stream().map(Unit::getId).collect(java.util.stream.Collectors.toUnmodifiableSet());
   }
 
-  // ---------------------------------------------- step C2: computed defense (Stratega LLM only)
+  // ------------------------------------- step C2-bis: Hard's defense + budget (Stratega LLM only)
 
-  private String defenseKey = "";
-  private @Nullable games.strategy.triplea.ai.pro.ProDefensePlan defense;
-
-  /** Step C2: the defense plan of {@code player}'s purchase this round (also on the game copy). */
-  public void setDefensePlan(
-      final GamePlayer player,
-      final int round,
-      final games.strategy.triplea.ai.pro.ProDefensePlan plan) {
-    defenseKey = player.getName() + "|" + round;
-    defense = plan;
+  /**
+   * Step C2-bis: the operations' reserves get at most {@code tetto_strategia_pct}% of the turn's
+   * PUs, after Hard has bought its own defense (only the strategist's nations).
+   */
+  @Override
+  public OptionalDouble strategyCapPercent(final ProData proData) {
+    final GamePlayer player = proData.getPlayer();
+    if (player == null || !Stratega.gioca(proData.getData(), player)) {
+      return java.util.OptionalDouble.empty();
+    }
+    return ProPlusSettings.allianceOf(proData.getData(), player)
+        .map(
+            a ->
+                operationAnswer(
+                    java.util.OptionalDouble.of(
+                        Difesa.tetto(proData.getData().getProperties(), a))))
+        .orElse(java.util.OptionalDouble.empty());
   }
 
+  /**
+   * Step C2-bis: the LLM's lists of the round (contract 1.5) for Hard's defense of the strategist's
+   * nations: expendable land is left out, irreplaceable land (and the nation's capital) always in.
+   */
   @Override
-  public Optional<games.strategy.triplea.ai.pro.ProDefensePlan> defensePlan(final ProData proData) {
-    if (defense == null
-        || proData.getPlayer() == null
-        || !defenseKey.equals(
-            proData.getPlayer().getName() + "|" + proData.getData().getSequence().getRound())) {
+  public Optional<games.strategy.triplea.ai.pro.ProDefenseLists> defenseLists(
+      final ProData proData) {
+    final GamePlayer player = proData.getPlayer();
+    if (player == null || !Stratega.gioca(proData.getData(), player)) {
       return Optional.empty();
     }
-    return operationAnswer(Optional.of(defense));
+    final Optional<String> alliance = ProPlusSettings.allianceOf(proData.getData(), player);
+    if (alliance.isEmpty()) {
+      return Optional.empty();
+    }
+    final Difesa.Liste l =
+        Difesa.liste(
+            proData.getData().getProperties(),
+            alliance.get(),
+            proData.getData().getSequence().getRound());
+    final java.util.Set<String> must = new java.util.LinkedHashSet<>(l.irrinunciabili().keySet());
+    if (proData.getMyCapital() != null) {
+      must.add(proData.getMyCapital().getName());
+    }
+    return operationAnswer(
+        Optional.of(
+            new games.strategy.triplea.ai.pro.ProDefenseLists(l.sacrificabili().keySet(), must)));
   }
 
   @Override

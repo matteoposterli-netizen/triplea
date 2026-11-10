@@ -182,6 +182,11 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   (unita' contate dalle conquiste, cause dei cali >= 30 punti), hook `ProTuning.defensePlan` + record `ai/pro/ProDefensePlan`
   (default vuoto; in `ProPurchaseAi` sostituisce la difesa di terra e limita i PU degli ordini), `StimaUnica.nemiciReali`/
   `soloNemiciReali`/`contate`, contratto 1.5 (`irrinunciabili`, `sacrificabili`). Vedi "Budget difensivo calcolato (step C2)".
+- Step C2-bis: la difesa torna a Hard (solo Stratega LLM): hook `ProTuning.strategyCapPercent` (tetto degli ordini DOPO la
+  difesa di Hard) e `ProTuning.defenseLists` + record `ai/pro/ProDefenseLists` (sacrificabili esclusi, irrinunciabili sempre
+  difesi, in `ProPurchaseAi` e `ProNonCombatMoveAi`), record `ai/pro/ProStrategyBudget` + hook diario
+  `ProDecisionRecorder.strategyBudget`; tolti `ProTuning.defensePlan` e `ProDefensePlan`. `Difesa` solo IN OMBRA (diario).
+  Vedi "Difesa di Hard e budget dinamico (step C2-bis)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -401,7 +406,7 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   sezione **"Decisioni LLM delle operazioni congiunte"** (`ConfrontoLlm`): decisioni per tipo e azione, diverse dalla formula, ripieghi con i
   motivi, calibrazione LLM contro formula sulle stesse decisioni (fasce 20%, errore medio pesato, Brier), costo totale/per partita.
 - **Modalita' "smoke" (step STRATEGA LLM)**: `[smoke]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒ `modalita:
-  smoke`. Controllo, non misura di forza: 12 round, Equilibrato, **semi 901-906** (step C2, `--tetto-strategia 70`; prima 801-806,
+  smoke`. Controllo, non misura di forza: 12 round, Equilibrato, **semi 1001-1006** (step C2-bis, `--tetto-strategia 70`; 901-906 C2, prima 801-806,
   701-706, 601-606, 501-506), 2 configurazioni = 12 partite (`1-Asse-Stratega-LLM-
   vs-Hard`, `2-Hard-vs-Alleati-Stratega-LLM`), matrice mescolata, `max-parallel` 6, tetto per partita min(2, 30/12) = 2 $ (run <= 24 $,
   tetto 30 $). La chiave va ai job con `matrix.stratega`; senza secret le partite girano lo stesso (paracadute = Hard). Sezione
@@ -1907,6 +1912,39 @@ Solo per la voce "Pro+ Stratega LLM" (`Stratega.gioca`); Hard, Hard Beta, Pro+ (
   persi, calibrazione della stima di difesa, cause dei cali).
 - **LLM**: stato `difesa_calcolata` (ultimo piano di ogni nazione), risposta `irrinunciabili`/`sacrificabili` (max 5),
   `Difesa.salvaListe`; prompt v5 aggiornato.
+
+### Difesa di Hard e budget dinamico (step C2-bis)
+
+Decisione di Matteo dopo la [smoke] del C2 (Asse 0,33 VC): il pianificatore difensivo C2 NON decide piu'. Solo per la voce
+"Pro+ Stratega LLM"; Hard, Hard Beta, Pro+ (AI) invariati (hook vuoti di default).
+- **Difesa = Hard**: acquisti difensivi di Hard (`purchaseDefenders` pieno, senza la quota `minimumShare` quando c'e' il
+  tetto) e non combattimento di Hard. Nessuna guarnigione congelata: restano trattenute solo le unita' delle operazioni
+  attive (`trattenuteAllAcquisto`, come prima del C2).
+- **Budget** (`ProPurchaseAi.purchase`, `ProTuning.strategyCapPercent` = `Difesa.tetto`, default 70, `--tetto-strategia`):
+  1) Hard compra la sua difesa (`defend_land`) ⇒ PU_difesa; 2) gli ordini (riserve delle operazioni) con al massimo
+  min(PU rimasti, tetto% dei PU del turno) (il resto accantonato con `reserve/release`); 3) Hard spende il resto. Hook
+  `ProDecisionRecorder.strategyBudget(ProStrategyBudget)` ⇒ `DiaryRecorder` ⇒ `Difesa.budgetAcquisto` (l'acquisto gira su
+  una copia: i numeri sono scritti sul gioco reale da `ProPlusAi.purchase` con `Difesa.registraBudget`). "Tetto limita" =
+  PU trattenuti > 0 e ordini con acquisti obbligati non fatti.
+- **Liste dell'LLM** (contratto 1.5 invariato, `ProTuning.defenseLists` ⇒ `ProDefenseLists` per nome; capitale della
+  nazione sempre irrinunciabile): sacrificabili ⇒ negli acquisti esclusi da `prioritizeTerritoriesToDefend` e segnati
+  "non tenibili" (Hard non ci compra ne' ci piazza unita' di terra), nel non combattimento tolti da `prioritizeDefendOptions`
+  con `canHold = false` (Hard non ci manda unita' a restare; passaggio e ritirata restano); irrinunciabili ⇒ negli acquisti
+  tra i territori da difendere se il nemico vince > 100 − desiderata, e mai abbandonati dal controllo "vale la pena" (come
+  la capitale, anche nel piazzamento); nel non combattimento mai tolti (salvo "tiene gia'") e provati per primi
+  nell'ordine di Hard. Limite noto: se nemmeno provandoli per primi Hard riesce a tenerli tutti, il ciclo di Hard li toglie.
+- **Ombra** (`Difesa.calcola`, all'acquisto, solo diario e `Pro+ stratega llm difesa: <alleanza>` con `ombra: true`): cosa
+  avrebbe difeso/sacrificato il piano C2 e con quanti PU; limiti separati (12 rinforzi + 12 acquisti nella fabbrica del
+  territorio); fabbriche vicine proprie (`Difesa.fabbricheVicine`: unita' che arrivano in una mossa su terra amica,
+  difendono dal turno nemico DOPO: `acquisti_vicini`, `tenuta_turno_dopo_pct`). Fabbriche alleate non usabili: si piazza solo
+  nei propri territori (`AbstractPlaceDelegate.canProduce`). Accanto: `reale` (PU difesa di Hard, budget, ordini, resto,
+  tetto) e a fine turno (`Difesa.fineTurno`, da `ProPlusStrategaAi.place`) `difensori_inizio` → `difensori_fine_turno`,
+  `hard_rinforzato`; esito al turno dopo (`esito_tenuto`). Righe in `stratega.txt`: "piano difensivo IN OMBRA", "Budget ...
+  (reale)", "Difesa ... a fine turno (ombra contro Hard)". Prompt v5: la difesa la fa Hard con le liste; `difesa_calcolata` e'
+  una stima.
+- `ConfrontoSmoke`: sezione "Difesa di Hard e budget dinamico (step C2-bis)" (PU reali per nazione, % operazioni mediana e
+  max, turni con difesa 0, tetto che trattiene/limita; ombra contro Hard con esito; fabbriche vicine; calibrazione della
+  tenuta iniziale stimata).
 
 ## Come configurare lo stratega
 

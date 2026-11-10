@@ -597,6 +597,17 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   }
 
   @Override
+  public void strategyBudget(
+      final ProData proData, final games.strategy.triplea.ai.pro.ProStrategyBudget budget) {
+    // step C2-bis: the real split of the strategist's purchase, read after the purchase (diary
+    // on/off; the purchase runs on a copy of the game, so the record is written on the real one)
+    guard(
+        () ->
+            games.strategy.triplea.ai.proplus.Difesa.budgetAcquisto(
+                proData.getPlayer().getName(), proData.getData().getSequence().getRound(), budget));
+  }
+
+  @Override
   public void purchaseDefenseShare(
       final ProData proData,
       final ProPurchaseOrders orders,

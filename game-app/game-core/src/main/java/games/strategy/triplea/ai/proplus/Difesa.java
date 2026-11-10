@@ -7,14 +7,12 @@ import com.google.gson.JsonParser;
 import games.strategy.engine.data.GameMap;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
-import games.strategy.engine.data.MoveDescription;
-import games.strategy.engine.data.Route;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.ai.pro.ProData;
-import games.strategy.triplea.ai.pro.ProDefensePlan;
 import games.strategy.triplea.ai.pro.ProPurchaseOrders;
+import games.strategy.triplea.ai.pro.ProStrategyBudget;
 import games.strategy.triplea.ai.pro.data.ProPurchaseOption;
 import games.strategy.triplea.ai.pro.data.ProTerritory;
 import games.strategy.triplea.ai.pro.data.ProTerritoryManager;
@@ -27,7 +25,6 @@ import games.strategy.triplea.ai.proplus.OperazioneCongiunta.Stato;
 import games.strategy.triplea.ai.proplus.OperazioniCongiunte.Minaccia;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
-import games.strategy.triplea.delegate.remote.IMoveDelegate;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -40,31 +37,35 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import javax.annotation.Nullable;
 
 /**
- * Step C2, the computed defense budget of the "Pro+ Stratega LLM" player (never Hard nor the other
- * players): at the start of each turn of a strategist's nation, first what it costs to defend what
- * matters, then the rest goes to the strategy.
+ * Step C2-bis: the computed defense of the "Pro+ Stratega LLM" player, IN THE SHADOW (diary only,
+ * no decision of the game reads it). The defense of the game is Hard's own (purchase and non-combat
+ * move), with the LLM's lists (expendable / irreplaceable, {@link ProDefenseLists}); this records,
+ * per nation and turn, what the step C2 planner would have defended or given up and with how many
+ * PUs, next to what Hard did and the outcome at the nation's next turn.
  *
  * <ul>
  *   <li>threat: the territories of the nation (and the alliance's capitals and factories it can
- *       reinforce) that the enemies moving before its next turn can take, all of them together
+ *       reinforce) that the real enemies moving before its next turn can take, all of them together
  *       (Hard's enemy attack options); the counterattack is the single estimate of the operations
  *       ({@link StimaUnica}: maximum on capitals and key factories, realistic elsewhere);
  *   <li>value in PU (same scale as the value of the alliance) and cost of the defense: the fewest
  *       units for {@code difesa.soglia_tenuta}, first reinforcements that arrive in the non-combat
- *       move, then purchases placeable in the territory's factory;
+ *       move (at most {@code max_unita_per_territorio}), then purchases in the territory's own
+ *       factory (another {@code max_unita_per_territorio} at most: they defend at once);
+ *   <li>nearby factories: purchases in the nation's other factories whose units reach the territory
+ *       in one move (they defend from the enemy turn after the next one: estimate {@code
+ *       tenuta_turno_dopo}); allied factories cannot be used, units are placed only in territories
+ *       of their owner (AbstractPlaceDelegate.canProduce);
  *   <li>defend if irreplaceable (capital, LLM list) or value >= cost; give up if expendable (LLM
- *       list), cost > value or the territory cannot be held;
- *   <li>PUs to the strategy = min(PUs - defense PUs, {@code tetto_strategia_pct}% of the PUs); the
- *       rest to Hard.
+ *       list), cost > value or the territory cannot be held.
  * </ul>
  *
  * <p>Values in {@code stratega-llm.json} ({@code difesa}), reasonable and not tuned.
  */
-final class Difesa {
+public final class Difesa {
 
   /** Records of the defense per alliance: {"turni": [...]} (diary, outcomes, calibration). */
   static final String KEY = "Pro+ stratega llm difesa: ";
@@ -96,7 +97,10 @@ final class Difesa {
       StimaUnica.Impegno impegno,
       double tuvContrattacco,
       List<Unit> presidio,
-      List<String> nemici) {}
+      List<String> nemici,
+      Map<String, Integer> acquistiVicini,
+      double tenutaTurnoDopo,
+      int difensoriInizio) {}
 
   /** The plan of a nation's turn. */
   record Piano(
@@ -111,33 +115,7 @@ final class Difesa {
       boolean tettoLimita,
       int costoRiserve,
       List<Voce> voci,
-      List<String> nonValutati) {
-
-    /** The purchases for the Pro purchase ({@link ProDefensePlan}). */
-    ProDefensePlan perAcquisto() {
-      final List<ProDefensePlan.Purchase> buy = new ArrayList<>();
-      for (final Voce v : voci) {
-        if (v.difendi() && v.acquisto() != null && v.nAcquisti() > 0) {
-          buy.add(
-              new ProDefensePlan.Purchase(
-                  v.territorio().getName(), v.acquisto().getUnitType().getName(), v.nAcquisti()));
-        }
-      }
-      return new ProDefensePlan("Stratega LLM, difesa di " + nazione, buy, puStrategia);
-    }
-
-    /** Units the plan keeps for the defense: the reinforcements and the defended garrisons. */
-    Set<Unit> trattenute() {
-      final Set<Unit> out = new LinkedHashSet<>();
-      for (final Voce v : voci) {
-        if (v.difendi()) {
-          out.addAll(v.rinforzi());
-          out.addAll(v.presidio());
-        }
-      }
-      return out;
-    }
-  }
+      List<String> nonValutati) {}
 
   private final ProData proData;
   private final ProOddsCalculator calc;
@@ -354,10 +332,11 @@ final class Difesa {
                             + u.getUnitAttachment().getDefense(u.getOwner()))
                         / Math.max(1, op.tuvOf(List.of(u))))
             .thenComparing(u -> u.getType().getName()));
+    // reinforcements and purchases have separate limits (step C2-bis)
     final List<Unit> sequence =
         new ArrayList<>(help.subList(0, Math.min(help.size(), cfg.maxUnitaDifesa())));
     final int moved = sequence.size();
-    // purchases: only in the territory's own factory (placed units do not move before the enemy)
+    // purchases in the territory's own factory: the only ones that defend before the enemy moves
     final Optional<ProPurchaseOption> best = migliorDifensore();
     int buyable = 0;
     if (best.isPresent()
@@ -369,7 +348,7 @@ final class Difesa {
       buyable =
           Math.min(
               Math.min(capacity, pusLeft / Math.max(1, best.get().getCost())),
-              Math.max(0, cfg.maxUnitaDifesa() - moved));
+              cfg.maxUnitaDifesa());
       if (buyable > 0) {
         sequence.addAll(best.get().getUnitType().createTemp(buyable, player));
       }
@@ -409,6 +388,31 @@ final class Difesa {
     final boolean defend = dec.difendi();
     final String why = dec.motivo();
     final String source = dec.fonte();
+    // nearby factories (own, one move away): they defend from the enemy turn after the next one
+    final Map<String, Integer> nearby = new LinkedHashMap<>();
+    double holdNext = holdNow;
+    if (holdNow < threshold && best.isPresent()) {
+      int pus = pusLeft - (defend ? puBuy : 0);
+      final List<Unit> later = new ArrayList<>(used);
+      for (final Territory f : fabbricheVicine(map, player, t, best.get().getMovement())) {
+        final int capacity =
+            Math.max(
+                0, TerritoryAttachment.getProduction(f) - production.getOrDefault(f.getName(), 0));
+        final int n =
+            Math.min(
+                Math.min(capacity, pus / Math.max(1, best.get().getCost())),
+                cfg.maxUnitaDifesa() - nearby.values().stream().mapToInt(Integer::intValue).sum());
+        if (n <= 0) {
+          continue;
+        }
+        nearby.put(f.getName(), n);
+        pus -= n * best.get().getCost();
+        later.addAll(best.get().getUnitType().createTemp(n, player));
+      }
+      if (!nearby.isEmpty()) {
+        holdNext = hold(t, m, counter, garrison, later);
+      }
+    }
     final List<Unit> keepHere =
         garrison.stream()
             .filter(Matches.unitIsOwnedBy(player))
@@ -432,7 +436,37 @@ final class Difesa {
         imp,
         op.tuvOf(counter),
         defend ? keepHere : List.of(),
-        counter.stream().map(u -> u.getOwner().getName()).distinct().sorted().toList());
+        counter.stream().map(u -> u.getOwner().getName()).distinct().sorted().toList(),
+        Map.copyOf(nearby),
+        holdNext,
+        (int)
+            garrison.stream()
+                .filter(Matches.unitIsLand().and(Matches.unitIsNotInfrastructure()))
+                .count());
+  }
+
+  /**
+   * The other factories of {@code player} on land from which a unit with {@code movement} reaches
+   * {@code t} in one move over own or allied land, nearest first.
+   */
+  static List<Territory> fabbricheVicine(
+      final GameMap map, final GamePlayer player, final Territory t, final int movement) {
+    final java.util.function.Predicate<Territory> land =
+        x -> !x.isWater() && Matches.isTerritoryAllied(player).test(x);
+    final List<Territory> out = new ArrayList<>();
+    for (final Territory f : map.getTerritories()) {
+      if (f.equals(t) || !ProMatches.territoryHasInfraFactoryAndIsOwnedLand(player).test(f)) {
+        continue;
+      }
+      final int d = map.getDistance(f, t, land);
+      if (d > 0 && d <= Math.max(1, movement)) {
+        out.add(f);
+      }
+    }
+    out.sort(
+        Comparator.comparingInt((Territory f) -> map.getDistance(f, t, land))
+            .thenComparing(Territory::getName));
+    return out;
   }
 
   /**
@@ -702,99 +736,144 @@ final class Difesa {
     return out;
   }
 
-  // ================================================================== execution (non-combat)
+  // ========================================================= what Hard did (real numbers)
 
-  /**
-   * Non-combat move of the nation, before Hard: the plan's reinforcements go to their territories.
-   * Returns the units the plan keeps (moved reinforcements and defended garrisons) and the lines.
-   */
-  static Esecuzione esegui(final ProData proData, final IMoveDelegate moveDel, final Piano plan) {
-    final GameState data = proData.getData();
-    final GameMap map = data.getMap();
-    final GamePlayer player = proData.getPlayer();
-    final Map<UUID, Territory> where = new HashMap<>();
-    for (final Territory t : map.getTerritories()) {
-      for (final Unit u : t.getUnits()) {
-        where.put(u.getId(), t);
-      }
-    }
-    final Set<Unit> kept = new LinkedHashSet<>();
-    final List<String> lines = new ArrayList<>();
-    int moved = 0;
-    int failed = 0;
-    for (final Voce v : plan.voci()) {
-      if (!v.difendi()) {
-        continue;
-      }
-      final Territory to = map.getTerritoryOrNull(v.territorio().getName());
-      if (to == null) {
-        continue;
-      }
-      for (final Unit planned : v.presidio()) {
-        final Territory at = where.get(planned.getId());
-        if (at != null && at.equals(to)) {
-          at.getUnits().stream()
-              .filter(u -> u.getId().equals(planned.getId()))
-              .findFirst()
-              .ifPresent(kept::add);
-        }
-      }
-      final List<String> done = new ArrayList<>();
-      for (final Unit planned : v.rinforzi()) {
-        final Territory from = where.get(planned.getId());
-        if (from == null) {
-          failed++;
-          continue;
-        }
-        final Optional<Unit> u =
-            from.getUnits().stream().filter(x -> x.getId().equals(planned.getId())).findFirst();
-        if (u.isEmpty()) {
-          failed++;
-          continue;
-        }
-        if (from.equals(to)) {
-          kept.add(u.get());
-          continue;
-        }
-        final Optional<Route> route =
-            Matches.unitIsAir().test(u.get())
-                ? map.getRoute(from, to, x -> true)
-                : map.getRoute(
-                    from, to, x -> !x.isWater() && Matches.isTerritoryAllied(player).test(x));
-        if (route.isEmpty()
-            || route.get().getMovementCost(u.get()).compareTo(u.get().getMovementLeft()) > 0) {
-          failed++;
-          continue;
-        }
-        final Optional<String> error =
-            moveDel.performMove(new MoveDescription(List.of(u.get()), route.get()));
-        if (error.isPresent()) {
-          failed++;
-          ProLogger.info("[Pro+] Difesa: " + u.get() + " non mossa in " + to + ": " + error.get());
-          continue;
-        }
-        moved++;
-        kept.add(u.get());
-        done.add(u.get().getType().getName() + " da " + from.getName());
-      }
-      if (!done.isEmpty()) {
-        lines.add("  difesa " + to.getName() + ": " + String.join(", ", done));
-      }
-    }
-    lines.add(
-        0,
-        String.format(
-            Locale.ROOT,
-            "Difesa %s R%d (non combattimento): rinforzi mossi %d, non mossi %d, trattenute %d",
-            player.getName(),
-            data.getSequence().getRound(),
-            moved,
-            failed,
-            kept.size()));
-    return new Esecuzione(Set.copyOf(kept), List.copyOf(lines));
+  /** The budget of each nation's last purchase ("nation|round"), from the purchase's recorder. */
+  private static final Map<String, ProStrategyBudget> BUDGET =
+      new java.util.concurrent.ConcurrentHashMap<>();
+
+  /** The purchase of {@code nation} in {@code round} split its PUs like this (recorder). */
+  public static void budgetAcquisto(
+      final String nation, final int round, final ProStrategyBudget budget) {
+    BUDGET.put(nation + "|" + round, budget);
   }
 
-  record Esecuzione(Set<Unit> trattenute, List<String> righe) {}
+  /**
+   * After the real purchase: the PUs Hard spent on its defense, the orders' budget and spending,
+   * the rest, next to the shadow plan of the same turn (record and diary line).
+   */
+  static void registraBudget(final GameState data, final GamePlayer player) {
+    final int round = data.getSequence().getRound();
+    final ProStrategyBudget b = BUDGET.remove(player.getName() + "|" + round);
+    final Optional<String> alliance = ProPlusSettings.allianceOf(data, player);
+    if (b == null || alliance.isEmpty()) {
+      return;
+    }
+    final GameProperties props = data.getProperties();
+    final JsonObject all = registro(props, alliance.get());
+    final Optional<JsonObject> turn = turno(all, player.getName(), round);
+    final JsonObject real = new JsonObject();
+    real.addProperty("pu", b.pus());
+    real.addProperty("pu_difesa_hard", b.defense());
+    real.addProperty("tetto_strategia_pct", b.capPercent());
+    real.addProperty("pu_strategia", b.budget());
+    real.addProperty("pu_ordini", b.orders());
+    real.addProperty("pu_trattenuti_dal_tetto", b.reserved());
+    real.addProperty("pu_resto_hard", Math.max(0, b.pus() - b.defense() - b.orders()));
+    real.addProperty("tetto_limita", b.limited());
+    if (turn.isPresent()) {
+      turn.get().add("reale", real);
+      props.set(KEY + alliance.get(), (Serializable) null);
+      props.set(KEY + alliance.get(), all.toString());
+    }
+    final String line =
+        String.format(
+            Locale.ROOT,
+            "Budget %s R%d (reale): PU %d = difesa di Hard %d + operazioni %d (budget %d, tetto %.0f%%%s)"
+                + " + resto di Hard %d%s",
+            player.getName(),
+            round,
+            b.pus(),
+            b.defense(),
+            b.orders(),
+            b.budget(),
+            b.capPercent(),
+            b.reserved() > 0 ? ", " + b.reserved() + " PU trattenuti dal tetto" : "",
+            Math.max(0, b.pus() - b.defense() - b.orders()),
+            b.limited() ? " - il tetto LIMITA le riserve" : "");
+    try {
+      games.strategy.triplea.ai.proplus.diario.DiaryRecorder.stratega(
+          data, List.of(line), null, null);
+    } catch (final RuntimeException e) {
+      ProLogger.warn("[Pro+] Difesa: riga del budget non scritta: " + e);
+    }
+  }
+
+  /**
+   * At the end of the nation's turn (after placement): for each territory of the shadow plan, the
+   * allied land defenders there now, against the start of the turn (what Hard did).
+   */
+  static void fineTurno(final GameState data, final GamePlayer player) {
+    final int round = data.getSequence().getRound();
+    final Optional<String> alliance = ProPlusSettings.allianceOf(data, player);
+    if (alliance.isEmpty() || !Stratega.gioca(data, player)) {
+      return;
+    }
+    final GameProperties props = data.getProperties();
+    final JsonObject all = registro(props, alliance.get());
+    final Optional<JsonObject> turn = turno(all, player.getName(), round);
+    if (turn.isEmpty() || turn.get().has("hard_fine_turno")) {
+      return;
+    }
+    final List<String> parts = new ArrayList<>();
+    for (final JsonElement e : turn.get().getAsJsonArray("territori")) {
+      final JsonObject x = e.getAsJsonObject();
+      final Territory t = data.getMap().getTerritoryOrNull(x.get("territorio").getAsString());
+      if (t == null) {
+        continue;
+      }
+      final int now =
+          (int)
+              t.getUnits().stream()
+                  .filter(Matches.isUnitAllied(player))
+                  .filter(Matches.unitIsLand().and(Matches.unitIsNotInfrastructure()))
+                  .count();
+      final int before = x.has("difensori_inizio") ? x.get("difensori_inizio").getAsInt() : 0;
+      x.addProperty("difensori_fine_turno", now);
+      x.addProperty("hard_rinforzato", now > before);
+      parts.add(
+          String.format(
+              Locale.ROOT,
+              "%s ombra %s, Hard %s (%d -> %d)",
+              t.getName(),
+              x.get("decisione").getAsString().toUpperCase(Locale.ROOT),
+              now > before ? "rinforza" : now < before ? "lascia" : "invariato",
+              before,
+              now));
+    }
+    turn.get().addProperty("hard_fine_turno", true);
+    props.set(KEY + alliance.get(), (Serializable) null);
+    props.set(KEY + alliance.get(), all.toString());
+    if (!parts.isEmpty()) {
+      try {
+        games.strategy.triplea.ai.proplus.diario.DiaryRecorder.stratega(
+            data,
+            List.of(
+                "Difesa "
+                    + player.getName()
+                    + " R"
+                    + round
+                    + " a fine turno (ombra contro Hard): "
+                    + String.join("; ", parts)),
+            null,
+            null);
+      } catch (final RuntimeException ex) {
+        ProLogger.warn("[Pro+] Difesa: riga di fine turno non scritta: " + ex);
+      }
+    }
+  }
+
+  private static Optional<JsonObject> turno(
+      final JsonObject all, final String nation, final int round) {
+    final JsonArray turns = all.getAsJsonArray("turni");
+    for (int i = turns.size() - 1; i >= 0; i--) {
+      final JsonObject t = turns.get(i).getAsJsonObject();
+      if (t.get("nazione").getAsString().equals(nation) && t.get("round").getAsInt() == round) {
+        return Optional.of(t);
+      }
+    }
+    return Optional.empty();
+  }
 
   // ===================================================================== records and diary
 
@@ -868,8 +947,8 @@ final class Difesa {
     lines.add(
         String.format(
             Locale.ROOT,
-            "=== R%d %s - piano difensivo: PU %d = difesa %d + strategia %d + Hard %d"
-                + " (tetto strategia %.0f%%%s) ===",
+            "=== R%d %s - piano difensivo IN OMBRA (nessun effetto sul gioco): PU %d = difesa %d"
+                + " + strategia %d + Hard %d (tetto strategia %.0f%%%s) ===",
             p.round(),
             p.nazione(),
             p.pu(),
@@ -892,7 +971,7 @@ final class Difesa {
           String.format(
               Locale.ROOT,
               "  %s %s: valore %.0f PU, costo %.0f PU, tenuta %.0f%% -> %.0f%% (max %.0f%%,"
-                  + " contrattacco %.0f TUV, %s)%s%s - %s",
+                  + " contrattacco %.0f TUV, %s)%s%s%s - %s",
               v.difendi() ? "DIFESO" : "SACRIFICATO",
               v.territorio().getName(),
               v.valore(),
@@ -908,6 +987,13 @@ final class Difesa {
               v.nAcquisti() > 0 && v.acquisto() != null
                   ? ", acquisti " + v.nAcquisti() + " " + v.acquisto().getUnitType().getName()
                   : "",
+              v.acquistiVicini().isEmpty()
+                  ? ""
+                  : String.format(
+                      Locale.ROOT,
+                      ", fabbriche vicine %s: tenuta al turno dopo %.0f%%",
+                      v.acquistiVicini(),
+                      v.tenutaTurnoDopo()),
               v.motivo()));
     }
     if (!p.nonValutati().isEmpty()) {
@@ -936,6 +1022,7 @@ final class Difesa {
     final JsonObject o = new JsonObject();
     o.addProperty("round", p.round());
     o.addProperty("nazione", p.nazione());
+    o.addProperty("ombra", true);
     o.addProperty("pu", p.pu());
     o.addProperty("pu_difesa", p.puDifesa());
     o.addProperty("pu_strategia", p.puStrategia());
@@ -973,6 +1060,15 @@ final class Difesa {
               ? v.nAcquisti() + " " + v.acquisto().getUnitType().getName()
               : "");
       x.addProperty("pu_acquisti", v.puAcquisti());
+      final JsonObject near = new JsonObject();
+      v.acquistiVicini().forEach(near::addProperty);
+      x.add("acquisti_vicini", near);
+      x.addProperty("tenuta_turno_dopo_pct", Math.round(v.tenutaTurnoDopo()));
+      x.addProperty("difensori_inizio", v.difensoriInizio());
+      x.addProperty(
+          "fabbrica_propria",
+          ProMatches.territoryHasInfraFactoryAndIsOwnedLand(v.territorio().getOwner())
+              .test(v.territorio()));
       ts.add(x);
     }
     o.add("territori", ts);

@@ -978,8 +978,8 @@ public final class Stratega {
           "- al massimo "
               + cfg.maxOperazioni()
               + " operazioni attive per alleanza (le altre vengono rifiutate);",
-          "- PU per le riserve delle operazioni: quelli che restano dopo il piano difensivo"
-              + " calcolato dal motore, al massimo il "
+          "- PU per le riserve delle operazioni: quelli che restano dopo la difesa di Hard"
+              + " (che segue le liste irrinunciabili/sacrificabili), al massimo il "
               + Math.round(cfg.tettoStrategiaPct())
               + "% dei PU del turno per nazione (tetto di sicurezza); il resto lo spende Hard;",
           "- la guarnigione della capitale (25% di rischio nemico) non la lascia mai;",

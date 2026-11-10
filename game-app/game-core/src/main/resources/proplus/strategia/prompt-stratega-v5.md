@@ -88,9 +88,10 @@ Solo un oggetto JSON con questo schema (nessun testo fuori dal JSON):
 - `rinforzi`: territori o zone di mare (proprie/alleate) dove l'alleanza deve spostare riserve nel movimento non di
   combattimento, con `peso` 1-3 (il motore sceglie le unita'). Lista vuota = come Hard.
 - `irrinunciabili` e `sacrificabili` (contratto 1.5): al massimo 5 territori di terra dell'alleanza ciascuna, con una
-  frase di motivazione. Il motore calcola a ogni turno la DIFESA (`difesa_calcolata` nello stato: territori minacciati,
-  valore e costo in PU, tenuta stimata, decisione) e difende se il valore supera il costo; un territorio irrinunciabile
-  lo difende anche se costa di piu' (le capitali lo sono sempre), uno sacrificabile non lo difende (mai una capitale).
-  I PU che restano dopo la difesa vanno alle riserve delle operazioni (tetto di sicurezza), il resto a Hard. Liste
-  vuote = decide il motore con valore e costo.
+  frase di motivazione. La DIFESA la fa Hard (acquisti difensivi e movimento non di combattimento) con le tue liste:
+  un territorio sacrificabile Hard non lo difende (non ci compra e non ci manda unita', salvo passaggio o ritirata;
+  mai una capitale), uno irrinunciabile lo difende sempre, anche se lo giudicherebbe perso (le capitali lo sono
+  sempre). `difesa_calcolata` nello stato e' una stima del motore (territori minacciati, valore e costo in PU, tenuta)
+  per aiutarti a scegliere le liste, non decide nulla. I PU che restano dopo la difesa di Hard vanno alle riserve delle
+  operazioni (tetto di sicurezza), il resto a Hard. Liste vuote = Hard difende come sempre.
 - `motivazione`: max 3 frasi sul quadro strategico del round.

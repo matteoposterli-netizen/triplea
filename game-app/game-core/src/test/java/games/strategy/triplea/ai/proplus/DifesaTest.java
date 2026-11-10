@@ -34,10 +34,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Step C2: the computed defense of the "Pro+ Stratega LLM" player (threat of every real enemy
- * together, maximum on capitals and key factories, realistic elsewhere, value against cost, the
- * LLM's lists, the strategy budget, the same estimate as the holds) and the tracking of the units
- * an operation counts. No LLM call.
+ * Step C2 / C2-bis: the computed defense of the "Pro+ Stratega LLM" player, now only in the shadow
+ * (threat of every real enemy together, maximum on capitals and key factories, realistic elsewhere,
+ * value against cost, the LLM's lists, the strategy budget, the same estimate as the holds) and the
+ * tracking of the units an operation counts. No LLM call.
  */
 class DifesaTest extends AbstractClientSettingTestCase {
   private static final long SEED = 20261111L;
@@ -109,8 +109,6 @@ class DifesaTest extends AbstractClientSettingTestCase {
     assertThat(given.nAcquisti()).isZero();
     assertThat(wg.difendi()).isTrue();
     assertThat(given.presidio()).isEmpty();
-    assertThat(plan.perAcquisto().purchases())
-        .noneMatch(p -> p.territory().equals("Western Germany"));
     // the capital can never be expendable
     lists("Axis", List.of(), List.of("Germany"));
     assertThat(Difesa.liste(data.getProperties(), "Axis", 1).sacrificabili()).isEmpty();
@@ -156,6 +154,66 @@ class DifesaTest extends AbstractClientSettingTestCase {
     assertThat(all.puStrategia()).isEqualTo(pus - all.puDifesa());
     assertThat(all.puHard()).isZero();
     assertThat(all.taglioTetto()).isZero();
+  }
+
+  @Test
+  void theShadowPlanHasNoEffectOnTheGame() {
+    final ProData proData = proData(player("Germans"), 1);
+    final ProPlusTuning tuning =
+        ProPlusTuning.unwrap(proData.getTuning()) instanceof ProPlusTuning t ? t : null;
+    final String units =
+        data.getMap().getTerritories().stream()
+            .map(t -> t.getName() + t.getUnits().size())
+            .toList()
+            .toString();
+    final Difesa.Piano plan = Difesa.calcola(proData, calc(), List.of()).orElseThrow();
+    assertThat(plan.voci()).anyMatch(Difesa.Voce::difendi);
+    // no unit held out of Hard's moves, the board unchanged: the plan is only written down
+    assertThat(tuning).isNotNull();
+    assertThat(tuning.heldUnits(proData)).isEmpty();
+    assertThat(tuning.combatHeldUnits(proData)).isEmpty();
+    assertThat(
+            data.getMap().getTerritories().stream()
+                .map(t -> t.getName() + t.getUnits().size())
+                .toList()
+                .toString())
+        .isEqualTo(units);
+    final JsonObject turn =
+        Difesa.registro(data.getProperties(), "Axis")
+            .getAsJsonArray("turni")
+            .get(0)
+            .getAsJsonObject();
+    assertThat(turn.get("ombra").getAsBoolean()).isTrue();
+    // Hard's real split, written next to the shadow plan
+    Difesa.budgetAcquisto(
+        "Germans",
+        1,
+        new games.strategy.triplea.ai.pro.ProStrategyBudget(30, 6, 70, 21, 3, 15, false));
+    Difesa.registraBudget(data, player("Germans"));
+    final JsonObject real =
+        Difesa.registro(data.getProperties(), "Axis")
+            .getAsJsonArray("turni")
+            .get(0)
+            .getAsJsonObject()
+            .getAsJsonObject("reale");
+    assertThat(real.get("pu_difesa_hard").getAsInt()).isEqualTo(6);
+    assertThat(real.get("pu_resto_hard").getAsInt()).isEqualTo(9);
+  }
+
+  @Test
+  void nearbyOwnFactoriesAreOneMoveAwayOverFriendlyLand() {
+    // Denmark has no factory: the German factories one infantry move away can still buy for it
+    final List<Territory> near =
+        Difesa.fabbricheVicine(data.getMap(), player("Germans"), territory("Denmark"), 1);
+    assertThat(near).isNotEmpty();
+    assertThat(near)
+        .allMatch(f -> f.isOwnedBy(player("Germans")))
+        .allMatch(f -> data.getMap().getDistance(f, territory("Denmark")) == 1);
+    // never another nation's factory (units are placed only in their owner's territories)
+    assertThat(
+            Difesa.fabbricheVicine(
+                data.getMap(), player("Germans"), territory("Northern Italy"), 1))
+        .noneMatch(f -> f.isOwnedBy(player("Italians")));
   }
 
   @Test

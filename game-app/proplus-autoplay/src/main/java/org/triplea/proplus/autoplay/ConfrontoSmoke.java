@@ -362,6 +362,10 @@ final class ConfrontoSmoke {
     final double[][] bands = new double[5][3];
     final Map<String, Integer> fallCauses = new TreeMap<>();
     final List<String> falls = new ArrayList<>();
+    final Map<String, List<Double>> strategyShares = new TreeMap<>();
+    final Map<String, Integer> zeroDefense = new TreeMap<>();
+    final Map<String, int[]> versus = new TreeMap<>();
+    final int[] nearbyUsed = new int[2];
     int capitalsLost = 0;
     int mustLost = 0;
     int mustDefended = 0;
@@ -407,29 +411,60 @@ final class ConfrontoSmoke {
       if (a.has("difesa") && a.get("difesa").isJsonArray()) {
         for (final JsonElement e : a.getAsJsonArray("difesa")) {
           final JsonObject t = e.getAsJsonObject();
-          final double[] v =
-              byNation.computeIfAbsent(
-                  side + " " + RiepilogoGenerale.text(t, "nazione"), k -> new double[8]);
-          v[0]++;
-          v[1] += t.get("pu").getAsDouble();
-          v[2] += t.get("pu_difesa").getAsDouble();
-          v[3] += t.get("pu_strategia").getAsDouble();
-          v[4] += t.get("pu_hard").getAsDouble();
-          if (t.has("tetto_limita") && t.get("tetto_limita").getAsBoolean()) {
-            v[5]++;
-            v[6] += t.get("pu_tagliati_dal_tetto").getAsDouble();
+          final String nation = side + " " + RiepilogoGenerale.text(t, "nazione");
+          // step C2-bis: the real split of the purchase (Hard's defense, orders, rest)
+          if (t.has("reale") && t.get("reale").isJsonObject()) {
+            final JsonObject r = t.getAsJsonObject("reale");
+            final double[] v = byNation.computeIfAbsent(nation, k -> new double[8]);
+            v[0]++;
+            v[1] += r.get("pu").getAsDouble();
+            v[2] += r.get("pu_difesa_hard").getAsDouble();
+            v[3] += r.get("pu_ordini").getAsDouble();
+            v[4] += r.get("pu_resto_hard").getAsDouble();
+            if (r.get("tetto_limita").getAsBoolean()) {
+              v[5]++;
+            }
+            v[6] += r.get("pu_strategia").getAsDouble();
+            v[7] += r.get("pu_trattenuti_dal_tetto").getAsDouble() > 0 ? 1 : 0;
+            final double share =
+                r.get("pu").getAsDouble() <= 0
+                    ? 0
+                    : r.get("pu_ordini").getAsDouble() / r.get("pu").getAsDouble() * 100;
+            strategyShares.computeIfAbsent(nation, k -> new ArrayList<>()).add(share);
+            if (r.get("pu_difesa_hard").getAsDouble() <= 0) {
+              zeroDefense.merge(nation, 1, Integer::sum);
+            }
           }
-          v[7] += t.has("taglio_tetto") && t.get("taglio_tetto").getAsDouble() > 0 ? 1 : 0;
           for (final JsonElement x : t.getAsJsonArray("territori")) {
             final JsonObject y = x.getAsJsonObject();
             final String d = RiepilogoGenerale.text(y, "decisione");
             final String src = RiepilogoGenerale.text(y, "fonte");
             decisions.merge(d + " (" + src + ")", 1, Integer::sum);
+            if (y.has("acquisti_vicini") && y.getAsJsonObject("acquisti_vicini").size() > 0) {
+              nearbyUsed[0]++;
+              if (y.get("tenuta_turno_dopo_pct").getAsDouble() >= 70) {
+                nearbyUsed[1]++;
+              }
+            }
             if (!y.has("esito_tenuto")) {
               continue;
             }
             final boolean held = y.get("esito_tenuto").getAsBoolean();
-            band(bands, y.get("tenuta_stimata_pct").getAsDouble() / 100, held);
+            // the shadow plan is not played: calibrate the estimate of the territory as it was
+            band(bands, y.get("tenuta_iniziale_pct").getAsDouble() / 100, held);
+            if (y.has("hard_rinforzato")) {
+              final boolean hard = y.get("hard_rinforzato").getAsBoolean();
+              final boolean shadow = "difeso".equals(d);
+              final String k =
+                  (shadow ? "ombra difende" : "ombra sacrifica")
+                      + " / "
+                      + (hard ? "Hard rinforza" : "Hard non rinforza");
+              final int[] c = versus.computeIfAbsent(k, z -> new int[2]);
+              c[0]++;
+              if (held) {
+                c[1]++;
+              }
+            }
             if ("difeso".equals(d) && ("capitale".equals(src) || "llm".equals(src))) {
               mustDefended++;
               if (!held) {
@@ -464,29 +499,60 @@ final class ConfrontoSmoke {
     }
     md.append(
 """
-### Budget difensivo calcolato (step C2)
+### Difesa di Hard e budget dinamico (step C2-bis)
 
-| Nazione | Turni | PU medi | Difesa | Strategia | Hard | Strategia % | Tetto superato | Tetto limita le riserve | PU tagliati (tot / medi) |
-|---|---|---|---|---|---|---|---|---|---|
+PU reali di ogni acquisto: difesa di Hard, poi riserve delle operazioni (entro il tetto), poi il resto di Hard.
+
+| Nazione | Turni | PU medi | Difesa di Hard | Operazioni | Resto di Hard | Operazioni % (mediana, max) | Turni con difesa 0 | Budget operazioni medio | Tetto trattiene PU | Tetto limita le riserve |
+|---|---|---|---|---|---|---|---|---|---|---|
 """);
     byNation.forEach(
-        (k, v) ->
+        (k, v) -> {
+          final List<Double> sh = strategyShares.getOrDefault(k, List.of());
+          md.append(
+              String.format(
+                  Locale.ROOT,
+                  "| %s | %.0f | %.1f | %.1f | %.1f | %.1f | %.0f%% (%.0f%%, %.0f%%) | %d |"
+                      + " %.1f | %.0f | %.0f |%n",
+                  k,
+                  v[0],
+                  v[1] / v[0],
+                  v[2] / v[0],
+                  v[3] / v[0],
+                  v[4] / v[0],
+                  v[1] == 0 ? 0 : v[3] / v[1] * 100,
+                  mediana(sh),
+                  sh.stream().mapToDouble(Double::doubleValue).max().orElse(0),
+                  zeroDefense.getOrDefault(k, 0),
+                  v[6] / v[0],
+                  v[7],
+                  v[5]));
+        });
+    md.append(
+"""
+
+Piano difensivo del C2 IN OMBRA (nessun effetto) contro quello che ha fatto Hard, con l'esito al turno dopo della nazione (territori minacciati valutati):
+
+| Caso | Territori | Tenuti al turno dopo |
+|---|---|---|
+""");
+    versus.forEach(
+        (k, c) ->
             md.append(
                 String.format(
                     Locale.ROOT,
-                    "| %s | %.0f | %.1f | %.1f | %.1f | %.1f | %.0f%% (fisso prima: 30%%) | %.0f |"
-                        + " %.0f | %.0f / %.1f |%n",
+                    "| %s | %d | %d (%.0f%%) |%n",
                     k,
-                    v[0],
-                    v[1] / v[0],
-                    v[2] / v[0],
-                    v[3] / v[0],
-                    v[4] / v[0],
-                    v[1] == 0 ? 0 : v[3] / v[1] * 100,
-                    v[7],
-                    v[5],
-                    v[6],
-                    v[5] == 0 ? 0 : v[6] / v[5])));
+                    c[0],
+                    c[1],
+                    c[0] == 0 ? 0 : 100.0 * c[1] / c[0])));
+    md.append(
+        String.format(
+            Locale.ROOT,
+            "%nFabbriche vicine nell'ombra: %d territori con acquisti vicini, %d arriverebbero alla"
+                + " soglia al turno dopo.%n",
+            nearbyUsed[0],
+            nearbyUsed[1]));
     md.append("\nTerritori minacciati valutati, per decisione (fonte): ")
         .append(decisions.isEmpty() ? "nessuno" : decisions.toString())
         .append(".\n\n");
@@ -501,8 +567,8 @@ final class ConfrontoSmoke {
             mustDefended));
     calibration(
         md,
-        "stima della DIFESA (tenuta stimata del piano difensivo, esito al turno dopo della nazione;"
-            + " criterio errore medio <= 20 punti)",
+        "stima della DIFESA IN OMBRA (tenuta stimata senza rinforzi a inizio turno, esito al turno"
+            + " dopo della nazione; criterio errore medio <= 20 punti)",
         bands);
     md.append("Cali della stima di 30 punti o piu' dal lancio (tracciamento), per causa: ")
         .append(fallCauses.isEmpty() ? "nessuno" : fallCauses.toString())
