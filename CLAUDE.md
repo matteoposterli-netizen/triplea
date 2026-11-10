@@ -3799,3 +3799,43 @@ da Hard 1, fallite 2, annullate 8), sbarco 1 (in corso). Rifiutato 1 riavvio (Ho
   113 per tenute); per tappe poi rinviate 3 (28 unita', 1 turno ciascuna). Un solo calo >= 30 punti a un punto di decisione
   (Syria seme 602: tappa 1 "2 bomber, 5 fighter, 5 tactical" → "2 bomber, 2 fighter, 2 tactical", presidio "2 art, 2 inf" → "1
   inf"); nessun caso tipo Denmark tra le tenute.
+
+### Step C1-bis — aerei trattenuti, ordine delle cause, valore d'alleanza in PU (2026-11-10)
+
+Vedi "Step C1-bis" (sezione "Coerenza delle stime"). File: `StimaUnica` (aerei contati solo se trattenibili, `valoreAlleanza`/
+`jsonValore`), `OperazioniCongiunte` (`trattenute` con ogni unita', `avvicina`, `colpisceDaQui`, `gatherPlanes` sugli aerei
+contati, trattenute nel combattimento di preparazione, tappa 1 con il valore in PU), `CauseAnnullamento` (ordine),
+`StrategaCandidati` (`valoreBersaglioPu`, `indice_valore`), `StrategaConfig` + `stratega-llm.json` (`valore_pu`), `Stratega`
+(`stima_round_dopo`), `StrategaDiario`, prompt v5 (1 riga), `contratto-v1.md`, `ConfrontoSmoke`, workflow (semi 701-706).
+Hard, Pro+ (AI) e operazioni scritte a mano invariati.
+- Test locali: `:game-core:test --tests 'games.strategy.triplea.ai.*'` + `:proplus-autoplay:test` + `:ai:test` **557, 0
+  falliti** (golden Hard, `NudoHardTest`, `DiaryNeutralityTest` diario on/off compresi); `CoerenzaStimeTest` 11 (nuovi: aereo che
+  colpisce da dove e' contato e trattenuto all'acquisto, aereo che dovrebbe prima avvicinarsi non contato; valore in PU con
+  componenti e formula; calo di stima C3 prima di C5); `:game-headed:compileJava` verde.
+- Cause della run 42822465005 ricalcolate con il nuovo ordine (stima ora = `stima_motore_ora` nello stato della chiamata che
+  annulla): 11 annullate = **C3 6, giustificato 5** (prima C5 7, giustificato 4): le 7 "C5" erano 6 Syria/Southern France/
+  Caucasus con successo 80-100% → 0-27% e West India con contrattacco massimo 3 → 16 TUV. Artefatti C1-C5 6/56 (11%).
+
+#### Autoplay in CI (run 42833255633, commit 21f57be, tutto verde, 12 partite [smoke] semi 701-706)
+12/12 completate, 144/144 round decisi dall'LLM, 0 ripieghi, 222 chiamate, **$3,08** (tetto 30), $0,26 a partita. Operazioni
+69: tenuta 48 (eseguite dal motore 46, completate 28, fallite 11, annullate 2), offensiva 18 (eseguite 4, completata 1, fallita 1,
+annullate 13), sbarco 3 (preso da Hard 1, annullato 1). Aerei trattenuti: 130 turni-aereo in 21 operazioni.
+- **Criteri**: artefatti C1-C5 **11/69 (16%) > 10%: NO** (C3 9, C2 1, C5 1; giustificati 5); offensive/sbarchi eseguiti dal
+  motore **4/21 (19%) < 30%: NO**; mediana candidato → primo punto di decisione 0 punti su 50 (quasi tutte tenute); **lancio →
+  round dopo per le offensive mediana 26 punti su 19 (criterio <= 15): NO** (era 77). Calibrazione del motore al lancio: offensive
+  92% → reale 15% (13), tenute 99% → 79% (38); LLM strategico 33,7 punti (offensive 68,4), ordini 4,9. VC R12 (informative):
+  Asse Stratega 5,2 / Hard 5,8; Alleati Stratega 4,8 / Hard 6,2.
+- **Perche' (dai diari)**: (1) Syria R1 lanciata in 6 partite su 6 e annullata al R2 in 6 su 6 (C3): i 3 TUV di difensori
+  francesi spariscono prima della tappa (Hard italiana la prende o la svuota: l'LLM lo dice in tutte e 6 le motivazioni), la
+  tappa 1 di soli aerei passa a win 0% perche' senza difensori la formula da' 0 a una tappa senza terra (artefatto del numero,
+  non delle forze), e la tenuta stimata oscilla 81-91% → 21-100% con +7 TUV di contrattacco contato e 1 fanteria in meno nel
+  presidio (stima di tenuta molto sensibile su stack piccoli). Il valore d'alleanza di Syria era 38 PU di cui 49 TUV nemici
+  distrutti attesi (46 di rinforzi britannici tra le tappe) contro 4 PU di bersaglio: i TUV distrutti hanno reso il lancio piu'
+  attraente. (2) Offensive tardive (Greece R10 x2, Iraq R11): la tappa 2 conta unita' di terra raggiungibili entro k x movimento
+  (es. 9 artiglierie italiane, carri tedeschi da Bryansk), ma la "sicurezza raduni" nega i passi (15-34 mosse negate per turno)
+  ⇒ le unita' restano ferme (ora trattenute) e il round dopo non sono piu' entro (k-1) x movimento ⇒ la tappa 2 crolla (9 art.
+  5 fant. → 1 carro, win 100 → 0). Gli aerei ora restano (5-9 turni-aereo per operazione); il calo e' sulle unita' di terra che
+  il motore conta ma non puo' muovere. (3) Tenute: buone (46/48 eseguite, calibrazione 99 → 79).
+- Non tarato (regola dello step). Correzione coerente con lo step (da decidere): contare per un round futuro solo le unita' di
+  terra che hanno un percorso SICURO verso la raccolta (la stessa prova di `stepToward`/`sicuro` usata per muoverle), e per una
+  tappa senza difensori nemici non usare il win% della tappa 1 nel confronto (presa gia' 100%).
