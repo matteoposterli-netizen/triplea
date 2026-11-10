@@ -250,6 +250,57 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
     assertThat(reading.has("ammassamenti_per_fronte")).isTrue();
   }
 
+  // ------------------------------------------------------------------------ step R0 switches
+
+  @Test
+  void theSwitchesOfStepR0TurnOffTheListsAndTheHolds() {
+    registerAxis();
+    final var props = data.getProperties();
+    // default: both on
+    assertThat(StrategaInterruttori.LISTE.acceso(props, "Axis")).isTrue();
+    assertThat(StrategaInterruttori.TENUTE.acceso(props, "Axis")).isTrue();
+    final List<Candidato> withHolds = generator("Germans", 2).calcola();
+    // "tenute" off: no hold/reinforcement candidate, none outside the list
+    StrategaInterruttori.set(props, "Axis", "tenute");
+    assertThat(StrategaInterruttori.TENUTE.acceso(props, "Axis")).isFalse();
+    assertThat(StrategaInterruttori.TENUTE.acceso(props, "Allies")).isTrue();
+    final List<Candidato> noHolds = generator("Germans", 2).calcola();
+    assertThat(noHolds).allMatch(c -> c.tipo().conquista());
+    assertThat(noHolds.stream().map(Candidato::bersaglio).toList())
+        .containsAll(
+            withHolds.stream()
+                .filter(c -> c.tipo().conquista())
+                .map(Candidato::bersaglio)
+                .limit(1)
+                .toList());
+    final JsonObject hold =
+        JsonParser.parseString(outside("tenuta", "Germany", "Germans", "Germans"))
+            .getAsJsonObject();
+    assertThat(StrategaFuoriLista.valida(data, "Axis", Stratega.nazioni(props, "Axis"), hold))
+        .hasValueSatisfying(w -> assertThat(w).contains("tenute"));
+    StrategaInterruttori.set(props, "Axis", "");
+    assertThat(StrategaFuoriLista.valida(data, "Axis", Stratega.nazioni(props, "Axis"), hold))
+        .isEmpty();
+    // "liste" off: the LLM's lists are not given to Hard's defense
+    final JsonObject answer = new JsonObject();
+    final JsonArray must = new JsonArray();
+    final JsonObject entry = new JsonObject();
+    entry.addProperty("territorio", "Western Germany");
+    entry.addProperty("motivazione", "prova");
+    must.add(entry);
+    answer.add("irrinunciabili", must);
+    answer.add("sacrificabili", new JsonArray());
+    Difesa.salvaListe(data, "Axis", 2, answer);
+    final ProData pd = proData(player("Germans"), 2, "Purchase");
+    assertThat(pd.getTuning().defenseLists(pd))
+        .hasValueSatisfying(l -> assertThat(l.mustHold()).contains("Western Germany"));
+    StrategaInterruttori.set(props, "Axis", "liste");
+    assertThat(pd.getTuning().defenseLists(pd)).isEmpty();
+    assertThatThrownBy(() -> StrategaInterruttori.set(props, "Axis", "difesa"))
+        .isInstanceOf(IllegalArgumentException.class);
+    StrategaInterruttori.set(props, "Axis", "");
+  }
+
   // ------------------------------------------------------------------------------ portfolio
 
   @Test

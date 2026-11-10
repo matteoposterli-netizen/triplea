@@ -419,6 +419,17 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   eseguiti dal motore / avviati, mediana |stima del candidato - prima stima al punto di decisione| (punti di successo e di
   tenuta), blocchi del motore (tetto di perdita, sicurezza raduni, quota PU, candidati scartati, riavvii rifiutati);
   calibrazione per tipo (stima dell'LLM) e della stima unica del motore al lancio per tipo.
+- **Modalita' "diagnosi" (step R0)**: `[diagnosi]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒ `modalita:
+  diagnosi`. 12 round, Equilibrato, **semi 1101-1110** (mai usati prima), matrice mescolata per seme, `max-parallel` 20, 5
+  configurazioni = 50 partite: a `Hard-vs-Hard`, b `Asse-Stratega-senza-chiave-vs-Hard` (nessuna chiave al job: paracadute, nessuna
+  operazione, nessuna lista), c `Asse-Stratega-LLM-vs-Hard`, d `Asse-Stratega-senza-liste-vs-Hard` (`--stratega-spento Axis=liste`), e
+  `Asse-Stratega-senza-tenute-vs-Hard` (`--stratega-spento Axis=tenute`). La chiave va solo a c, d, e (`matrix.stratega`); tetto della
+  run 15 $ diviso sulle 30 partite LLM (0,5 $ a partita). `riepilogo.json` `parametri.chiave_llm` (solo vero/falso, mai la chiave) e
+  `parametri.stratega_spento`; etichetta della configurazione "Stratega LLM [senza chiave] / [senza liste] / [senza tenute]". Sezione
+  **"Diagnosi Stratega (R0)"** (`ConfrontoDiagnosi`, scritta con "Hard / Hard" e almeno una configurazione Stratega contro Hard): per
+  configurazione VC R12 del lato (media ± ds, min-max), reddito finale, TUV perso, capitali cadute; differenze di ogni configurazione
+  Stratega da Hard vs Hard e di "[senza liste]"/"[senza tenute]" dallo Stratega completo, con IC 95% di Welch (`ConfrontoConferma.Welch`)
+  ed esito "esclude / include lo 0"; per "[senza chiave]" il contatore di `ControlloTuning` (domande, differenze, risposte "operazione").
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -1945,6 +1956,18 @@ Decisione di Matteo dopo la [smoke] del C2 (Asse 0,33 VC): il pianificatore dife
 - `ConfrontoSmoke`: sezione "Difesa di Hard e budget dinamico (step C2-bis)" (PU reali per nazione, % operazioni mediana e
   max, turni con difesa 0, tetto che trattiene/limita; ombra contro Hard con esito; fabbriche vicine; calibrazione della
   tenuta iniziale stimata).
+
+### Interruttori di diagnosi dello Stratega (step R0)
+
+Solo per la voce "Pro+ Stratega LLM", default = comportamento di prima (acceso). Proprieta' della partita `Pro+ stratega llm spento:
+<alleanza>` = id spenti separati da virgola (`StrategaInterruttori`); opzione dell'autoplay `--stratega-spento Axis=liste+tenute`;
+nessun pannello.
+- `liste` spento: `ProPlusTuning.defenseLists` torna vuoto (Hard difende senza irrinunciabili/sacrificabili); l'LLM viene chiamato
+  lo stesso e le liste restano nel diario.
+- `tenute` spento: `StrategaCandidati.calcola` non aggiunge candidati tenuta/rinforzo; `StrategaFuoriLista.valida` rifiuta tenuta e
+  rinforzo fuori lista ("tenute e rinforzi spenti"). I "rinforzi prioritari" (pesi dell'ammassamento) NON sono toccati.
+- Test: `StrategaLlmCompletoTest.theSwitchesOfStepR0TurnOffTheListsAndTheHolds`, `AutoplayTest.parsesTheStrategistSwitchesOfStepR0`,
+  `AutoplayTest.diagnosisOfStepR0ComparesTheStrategistConfigurations`.
 
 ## Come configurare lo stratega
 
@@ -4050,3 +4073,14 @@ limiti separati, fabbriche vicine, `registraBudget`), `DiaryRecorder`, `Stratega
 - Offensive/sbarchi eseguiti dal motore 2/11 (18%, criterio 30%: NO); artefatti C1-C5 4/54 (7%: SI'); lancio → round dopo per
   le offensive mediana 18,5 punti (criterio 15: NO); calibrazione del motore al lancio: offensive 99% → reale 0% (7), tenute 99%
   → 72% (36). Irrinunciabili difesi e persi al turno dopo 32/414.
+
+### Step R0 — diagnosi dei -1,8 VC dell'Asse Stratega (2026-11-10, lavoro notturno autonomo)
+
+Scopo: capire da dove vengono i ~-1,8 VC dell'Asse Stratega rispetto a Hard vs Hard (smoke 42890953654: 4,17 contro 5,94) prima di
+correggere altro. Nessuna correzione di comportamento: due interruttori (default acceso), modalita' `[diagnosi]`, sezione "Diagnosi
+Stratega (R0)". Vedi "Interruttori di diagnosi dello Stratega (step R0)" e "Modalita' diagnosi" nella sezione dell'autoplay.
+File: nuovi `ai/proplus/StrategaInterruttori`, autoplay `ConfrontoDiagnosi`; modificati `ProPlusTuning.defenseLists`,
+`StrategaCandidati.calcola`, `StrategaFuoriLista.valida`, autoplay `AutoplayOptions` (`--stratega-spento`), `AutoplayRunner`,
+`Riepilogo` (`chiave_llm`, `stratega_spento`), `RiepilogoGenerale` (etichetta, sezione), workflow (`[diagnosi]`). Hard, Pro+ (AI) e le
+altre voci invariate. `avvia.bat` e `aggiorna.ps1` NON toccati.
+

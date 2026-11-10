@@ -226,6 +226,13 @@ public final class AutoplayRunner {
       // step STRATEGA LLM: the cap of the game for both levels of the strategist
       games.strategy.triplea.ai.proplus.Stratega.setBudget(
           data.getProperties(), options.budgetOperazioni());
+      // step R0: the strategist's switches turned off (default: all on)
+      for (final String alliance : monitor.alliances().keySet()) {
+        if (AutoplayOptions.STRATEGA.equals(options.tipo(alliance))) {
+          games.strategy.triplea.ai.proplus.StrategaInterruttori.set(
+              data.getProperties(), alliance, options.strategaSpento(alliance));
+        }
+      }
       // step C2: the cap of the PUs to the strategy (default: the data file)
       if (options.tettoStrategia() != null) {
         for (final String alliance : monitor.alliances().keySet()) {

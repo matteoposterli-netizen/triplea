@@ -538,7 +538,9 @@ public final class ProPlusTuning implements ProTuning {
       return Optional.empty();
     }
     final Optional<String> alliance = ProPlusSettings.allianceOf(proData.getData(), player);
-    if (alliance.isEmpty()) {
+    if (alliance.isEmpty()
+        || !StrategaInterruttori.LISTE.acceso(proData.getData().getProperties(), alliance.get())) {
+      // step R0: lists switched off = Hard's defense without them (the LLM still answers them)
       return Optional.empty();
     }
     final Difesa.Liste l =

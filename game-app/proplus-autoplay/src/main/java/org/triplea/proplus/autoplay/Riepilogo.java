@@ -437,7 +437,31 @@ final class Riepilogo {
     if (o.tettoStrategia() != null) {
       p.addProperty("tetto_strategia_pct", o.tettoStrategia());
     }
+    // step R0: switches of the strategist turned off, and whether an LLM key was there at all
+    // (true/false only: never the key)
+    final JsonObject switches = new JsonObject();
+    boolean strategist = false;
+    for (final String a : monitor.alliances().keySet()) {
+      if (AutoplayOptions.STRATEGA.equals(o.tipo(a))) {
+        strategist = true;
+        if (!o.strategaSpento(a).isEmpty()) {
+          switches.addProperty(a, o.strategaSpento(a));
+        }
+      }
+    }
+    if (switches.size() > 0) {
+      p.add("stratega_spento", switches);
+    }
+    if (strategist) {
+      p.addProperty("chiave_llm", llmKeyPresent());
+    }
     return p;
+  }
+
+  /** True if an Anthropic key is set in the environment (the value is never read further). */
+  static boolean llmKeyPresent() {
+    final String key = System.getenv("ANTHROPIC_API_KEY");
+    return key != null && !key.isBlank();
   }
 
   /**

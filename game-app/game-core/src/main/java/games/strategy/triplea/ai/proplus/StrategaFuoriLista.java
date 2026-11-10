@@ -26,6 +26,10 @@ final class StrategaFuoriLista {
     if (tipo.isEmpty()) {
       return Optional.of("tipo sconosciuto: " + f.get("tipo").getAsString());
     }
+    if (!tipo.get().conquista()
+        && !StrategaInterruttori.TENUTE.acceso(data.getProperties(), alliance)) {
+      return Optional.of("tenute e rinforzi spenti per " + alliance + " (interruttore 'tenute')");
+    }
     final Territory t = data.getMap().getTerritoryOrNull(f.get("bersaglio").getAsString());
     if (t == null || t.isWater()) {
       return Optional.of("territorio di terra sconosciuto: " + f.get("bersaglio").getAsString());

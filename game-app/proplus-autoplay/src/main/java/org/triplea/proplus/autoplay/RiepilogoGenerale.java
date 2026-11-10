@@ -140,6 +140,7 @@ final class RiepilogoGenerale {
     ConfrontoHard.write(md, games, alliances, vcRounds);
     ConfrontoAblazione.write(md, games, alliances, vcRounds);
     ConfrontoConferma.write(md, games, alliances, vcRounds);
+    ConfrontoDiagnosi.write(md, games, alliances, vcRounds);
     ConfrontoVarianza.write(md, games, alliances, vcRounds);
     ConfrontoProva.write(md, games, alliances, vcRounds);
     ConfrontoSmoke.write(md, games, alliances);
@@ -258,8 +259,11 @@ final class RiepilogoGenerale {
         alliances,
         a -> {
           final String type = text(p.getAsJsonObject("tipi"), a);
-          if (AutoplayOptions.HARD.equals(type) || AutoplayOptions.STRATEGA.equals(type)) {
+          if (AutoplayOptions.HARD.equals(type)) {
             return Riepilogo.typeLabel(type);
+          }
+          if (AutoplayOptions.STRATEGA.equals(type)) {
+            return Riepilogo.typeLabel(type) + strategistLabel(json, a);
           }
           final String decider = decider(json, a);
           return Riepilogo.typeLabel(type)
@@ -269,6 +273,25 @@ final class RiepilogoGenerale {
               + ablationLabel(json, a)
               + operationLabel(json, a);
         });
+  }
+
+  /**
+   * Step R0: " [senza chiave]" when the game ran without an LLM key, " [senza liste]" / " [senza
+   * tenute]" for the switches off; "" for the full strategist (and for the games before R0).
+   */
+  static String strategistLabel(final JsonObject json, final String alliance) {
+    final JsonObject p = json.getAsJsonObject("parametri");
+    final StringBuilder label = new StringBuilder();
+    if (p.has("chiave_llm") && !p.get("chiave_llm").getAsBoolean()) {
+      label.append(" [senza chiave]");
+    }
+    if (p.has("stratega_spento") && p.getAsJsonObject("stratega_spento").has(alliance)) {
+      for (final String off :
+          p.getAsJsonObject("stratega_spento").get(alliance).getAsString().split(",")) {
+        label.append(" [senza ").append(off).append(']');
+      }
+    }
+    return label.toString();
   }
 
   /** Step PROVA DI VALORE: the joint operation of {@code alliance}, eg " + operazione egitto". */

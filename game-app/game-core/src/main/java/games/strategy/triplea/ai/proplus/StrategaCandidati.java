@@ -188,7 +188,9 @@ public final class StrategaCandidati {
     }
     all.addAll(offensive());
     all.addAll(sbarchi());
-    all.addAll(tenute());
+    if (StrategaInterruttori.TENUTE.acceso(data.getProperties(), alliance)) {
+      all.addAll(tenute()); // step R0: switched off = no hold/reinforcement candidate
+    }
     all.sort(
         Comparator.comparingDouble((Candidato c) -> -c.punteggio())
             .thenComparing(Candidato::bersaglio));

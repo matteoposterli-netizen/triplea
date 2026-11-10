@@ -870,6 +870,74 @@ class AutoplayTest {
     assertThat(ConfrontoSmoke.mediana(List.of(3.0, 1.0, 2.0))).isEqualTo(2.0);
   }
 
+  @Test
+  void parsesTheStrategistSwitchesOfStepR0() {
+    final AutoplayOptions o =
+        AutoplayOptions.parse(
+            new String[] {
+              "--mappa",
+              "m.xml",
+              "--tipo",
+              "Axis=stratega",
+              "--stratega-spento",
+              "Axis=liste+tenute"
+            });
+    assertThat(o.strategaSpento("Axis")).isEqualTo("liste,tenute");
+    assertThat(o.strategaSpento("Allies")).isEmpty();
+    assertThatThrownBy(
+            () ->
+                AutoplayOptions.parse(
+                    new String[] {"--mappa", "m", "--stratega-spento", "Axis=difesa"}))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void diagnosisOfStepR0ComparesTheStrategistConfigurations() {
+    final List<RiepilogoGenerale.Game> games = new java.util.ArrayList<>();
+    final int[][] vc = {{6, 7, 5}, {6, 6, 5}, {4, 3, 4}, {5, 5, 6}};
+    final String[] params = {
+      "\"tipi\":{\"Axis\":\"hard\",\"Allies\":\"hard\"}",
+      "\"tipi\":{\"Axis\":\"stratega\",\"Allies\":\"hard\"},\"chiave_llm\":false",
+      "\"tipi\":{\"Axis\":\"stratega\",\"Allies\":\"hard\"},\"chiave_llm\":true",
+      "\"tipi\":{\"Axis\":\"stratega\",\"Allies\":\"hard\"},\"chiave_llm\":true,"
+          + "\"stratega_spento\":{\"Axis\":\"liste\"}"
+    };
+    for (int c = 0; c < vc.length; c++) {
+      for (int seed = 0; seed < 3; seed++) {
+        final String json =
+            "{\"stato\":\"completata\",\"parametri\":{\"round_max\":12,"
+                + params[c]
+                + "},\"alleanze\":{\"Axis\":[\"Germans\"],\"Allies\":[\"British\"]},"
+                + "\"tuv_perso\":{\"Axis\":100,\"Allies\":90},"
+                + "\"capitali\":[],"
+                + "\"controllo_nudo\":{\"Germans\":{\"R1\":{\"domande\":10,"
+                + "\"differenze\":0,\"operazione\":1,\"esempi\":[]}}},"
+                + "\"round\":[{\"round\":12,\"completo\":true,\"nazioni\":{"
+                + "\"Germans\":{\"reddito\":40},\"British\":{\"reddito\":30}},"
+                + "\"vc\":{\"Axis\":{\"numero\":"
+                + vc[c][seed]
+                + "},\"Allies\":{\"numero\":3}}}]}";
+        games.add(
+            new RiepilogoGenerale.Game(
+                c + "-x-seme" + seed, JsonParser.parseString(json).getAsJsonObject()));
+      }
+    }
+    final StringBuilder md = new StringBuilder();
+
+    ConfrontoDiagnosi.write(md, games, List.of("Axis", "Allies"), List.of(4, 8, 12));
+
+    final String text = md.toString();
+    assertThat(text).contains("## Diagnosi Stratega (R0)");
+    assertThat(text).contains("| Hard / Hard | Asse | 3 | 6.00 ± 1.00 (5.00-7.00)");
+    assertThat(text).contains("| Stratega LLM [senza chiave] / Hard | Asse | 3 |");
+    assertThat(text)
+        .contains("| Stratega LLM / Hard − Hard / Hard | Asse | VC R12 | -2.33 |")
+        .contains("| Stratega LLM [senza liste] / Hard − Stratega LLM / Hard | Asse | VC R12 |");
+    assertThat(text).contains("| Stratega LLM [senza chiave] / Hard | 3 | 30 | 0 | 3 |");
+    assertThat(ConfrontoDiagnosi.full("Stratega LLM [senza tenute] / Hard"))
+        .isEqualTo("Stratega LLM / Hard");
+  }
+
   private static final String SAMPLE =
       """
       {"nome":"A / 1","stato":"completata","durata_s":75,"round_giocati":1,

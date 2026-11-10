@@ -32,6 +32,8 @@ import javax.annotation.Nullable;
  *                      (default 1.0); over it the formula decides
  * --tetto-strategia P  step C2: cap (percent) of the PUs the "Pro+ Stratega LLM" gives to the
  *                      strategy after its computed defense (default: the data file, 70)
+ * --stratega-spento A=S+S,..  step R0: switches of the "Pro+ Stratega LLM" turned off per
+ *                      alliance (liste, tenute; see StrategaInterruttori), default all on
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
@@ -50,6 +52,7 @@ record AutoplayOptions(
     Map<String, String> decisoriOperazione,
     double budgetOperazioni,
     @Nullable Double tettoStrategia,
+    Map<String, String> strategaSpenti,
     long seme,
     Path output,
     int minuti,
@@ -91,10 +94,40 @@ record AutoplayOptions(
                 String.valueOf(
                     games.strategy.triplea.ai.proplus.DecisoreOperazione.BUDGET_DEFAULT))),
         cap(values.get("tetto-strategia")),
+        strategistSwitches(values.get("stratega-spento")),
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
         Integer.parseInt(values.getOrDefault("minuti", "55")),
         values.get("nome"));
+  }
+
+  /** "Axis=liste+tenute": every id must be a switch of the strategist (step R0). */
+  static Map<String, String> strategistSwitches(@Nullable final String text) {
+    final Map<String, String> map = pairs(text);
+    map.replaceAll(
+        (alliance, s) -> {
+          final java.util.List<String> ids = new java.util.ArrayList<>();
+          for (final String id : s.split("\\+")) {
+            ids.add(
+                games.strategy.triplea.ai.proplus.StrategaInterruttori.of(id)
+                    .orElseThrow(
+                        () ->
+                            new IllegalArgumentException(
+                                "Interruttore dello Stratega non valido per "
+                                    + alliance
+                                    + ": "
+                                    + id
+                                    + " (liste, tenute)"))
+                    .id());
+          }
+          return String.join(",", ids);
+        });
+    return map;
+  }
+
+  /** Switches of the strategist turned off for {@code alliance}, comma separated ("" = none). */
+  String strategaSpento(final String alliance) {
+    return strategaSpenti.getOrDefault(alliance, "");
   }
 
   /** "--tetto-strategia 70": a percent 0-100, or null (the data file's value). */
