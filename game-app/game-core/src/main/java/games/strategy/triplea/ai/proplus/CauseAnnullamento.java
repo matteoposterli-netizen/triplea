@@ -28,7 +28,9 @@ import javax.annotation.Nullable;
  *       target since the launch.
  * </ul>
  *
- * <p>Rough rules on the numbers the engine has, in this order; they are a measure, not a decision.
+ * <p>Rough rules on the numbers the engine has, in this order (step C1-bis: C1, then the engine's
+ * estimate against the launch's - giustificato, C3/C2 - then C5, C4, C6); they are a measure, not a
+ * decision.
  */
 final class CauseAnnullamento {
   static final String C1 = "C1";
@@ -91,22 +93,7 @@ final class CauseAnnullamento {
       };
     }
     final boolean started = reg.json().has("tappa1_round");
-    if (conquest
-        && !held
-        && !started
-        && bersagliCandidati != null
-        && !bersagliCandidati.contains(def.bersaglio())) {
-      return new String[] {C5, "il candidato non e' piu' nella lista del round"};
-    }
     final int launched = reg.intOf("avvio_round", round);
-    if (conquest
-        && !held
-        && !started
-        && round - launched >= 2
-        && reg.json().has("in_raccolta_tuv")
-        && reg.json().get("in_raccolta_tuv").getAsDouble() <= 0) {
-      return new String[] {C4, "nessuna unita' raccolta dopo " + (round - launched) + " round"};
-    }
     final JsonObject start =
         reg.json().has("stima_avvio") && reg.json().get("stima_avvio").isJsonObject()
             ? reg.json().getAsJsonObject("stima_avvio")
@@ -117,35 +104,62 @@ final class CauseAnnullamento {
             : reg.json().has("stima_decisione_ultima")
                 ? reg.json().getAsJsonObject("stima_decisione_ultima")
                 : null;
+    // step C1-bis: the fall of the engine's estimate (or the enemy's growth) comes before "out of
+    // the list": a candidate leaves the list because its numbers fell (run 42822465005: the 7 C5
+    // were offensives whose counted planes Hard had used), so C5 is only what remains
+    if (start != null && now != null) {
+      final double maxStart = num(start, "contrattacco_massimo_TUV");
+      final double maxNow = num(now, "contrattacco_massimo_TUV");
+      final double growth = maxStart <= 0 ? (maxNow > 0 ? 100 : 0) : (maxNow / maxStart - 1) * 100;
+      final double drop = num(start, "successo_pct") - num(now, "successo_pct");
+      final String numbers =
+          String.format(
+              Locale.ROOT,
+              "successo stimato dal motore %.0f%% al lancio, %.0f%% ora; contrattacco massimo TUV"
+                  + " %.0f -> %.0f",
+              num(start, "successo_pct"),
+              num(now, "successo_pct"),
+              maxStart,
+              maxNow);
+      if (growth >= CRESCITA_NEMICO_PCT) {
+        return new String[] {GIUSTIFICATO, "il nemico in portata e' cresciuto: " + numbers};
+      }
+      if (drop >= CALO_STIMA_PUNTI) {
+        return new String[] {
+          conquest ? C3 : C2,
+          (conquest
+                  ? "forze alla tappa inferiori al lancio: "
+                  : "tenuta al punto di decisione inferiore al lancio: ")
+              + numbers
+        };
+      }
+    }
+    if (conquest
+        && !held
+        && !started
+        && bersagliCandidati != null
+        && !bersagliCandidati.contains(def.bersaglio())) {
+      return new String[] {C5, "il candidato non e' piu' nella lista del round"};
+    }
+    if (conquest
+        && !held
+        && !started
+        && round - launched >= 2
+        && reg.json().has("in_raccolta_tuv")
+        && reg.json().get("in_raccolta_tuv").getAsDouble() <= 0) {
+      return new String[] {C4, "nessuna unita' raccolta dopo " + (round - launched) + " round"};
+    }
     if (start == null || now == null) {
       return new String[] {C6, "nessuna stima del motore da confrontare: stessi numeri"};
     }
-    final double maxStart = num(start, "contrattacco_massimo_TUV");
-    final double maxNow = num(now, "contrattacco_massimo_TUV");
-    final double growth = maxStart <= 0 ? (maxNow > 0 ? 100 : 0) : (maxNow / maxStart - 1) * 100;
-    final double drop = num(start, "successo_pct") - num(now, "successo_pct");
-    final String numbers =
-        String.format(
-            Locale.ROOT,
-            "successo stimato dal motore %.0f%% al lancio, %.0f%% ora; contrattacco massimo TUV %.0f"
-                + " -> %.0f",
-            num(start, "successo_pct"),
-            num(now, "successo_pct"),
-            maxStart,
-            maxNow);
-    if (growth >= CRESCITA_NEMICO_PCT) {
-      return new String[] {GIUSTIFICATO, "il nemico in portata e' cresciuto: " + numbers};
-    }
-    if (drop >= CALO_STIMA_PUNTI) {
-      return new String[] {
-        conquest ? C3 : C2,
-        (conquest
-                ? "forze alla tappa inferiori al lancio: "
-                : "tenuta al punto di decisione inferiore al lancio: ")
-            + numbers
-      };
-    }
-    return new String[] {C6, "stessi numeri del lancio: " + numbers};
+    return new String[] {
+      C6,
+      String.format(
+          Locale.ROOT,
+          "stessi numeri del lancio: successo stimato dal motore %.0f%% al lancio, %.0f%% ora",
+          num(start, "successo_pct"),
+          num(now, "successo_pct"))
+    };
   }
 
   private static double num(final JsonObject o, final String key) {

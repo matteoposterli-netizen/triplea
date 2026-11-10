@@ -15,6 +15,11 @@ Senza operazioni l'alleanza gioca esattamente come Hard: avvia un'operazione sol
 - Ordine dei turni in ogni round: Germania, URSS, Stati Uniti, Regno Unito, Italia, Francia.
 - Vittoria dell'Asse: 8 victory city (VC) tenute a fine round piu' una capitale nemica; Alleati: Roma e Berlino.
 - Le VC, il reddito (produzione dei territori) e gli obiettivi nazionali sono il valore; il TUV e' il costo.
+- Tutto e' in PU equivalenti (1 TUV = 1 PU). `stima_motore.valore_alleanza` = `valore_bersaglio_PU` x presa x tenuta
+  + `tuv_nemico_distrutto` - `tuv_perso`; `valore_bersaglio_PU` (componenti in `valore.componenti_PU`) = round di tenuta
+  x (2 x produzione + obiettivi nazionali in gioco + 5 PU per VC) + per una capitale la cassa e il reddito del
+  proprietario. E' il numero con cui il motore lancia la tappa 1 (lancia se > 0); `indice_valore_PU` serve solo a
+  ordinare i candidati.
 
 # Tipi di operazione
 

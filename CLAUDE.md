@@ -170,6 +170,10 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   operazioni dello Stratega), `raggiungibiliOra`/`sbarcabili`, `rinforziPossibili`, `trattenuteAllAcquisto` (+
   `ProPlusTuning.holdCombatForPurchase`, da `ProPlusAi.purchase` solo per le nazioni dello Stratega); prompt `prompt-stratega-v5.md`, `prompt-ordini-turno-v4.md`
   (`PromptStrategaV5`, `PromptOrdiniTurnoV4`, sostituiscono v4/v3). Vedi "Coerenza delle stime (step COERENZA STIME)".
+- Step C1-bis: aerei (e ogni unita') contati per una tappa futura trattenuti o non contati (`StimaUnica.forze`,
+  `OperazioniCongiunte.trattenute`/`avvicina`/`colpisceDaQui`/`combat`), cause con il calo di stima prima di C5
+  (`CauseAnnullamento`), valore d'alleanza in PU con i TUV nemici distrutti (`StimaUnica.Stima.valoreAlleanza`,
+  `StrategaCandidati.valoreBersaglioPu`, `stratega-llm.json` `valore_pu`). Vedi "Step C1-bis".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -1807,6 +1811,33 @@ operazioni dello Stratega (`OperazioneCongiunta.isStratega`): le operazioni scri
 - **Record perso (seme 503, R7)**: l'eccezione in `applica` dopo un annullamento saltava `chiudi`; causa non ricostruibile dai
   file. Ora `applica` e' in try/catch (riga "ERRORE nell'applicazione", `errore_applicazione` nel record), il diario del round
   e' scritto comunque (`StrategaDiario.scriviMinimo` se il diario completo fallisce).
+
+### Step C1-bis: aerei trattenuti, ordine delle cause, valore d'alleanza in PU
+
+Dalla [smoke] 42822465005: le offensive crollavano il round dopo il lancio (mediana 77 punti) perche' gli aerei contati per
+una tappa futura non erano trattenuti (Hard li usava).
+- **Ogni unita' contata e' trattenuta** (solo operazioni dello Stratega): per un round successivo `StimaUnica.forze` conta un
+  aereo solo se e' su terra e puo' colpire il bersaglio DA DOVE E' (`raggiungibiliEntro`: distanza + atterraggio <= movimento,
+  non piu' movimento x k; `OperazioniCongiunte.colpisceDaQui`), oppure se e' uno degli aerei di chi apre per la raccolta aerea
+  (`aerei_apre`, volano li' con `gatherPlanes` che ora muove proprio quelli contati); aerei su portaerei o che dovrebbero prima
+  avvicinarsi: non contati. Trattenuti: all'acquisto (`trattenute()` senza il filtro "solo terra" ⇒ `holdCombatForPurchase`),
+  nel combattimento dei round di preparazione/posizionamento (`combat()`, anche se Hard ripianifica) e nel non combattimento
+  (`avvicina`: aerei che colpiscono da li' fermi, unita' di terra contate tenute anche senza un passo sicuro). Diario/registro:
+  `trattenute_acquisto[].aerei`, `aerei_trattenuti_ultimo_turno`, `aerei_turni_fermi` (turni-aereo fermi), riga "aerei
+  trattenuti: ..." nelle riserve. Attacchi di Hard rinunciati per mancanza di quegli aerei: NON misurati (servirebbe un
+  secondo piano d'attacco di Hard senza la trattenuta a ogni turno).
+- **Ordine delle cause** (`CauseAnnullamento`): C1 → (con stima al lancio e stima ora) giustificato / C3 / C2 → C5 → C4 → C6.
+- **Valore d'alleanza in PU equivalenti** (solo Stratega; formula e razionale in `stratega-llm.json` `valore_pu`): valore =
+  `valore_bersaglio_PU` x presa x tenuta + TUV_nemico_distrutto − TUV_perso (1 TUV = 1 PU; TUV_perso = tappa 1 + tappa 2 se la
+  1 non prende + (1 − tenuta) x presidio, come la v2). `valore_bersaglio_PU` = H x (2 x produzione + obiettivi nazionali in
+  gioco (`ProNationalObjectiveUtils.stake`) + 5 PU x VC) + capitale (cassa del proprietario + suo reddito x H, regole di
+  `ProUtils.capturedTreasury`/`capitalValue`), H = round di tenuta dell'operazione (2). `StimaUnica.Stima.valoreAlleanza`/
+  `jsonValore` (in `stima_motore.valore_alleanza` per l'LLM e nel diario della tappa 1), `StrategaCandidati.valoreBersaglioPu`
+  (`valore.componenti_PU` del candidato, `valore`/`valore_componenti` della definizione). La tappa 1 del motore lancia se il
+  valore > 0. Il vecchio indice (produzione + valore_vc + valore_capitale) resta per ordinare i candidati, per
+  `valore_minimo_tenuta` e per il tetto di perdita (`indice_valore` nella definizione). Prompt stratega v5: 1 riga sulla formula.
+- Misure nuove in `ConfrontoSmoke`: mediana |stima al lancio − stima del round dopo| per offensive/sbarchi (`stima_round_dopo`,
+  scritta da `Stratega` nello stato del round dopo il lancio), turni-aereo fermi. [smoke] semi 701-706.
 
 ## Come configurare lo stratega
 

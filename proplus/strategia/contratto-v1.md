@@ -273,3 +273,9 @@ Ingresso del livello strategico (contratto `1.4`), differenze dalla 1.3:
 
 Ordini del turno (dinamiche): `numeri.stima_motore` (stessa funzione), `stima_motore_azione` {azione, prob_tenuta_stimata,
 nota} al posto di `formula_v2`.
+
+Step C1-bis (stesso contratto `1.4`, campi in piu'): `stima_motore.valore_alleanza` {`formula`, `valore_bersaglio_PU`,
+`presa_pct`, `tenuta_pct`, `bersaglio_atteso_PU`, `tuv_nemico_distrutto`, `tuv_perso`, `totale_PU`}; `valore` del candidato
+con `indice_valore_PU` (ordina i candidati, ex `valore_PU`), `valore_bersaglio_PU` e `componenti_PU` {`round_tenuta`,
+`reddito_PU`, `obiettivi_nazionali_PU`, `victory_city_PU`, `capitale_PU` (+ `capitale_cassa_PU`,
+`capitale_reddito_per_round_PU`), `totale_PU`}. Formula e razionale in `stratega-llm.json` (`valore_pu`).

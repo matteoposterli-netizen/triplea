@@ -56,7 +56,9 @@ public record StrategaConfig(
     double tenutaMinimaCandidato,
     int candidatiValutati,
     int riavvioRound,
-    double riavvioMiglioramentoPunti) {
+    double riavvioMiglioramentoPunti,
+    double fattoreReddito,
+    double valoreVcPerRound) {
 
   static final String RESOURCE = "proplus/strategia/stratega-llm.json";
 
@@ -122,7 +124,9 @@ public record StrategaConfig(
         o.get("tenuta_minima_candidato").getAsDouble(),
         o.get("candidati_valutati").getAsInt(),
         o.get("riavvio_round").getAsInt(),
-        o.get("riavvio_miglioramento_punti").getAsDouble());
+        o.get("riavvio_miglioramento_punti").getAsDouble(),
+        o.getAsJsonObject("valore_pu").get("fattore_reddito").getAsDouble(),
+        o.getAsJsonObject("valore_pu").get("victory_city_per_round").getAsDouble());
   }
 
   /**

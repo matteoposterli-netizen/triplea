@@ -20,6 +20,7 @@ import games.strategy.triplea.delegate.Matches;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -79,7 +80,41 @@ public final class StimaUnica {
       double tuvContrattaccoMassimo,
       int round,
       int roundObiettivo,
-      Minaccia minaccia) {
+      Minaccia minaccia,
+      double valoreBersaglio) {
+
+    /**
+     * Step C1-bis: expected TUV lost (= PU): step 1, step 2 when step 1 does not take it, the
+     * garrison lost with the hold (same terms as the variant v2's value).
+     */
+    public double tuvPersoAtteso() {
+      final double take1 = tappa1.stream().anyMatch(Matches.unitIsLand()) ? win1 / 100 : 0;
+      return perdita1 + (1 - take1) * perdita2 + (1 - tenuta / 100) * tuvPresidio;
+    }
+
+    /**
+     * Step C1-bis: the value of the alliance in PU equivalents = value of the target (PU) x taken x
+     * held + enemy TUV destroyed - TUV lost ({@code stratega-llm.json}, {@code valore_pu}).
+     */
+    public double valoreAlleanza() {
+      return valoreBersaglio * presa * tenuta / 100 + tuvDistrutto - tuvPersoAtteso();
+    }
+
+    /** The value of the alliance with its components (diary and LLM state). */
+    public JsonObject jsonValore() {
+      final JsonObject o = new JsonObject();
+      o.addProperty(
+          "formula",
+          "valore_bersaglio_PU x presa x tenuta + TUV_nemico_distrutto - TUV_perso (1 TUV = 1 PU)");
+      o.addProperty("valore_bersaglio_PU", Math.round(valoreBersaglio));
+      o.addProperty("presa_pct", Math.round(presa * 100));
+      o.addProperty("tenuta_pct", Math.round(tenuta));
+      o.addProperty("bersaglio_atteso_PU", Math.round(valoreBersaglio * presa * tenuta / 100));
+      o.addProperty("tuv_nemico_distrutto", Math.round(tuvDistrutto));
+      o.addProperty("tuv_perso", Math.round(tuvPersoAtteso()));
+      o.addProperty("totale_PU", Math.round(valoreAlleanza()));
+      return o;
+    }
 
     /** The numbers for the LLM and the diary (same keys in candidates and decision points). */
     public JsonObject json() {
@@ -106,6 +141,7 @@ public final class StimaUnica {
       o.addProperty("base_impegno", base);
       o.addProperty("tenuta_pct", Math.round(tenuta));
       o.addProperty("successo_pct", Math.round(successo * 100));
+      o.add("valore_alleanza", jsonValore());
       return o;
     }
 
@@ -135,6 +171,7 @@ public final class StimaUnica {
           "scambio_tuv_con_presidio", Math.round(tuvDistrutto - lostSteps - lostGarrison));
       o.addProperty("contrattacco_contato_TUV", Math.round(tuvContrattacco));
       o.addProperty("contrattacco_massimo_TUV", Math.round(tuvContrattaccoMassimo));
+      o.add("valore_alleanza", jsonValore());
       return o;
     }
   }
@@ -246,7 +283,8 @@ public final class StimaUnica {
         op.tuvOf(m.tutti()),
         data.getSequence().getRound(),
         data.getSequence().getRound() + k - 1,
-        m);
+        m,
+        def.valore());
   }
 
   // ==================================================================================== hold
@@ -302,7 +340,8 @@ public final class StimaUnica {
         op.tuvOf(m.tutti()),
         round,
         round,
-        m);
+        m,
+        def.valore());
   }
 
   /** The estimate of any operation of the strategist now (conquest before the take, else hold). */
@@ -472,6 +511,7 @@ public final class StimaUnica {
       list.addAll(op.raggiungibiliEntro(target, owner, k));
       op.raggiungibiliOra(target, owner).stream().filter(u -> !list.contains(u)).forEach(list::add);
       final GameMap map = target.getData().getMap();
+      final Set<Unit> gatherPlanes = new HashSet<>();
       final boolean opens = def.isApre(owner.getName());
       final List<String> places = opens ? def.raccoltaApre() : def.raccoltaChiude();
       for (final String name : places) {
@@ -524,7 +564,20 @@ public final class StimaUnica {
             Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getAttack(owner))
                 .thenComparing(u -> u.getType().getName()));
         list.addAll(planes.stream().limit(Math.max(0, def.aereiApre())).toList());
+        gatherPlanes.addAll(list.stream().filter(Matches.unitIsAir()).toList());
       }
+      // step C1-bis: a plane counts for a later round only if the engine can hold it until the
+      // step: on land and able to strike the target from there, or one of the opener's planes for
+      // the air gathering place (flown there and held); a plane on a carrier or that must land
+      // elsewhere first is not counted
+      list.removeIf(
+          u -> {
+            if (!Matches.unitIsAir().test(u) || gatherPlanes.contains(u)) {
+              return false;
+            }
+            final Territory at = op.luogo(u);
+            return at == null || at.isWater() || !op.colpisceDaQui(u, at, target);
+          });
     }
     list.removeAll(reserved);
     list.removeAll(already);

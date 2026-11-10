@@ -1021,7 +1021,20 @@ public final class StrategaCandidati {
       reserves.add(n, r);
     }
     o.add("riserve", reserves);
-    o.addProperty("valore", Math.max(1, c.valore()));
+    // step C1-bis: the value d'alleanza uses the target's value in PU equivalents (components
+    // below); the old index (production + VC + capital) only ranks candidates and scales the cap
+    final int holdRounds =
+        Math.max(
+            1,
+            Math.min(
+                cfg.durataTenutaMax(), durataTenuta > 0 ? durataTenuta : cfg.tenutaRoundDefault()));
+    final JsonObject parts =
+        t == null ? new JsonObject() : valoreBersaglioPu(t, c.apre(), holdRounds);
+    o.addProperty(
+        "valore",
+        Math.max(1, parts.has("totale_PU") ? parts.get("totale_PU").getAsDouble() : c.valore()));
+    o.addProperty("indice_valore", Math.max(1, c.valore()));
+    o.add("valore_componenti", parts);
     // step COERENZA STIME: proportional to the value, the LLM may ask another cap up to a maximum
     o.addProperty(
         "tetto_perdita", Math.round(cfg.tettoPerdita(Math.max(1, c.valore()), tettoPerdita)));
@@ -1130,7 +1143,10 @@ public final class StrategaCandidati {
         });
     j.addProperty("round_minimo", roundMin);
     final JsonObject v = new JsonObject();
-    v.addProperty("valore_PU", Math.round(value));
+    v.addProperty("indice_valore_PU", Math.round(value));
+    final JsonObject parts = valoreBersaglioPu(t, apre, Math.max(1, cfg.tenutaRoundDefault()));
+    v.addProperty("valore_bersaglio_PU", parts.get("totale_PU").getAsLong());
+    v.add("componenti_PU", parts);
     TerritoryAttachment.get(t)
         .ifPresent(
             a -> {
@@ -1142,7 +1158,42 @@ public final class StrategaCandidati {
     return j;
   }
 
-  /** Value in PUs: production, VC, capital. */
+  /**
+   * Step C1-bis: the value of {@code t} for the alliance in PU equivalents over {@code holdRounds}
+   * rounds of hold (formula and rationale in {@code stratega-llm.json}, {@code valore_pu}): income
+   * swing {@code fattore_reddito} x production, national objectives at stake, VC weight per round,
+   * and for the owner's own capital its cash plus its income.
+   */
+  JsonObject valoreBersaglioPu(final Territory t, final String nation, final int holdRounds) {
+    final JsonObject o = new JsonObject();
+    final TerritoryAttachment a = TerritoryAttachment.get(t).orElse(null);
+    final int production = a == null ? 0 : a.getProduction();
+    final int vc = a == null ? 0 : a.getVictoryCity();
+    final GamePlayer me = player(nation);
+    final double objectives =
+        me == null ? 0 : games.strategy.triplea.ai.pro.util.ProNationalObjectiveUtils.stake(me, t);
+    // the owner's own capital (rules of the map: ProUtils, as Hard): its cash when it falls and
+    // its income while it is held
+    final int cash = games.strategy.triplea.ai.pro.util.ProUtils.capturedTreasury(t, data);
+    final double ownerIncome = games.strategy.triplea.ai.pro.util.ProUtils.capitalValue(t, data);
+    final double capital = cash + ownerIncome * holdRounds;
+    if (capital > 0) {
+      o.addProperty("capitale_cassa_PU", cash);
+      o.addProperty("capitale_reddito_per_round_PU", Math.round(ownerIncome));
+    }
+    final double income = cfg.fattoreReddito() * production * holdRounds;
+    final double objectivesPu = objectives * holdRounds;
+    final double vcPu = vc > 0 ? cfg.valoreVcPerRound() * vc * holdRounds : 0;
+    o.addProperty("round_tenuta", holdRounds);
+    o.addProperty("reddito_PU", Math.round(income));
+    o.addProperty("obiettivi_nazionali_PU", Math.round(objectivesPu));
+    o.addProperty("victory_city_PU", Math.round(vcPu));
+    o.addProperty("capitale_PU", Math.round(capital));
+    o.addProperty("totale_PU", Math.round(income + objectivesPu + vcPu + capital));
+    return o;
+  }
+
+  /** Index of the value in PUs (production, VC, capital): ranks the candidates, scales the cap. */
   double valore(final Territory t) {
     return TerritoryAttachment.get(t)
         .map(

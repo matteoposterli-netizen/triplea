@@ -252,8 +252,124 @@ class CoerenzaStimeTest extends AbstractClientSettingTestCase {
     assertThat(cfg.tettoPerdita(12, 500)).isEqualTo(cfg.tettoPerditaMaxLlm());
     final OperazioneCongiunta.Definizione def =
         install(Tipo.OFFENSIVA, "Alexandria", "stratega-offensiva-R2-Alexandria", 3, 0);
+    // step C1-bis: the cap scales with the old value index, not with the value in PU equivalents
+    final double index = generator("Germans", 3).valore(territory("Alexandria"));
     assertThat(def.tettoPerdita())
-        .isEqualTo((double) Math.round(cfg.tettoPerdita(def.valore(), 0)));
+        .isEqualTo((double) Math.round(cfg.tettoPerdita(Math.max(1, index), 0)));
+  }
+
+  // ------------------------------------------------------------ step C1-bis: held planes
+
+  @Test
+  void aPlaneCountedForALaterStepIsHeldFromThePurchaseAndOneThatMustFlyFirstIsNotCounted() {
+    clear("Alexandria");
+    add("Alexandria", player("British"), "infantry", 2);
+    clear("Tobruk");
+    add("Tobruk", player("Italians"), "armour", 2);
+    add("Tobruk", player("Italians"), "fighter", 1);
+    add("Germany", player("Italians"), "fighter", 1);
+    final Unit near = territory("Tobruk").getMatches(Matches.unitIsAir()).get(0);
+    final Unit far =
+        territory("Germany")
+            .getMatches(Matches.unitIsAir().and(Matches.unitIsOwnedBy(player("Italians"))))
+            .get(0);
+    final String id = "stratega-offensiva-R3-Alexandria";
+    final OperazioneCongiunta.Definizione def = install(Tipo.OFFENSIVA, "Alexandria", id, 4, 0);
+    final Registro reg = Registro.leggi(data.getProperties(), id);
+    reg.setStato(Stato.PREPARAZIONE);
+    reg.setRoundObiettivo(4);
+    reg.set("avvio_round", 3);
+    reg.salva(data.getProperties());
+    final ProData italians = proData(player("Italians"), 3, "Purchase");
+    final StimaUnica.Stima st =
+        StimaUnica.conquista(italians, calc(), def, territory("Alexandria"), 2);
+    // the plane that strikes from where it is counts; the one that must fly closer first does not
+    assertThat(st.tappa2()).contains(near).doesNotContain(far);
+    // and the counted plane stays out of Hard's attacks from the purchase on
+    assertThat(OperazioniCongiunte.trattenuteAllAcquisto(italians, calc()))
+        .contains(near)
+        .doesNotContain(far);
+    final JsonArray held =
+        Registro.leggi(data.getProperties(), id).json().getAsJsonArray("trattenute_acquisto");
+    assertThat(held.get(held.size() - 1).getAsJsonObject().get("aerei").getAsInt())
+        .isGreaterThanOrEqualTo(1);
+  }
+
+  // ------------------------------------------------------ step C1-bis: value in PU equivalents
+
+  @Test
+  void theValueOfTheAllianceIsInPuEquivalentsWithItsComponents() {
+    final StrategaConfig cfg = StrategaConfig.get();
+    final StrategaCandidati gen = generator("Germans", 3);
+    final Territory london = territory("United Kingdom");
+    final JsonObject capital = gen.valoreBersaglioPu(london, "Germans", 2);
+    final int production =
+        games.strategy.triplea.attachments.TerritoryAttachment.get(london)
+            .orElseThrow()
+            .getProduction();
+    assertThat(capital.get("reddito_PU").getAsDouble())
+        .isEqualTo(Math.round(cfg.fattoreReddito() * production * 2));
+    assertThat(capital.get("capitale_PU").getAsDouble())
+        .as("cash of the owner + its income x 2 rounds")
+        .isGreaterThan(0);
+    assertThat(capital.get("totale_PU").getAsDouble())
+        .isCloseTo(
+            capital.get("reddito_PU").getAsDouble()
+                + capital.get("obiettivi_nazionali_PU").getAsDouble()
+                + capital.get("victory_city_PU").getAsDouble()
+                + capital.get("capitale_PU").getAsDouble(),
+            within(2.0));
+    clear("Alexandria");
+    add("Alexandria", player("British"), "infantry", 2);
+    add("Tobruk", player("Germans"), "fighter", 2);
+    add("Tobruk", player("Italians"), "armour", 2);
+    final OperazioneCongiunta.Definizione def =
+        install(Tipo.OFFENSIVA, "Alexandria", "stratega-offensiva-R3-Alexandria", 3, 0);
+    assertThat(def.valore())
+        .isEqualTo(
+            Math.max(
+                1,
+                gen.valoreBersaglioPu(territory("Alexandria"), "Germans", 2)
+                    .get("totale_PU")
+                    .getAsDouble()));
+    final StimaUnica.Stima st =
+        StimaUnica.conquista(
+            proData(player("Germans"), 3, "Purchase"), calc(), def, territory("Alexandria"), 1);
+    assertThat(st.valoreAlleanza())
+        .isCloseTo(
+            def.valore() * st.presa() * st.tenuta() / 100 + st.tuvDistrutto() - st.tuvPersoAtteso(),
+            within(1e-9));
+    assertThat(st.tuvDistrutto()).as("the British infantry is expected destroyed").isPositive();
+    final JsonObject v = st.json().getAsJsonObject("valore_alleanza");
+    for (final String k :
+        List.of("valore_bersaglio_PU", "tuv_nemico_distrutto", "tuv_perso", "totale_PU")) {
+      assertThat(v.has(k)).as(k).isTrue();
+    }
+  }
+
+  // ------------------------------------------------------------ step C1-bis: order of the causes
+
+  @Test
+  void aFallOfTheEngineEstimateIsC3BeforeTheCandidateLeftTheList() {
+    final String id = "stratega-offensiva-R3-Alexandria";
+    final OperazioneCongiunta.Definizione def = install(Tipo.OFFENSIVA, "Alexandria", id, 4, 0);
+    final Registro reg = Registro.leggi(data.getProperties(), id);
+    reg.setStato(Stato.PREPARAZIONE);
+    reg.setRoundObiettivo(4);
+    reg.set("avvio_round", 3);
+    reg.json()
+        .add(
+            "stima_avvio",
+            JsonParser.parseString("{\"successo_pct\":60,\"contrattacco_massimo_TUV\":20}"));
+    data.getSequence().setRoundAndStep(4, "Purchase", player("Germans"));
+    final JsonObject fell =
+        JsonParser.parseString("{\"successo_pct\":10,\"contrattacco_massimo_TUV\":20}")
+            .getAsJsonObject();
+    assertThat(CauseAnnullamento.classifica(data, def, reg, List.of(), fell)).startsWith("C3");
+    final JsonObject same =
+        JsonParser.parseString("{\"successo_pct\":58,\"contrattacco_massimo_TUV\":20}")
+            .getAsJsonObject();
+    assertThat(CauseAnnullamento.classifica(data, def, reg, List.of(), same)).startsWith("C5");
   }
 
   // ------------------------------------------------------------------------- no relaunch

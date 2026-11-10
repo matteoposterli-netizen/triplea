@@ -174,6 +174,8 @@ final class StrategaDiario {
                 "causa_testo",
                 "stima_avvio",
                 "stima_decisione_prima",
+                "stima_round_dopo",
+                "aerei_turni_fermi",
                 "stima_decisione_ultima",
                 "blocchi_tetto",
                 "trattenute_acquisto")) {

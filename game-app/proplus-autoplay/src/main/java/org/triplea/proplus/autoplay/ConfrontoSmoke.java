@@ -74,6 +74,8 @@ final class ConfrontoSmoke {
     final Map<String, Integer> blocks = new TreeMap<>();
     final List<Double> coherence = new ArrayList<>();
     final List<Double> coherenceHold = new ArrayList<>();
+    final List<Double> coherenceNext = new ArrayList<>();
+    final int[] planeTurns = new int[2];
     final Map<String, double[][]> bandsByType = new TreeMap<>();
     final Map<String, double[][]> engineByType = new TreeMap<>();
     final Map<String, Integer> rejected = new TreeMap<>();
@@ -146,6 +148,14 @@ final class ConfrontoSmoke {
         }
         final double start = successo(o, "stima_avvio");
         final double first = successo(o, "stima_decisione_prima");
+        final double next = successo(o, "stima_round_dopo");
+        if (start >= 0 && next >= 0 && ("offensiva".equals(tipo) || "sbarco".equals(tipo))) {
+          coherenceNext.add(Math.abs(start - next));
+        }
+        if (o.has("aerei_turni_fermi") && o.get("aerei_turni_fermi").isJsonPrimitive()) {
+          planeTurns[0] += o.get("aerei_turni_fermi").getAsInt();
+          planeTurns[1]++;
+        }
         if (start >= 0 && first >= 0) {
           coherence.add(Math.abs(start - first));
           final double h0 = pct(o, "stima_avvio", "tenuta_pct");
@@ -273,6 +283,18 @@ final class ConfrontoSmoke {
         .append(rejected.isEmpty() ? "nessuna" : rejected.toString())
         .append("\n\n");
     coerenza(md, byType, causes, blocks, coherence, coherenceHold);
+    md.append(
+        String.format(
+            Locale.ROOT,
+            "- Offensive e sbarchi, stima del motore al lancio contro quella del round dopo: mediana"
+                + " **%s punti** di successo su %d operazioni, criterio <= 15 (step C1-bis).%n"
+                + "- Aerei trattenuti per le tappe future: %d turni-aereo fermi in %d operazioni.%n%n",
+            coherenceNext.isEmpty()
+                ? "-"
+                : String.format(Locale.ROOT, "%.1f", mediana(coherenceNext)),
+            coherenceNext.size(),
+            planeTurns[0],
+            planeTurns[1]));
     calibration(
         md,
         "livello strategico (avvia/continua/modifica; stima a inizio round, esito a fine durata)",

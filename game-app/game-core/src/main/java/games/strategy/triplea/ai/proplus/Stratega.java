@@ -858,6 +858,11 @@ public final class Stratega {
             final JsonObject now = stimaOra(d).json();
             o.add("stima_motore_ora", now);
             reg.json().add("stima_strategica_ultima", now);
+            // step C1-bis: the estimate one round after the launch (coherence of the conquests)
+            if (!reg.json().has("stima_round_dopo")
+                && reg.intOf("avvio_round", round) == round - 1) {
+              reg.json().add("stima_round_dopo", now);
+            }
             reg.salva(props);
           } catch (final RuntimeException ex) {
             o.addProperty("stima_motore_ora", "non calcolata (" + ex.getMessage() + ")");
