@@ -135,17 +135,62 @@ public final class OperazioniCongiunte {
    * target round from what is feasible; then the state of the round, the outcome of a taken target.
    */
   public static Esito aggiorna(final ProData proData, final ProOddsCalculator calc) {
-    return OperazioneCongiunta.per(proData.getData(), proData.getPlayer())
-        .map(d -> new OperazioniCongiunte(proData, calc, null, d).update())
-        .orElse(Esito.NESSUNO);
+    Esito all = Esito.NESSUNO;
+    for (final Definizione d : OperazioneCongiunta.tutte(proData.getData(), proData.getPlayer())) {
+      all = unisci(all, new OperazioniCongiunte(proData, calc, null, d).update());
+    }
+    return all;
+  }
+
+  /** Two phases' results together (units kept, lines, events). */
+  public static Esito unisci(final Esito a, final Esito b) {
+    if (a.isEmpty() && a.eventi().isEmpty()) {
+      return b;
+    }
+    if (b.isEmpty() && b.eventi().isEmpty()) {
+      return a;
+    }
+    final Set<Unit> units = new LinkedHashSet<>(a.tenute());
+    units.addAll(b.tenute());
+    return new Esito(
+        Set.copyOf(units), concat(a.righe(), b.righe()), concat(a.eventi(), b.eventi()));
   }
 
   /**
    * The reserves this nation buys this turn (mandatory purchases), while the operation prepares.
    */
   public static Optional<ProPurchaseOrders> ordiniAcquisto(final ProData proData) {
+    final List<ProPurchaseOrders> all = new ArrayList<>();
+    for (final Definizione d : OperazioneCongiunta.tutte(proData.getData(), proData.getPlayer())) {
+      ordiniAcquisto(proData, Optional.of(d)).ifPresent(all::add);
+    }
+    if (all.size() <= 1) {
+      return all.stream().findFirst();
+    }
+    // several operations: their mandatory purchases together, one share (the largest)
+    final List<ProPurchaseOrders.Mandatory> mandatory = new ArrayList<>();
+    final List<String> placement = new ArrayList<>();
+    final List<String> staging = new ArrayList<>();
+    double share = 0;
+    for (final ProPurchaseOrders o : all) {
+      mandatory.addAll(o.mandatory());
+      o.preferredPlacement().stream().filter(x -> !placement.contains(x)).forEach(placement::add);
+      o.stagingTerritories().stream().filter(x -> !staging.contains(x)).forEach(staging::add);
+      share = Math.max(share, o.minimumShare());
+    }
+    return Optional.of(
+        new ProPurchaseOrders(
+            String.join("; ", all.stream().map(ProPurchaseOrders::label).toList()),
+            List.of(),
+            List.copyOf(mandatory),
+            List.copyOf(placement),
+            List.copyOf(staging),
+            share));
+  }
+
+  private static Optional<ProPurchaseOrders> ordiniAcquisto(
+      final ProData proData, final Optional<Definizione> def) {
     final GameState data = proData.getData();
-    final Optional<Definizione> def = OperazioneCongiunta.per(data, proData.getPlayer());
     if (def.isEmpty()) {
       return Optional.empty();
     }
@@ -248,17 +293,48 @@ public final class OperazioniCongiunte {
    */
   public static Esito combattimento(
       final ProData proData, final ProOddsCalculator calc, final IMoveDelegate moveDel) {
-    return OperazioneCongiunta.per(proData.getData(), proData.getPlayer())
-        .map(d -> new OperazioniCongiunte(proData, calc, moveDel, d).combat())
-        .orElse(Esito.NESSUNO);
+    Esito all = Esito.NESSUNO;
+    for (final Definizione d : OperazioneCongiunta.tutte(proData.getData(), proData.getPlayer())) {
+      all = unisci(all, combattimento(proData, calc, moveDel, d, all.tenute()));
+    }
+    return all;
+  }
+
+  /**
+   * Combat move of one operation {@code d} (several operations: one after the other, the units
+   * {@code giaTenute} by the earlier ones are not used again).
+   */
+  public static Esito combattimento(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final IMoveDelegate moveDel,
+      final Definizione d,
+      final Set<Unit> giaTenute) {
+    final OperazioniCongiunte op = new OperazioniCongiunte(proData, calc, moveDel, d);
+    op.held.addAll(giaTenute);
+    return op.combat();
   }
 
   /** Non-combat move: reserves to the gathering place, the closer's completion, the outcome. */
   public static Esito nonCombattimento(
       final ProData proData, final ProOddsCalculator calc, final IMoveDelegate moveDel) {
-    return OperazioneCongiunta.per(proData.getData(), proData.getPlayer())
-        .map(d -> new OperazioniCongiunte(proData, calc, moveDel, d).nonCombat())
-        .orElse(Esito.NESSUNO);
+    Esito all = Esito.NESSUNO;
+    for (final Definizione d : OperazioneCongiunta.tutte(proData.getData(), proData.getPlayer())) {
+      all = unisci(all, nonCombattimento(proData, calc, moveDel, d, all.tenute()));
+    }
+    return all;
+  }
+
+  /** Non-combat move of one operation {@code d} (see {@link #combattimento(ProData, ...)}). */
+  public static Esito nonCombattimento(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final IMoveDelegate moveDel,
+      final Definizione d,
+      final Set<Unit> giaTenute) {
+    final OperazioniCongiunte op = new OperazioniCongiunte(proData, calc, moveDel, d);
+    op.held.addAll(giaTenute);
+    return op.nonCombat();
   }
 
   /**
@@ -266,8 +342,18 @@ public final class OperazioniCongiunte {
    * map allows ({@code guerra_da_round}), until the operation ends. Empty otherwise.
    */
   public static Optional<ProWarDecision> guerra(final ProData proData, final GamePlayer enemy) {
+    for (final Definizione d : OperazioneCongiunta.tutte(proData.getData(), proData.getPlayer())) {
+      final Optional<ProWarDecision> w = guerra(proData, enemy, Optional.of(d));
+      if (w.isPresent()) {
+        return w;
+      }
+    }
+    return Optional.empty();
+  }
+
+  private static Optional<ProWarDecision> guerra(
+      final ProData proData, final GamePlayer enemy, final Optional<Definizione> def) {
     final GameState data = proData.getData();
-    final Optional<Definizione> def = OperazioneCongiunta.per(data, proData.getPlayer());
     if (def.isEmpty() || !def.get().isApre(proData.getPlayer().getName())) {
       return Optional.empty();
     }
@@ -291,8 +377,16 @@ public final class OperazioniCongiunte {
    * the operation prepares; 0 otherwise.
    */
   public static double bonusAccesso(final ProData proData, final Territory t) {
+    double best = 0;
+    for (final Definizione d : OperazioneCongiunta.tutte(proData.getData(), proData.getPlayer())) {
+      best = Math.max(best, bonusAccesso(proData, t, Optional.of(d)));
+    }
+    return best;
+  }
+
+  private static double bonusAccesso(
+      final ProData proData, final Territory t, final Optional<Definizione> def) {
     final GameState data = proData.getData();
-    final Optional<Definizione> def = OperazioneCongiunta.per(data, proData.getPlayer());
     if (def.isEmpty()
         || !def.get().isChiude(proData.getPlayer().getName())
         || !def.get().accesso().contains(t.getName())) {
@@ -1167,6 +1261,28 @@ public final class OperazioniCongiunte {
   }
 
   /**
+   * Step STRATEGA LLM: for a candidate operation {@code def} (not saved), the counterattack the
+   * enemy can bring on {@code target} once the alliance holds it with {@code garrison}: maximum by
+   * origin and the purchases by factory ({@code contrattacco_massimo}), the hold for an enemy
+   * commitment of 25/50/75/100% ({@code tenuta_per_impegno}), and where the alliance presses the
+   * enemy elsewhere ({@code priorita_nemico}). Same numbers as at the decision points.
+   */
+  public static JsonObject valutaTenuta(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final Definizione def,
+      final Territory target,
+      final Collection<Unit> garrison) {
+    final OperazioniCongiunte op = new OperazioniCongiunte(proData, calc, null, def);
+    final Minaccia m = op.minaccia(target);
+    final JsonObject o = new JsonObject();
+    o.add("contrattacco_massimo", op.counterattack(target, m));
+    o.add("tenuta_per_impegno", op.curve(target, m, garrison));
+    o.add("priorita_nemico", op.priorities(target));
+    return o;
+  }
+
+  /**
    * Test hook: the counterattack this nation's operation expects on {@code target} (enemy units in
    * reach and the units the enemies may buy for it). Empty without an operation.
    */
@@ -1799,8 +1915,19 @@ public final class OperazioniCongiunte {
    * (top priority), down to the closing threshold, and keeps it even if "not worth it".
    */
   public static boolean forzaBersaglio(final ProData proData, final Territory t) {
+    return forzante(proData, t).isPresent();
+  }
+
+  /** The operation forcing {@code t} this round for this nation, if any. */
+  private static Optional<Definizione> forzante(final ProData proData, final Territory t) {
+    return OperazioneCongiunta.tutte(proData.getData(), proData.getPlayer()).stream()
+        .filter(d -> forzaBersaglio(proData, t, Optional.of(d)))
+        .findFirst();
+  }
+
+  private static boolean forzaBersaglio(
+      final ProData proData, final Territory t, final Optional<Definizione> def) {
     final GameState data = proData.getData();
-    final Optional<Definizione> def = OperazioneCongiunta.per(data, proData.getPlayer());
     if (def.isEmpty() || !def.get().isChiude(proData.getPlayer().getName())) {
       return false;
     }
@@ -1820,8 +1947,9 @@ public final class OperazioniCongiunte {
 
   /** The closing threshold of the operation forcing {@code t} ({@link #forzaBersaglio}). */
   public static double sogliaForzata(final ProData proData) {
-    return OperazioneCongiunta.per(proData.getData(), proData.getPlayer())
-        .map(Definizione::sogliaChiusura)
+    return OperazioneCongiunta.tutte(proData.getData(), proData.getPlayer()).stream()
+        .mapToDouble(Definizione::sogliaChiusura)
+        .min()
         .orElse(0.0);
   }
 
@@ -2409,6 +2537,7 @@ public final class OperazioniCongiunte {
    */
   private void germanPresence(final Territory target) {
     if (!def.isApre(player.getName())
+        || OperazioneCongiunta.isStratega(def.id())
         || !reg.flag("presa")
         || !Matches.isTerritoryAllied(player).test(target)
         || target.anyUnitsMatch(Matches.unitIsOwnedBy(player).and(Matches.unitIsLand()))) {
@@ -3088,9 +3217,22 @@ public final class OperazioniCongiunte {
       in.addProperty("azioni_ammesse", DecisioneOperazione.ids(punto));
       in.addProperty("bersaglio", target.getName());
     }
+    if (OperazioneCongiunta.isStratega(def.id())) {
+      // step STRATEGA LLM: the general type of the operation, read by prompt-ordini-turno-v3
+      in.addProperty("tipo_operazione", OperazioneCongiunta.tipoStratega(def.id()));
+    }
     final DecisoreOperazione.Esito x =
         DecisoreOperazione.decidi(data.getProperties(), def.alleanza(), punto, in, formula);
-    final DecisioneOperazione d = x.decisione();
+    // step STRATEGA LLM: on a fallback the decision is Hard's (the operation does not act this
+    // turn, the units stay with the Pro AI), not the formula's
+    final boolean hard = x.ripiego() && OperazioneCongiunta.isStratega(def.id());
+    final DecisioneOperazione d =
+        hard
+            ? new DecisioneOperazione(
+                punto == Punto.TENUTA ? Azione.RITIRA : Azione.RINVIA,
+                formula.probTenuta(),
+                "paracadute: Hard (" + x.motivoRipiego() + ")")
+            : x.decisione();
     final JsonObject rec = new JsonObject();
     rec.addProperty("round", round);
     rec.addProperty("nazione", player.getName());
@@ -3107,6 +3249,9 @@ public final class OperazioniCongiunte {
       rec.addProperty("motivazione", d.motivazione());
     }
     rec.addProperty("ripiego", x.ripiego());
+    if (hard) {
+      rec.addProperty("ripiego_hard", true);
+    }
     if (x.ripiego()) {
       rec.addProperty("motivo_ripiego", x.motivoRipiego());
       rec.addProperty("dettaglio_ripiego", x.dettaglio());
@@ -3168,7 +3313,7 @@ public final class OperazioniCongiunte {
                 ? " - RIPIEGO sulla formula (" + x.motivoRipiego() + ": " + x.dettaglio() + ")"
                 : "",
             riassunto(in)));
-    return new Scelta(d, x.llm(), rec);
+    return new Scelta(d, x.llm() || hard, rec);
   }
 
   /**

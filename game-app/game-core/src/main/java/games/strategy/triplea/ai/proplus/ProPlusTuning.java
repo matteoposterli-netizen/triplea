@@ -575,6 +575,11 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public Optional<ProStagingOrders> stagingOrders(final ProData proData) {
+    // step STRATEGA LLM: the strategist's priority reinforcements of the round (only its nations)
+    final Optional<ProStagingOrders> llm = rinforziStratega(proData);
+    if (llm.isPresent()) {
+      return operationAnswer(llm);
+    }
     if (!on(proData, Ablazione.Componente.AMMASSAMENTO)) {
       return Optional.empty();
     }
@@ -584,6 +589,35 @@ public final class ProPlusTuning implements ProTuning {
                 plan.getLogistica()
                     .filter(l -> l.forza() > 0)
                     .flatMap(l -> Staging.orders(proData, plan, l, ordersLabel(plan, l))));
+  }
+
+  /**
+   * Step STRATEGA LLM: the territories and sea zones where the strategist wants reserves this
+   * round, with their weight (1-3), as a pull of the non-combat move (the engine chooses the
+   * units). Empty for every player that is not the strategist's.
+   */
+  private static Optional<ProStagingOrders> rinforziStratega(final ProData proData) {
+    if (proData == null || proData.getData() == null || proData.getPlayer() == null) {
+      return Optional.empty();
+    }
+    final var data = proData.getData();
+    if (!Stratega.gioca(data, proData.getPlayer())) {
+      return Optional.empty();
+    }
+    final Map<String, Integer> r = Stratega.rinforzi(data, proData.getPlayer());
+    if (r.isEmpty()) {
+      return Optional.empty();
+    }
+    final Map<String, Double> weights = new java.util.LinkedHashMap<>();
+    r.forEach((k, v) -> weights.put(k, v / 3.0));
+    return Optional.of(
+        new ProStagingOrders(
+            "stratega LLM: rinforzi prioritari",
+            "",
+            List.copyOf(r.keySet()),
+            0.5,
+            false,
+            Map.copyOf(weights)));
   }
 
   /** The plan's minimum garrisons (step 3b-ter): own territory → land units. */

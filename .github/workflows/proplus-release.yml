@@ -117,7 +117,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/proplus/dist/avvia.bat" avvia.bat
           cp "$GITHUB_WORKSPACE/proplus/dist/aggiorna.ps1" aggiorna.ps1
           # LEGGIMI.txt e build-info.txt: sostituisci i segnaposto della build.
-          for tmpl in LEGGIMI.txt build-info.txt; do
+          for tmpl in LEGGIMI.txt LEGGIMI-TEST.txt build-info.txt; do
             sed -e "s|@VERSION@|${build_version}|g" \
                 -e "s|@COMMIT@|${GITHUB_SHA}|g" \
                 -e "s|@DATE@|${build_date}|g" \
@@ -127,9 +127,9 @@ jobs:
           # Windows line endings for the text files the user/launcher reads.
           # build-info.txt is left with LF: avvia.bat parses it with `for /f`,
           # which would otherwise keep a trailing CR on each value.
-          sed -i 's/\r\?$/\r/' avvia.bat aggiorna.ps1 LEGGIMI.txt
+          sed -i 's/\r\?$/\r/' avvia.bat aggiorna.ps1 LEGGIMI.txt LEGGIMI-TEST.txt
           zip -9 -r ../TripleA-ProPlus.zip \
-            TripleA-ProPlus.jar avvia.bat aggiorna.ps1 LEGGIMI.txt build-info.txt .triplea-root
+            TripleA-ProPlus.jar avvia.bat aggiorna.ps1 LEGGIMI.txt LEGGIMI-TEST.txt build-info.txt .triplea-root
           unzip -l ../TripleA-ProPlus.zip
       - name: Publish release proplus-latest
         env:
@@ -151,13 +151,13 @@ jobs:
   # AI vs AI games (proplus-autoplay.yml) on the released commit, after the release: they
   # never block or change 'proplus-latest'. Called as a reusable workflow because
   # workflow_run / workflow_dispatch need the workflow on the default branch ('main' = upstream).
-  # only for commits whose message contains [autoplay], [confronto], [ablazione], [conferma], [varianza], [prova], [prova2] or [provallm] (or a manual run)
+  # only for commits whose message contains [autoplay], [confronto], [ablazione], [conferma], [varianza], [prova], [prova2], [provallm] or [smoke] (or a manual run)
   autoplay:
     needs: build
     # the LLM games read the secret ANTHROPIC_API_KEY (skipped when it is missing)
     secrets: inherit
     # needs.build.result explicitly: the default success() is false when powershell-tests was skipped
-    if: ${{ !cancelled() && needs.build.result == 'success' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[autoplay]') || contains(github.event.head_commit.message, '[confronto]') || contains(github.event.head_commit.message, '[ablazione]') || contains(github.event.head_commit.message, '[conferma]') || contains(github.event.head_commit.message, '[varianza]') || contains(github.event.head_commit.message, '[prova]') || contains(github.event.head_commit.message, '[prova2]') || contains(github.event.head_commit.message, '[provallm]')) }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[autoplay]') || contains(github.event.head_commit.message, '[confronto]') || contains(github.event.head_commit.message, '[ablazione]') || contains(github.event.head_commit.message, '[conferma]') || contains(github.event.head_commit.message, '[varianza]') || contains(github.event.head_commit.message, '[prova]') || contains(github.event.head_commit.message, '[prova2]') || contains(github.event.head_commit.message, '[provallm]') || contains(github.event.head_commit.message, '[smoke]')) }}
     uses: ./.github/workflows/proplus-autoplay.yml
     with:
       round: "12"
@@ -170,4 +170,4 @@ jobs:
       # [prova]: joint operations, Pro+ nudo with and without (step PROVA DI VALORE)
       # [prova2]: the take-and-hold variant of the joint operations (step PROVA2)
       # [provallm]: the operations v2 decided by an LLM at their decision points (step PROVALLM)
-      modalita: ${{ contains(github.event.head_commit.message, '[provallm]') && 'provallm' || contains(github.event.head_commit.message, '[prova2]') && 'prova2' || contains(github.event.head_commit.message, '[prova]') && 'prova' || contains(github.event.head_commit.message, '[varianza]') && 'varianza' || (contains(github.event.head_commit.message, '[conferma]') && 'conferma' || (contains(github.event.head_commit.message, '[ablazione]') && 'ablazione' || (contains(github.event.head_commit.message, '[confronto]') && 'confronto' || 'normale'))) }}
+      modalita: ${{ contains(github.event.head_commit.message, '[smoke]') && 'smoke' || contains(github.event.head_commit.message, '[provallm]') && 'provallm' || contains(github.event.head_commit.message, '[prova2]') && 'prova2' || contains(github.event.head_commit.message, '[prova]') && 'prova' || contains(github.event.head_commit.message, '[varianza]') && 'varianza' || (contains(github.event.head_commit.message, '[conferma]') && 'conferma' || (contains(github.event.head_commit.message, '[ablazione]') && 'ablazione' || (contains(github.event.head_commit.message, '[confronto]') && 'confronto' || 'normale'))) }}

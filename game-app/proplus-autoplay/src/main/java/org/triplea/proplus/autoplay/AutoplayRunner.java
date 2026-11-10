@@ -103,7 +103,10 @@ public final class AutoplayRunner {
       players.add(
           AutoplayOptions.HARD.equals(type)
               ? PlayerTypes.PRO_AI.newPlayerWithName(p.getName())
-              : new ProPlusAi(p.getName(), ProPlusAi.PLAYER_LABEL));
+              : AutoplayOptions.STRATEGA.equals(type)
+                  ? new games.strategy.triplea.ai.proplus.ProPlusStrategaAi(
+                      p.getName(), games.strategy.triplea.ai.proplus.ProPlusStrategaAi.PLAYER_LABEL)
+                  : new ProPlusAi(p.getName(), ProPlusAi.PLAYER_LABEL));
     }
     final HeadlessLaunchAction launchAction = new HeadlessLaunchAction(null);
     final ServerGame game =
@@ -218,6 +221,12 @@ public final class AutoplayRunner {
     }
     games.strategy.triplea.ai.proplus.DecisoreOperazione.setBudget(
         data.getProperties(), options.budgetOperazioni());
+    if (monitor.alliances().keySet().stream()
+        .anyMatch(a -> AutoplayOptions.STRATEGA.equals(options.tipo(a)))) {
+      // step STRATEGA LLM: the cap of the game for both levels of the strategist
+      games.strategy.triplea.ai.proplus.Stratega.setBudget(
+          data.getProperties(), options.budgetOperazioni());
+    }
     for (final String alliance : options.tipi().keySet()) {
       if (!monitor.alliances().containsKey(alliance)) {
         throw new IllegalArgumentException(

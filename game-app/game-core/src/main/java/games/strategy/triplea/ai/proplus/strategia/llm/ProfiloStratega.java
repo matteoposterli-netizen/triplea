@@ -82,6 +82,26 @@ public final class ProfiloStratega {
     values.setProperty(KEY_MODE, m.id());
   }
 
+  private static final String KEY_BUDGET_STRATEGA = "stratega_llm_tetto_usd";
+
+  /**
+   * Step STRATEGA LLM: cap in USD per game of the "Pro+ Stratega LLM" player ({@code fallback} if
+   * none saved or not valid).
+   */
+  public double tettoPartitaUsd(final double fallback) {
+    try {
+      final double v =
+          Double.parseDouble(values.getProperty(KEY_BUDGET_STRATEGA, "").strip().replace(',', '.'));
+      return v > 0 && v <= 100 ? v : fallback;
+    } catch (final NumberFormatException e) {
+      return fallback;
+    }
+  }
+
+  public void setTettoPartitaUsd(final double usd) {
+    values.setProperty(KEY_BUDGET_STRATEGA, String.format(java.util.Locale.ROOT, "%.2f", usd));
+  }
+
   /** The key saved for {@code f}. */
   public Optional<String> chiaveSalvata(final Fornitore f) {
     final String k = values.getProperty(KEY_PREFIX + f.id(), "").strip();
@@ -112,11 +132,11 @@ public final class ProfiloStratega {
     if (!Files.exists(file)
         && FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
       Files.createFile(
-          file,
-          PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+          file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
     }
     try (Writer out = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-      values.store(out, "Stratega Pro+: impostazioni e chiavi API di questo utente. Non condividere.");
+      values.store(
+          out, "Stratega Pro+: impostazioni e chiavi API di questo utente. Non condividere.");
     }
   }
 
@@ -151,7 +171,7 @@ public final class ProfiloStratega {
       final Path source, final Fornitore fallback) throws IOException {
     for (final String raw : Files.readAllLines(source, StandardCharsets.UTF_8)) {
       final String line = raw.replace("﻿", "").strip();
-      if (line.isEmpty() || line.startsWith("#")) {
+      if (line.isEmpty() || line.charAt(0) == '#') {
         continue;
       }
       final int eq = line.indexOf('=');
@@ -169,6 +189,8 @@ public final class ProfiloStratega {
   /** Eg "\u2022\u2022\u2022\u20227f3a" (only the last 4 characters). */
   public static String maschera(final String key) {
     final String k = key == null ? "" : key.strip();
-    return k.length() <= 4 ? "\u2022\u2022\u2022\u2022" : "\u2022\u2022\u2022\u2022" + k.substring(k.length() - 4);
+    return k.length() <= 4
+        ? "\u2022\u2022\u2022\u2022"
+        : "\u2022\u2022\u2022\u2022" + k.substring(k.length() - 4);
   }
 }

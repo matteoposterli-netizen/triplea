@@ -340,6 +340,111 @@ public final class OperazioneCongiunta {
     return definizione(id).filter(d -> d.alleanza().equals(alliance));
   }
 
+  // ------------------------------------------------------- dynamic operations (Stratega LLM)
+
+  /**
+   * Game property (per alliance) with the operations the LLM strategist launched (step STRATEGA
+   * LLM): {@code {"operazioni": [...]}} in the format of the data file. Absent in every other game.
+   */
+  public static final String DYNAMIC_PREFIX = "Pro+ stratega operazioni: ";
+
+  private static final Map<String, List<Definizione>> DYNAMIC_CACHE =
+      java.util.Collections.synchronizedMap(
+          new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(final Map.Entry<String, List<Definizione>> e) {
+              return size() > 64;
+            }
+          });
+
+  /** The dynamic operations of {@code alliance} (none without the property). */
+  public static List<Definizione> dinamiche(final GameProperties props, final String alliance) {
+    if (!(props.get(DYNAMIC_PREFIX + alliance) instanceof String text) || text.isBlank()) {
+      return List.of();
+    }
+    return DYNAMIC_CACHE.computeIfAbsent(
+        text,
+        t -> {
+          try {
+            return parse(JsonParser.parseString(t).getAsJsonObject());
+          } catch (final RuntimeException e) {
+            return List.of();
+          }
+        });
+  }
+
+  /** Writes the dynamic operations of {@code alliance} ({@code operazioni}: data file format). */
+  public static void setDinamiche(
+      final GameProperties props, final String alliance, final JsonArray operazioni) {
+    props.set(DYNAMIC_PREFIX + alliance, (java.io.Serializable) null);
+    if (operazioni.isEmpty()) {
+      return;
+    }
+    final JsonObject root = new JsonObject();
+    root.add("operazioni", operazioni);
+    final String text = root.toString();
+    parse(root); // refuses a broken definition before it is saved
+    props.set(DYNAMIC_PREFIX + alliance, text);
+    props.set(DYNAMIC_ANY, "1");
+  }
+
+  /** The JSON of the dynamic operations of {@code alliance} (empty array without). */
+  public static JsonArray dinamicheJson(final GameProperties props, final String alliance) {
+    if (props.get(DYNAMIC_PREFIX + alliance) instanceof String text && !text.isBlank()) {
+      try {
+        return JsonParser.parseString(text).getAsJsonObject().getAsJsonArray("operazioni");
+      } catch (final RuntimeException e) {
+        // broken: none
+      }
+    }
+    return new JsonArray();
+  }
+
+  /**
+   * Every operation {@code player} takes part in: the hand-written one turned on for its alliance
+   * (autoplay only) and the dynamic ones of the LLM strategist, in this order. Empty in every game
+   * without either (cheap check first).
+   */
+  public static List<Definizione> tutte(final GameState data, final GamePlayer player) {
+    final GameProperties props = data.getProperties();
+    final Optional<Definizione> fixed = per(data, player);
+    final Optional<String> alliance =
+        hasDynamic(props) ? ProPlusSettings.allianceOf(data, player) : Optional.empty();
+    if (alliance.isEmpty()) {
+      return fixed.map(List::of).orElse(List.of());
+    }
+    final List<Definizione> list = new ArrayList<>();
+    fixed.ifPresent(list::add);
+    dinamiche(props, alliance.get()).stream()
+        .filter(d -> d.riguarda(player.getName()))
+        .forEach(list::add);
+    return List.copyOf(list);
+  }
+
+  /** Prefix of the ids of the operations of the LLM strategist: "stratega-<tipo>-R<n>-...". */
+  public static final String PREFISSO_STRATEGA = "stratega-";
+
+  public static boolean isStratega(final String id) {
+    return id.startsWith(PREFISSO_STRATEGA);
+  }
+
+  /** The general type in an id of the strategist ("offensiva", "sbarco", "tenuta", "rinforzo"). */
+  public static String tipoStratega(final String id) {
+    if (!isStratega(id)) {
+      return "";
+    }
+    final String rest = id.substring(PREFISSO_STRATEGA.length());
+    final int dash = rest.indexOf('-');
+    return dash < 0 ? rest : rest.substring(0, dash);
+  }
+
+  private static boolean hasDynamic(final GameProperties props) {
+    return props.get(DYNAMIC_ANY) != null;
+  }
+
+  /** Set (to "1") once an alliance of the game has had dynamic operations (cheap check). */
+  public static final String DYNAMIC_ANY = "Pro+ stratega operazioni presenti";
+
   /** The operation turned on for {@code player}'s alliance, if {@code player} takes part in it. */
   public static Optional<Definizione> per(final GameState data, final GamePlayer player) {
     // cheap check first: no switch on in the game (every game but the operation's tests)

@@ -1,0 +1,57 @@
+TripleA Pro+ - COME PROVARE LO "STRATEGA LLM"   (versione @VERSION@, commit @COMMIT@)
+=================================================================================
+
+1) SCEGLIERE LA VOCE
+   Avvia il gioco con avvia.bat, apri "World War II Europe 1940 2nd Edition" e, nella
+   tabella dei giocatori, metti "Pro+ Stratega LLM (Europe 1940)" per tutte le nazioni
+   dell'alleanza che NON giochi tu (es. Germania e Italia), e "Human" per le tue.
+   Mettilo su tutte le nazioni di quell'alleanza: le operazioni congiunte coinvolgono solo
+   nazioni giocate dallo Stratega. La Francia non ha ruoli nelle operazioni.
+   Le altre voci (Hard, Pro+, ...) sono invariate.
+
+2) IMPOSTARE LA CHIAVE (Anthropic, serve credito prepagato)
+   Modo piu' semplice: metti accanto ad avvia.bat un file chiave-stratega.txt con dentro
+   SOLO la chiave (sk-ant-...). Viene importata all'inizio della partita (o all'apertura
+   del pannello "Impostazioni Pro+") e salvata solo sul tuo PC, nel profilo utente
+   (cartella .triplea-proplus): poi puoi cancellare il file.
+   In alternativa: pannello "Impostazioni Pro+" -> sezione "Stratega (LLM)" -> Fornitore
+   Anthropic, incolla la chiave, "Salva", "Prova connessione". La chiave si vede mascherata.
+   Nello stesso pannello: "Tetto Stratega LLM" = dollari massimi per partita (predefinito 2).
+   SENZA CHIAVE la partita parte comunque e lo Stratega gioca come Hard; nel log di gioco
+   compare UNA volta "Stratega LLM non disponibile: gioco con le regole". Lo stesso se la
+   rete non risponde, la chiave e' sbagliata, il credito o il tetto sono finiti.
+
+3) COSA VEDI IN PARTITA
+   A fine turno di ogni nazione dello Stratega, nel log di gioco (cronologia), una riga:
+     Stratega LLM Germans: Offensiva su Egypt [Germans+Italians]: preparazione, tappe al R3;
+     Tenuta di Romania [Germans]: tenuta dal R4 (2 round)
+   e, quando finisce, "Stratega LLM: Offensiva su Egypt: COMPLETATA/FALLITA/ANNULLATA".
+   Niente stime ne' motivazioni durante la partita (sono nel diario, dopo).
+   Tipi di operazione: Offensiva (due nazioni sullo stesso territorio nemico nello stesso
+   round), Sbarco (sbarco congiunto), Tenuta (presidio di un territorio minacciato),
+   Rinforzo (una nazione rinforza il territorio di un alleato). Tutto il resto lo fa Hard.
+
+4) QUANDO L'AI SBAGLIA O SORPRENDE: SALVA
+   Menu File -> Salva (file .tsvg) SUBITO, nel turno in cui lo vedi. Nome consigliato:
+     R<round>-<nazione>-<cosa>.tsvg   es. R5-Germans-sbarco-assurdo.tsvg
+   I salvataggi sono in Documenti\triplea\savedGames.
+
+5) DOVE SONO DIARIO E LOG DA ALLEGARE
+   - Diario dello Stratega: cartella "diario" accanto ad avvia.bat, sottocartella della
+     partita (data_ora_nome mappa):
+       stratega.txt            leggibile: decisioni, stime, motivazioni, esiti, costo
+       stratega.jsonl          lo stesso in JSON (stato inviato in sintesi, risposte)
+       stratega-riepilogo.json portafoglio, esiti e costo della partita
+     (il diario completo Pro+ diario.txt / decisioni.jsonl, se attivo, e' nella stessa
+     cartella; vengono tenute le ultime 20 partite).
+   - Log del gioco: se compare un errore, copia le ultime righe della finestra nera
+     aperta da avvia.bat in un file di testo.
+   Allega: la sottocartella del diario della partita + i .tsvg salvati (+ l'eventuale testo
+   dell'errore).
+
+6) COME SEGNALARE (una riga = un episodio)
+   Scrivi un file di testo, una riga per episodio, cosi':
+     R<round> | <nazione> | <cosa e' successo> | <cosa ti aspettavi> | <file .tsvg>
+   esempio:
+     R5 | Germans | ha annullato l'offensiva su Egypt con l'Italia gia' pronta | che attaccasse | R5-Germans-egitto.tsvg
+     R7 | British | ha rinforzato Gibraltar invece di Malta minacciata | Malta | R7-British-malta.tsvg

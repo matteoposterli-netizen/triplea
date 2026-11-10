@@ -116,17 +116,35 @@ public class ProPlusAi extends ProAi {
       final IMoveDelegate moveDel,
       final GameData data,
       final GamePlayer player) {
-    if (!(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)
-        || OperazioneCongiunta.per(data, player).isEmpty()) {
+    if (!(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    final List<OperazioneCongiunta.Definizione> defs = OperazioneCongiunta.tutte(data, player);
+    if (defs.isEmpty()) {
       return;
     }
     try {
-      initializeData();
-      prepareData(data);
-      final OperazioniCongiunte.Esito result =
-          nonCombat
-              ? OperazioniCongiunte.nonCombattimento(getProData(), getCalc(), moveDel)
-              : OperazioniCongiunte.combattimento(getProData(), getCalc(), moveDel);
+      // one operation after the other (step STRATEGA LLM: several at once), each on the board
+      // left by the earlier ones and without their units
+      OperazioniCongiunte.Esito result = OperazioniCongiunte.Esito.NESSUNO;
+      for (final OperazioneCongiunta.Definizione d : defs) {
+        try {
+          initializeData();
+          prepareData(data);
+          if (OperazioneCongiunta.isStratega(d.id())) {
+            attendiCalcolatore(data, player);
+          }
+          final OperazioniCongiunte.Esito one =
+              nonCombat
+                  ? OperazioniCongiunte.nonCombattimento(
+                      getProData(), getCalc(), moveDel, d, result.tenute())
+                  : OperazioniCongiunte.combattimento(
+                      getProData(), getCalc(), moveDel, d, result.tenute());
+          result = OperazioniCongiunte.unisci(result, one);
+        } catch (final RuntimeException e) {
+          ProLogger.warn(LOG_PREFIX + "Joint operation " + d.id() + " failed: " + e);
+        }
+      }
       if (nonCombat) {
         tuning.holdForOperation(data, player, result.tenute());
       } else {
@@ -138,8 +156,56 @@ public class ProPlusAi extends ProAi {
     }
   }
 
+  /**
+   * Step STRATEGA LLM: waits until the battle calculator has copied the game data set by {@link
+   * #prepareData} (it copies it in the background), so that writing game properties right after
+   * does not race with the copy. One tiny battle of 1 unit against 1 unit.
+   */
+  protected void attendiCalcolatore(final GameData data, final GamePlayer player) {
+    games.strategy.engine.data.Unit mine = null;
+    games.strategy.engine.data.Unit enemy = null;
+    games.strategy.engine.data.Territory where = null;
+    for (final games.strategy.engine.data.Territory t : data.getMap().getTerritories()) {
+      if (t.isWater()) {
+        continue;
+      }
+      if (mine == null) {
+        mine =
+            t.getMatches(
+                    games.strategy.triplea.delegate.Matches.unitIsOwnedBy(player)
+                        .and(games.strategy.triplea.delegate.Matches.unitIsLand())
+                        .and(games.strategy.triplea.delegate.Matches.unitIsNotInfrastructure()))
+                .stream()
+                .findFirst()
+                .orElse(null);
+      }
+      if (enemy == null) {
+        enemy =
+            t.getMatches(
+                    games.strategy.triplea.delegate.Matches.unitIsEnemyOf(player)
+                        .and(games.strategy.triplea.delegate.Matches.unitIsLand())
+                        .and(games.strategy.triplea.delegate.Matches.unitIsNotInfrastructure()))
+                .stream()
+                .findFirst()
+                .orElse(null);
+        where = enemy == null ? null : t;
+      }
+      if (mine != null && enemy != null) {
+        break;
+      }
+    }
+    if (mine != null && enemy != null) {
+      try {
+        getCalc()
+            .calculateBattleResults(getProData(), where, List.of(mine), List.of(enemy), List.of());
+      } catch (final RuntimeException e) {
+        // only a wait
+      }
+    }
+  }
+
   /** The joint operation's lines and events in the diary (only while the diary is on). */
-  private static void report(final GameData data, final OperazioniCongiunte.Esito result) {
+  static void report(final GameData data, final OperazioniCongiunte.Esito result) {
     if (!result.righe().isEmpty()) {
       DiaryRecorder.jointOperation(data, result.righe(), result.eventi());
     }

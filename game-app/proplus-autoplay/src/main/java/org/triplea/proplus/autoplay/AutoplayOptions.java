@@ -15,7 +15,8 @@ import javax.annotation.Nullable;
  * --round N            last round played (default 12)
  * --piano A=X,...      plan per alliance, eg. Axis=A,Allies=1 (default: "auto" = Automatico)
  * --rischio A=L,...    base risk level per alliance, 1-5 or name (default Equilibrato)
- * --tipo A=T,...       player type per alliance: proplus | hard (default proplus)
+ * --tipo A=T,...       player type per alliance: proplus | hard | stratega (default proplus;
+ *                       stratega = "Pro+ Stratega LLM", cap of the game = --budget-operazioni)
  * --decisore A=D,...   Pro+ decider per alliance: regole | file:PATH | llm (default regole; PATH =
  *                      directives file or folder, see DecisoreFile; llm = LLM strategist through
  *                      the API key, Claude Haiku with ANTHROPIC_API_KEY of the environment;
@@ -53,6 +54,7 @@ record AutoplayOptions(
 
   static final String PROPLUS = "proplus";
   static final String HARD = "hard";
+  static final String STRATEGA = "stratega";
   static final String LLM = "llm";
 
   static AutoplayOptions parse(final String[] args) {
@@ -222,6 +224,7 @@ record AutoplayOptions(
     return switch (t) {
       case PROPLUS, "pro", "plus" -> PROPLUS;
       case HARD -> HARD;
+      case STRATEGA, "strategallm", "llm" -> STRATEGA;
       default -> throw new IllegalArgumentException("Tipo di giocatore non valido: " + text);
     };
   }

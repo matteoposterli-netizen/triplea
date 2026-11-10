@@ -205,3 +205,46 @@ delle operazioni congiunte v2 (`OperazioniCongiunte`) quando l'alleanza ha la pr
 - Paracadute (`DecisoreOperazione`): errore, timeout (45 s, 2 tentativi), risposta non valida, tetto 80 chiamate per partita,
   budget in USD della partita (`Pro+ operazione budget usd`, default 1; prossima chiamata stimata come 1,5 × costo medio, min
   $0,03) ⇒ decisione della formula, con il motivo. Uso in `Pro+ operazione uso`.
+
+## Schema v1.3: Stratega LLM completo (step STRATEGA LLM)
+
+Solo per la voce giocatore "Pro+ Stratega LLM (Europe 1940)" (`ProPlusStrategaAi`). Due livelli, stesso trasporto
+(Anthropic Messages API, `output_config.format` json_schema strict, `effort: low`, niente `temperature`).
+
+**Livello strategico** (`Stratega`, inizio round, prima nazione dello Stratega dell'alleanza; prompt
+`prompt-stratega-v4.md`, `PromptStrategaV4`). Ingresso (contratto `1.3`): `round`, `alleanza`,
+`nazioni_dello_stratega`, `ordine_dei_turni`, `operazioni_in_corso` [{operazione, tipo, bersaglio, apre, chiude,
+stato, round_obiettivo, rinvii, ultima_tenuta_stimata_motore_pct, tenuta_dal_round, durata_tenuta,
+proprietario_bersaglio, ultimi_eventi}], `operazioni_finite`, `candidati` (max 8, `StrategaCandidati`: id "C1"...,
+tipo offensiva|sbarco|tenuta|rinforzo, bersaglio, proprietario, nazioni, ruoli, round_minimo, valore {valore_PU,
+produzione_PU, victory_city, capitale}; conquiste: difensori, tappa1/tappa2 {nazione, attaccanti, win_pct,
+perdita_attesa_TUV}, presa_stimata_pct, bersagli_successivi_possibili (sbarco), zona_raduno/raduno; tenute: difensori,
+nemici_in_portata_TUV, tenuta_ora_50_pct/100_pct, rinforzi_possibili; tutti: presidio_atteso,
+contrattacco_massimo (per origine + acquisti per fabbrica), tenuta_per_impegno 25/50/75/100%), `lettura_avversario`
+{ammassamenti_per_fronte [{fronte, tuv_nemico, tuv_alleanza, variazione_tuv_nemico}], minacce_capitali_vc
+[{territorio, capitale, tuv_nemico_in_portata, tuv_difensori, tenuta_100_pct}], storico_nemico_per_tipo {terra,
+costa_sbarco, capitale}}, `partita` {reddito_per_nazione, victory_city_per_alleanza}.
+
+Uscita:
+```json
+{"portafoglio": [{"azione": "avvia|continua|modifica|annulla", "candidato": "C2", "operazione": "",
+  "round_obiettivo": 0, "tetto_perdita_TUV": 0, "durata_tenuta": 0, "bersaglio_successivo": "",
+  "prob_tenuta_stimata": 0.55, "motivazione": "..."}],
+ "fuori_lista": {"proponi": false, "tipo": "nessuno", "bersaglio": "", "apre": "", "chiude": "",
+  "prob_tenuta_stimata": 0, "motivazione": ""},
+ "rinforzi": [{"territorio": "Romania", "peso": 2}],
+ "motivazione": "..."}
+```
+Validazione (`StrategaDecisione.leggi`: azione nota, `avvia` con candidato, altre con operazione, probabilita' 0-1,
+testi tagliati a 300 caratteri) poi il motore: annulla/modifica/continua prima, poi gli avvii; rifiutati con motivo
+(nel diario e in `rifiutate` del portafoglio): candidato sconosciuto, operazione non in corso, piu' di
+`max_operazioni_per_alleanza`, bersaglio gia' in un'operazione attiva; `fuori_lista` validata da `StrategaFuoriLista`
+(tipo, territorio, nazioni dello Stratega con ruoli, guerra con il proprietario, chi apre gioca prima di chi chiude,
+zona di mare con terra dell'alleanza per lo sbarco, territorio dell'alleanza per tenuta/rinforzo, rinforzo non al
+proprio territorio). `rinforzi`: max 4 territori propri/alleati o zone di mare, peso 1-3 → ammassamento del non
+combattimento (`ProPlusTuning.stagingOrders`, risposta marcata come operazione).
+
+**Ordini del turno** (punti di decisione delle operazioni durante il turno di ogni nazione con un ruolo: tappa1,
+tappa2, tenuta) = decisione v1.2 (`decisione_operazione`); l'ingresso ha `tipo_operazione` e il prompt e'
+`prompt-ordini-turno-v3.md` (`PromptOrdiniTurnoV3`). Ripiego (errore, timeout, non valida, tetto) = **Hard**: tappa →
+rinvia, tenuta → ritira (non la formula), registrato con `ripiego_hard`.

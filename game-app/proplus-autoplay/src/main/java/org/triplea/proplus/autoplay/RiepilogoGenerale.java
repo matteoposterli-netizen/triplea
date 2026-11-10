@@ -142,6 +142,7 @@ final class RiepilogoGenerale {
     ConfrontoConferma.write(md, games, alliances, vcRounds);
     ConfrontoVarianza.write(md, games, alliances, vcRounds);
     ConfrontoProva.write(md, games, alliances, vcRounds);
+    ConfrontoSmoke.write(md, games, alliances);
     configurations(md, games, alliances, vcRounds, maxRound);
     plansAndPostures(md, games, alliances);
     landingsAndTransports(md, games, alliances, maxRound);
@@ -257,7 +258,7 @@ final class RiepilogoGenerale {
         alliances,
         a -> {
           final String type = text(p.getAsJsonObject("tipi"), a);
-          if (AutoplayOptions.HARD.equals(type)) {
+          if (AutoplayOptions.HARD.equals(type) || AutoplayOptions.STRATEGA.equals(type)) {
             return Riepilogo.typeLabel(type);
           }
           final String decider = decider(json, a);

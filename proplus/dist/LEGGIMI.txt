@@ -175,6 +175,16 @@ diario scrive a ogni round "Stratega: <chi ha deciso> - postura, piano,
 motivazione".
 
 
+STRATEGA LLM (Europe 1940)  (novita' step STRATEGA LLM)
+------------------------------------------------------
+Nuova voce giocatore "Pro+ Stratega LLM (Europe 1940)": Hard + uno stratega (Claude
+Sonnet, chiave Anthropic) che avvia, tiene e annulla operazioni congiunte (offensiva,
+sbarco, tenuta, rinforzo all'alleato); il motore le esegue, Hard fa il resto. Senza
+chiave gioca come Hard (avviso una volta nel log di gioco). Tetto di spesa per partita
+nel pannello (predefinito 2 $). Istruzioni di prova, salvataggi e file da allegare:
+LEGGIMI-TEST.txt (nello zip della release).
+
+
 DIARIO DELLE DECISIONI  (novita' step 2bis)
 ------------------------------------------
 Dove: nella cartella "diario" accanto al gioco, per esempio

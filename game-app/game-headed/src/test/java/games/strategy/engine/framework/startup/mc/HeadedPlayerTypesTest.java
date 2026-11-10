@@ -78,4 +78,23 @@ public class HeadedPlayerTypesTest {
     assertThat(player.getPlayerLabel()).isEqualTo("Pro+ (AI)");
     assertThat(player.isAi()).isTrue();
   }
+
+  @Test
+  void proPlusStrategaLlmIsListedAfterProPlusAndInstantiable() {
+    ClientSetting.showBetaFeatures.setValue(false);
+    final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
+    final List<String> labels = List.of(playerTypes.getAvailablePlayerLabels());
+    assertThat(labels).contains("Pro+ Stratega LLM (Europe 1940)", "Pro+ (AI)", "Hard (AI)");
+    assertThat(labels.indexOf("Pro+ Stratega LLM (Europe 1940)"))
+        .isEqualTo(labels.indexOf("Pro+ (AI)") + 1);
+
+    final var player =
+        playerTypes.fromLabel("Pro+ Stratega LLM (Europe 1940)").newPlayerWithName("Italians");
+
+    assertThat(player)
+        .isInstanceOf(games.strategy.triplea.ai.proplus.ProPlusStrategaAi.class)
+        .isInstanceOf(ProPlusAi.class);
+    assertThat(player.getPlayerLabel()).isEqualTo("Pro+ Stratega LLM (Europe 1940)");
+    assertThat(player.isAi()).isTrue();
+  }
 }

@@ -158,6 +158,12 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `ai/proplus/StoricoNemico` (risposta reale del nemico), `ai/proplus/strategia/DecisioneOperazione` (contratto v1.2),
   `strategia/llm/PromptOperazione` + risorsa `proplus/strategia/prompt-operazione-v1.md`; punti di decisione in `OperazioniCongiunte`
   (`decide`, `stato`); riepilogo `ConfrontoLlm` (autoplay). Vedi "Operazioni decise da LLM (step PROVALLM)".
+- Step STRATEGA LLM: voce `ai/proplus/ProPlusStrategaAi` ("Pro+ Stratega LLM (Europe 1940)", `HeadedPlayerTypes.PRO_PLUS_STRATEGA_AI`
+  subito dopo "Pro+ (AI)"), `Stratega` (registrazione, livello strategico, portafoglio, riga di fine turno), `StrategaCandidati`
+  (candidati dei 4 tipi + lettura dell'avversario + definizioni dinamiche), `StrategaDecisione` (contratto 1.3), `StrategaFuoriLista`,
+  `StrategaDiario`, `StrategaConfig` (`proplus/strategia/stratega-llm.json`), `StrategaSimulato` (solo test/prove locali);
+  operazioni dinamiche in `OperazioneCongiunta` (`DYNAMIC_PREFIX`, `tutte`, `setDinamiche`); prompt `prompt-stratega-v4.md`,
+  `prompt-ordini-turno-v3.md` (`strategia/llm/PromptStrategaV4`, `PromptOrdiniTurnoV3`). Vedi "Stratega LLM completo".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -376,6 +382,14 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   decisioni sono in `operazioni_congiunte.<id>.decisioni`. Etichetta "... + operazione egitto decisa da LLM". Dopo "Presa e tenuta" la
   sezione **"Decisioni LLM delle operazioni congiunte"** (`ConfrontoLlm`): decisioni per tipo e azione, diverse dalla formula, ripieghi con i
   motivi, calibrazione LLM contro formula sulle stesse decisioni (fasce 20%, errore medio pesato, Brier), costo totale/per partita.
+- **Modalita' "smoke" (step STRATEGA LLM)**: `[smoke]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒ `modalita:
+  smoke`. Controllo, non misura di forza: 12 round, Equilibrato, **semi 501-506**, 2 configurazioni = 12 partite (`1-Asse-Stratega-LLM-
+  vs-Hard`, `2-Hard-vs-Alleati-Stratega-LLM`), matrice mescolata, `max-parallel` 6, tetto per partita min(2, 30/12) = 2 $ (run <= 24 $,
+  tetto 30 $). La chiave va ai job con `matrix.stratega`; senza secret le partite girano lo stesso (paracadute = Hard). Sezione
+  "Stratega LLM: controllo [smoke]" (`ConfrontoSmoke`): stato, round decisi/senza LLM, chiamate, costo, ripieghi per livello e motivo,
+  operazioni per tipo (avviate, eseguite, completate, fallite, annullate, in corso), rifiutate per motivo, calibrazione per fasce
+  (livello strategico: stima a inizio round contro bersaglio dell'alleanza a fine durata; ordini: `prob_llm` contro `esito_reale`), VC
+  finali solo informative.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -418,8 +432,9 @@ Dopo che le Actions del fork si erano fermate (step 3d-1):
    esterni ed è lento; `./verify` escluso: include PMD/spotless/check custom non necessari qui);
 2. scrive la versione (`set-game-headed-build-number`), `:game-headed:shadowJar`;
 3. zip `TripleA-ProPlus.zip` = `TripleA-ProPlus.jar` + `avvia.bat` + `aggiorna.ps1` +
-   `build-info.txt` + `LEGGIMI.txt` + `.triplea-root` (marcatore vuoto cercato da
-   `ClientFileSystemHelper.getRootFolder()`);
+   `build-info.txt` + `LEGGIMI.txt` + `LEGGIMI-TEST.txt` (step STRATEGA LLM; `aggiorna.ps1` NON lo copia
+   nell'aggiornamento automatico: arriva con il download manuale dello zip, `LEGGIMI.txt` lo cita) +
+   `.triplea-root` (marcatore vuoto cercato da `ClientFileSystemHelper.getRootFolder()`);
 4. sposta il tag `proplus-latest` sul commit e sostituisce l'asset nella release (prerelease);
 5. job `autoplay` (dopo la release, workflow riutilizzabile, solo con `[autoplay]`): partite AI vs AI,
    vedi "Autoplay in CI".
@@ -1648,6 +1663,69 @@ ritirata restano del motore. **Spento di default** (proprieta' `Pro+ operazione 
   0,20).
 - Test: `ai/pro/OperazioniLlmTest` (chiamate simulate): parsing e schema, ripiego su risposta non valida/timeout/budget, nessuna chiamata
   col flag spento, stato con storico del nemico, tieni/ritira nel motore, esito reale salvato.
+
+## Stratega LLM completo (step STRATEGA LLM)
+
+Decisione di Matteo (dopo PROVALLM): la misura principale diventano le partite giocate da Matteo; l'LLM decide COSA/PERCHE' con
+leve vere (operazioni, rinforzi), il motore calcola ed esegue (COME), Hard fa il resto; le manopole restano a Hard ("nudo") e
+l'LLM NON le controlla. Voce giocatore **"Pro+ Stratega LLM (Europe 1940)"** (`ProPlusStrategaAi extends ProPlusAi`); le voci
+esistenti non cambiano (nessuna proprieta' nuova senza la voce, `OperazioneCongiunta.tutte` vuota, nessuna chiamata).
+- **Registrazione** (`Stratega.registra`, in `initialize` e a ogni acquisto): nazione nella proprieta' `Pro+ stratega llm nazioni:
+  <alleanza>`; alleanza in `Pro+ ablazione` = `nudo` (attenzione: vale per TUTTA l'alleanza: una nazione "Pro+ (AI)" della stessa
+  alleanza diventa nudo); `Pro+ operazione decisore: <alleanza>` = `llm:<modello>` (Sonnet 5.5, `Pro+ stratega llm modello`);
+  tetto `Pro+ stratega llm budget usd` = profilo utente (`stratega_llm_tetto_usd`, campo "Tetto Stratega LLM" del pannello,
+  default 2 $ da `stratega-llm.json`), lo stesso valore in `Pro+ operazione budget usd`. `chiave-stratega.txt` accanto al gioco
+  importato nel profilo all'inizio della partita (senza aprire il pannello; il file non viene cancellato).
+- **Operazioni dinamiche**: definizioni nello stesso formato di `operazioni-congiunte.json`, salvate nella proprieta' `Pro+
+  stratega operazioni: <alleanza>` (+ `Pro+ stratega operazioni presenti` = controllo rapido), id `stratega-<tipo>-R<n>-<bersaglio>`;
+  `OperazioneCongiunta.tutte(data, player)` = operazione scritta a mano accesa (solo autoplay) + dinamiche della nazione. I punti
+  d'ingresso di `OperazioniCongiunte` (aggiorna, acquisti (ordini uniti, quota = la massima), combattimento, non combattimento,
+  guerra, accesso, bersaglio forzato) iterano su tutte; `ProPlusAi.playJointOperation` le gioca una dopo l'altra (dati
+  reinizializzati, unita' gia' tenute escluse). Con una sola operazione il comportamento e' identico a prima.
+- **Tipi** (costruiti sulla meccanica v2, niente riscrittura): **offensiva** (apre = indebolisce, chiude = prende nello STESSO round;
+  chi apre gioca prima nell'ordine dei turni; se chi apre colpisce con aerei `aerei_apre` + raccolta aerei entro 2 dal bersaglio),
+  **sbarco** (zona di mare confinante con bersaglio e con una terra dell'alleanza = raduno/carico; trasporti + terra nelle riserve;
+  `bersaglio_finale` = bersaglio successivo facoltativo tra i confinanti), **tenuta** (territorio proprio minacciato: il registro
+  parte in TENUTA, presidio bloccato, rinforzi sotto 70%, COMPLETATA dopo `durata_tenuta` round al turno di chi chiude, FALLITA se
+  perso), **rinforzo** (una nazione nel territorio di un alleato minacciato, poi come tenuta). Round successivi tra le tappe NON
+  supportati (vedi problemi aperti). `germanPresence` (regola Egitto) spenta per le dinamiche.
+- **Candidati** (`StrategaCandidati.calcola`, inizio round, max 8, al massimo 3 per tipo, uno per bersaglio e tipo): conquiste =
+  territori nemici con valore (produzione + 10 VC + 10 capitale) raggiungibili entro `orizzonte_round` 3 dalle coppie di nazioni
+  dello Stratega in guerra col proprietario (stima rapida delle tappe `estimateAttackBattleResults`: win%, perdita, difensori residui,
+  presa); tenute/rinforzi = territori dell'alleanza con valore >= 2 e nemici di TERRA in portata, tenuta al 50% < 80 e al 100% < 95.
+  Per gli 8 scelti: `presidio_atteso`, `contrattacco_massimo` per origine + acquisti per fabbrica e `tenuta_per_impegno` 25/50/75/100%
+  (`OperazioniCongiunte.valutaTenuta`, stessi numeri dei punti di decisione). Lettura dell'avversario: TUV nemico per fronte del file
+  di strategia con variazione dal round prima (`Pro+ stratega llm lettura: <alleanza>`), minacce a capitali/VC proprie, storico del
+  nemico per tipo di bersaglio (terra / costa-sbarco / capitale, da `StoricoNemico` delle operazioni dello Stratega).
+- **Livello strategico** (`Stratega.inizioTurno`, acquisto della prima nazione dello Stratega dell'alleanza nel round, proprieta'
+  `Pro+ stratega llm round: <alleanza>`): prima controlla chiave/tetti (`trasporto()`: senza chiave nessun candidato calcolato),
+  poi candidati + stato → Sonnet (`PromptStrategaV4`, contratto 1.3 in `contratto-v1.md`) → `StrategaDecisione.leggi` → applicazione
+  con i vincoli del motore (max 3 operazioni attive, un bersaglio una sola operazione, tetto di perdita <= 80, durata <= 4, riserve
+  <= 30% dei PU per nazione, guarnigione capitale del motore) e rifiuti con motivo; una sola proposta fuori lista. Portafoglio in
+  `Pro+ stratega llm portafoglio: <alleanza>` (operazioni con stima e motivazione, previsioni per round con `verifica_round` ed
+  `esito_reale`, `rifiutate`, `round_decisi`, `round_senza_llm`); operazioni finite tolte dalla lista dinamica a inizio round.
+  Tetto chiamate strategiche 30/partita; uso in `Pro+ stratega llm uso` (stesso formato di `Pro+ operazione uso`).
+- **Ordini del turno** = punti di decisione esistenti (tappa1/tappa2/tenuta, `DecisoreOperazione`) con `tipo_operazione`
+  nell'ingresso ⇒ `prompt-ordini-turno-v3`. **Scostamento dalla richiesta**: non c'e' una chiamata separata a inizio turno della
+  nazione; la decisione procedi/rinvia/tieni/ritira arriva nel momento in cui il motore ha i numeri (combattimento per le tappe,
+  non combattimento per la tenuta), come in PROVALLM. I "rinforzi prioritari" sono nel livello strategico (territori con peso 1-3
+  → ammassamento del non combattimento, il motore sceglie le unita').
+- **Paracadute** = Hard: senza chiave, errore, timeout, risposta non valida, tetto chiamate o tetto $ (strategico + ordini insieme:
+  `DecisoreOperazione.costoAltriLivelli`) ⇒ nessuna operazione nuova; nei punti di decisione delle operazioni dello Stratega rinvia /
+  ritira (non la formula, `ripiego_hard`). Avviso UNA volta per partita e nazione nel log di gioco: "Stratega LLM non disponibile:
+  gioco con le regole (<motivo>)" (`Pro+ stratega llm avviso`).
+- **Visibilita'**: a fine turno (dopo il piazzamento) di ogni nazione dello Stratega un commento nella cronologia del gioco
+  (`IEditDelegate.addComment`, ammesso nel turno del giocatore senza modalita' modifica) "Stratega LLM <nazione>: <operazioni
+  attive [nazioni]: stato>" (niente stime ne' motivazioni) + "Stratega LLM: <operazione>: COMPLETATA/FALLITA/ANNULLATA" alla fine.
+  Diario dello Stratega SEMPRE scritto (anche col diario Pro+ spento) nella cartella della partita del diario: `stratega.txt`,
+  `stratega.jsonl`, `stratega-riepilogo.json` (riscritto a ogni round/turno).
+- **Prezzi** (verificati su platform.claude.com il 10/11/2026): Sonnet 5.5 $2 / $10, cache 5 min $2,50, 1 h $4, lettura $0,10 per MTok
+  (gia' in `prezzi-stratega.json`); `temperature`/`top_p`/`top_k` = errore 400 dalla versione 2026-10-21 (non inviati), `effort` in
+  `output_config.effort` (low).
+- **Autoplay**: `--tipo <alleanza>=stratega` (tetto della partita = `--budget-operazioni`); `riepilogo.json` `stratega_llm`
+  (= `stratega-riepilogo.json`); sezione "Stratega LLM: controllo [smoke]" (`ConfrontoSmoke`). Prove locali senza rete:
+  `JAVA_OPTS=-Dproplus.stratega.simulato=true` (modello finto: avvia i primi 2 candidati, procedi/tieni).
+- Test: `ai/proplus/StrategaLlmCompletoTest` (13, chiamate simulate), `HeadedPlayerTypesTest.proPlusStrategaLlmIsListedAfterProPlusAndInstantiable`.
 
 ## Come configurare lo stratega
 
@@ -3434,3 +3512,36 @@ diviso in candidati + esecuzione senza cambiarne il comportamento); `DiaryRecord
   differenza di quanto suggerisce lo storico del nemico in altri territori; (2) l'esecuzione della tappa 2 (sbarco UK) lascia presidi che
   non reggono (procedi 18, tenuto 22%); (3) i lanci tolgono unita' all'offensiva normale di Hard (Normandy e Parigi meno alleate a R12 che
   in nudo). Le perdite in TUV non sono la causa: TUV perso Alleati −58 [−108, −9], Asse −83 [−141, −26] (scambi piu' pari).
+
+### Step STRATEGA LLM — stratega LLM completo e giocabile (2026-11-10)
+
+Voce giocatore "Pro+ Stratega LLM (Europe 1940)": Pro+ nudo (= Hard) + stratega LLM (Claude Sonnet 5.5, effort low) che sceglie a
+inizio round il portafoglio di operazioni congiunte GENERALI (offensiva, sbarco, tenuta, rinforzo all'alleato) dai candidati calcolati
+dal motore, e decide procedi/rinvia/tieni/ritira nei punti di decisione; il motore le esegue con la meccanica v2 generalizzata
+(definizioni dinamiche); senza chiave/errore/tetto gioca come Hard con un avviso. Vedi "Stratega LLM completo (step STRATEGA LLM)"
+e la modalita' `[smoke]`.
+File: nuovi `ai/proplus/ProPlusStrategaAi`, `Stratega`, `StrategaCandidati`, `StrategaConfig`, `StrategaDecisione`, `StrategaDiario`,
+`StrategaFuoriLista`, `StrategaSimulato`, `strategia/llm/PromptStrategaV4`, `PromptOrdiniTurnoV3`, risorse `stratega-llm.json`,
+`prompt-stratega-v4.md`, `prompt-ordini-turno-v3.md`; modificati `OperazioneCongiunta` (operazioni dinamiche, `tutte`),
+`OperazioniCongiunte` (punti d'ingresso su tutte le operazioni, `valutaTenuta`, paracadute Hard per le dinamiche, `germanPresence`
+solo per le scritte a mano), `DecisoreOperazione` (prompt v3 per le dinamiche, tetto $ comune ai due livelli, uso per chiave,
+trasporto simulato), `ProPlusAi` (operazioni in sequenza), `ProPlusTuning` (rinforzi dello stratega come ammassamento),
+`DiaryRecorder.stratega`, `ProfiloStratega` (tetto $), `HeadedPlayerTypes` (+ test), `StrategistPanel` (campo "Tetto Stratega LLM");
+autoplay `--tipo stratega`, `Monitor`/`Riepilogo` (`stratega_llm`), `ConfrontoSmoke` (nuovo), `RiepilogoGenerale`; workflow `[smoke]`;
+zip con `LEGGIMI-TEST.txt` (+ sezione in `LEGGIMI.txt`); `contratto-v1.md` (schema 1.3). `avvia.bat` e `aggiorna.ps1` NON toccati.
+Nessun hook nuovo nelle classi Pro: Hard invariata.
+- Test locali (JDK 25 da apt, mirror Google di Maven Central in `~/.gradle/init.d`, solo sandbox): `:game-core:test --tests
+  'games.strategy.triplea.ai.*'` + `:ai:test` + `:game-headed:test` + `:proplus-autoplay:test`: **638 test, 0 falliti** (golden Hard
+  `HardPriorityGoldenTest`/`HardNeutralityGoldenTest`, `ProPlusGoldenTest`, `NudoHardTest`, `DiaryNeutralityTest` diario on/off,
+  `OperazioniCongiunteTest`, `OperazioniLlmTest` compresi). Nuovi: `StrategaLlmCompletoTest` 13 (registrazione nudo + LLM + tetto dal
+  profilo; nessuna chiave = nessuna operazione e un solo avviso; errore / risposta non valida / tetto $ = nessuna chiamata o nessuna
+  operazione; ripiego dei punti di decisione = Hard; candidati <= 8 con numeri e definizioni valide; portafoglio entro max 3 con
+  rifiuti motivati, fuori lista rifiutata, candidato/operazione sconosciuti; schema strict; tenuta: presidio bloccato, rinforzi,
+  riserve, COMPLETATA; rinforzo: unita' di un'altra nazione, FALLITA se perso; offensiva: riserve <= 30%, raduno trattenuto, tappa 1
+  valutata, annullata = unita' a Hard; sbarco: zona, raduno, trasporti nelle riserve, bersaglio successivo; nessuna operazione ne'
+  chiamata per gli altri giocatori), `HeadedPlayerTypesTest` (voce elencata dopo "Pro+ (AI)" e istanziabile).
+- Prove locali (non statistiche): partita 4 round Asse Stratega simulato (offensive France/Egypt, tenuta Germany: Egypt preso dall'Italia
+  con tappa 2 approvata, poi FALLITA; France e Germany COMPLETATE; rifiuti "gia' 3 operazioni attive"); partita 2 round Alleati senza
+  chiave (nessuna chiamata, nessun candidato calcolato, "nessuna decisione ... LLM non disponibile", gioca come Hard).
+  Correzioni dalle prove: tenuta proposta su minacce di soli aerei (ora servono nemici di terra); offensiva aerea senza raccolta aerei
+  (ora `aerei_apre` + raccolta entro 2).

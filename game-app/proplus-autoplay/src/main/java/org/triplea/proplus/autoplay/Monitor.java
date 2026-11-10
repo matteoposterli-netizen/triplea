@@ -313,6 +313,8 @@ final class Monitor {
     json.add(
         "operazioni_llm_uso",
         games.strategy.triplea.ai.proplus.DecisoreOperazione.uso(data.getProperties()));
+    // step STRATEGA LLM: portfolios, operations with their outcome and decisions, cost
+    json.add("stratega_llm", games.strategy.triplea.ai.proplus.Stratega.riepilogoPartita(data));
     return json;
   }
 

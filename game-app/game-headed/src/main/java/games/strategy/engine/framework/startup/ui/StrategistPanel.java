@@ -57,6 +57,10 @@ final class StrategistPanel {
   @Getter private final JLabel detected = new JLabel("Verifica in corso...");
   @Getter private final JLabel testResult = new JLabel(" ");
   @Getter private final JSpinner cap;
+
+  /** Step STRATEGA LLM: cap in USD per game of the "Pro+ Stratega LLM" player (user profile). */
+  @Getter private final JSpinner usdCap;
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -117,6 +121,21 @@ final class StrategistPanel {
             "<html>per partita (stratega: 1 per alleanza per round; ordini del turno: 1 per"
                 + " nazione per turno)</html>"));
     panel.add(row("Tetto chiamate:", capRow));
+    usdCap =
+        new JSpinner(
+            new SpinnerNumberModel(
+                profile.tettoPartitaUsd(
+                    games.strategy.triplea.ai.proplus.StrategaConfig.get().budgetDefaultUsd()),
+                0.1,
+                50.0,
+                0.5));
+    final JPanel usdRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    usdRow.add(usdCap);
+    usdRow.add(
+        new JLabel(
+            "<html>$ per partita del giocatore \"Pro+ Stratega LLM (Europe 1940)\" (Claude Sonnet,"
+                + " chiave Anthropic); raggiunto il tetto gioca come Hard</html>"));
+    panel.add(row("Tetto Stratega LLM:", usdRow));
     panel.add(
         row(
             "",
@@ -135,6 +154,7 @@ final class StrategistPanel {
     Uso.setTetto(props, ((Number) cap.getValue()).intValue());
     profile.setFornitore(selected());
     llmMode.ifPresent(profile::setModalitaPredefinita);
+    profile.setTettoPartitaUsd(((Number) usdCap.getValue()).doubleValue());
     try {
       profile.salva();
     } catch (final IOException e) {

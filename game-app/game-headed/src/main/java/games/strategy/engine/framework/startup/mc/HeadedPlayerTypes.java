@@ -7,6 +7,7 @@ import games.strategy.engine.player.Player;
 import games.strategy.triplea.TripleAPlayer;
 import games.strategy.triplea.ai.pro.ProAi;
 import games.strategy.triplea.ai.proplus.ProPlusAi;
+import games.strategy.triplea.ai.proplus.ProPlusStrategaAi;
 import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
 import games.strategy.triplea.settings.ClientSetting;
 import java.util.Collection;
@@ -74,6 +75,18 @@ public class HeadedPlayerTypes {
         }
       };
 
+  /**
+   * Pro+ Stratega LLM (step STRATEGA LLM): Pro+ nudo (= Hard) with the LLM strategist of the joint
+   * operations; plays as Hard without an API key. Listed right after "Pro+ (AI)".
+   */
+  public static final PlayerTypes.Type PRO_PLUS_STRATEGA_AI =
+      new PlayerTypes.Type(ProPlusStrategaAi.PLAYER_LABEL) {
+        @Override
+        public Player newPlayerWithName(final String name) {
+          return new ProPlusStrategaAi(name, getLabel());
+        }
+      };
+
   private static PlayerTypes.Type getProAiBetaType() {
     return new PlayerTypes.Type(PLAYER_TYPE_PRO_AI_BETA_LABEL) {
       @Override
@@ -90,6 +103,7 @@ public class HeadedPlayerTypes {
             PlayerTypes.getBuiltInPlayerTypes(),
             List.of(
                 PRO_PLUS_AI,
+                PRO_PLUS_STRATEGA_AI,
                 getProAiBetaType(),
                 CLIENT_PLAYER,
                 DOES_NOTHING_PLAYER,

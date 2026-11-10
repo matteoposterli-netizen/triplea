@@ -10,6 +10,7 @@ import games.strategy.triplea.ai.proplus.strategia.llm.Fornitore;
 import games.strategy.triplea.ai.proplus.strategia.llm.Http;
 import games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega;
 import games.strategy.triplea.ai.proplus.strategia.llm.PromptOperazione;
+import games.strategy.triplea.ai.proplus.strategia.llm.PromptOrdiniTurnoV3;
 import games.strategy.triplea.ai.proplus.strategia.llm.Richiesta;
 import games.strategy.triplea.ai.proplus.strategia.llm.Risposta;
 import java.io.Serializable;
@@ -126,6 +127,21 @@ public final class DecisoreOperazione {
     props.set(KEY_BUDGET, String.format(Locale.ROOT, "%.4f", usd));
   }
 
+  /** Usage of the strategic level of the LLM strategist (absent in every other game). */
+  public static final String KEY_USO_STRATEGICO = "Pro+ stratega llm uso";
+
+  /** Cost (USD) already spent in the game by the strategic level of the LLM strategist. */
+  static double costoAltriLivelli(final GameProperties props) {
+    if (props.get(KEY_USO_STRATEGICO) instanceof String s && !s.isBlank()) {
+      try {
+        return JsonParser.parseString(s).getAsJsonObject().get("costo_usd").getAsDouble();
+      } catch (final RuntimeException e) {
+        return 0;
+      }
+    }
+    return 0;
+  }
+
   public static double budget(final GameProperties props) {
     if (props.get(KEY_BUDGET) instanceof String s) {
       try {
@@ -146,6 +162,10 @@ public final class DecisoreOperazione {
         // a fresh count
       }
     }
+    return nuovoUso();
+  }
+
+  private static JsonObject nuovoUso() {
     final JsonObject u = new JsonObject();
     for (final String k :
         new String[] {
@@ -183,11 +203,13 @@ public final class DecisoreOperazione {
     }
     final JsonObject u = uso(props);
     final int calls = u.get("chiamate").getAsInt();
-    final double cost = u.get("costo_usd").getAsDouble();
+    final double own = u.get("costo_usd").getAsDouble();
+    // step STRATEGA LLM: one cap per game for both levels (strategic calls counted here too)
+    final double cost = own + costoAltriLivelli(props);
     if (calls >= TETTO_CHIAMATE) {
       return fallback(props, u, formula, RIPIEGO_TETTO, calls + " chiamate");
     }
-    final double next = Math.max(COSTO_MINIMO_CHIAMATA, calls > 0 ? cost / calls * 1.5 : 0);
+    final double next = Math.max(COSTO_MINIMO_CHIAMATA, calls > 0 ? own / calls * 1.5 : 0);
     final double budget = budget(props);
     if (cost + next > budget) {
       return fallback(
@@ -215,7 +237,12 @@ public final class DecisoreOperazione {
     final Risposta r;
     u.addProperty("chiamate", calls + 1);
     try {
-      r = t.chiama(PromptOperazione.richiesta(stato));
+      // step STRATEGA LLM: the general operations have their own prompt (turn orders v3)
+      r =
+          t.chiama(
+              stato.has("tipo_operazione")
+                  ? PromptOrdiniTurnoV3.richiesta(stato)
+                  : PromptOperazione.richiesta(stato));
     } catch (final RuntimeException e) {
       u.addProperty("errori", u.get("errori").getAsInt() + 1);
       return fallback(props, u, formula, RIPIEGO_ERRORE, String.valueOf(e.getMessage()));
@@ -225,7 +252,7 @@ public final class DecisoreOperazione {
     add(u, "cache_lettura", r.cacheLettura());
     add(u, "cache_scrittura", r.cacheScrittura());
     add(u, "ms", r.millis());
-    u.addProperty("costo_usd", cost + r.costoUsd());
+    u.addProperty("costo_usd", own + r.costoUsd());
     u.addProperty("modello", r.modello());
     try {
       final DecisioneOperazione d = DecisioneOperazione.leggi(r.testo(), punto);
@@ -260,6 +287,34 @@ public final class DecisoreOperazione {
     return new Esito(formula, "formula", true, reason, d, 0, 0, 0);
   }
 
+  /** The usage saved under {@code key} (fresh counts if none). */
+  static JsonObject usoDi(final GameProperties props, final String key) {
+    if (props.get(key) instanceof String s && !s.isBlank()) {
+      try {
+        return JsonParser.parseString(s).getAsJsonObject();
+      } catch (final RuntimeException e) {
+        // a fresh count
+      }
+    }
+    return nuovoUso();
+  }
+
+  /** Adds an answer's tokens, time and cost to the usage {@code u}. */
+  static void conta(final JsonObject u, final Risposta r) {
+    add(u, "token_ingresso", r.ingresso());
+    add(u, "token_uscita", r.uscita());
+    add(u, "cache_lettura", r.cacheLettura());
+    add(u, "cache_scrittura", r.cacheScrittura());
+    add(u, "ms", r.millis());
+    u.addProperty("costo_usd", u.get("costo_usd").getAsDouble() + r.costoUsd());
+    u.addProperty("modello", r.modello());
+  }
+
+  static void salvaUso(final GameProperties props, final String key, final JsonObject u) {
+    props.set(key, (Serializable) null);
+    props.set(key, u.toString());
+  }
+
   private static void add(final JsonObject u, final String key, final long n) {
     u.addProperty(key, u.get(key).getAsLong() + n);
   }
@@ -271,6 +326,9 @@ public final class DecisoreOperazione {
 
   /** The real model through the Anthropic API key (user profile, else ANTHROPIC_API_KEY). */
   static Trasporto reale(final String model) {
+    if (StrategaSimulato.attivo()) {
+      return new StrategaSimulato();
+    }
     final Optional<String> key = ProfiloStratega.carica().chiave(Fornitore.ANTHROPIC);
     final ClientApi client = new ClientApi(Http.REALE, model);
     return new Trasporto() {

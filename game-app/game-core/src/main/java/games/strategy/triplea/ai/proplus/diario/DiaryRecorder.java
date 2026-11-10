@@ -1283,6 +1283,64 @@ public final class DiaryRecorder implements ProDecisionRecorder {
   }
 
   /**
+   * Step STRATEGA LLM: appends to the strategist's own diary of the game ({@code stratega.txt},
+   * {@code stratega.jsonl}) and rewrites {@code stratega-riepilogo.json} if {@code summary} is
+   * given. Written whatever the diary switch says (it is what the player attaches); never a key in
+   * it.
+   */
+  public static void stratega(
+      final GameState data,
+      final List<String> lines,
+      final @Nullable JsonObject json,
+      final @Nullable JsonObject summary) {
+    if (!(data instanceof GameData gameData)) {
+      return;
+    }
+    GameDiary.forGame(gameData)
+        .ifPresent(
+            diary -> {
+              try {
+                final java.nio.file.Path folder = diary.getFolder();
+                if (!lines.isEmpty()) {
+                  java.nio.file.Files.writeString(
+                      folder.resolve("stratega.txt"),
+                      String.join(System.lineSeparator(), lines) + System.lineSeparator(),
+                      java.nio.charset.StandardCharsets.UTF_8,
+                      java.nio.file.StandardOpenOption.CREATE,
+                      java.nio.file.StandardOpenOption.APPEND);
+                }
+                if (json != null) {
+                  java.nio.file.Files.writeString(
+                      folder.resolve("stratega.jsonl"),
+                      json + "\n",
+                      java.nio.charset.StandardCharsets.UTF_8,
+                      java.nio.file.StandardOpenOption.CREATE,
+                      java.nio.file.StandardOpenOption.APPEND);
+                }
+                if (summary != null) {
+                  java.nio.file.Files.writeString(
+                      folder.resolve("stratega-riepilogo.json"),
+                      new com.google.gson.GsonBuilder()
+                          .setPrettyPrinting()
+                          .disableHtmlEscaping()
+                          .create()
+                          .toJson(summary),
+                      java.nio.charset.StandardCharsets.UTF_8);
+                }
+              } catch (final java.io.IOException | RuntimeException e) {
+                ProLogger.warn("Diario Pro+: diario dello stratega non scritto: " + e);
+              }
+            });
+  }
+
+  /** Step STRATEGA LLM: the folder of the game's diary, if any. */
+  public static Optional<java.nio.file.Path> cartella(final GameState data) {
+    return data instanceof GameData gameData
+        ? GameDiary.forGame(gameData).map(GameDiary::getFolder)
+        : java.util.Optional.empty();
+  }
+
+  /**
    * Step PROVALLM: the state sent to the LLM at a decision point of a joint operation, as a file
    * {@code name} in the game's diary folder. Only while the diary is on.
    */

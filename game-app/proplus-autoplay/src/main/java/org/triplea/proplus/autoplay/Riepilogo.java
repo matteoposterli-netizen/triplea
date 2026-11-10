@@ -107,6 +107,7 @@ final class Riepilogo {
     json.add("operazioni_congiunte", data.get("operazioni_congiunte"));
     json.add("controllo_nudo", data.get("controllo_nudo"));
     json.add("operazioni_llm_uso", data.get("operazioni_llm_uso"));
+    json.add("stratega_llm", data.get("stratega_llm"));
     json.add("attacchi_regno_unito", diaryData.attacksOnBritain);
     json.add("esito", outcome(o, monitor, rounds, winner, gameOver));
     json.add("contratto", contract(diary));
@@ -1189,7 +1190,9 @@ final class Riepilogo {
   }
 
   static String typeLabel(final String type) {
-    return AutoplayOptions.HARD.equals(type) ? "Hard" : "Pro+";
+    return AutoplayOptions.HARD.equals(type)
+        ? "Hard"
+        : AutoplayOptions.STRATEGA.equals(type) ? "Stratega LLM" : "Pro+";
   }
 
   static String duration(final long seconds) {
