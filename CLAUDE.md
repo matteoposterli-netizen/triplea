@@ -3885,8 +3885,9 @@ tappe, annullate 2), sbarco 1 (eseguito, fallito), rinforzo 1.
   (R2) e Normandy (R8, offensiva) prese da Hard prima delle tappe (TENUTA, completate, non contano come eseguite dal motore: e'
   questo che tiene il criterio al 20% su un campione di 5); Libya annullata "giustificato" (rinforzi nemici tra le tappe 3 → 169
   TUV, contrattacco 3 → 48); Iraq annullata C3 (successo 100 → 25: il presidio stimato passa da 3 carri + 1 mech a 1 carro perche'
-  Hard usa 7 carri contati nella tappa 1 altrove, tappa 2 3 → 2 carri); sbarco su Normandy eseguito dal motore e perso al R9
+  la tappa 1 scende da 23 a 16 carri e la tappa 2 da 3 a 2); sbarco su Normandy eseguito dal motore e perso al R9
   (contrattacco 16 → 30). Le differenze lancio → round dopo: Libya 97, Iraq 75, sbarco 18, Algeria 0, Normandy 0 (mediana 18).
-- Non tarato. Restano: (a) le unita' di terra contate per la tappa di CHI APRE nel round obiettivo non sono trattenute da Hard
-  prima del round (Iraq: 23 → 16 carri) perche' quelle raggiungibili ORA non sono trattenute in preparazione se non sono in
-  raccolta; (b) campione piccolo (5 conquiste): servono piu' partite per giudicare il 30%.
+- Non tarato. Restano: (a) Iraq: 7 carri e 3 mech contati al lancio non ci sono piu' nella stima del round dopo, anche se le
+  unita' contate sono trattenute (acquisto, combattimento, non combattimento): causa NON verificata (candidati: perse in difesa
+  nel turno nemico, prese da un'altra operazione dell'alleanza, guardia della capitale); (b) campione piccolo (5 conquiste):
+  servono piu' partite per giudicare il 30%.
