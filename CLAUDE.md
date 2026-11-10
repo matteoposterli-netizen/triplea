@@ -3746,3 +3746,25 @@ modello era Sonnet). 6 partite su 12 (semi 604-606) senza nessun round deciso da
   tappe, presidio perso atteso, scambio TUV, esito del motore "in lista"/"scartato: motivo"; `StimaUnica.Stima.jsonAnalisi`,
   `StrategaCandidati.analisi`); nel registro di ogni operazione `trattenute_acquisto` [{round, nazione, stato, round_obiettivo,
   unita, tuv, ids}] (unita' tenute fuori dagli attacchi di Hard all'acquisto), copiato in `stratega-riepilogo.json`.
+
+#### Autoplay in CI (run 42822465005, commit eb20be2 = 2d7e78c + diagnostica, tutto verde, 12 partite [smoke] semi 601-606)
+Run valida: 12/12 completate, 143/144 round decisi dall'LLM (1 risposta non valida), 209 chiamate, **$2,59** (tetto 30), $0,22 a
+partita. Operazioni 56: tenuta 45 (eseguite dal motore 40, completate 21, fallite 12, annullate 3), offensiva 10 (eseguite 1, prese
+da Hard 1, fallite 2, annullate 8), sbarco 1 (in corso). Rifiutato 1 riavvio (Holland Belgium).
+- **Criteri**: artefatti C1-C5 **7/56 (13%) > 10%: NO**; offensive/sbarchi eseguiti dal motore **1/11 (9%) < 30%: NO**; mediana
+  candidato/primo punto di decisione 0 punti su 43, MA quasi solo tenute: per le offensive la stima del round dopo il lancio
+  differisce di **77 punti** di mediana (11 casi: Syria 80-89% → 0-27% in 4 partite, Caucasus 100 → 3, Southern France 100 → 0):
+  **NO per le offensive**. Calibrazione: stima del motore al lancio offensive 91% → reale 29% (7), tenute 99% → 71% (35); LLM
+  strategico 34,1 punti (offensive 70,2), ordini 6,8.
+- **Causa principale** (dalle stime del round dopo): le unita' contate per una conquista futura NON sono trattenute. `trattenute`
+  in preparazione tiene solo le unita' di TERRA contate e `gathered` solo cio' che e' ai luoghi di raccolta: gli aerei contati
+  (Syria: 5 caccia + 5 tattici al lancio, 1-2 al round dopo) li usa Hard nel suo turno. Le 7 "C5" sono questo caso (candidato poi
+  scartato perche' Hard lo prende da sola o raccolta aerea non sicura): la regola di `CauseAnnullamento` mette C5 prima del
+  controllo del calo di stima, quindi la classe giusta sarebbe C3.
+- **Diagnostica** (`stratega-analisi-R*.json`, 196 conquiste in lista + 21 scartate dopo la stima): impegno nemico = minimo
+  prudente 0,5 in 63/196; tenuta < 20% in 158 dei 185 non avviati; scambio TUV atteso delle tappe > 0 in 57 non avviati (43 con
+  tenuta < 20%). Valore d'alleanza (presa x valore x tenuta - perdite) > 0 solo in 7 non avviati; contando i TUV nemici distrutti
+  attesi diventa > 0 in altri 42; con tenuta 100% in altri 23. Unita' trattenute all'acquisto: 134 registrazioni (1.726 unita',
+  113 per tenute); per tappe poi rinviate 3 (28 unita', 1 turno ciascuna). Un solo calo >= 30 punti a un punto di decisione
+  (Syria seme 602: tappa 1 "2 bomber, 5 fighter, 5 tactical" → "2 bomber, 2 fighter, 2 tactical", presidio "2 art, 2 inf" → "1
+  inf"); nessun caso tipo Denmark tra le tenute.
