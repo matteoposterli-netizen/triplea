@@ -1752,8 +1752,10 @@ operazioni dello Stratega (`OperazioneCongiunta.isStratega`): le operazioni scri
   (`raggiungibiliOra`) terra per territori dell'alleanza, aerei con atterraggio, truppe sbarcabili (anche caricate su una costa
   amica e sbarcate nello stesso turno, `sbarcabili`); per un round successivo SOLO cio' che l'operazione trattiene (unita' ai
   luoghi di raccolta, carico dei trasporti nella zona di raduno, aerei di chi apre che arrivano in tempo alla raccolta, al
-  massimo `aerei_apre`): le altre unita' restano a Hard fino ad allora (prova locale: Syria 100% al lancio, 11% alla tappa
-  contando le unita' "raggiungibili ora"). Escluse le unita' di altre
+  massimo `aerei_apre`) PIU' le unita' raggiungibili entro k round (`raggiungibiliEntro`: terra k x movimento per territori
+  alleati, aerei) e quelle sbarcabili ora; il motore le avvicina davvero (`avvicina`: le unita' di terra contate fanno un passo
+  sicuro a turno verso la raccolta, trattenute) e le trattiene dall'acquisto (`trattenute`). Nota: la versione "solo cio' che e'
+  gia' in raccolta" (commit 1f1c7e2) azzerava le conquiste (vedi risultati della run 42803941666). Escluse le unita' di altre
   operazioni attive dell'alleanza (`StimaUnica.riservate`: presidio tenuto, aerei/terra/trasporti ai raduni) e senza la guarnigione
   delle capitali (`guardiaCapitali`, stessa soglia delle operazioni). Conquista: tappa 1 (`calculateBattleResults`, solo aerei con
   ritirata), rinforzi nemici tra le tappe visti dal turno di chi apre, tappa 2; presa = P1 + (1 - P1) x P2; presidio = superstiti
@@ -3716,3 +3718,25 @@ cambiamento e' dietro `OperazioneCongiunta.isStratega` o `Stratega.gioca`).
   ora" che l'operazione non trattiene (Syria 100% → 11% alla tappa): ora solo cio' che l'operazione trattiene; (2) Hard pianifica
   gli attacchi all'acquisto: i rinforzi trattenuti solo al combattimento erano gia' stati usati (2 caccia russi del rinforzo di
   Egypt sui Paesi Baltici): ora trattenuti dall'acquisto.
+
+#### Autoplay in CI (run 42803941666, commit 1f1c7e2, tutto verde: test, release `proplus-latest`, 12 partite [smoke] semi 601-606)
+**Run NON valida come misura**: credito API Anthropic esaurito durante la run. 104 chiamate strategiche su 128 e 6 degli ordini
+sono fallite con "Your credit balance is too low" (il messaggio dice "su Haiku", ma e' solo un'etichetta fissa del client; il
+modello era Sonnet). 6 partite su 12 (semi 604-606) senza nessun round deciso dall'LLM; nelle altre 6, 5-8 round decisi su 12.
+- **12/12 partite completate** (paracadute = Hard funzionante), 164 chiamate, **costo $0,630** (fino all'esaurimento del credito).
+- Operazioni avviate 13, tutte TENUTA (completate 6, fallite 5, annullate 1 "giustificato", in corso 1), eseguite dal motore
+  11/13. **Nessuna offensiva ne' sbarco avviato**: nei 24 round decisi l'LLM ha rifiutato le offensive perche' 178 candidati
+  offensivi su 182 avevano successo 0% (tappa 2 senza attaccanti in 166). Causa: difetto di 1f1c7e2. Per i round futuri la stima
+  contava solo le unita' gia' in raccolta, e la fattibilita' impone sempre il round obiettivo >= round + 1, quindi ogni conquista
+  aveva k >= 2 e forze nulle. L'LLM ha seguito correttamente i numeri del motore.
+- Criteri: artefatti C1-C5 0/13 (0%); offensive/sbarchi eseguiti dal motore 0/0 (non misurabile); mediana |stima candidato -
+  stima al punto di decisione| **0 punti** su 12 operazioni (solo tenute); calibrazione tenuta: LLM 37,5 punti (21 stime,
+  80-100% → reale 63%), stima del motore al lancio 48,1 punti (12 stime, 100% → 55%), ordini 5,5 punti (13 stime). Candidati
+  scartati 1.325 (in prevalenza "Hard lo prende da solo" e raccolta oltre l'orizzonte). Su sole tenute e su meta' delle partite
+  questi numeri NON dicono se lo step funziona.
+- **Correzione** (commit successivo, solo prove locali con lo Stratega simulato, semi 604-605, 7 round): forze per i round futuri =
+  raggiungibili entro k round + sbarcabili + gia' in raccolta, con `avvicina` e `trattenute` che le portano e le tengono; le
+  offensive tornano con presa 94-100%, ma la tenuta stimata contro il contrattacco realistico resta bassa (5-27%): successo >= 20%
+  in 4 candidati offensivi su 34. Coerenza locale mista: Syria 26 → 27, Egypt 6 → 0, Morocco 7 → 0; rinforzi Denmark 99 → 1,
+  France 100 → 16 (stato cambiato tra lancio e decisione).
+- **Da rifare**: [smoke] con credito API ricaricato (stessi semi 601-606).

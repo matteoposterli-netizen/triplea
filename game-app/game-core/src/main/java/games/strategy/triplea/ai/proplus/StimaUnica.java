@@ -424,9 +424,12 @@ public final class StimaUnica {
     if (k <= 1) {
       list.addAll(op.raggiungibiliOra(target, owner));
     } else {
-      // a later round: only what the operation holds for it (gathering places, transports in the
-      // gathering zone, the opener's planes that reach their gathering place in time); the other
-      // units are Hard's until then
+      // a later round: the land and air units that can be there by then (the engine brings the
+      // counted land units closer and holds them, OperazioniCongiunte.avvicina/trattenute), plus
+      // what the operation already holds (gathering places, transports in the gathering zone, the
+      // opener's planes that reach their gathering place in time)
+      list.addAll(op.raggiungibiliEntro(target, owner, k));
+      op.raggiungibiliOra(target, owner).stream().filter(u -> !list.contains(u)).forEach(list::add);
       final GameMap map = target.getData().getMap();
       final boolean opens = def.isApre(owner.getName());
       final List<String> places = opens ? def.raccoltaApre() : def.raccoltaChiude();
@@ -463,7 +466,6 @@ public final class StimaUnica {
       if (opens && def.aereiApre() > 0) {
         final List<Territory> airPlaces =
             places.stream().map(map::getTerritoryOrNull).filter(Objects::nonNull).toList();
-        final long already0 = list.stream().filter(Matches.unitIsAir()).count();
         final List<Unit> planes = new ArrayList<>();
         for (final Territory x : map.getTerritories()) {
           for (final Unit u :
@@ -480,7 +482,7 @@ public final class StimaUnica {
         planes.sort(
             Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getAttack(owner))
                 .thenComparing(u -> u.getType().getName()));
-        list.addAll(planes.stream().limit(Math.max(0, def.aereiApre() - already0)).toList());
+        list.addAll(planes.stream().limit(Math.max(0, def.aereiApre())).toList());
       }
     }
     list.removeAll(reserved);

@@ -448,10 +448,23 @@ public final class OperazioniCongiunte {
       }
       return keep;
     }
-    if (round == reg.roundObiettivo() - 1 && reg.intOf("rinvio_round", 0) != round) {
-      return gathered();
-    }
     final Territory target = map.getTerritoryOrNull(def.bersaglio());
+    if (round < reg.roundObiettivo()) {
+      final List<Unit> keep = new ArrayList<>();
+      if (round == reg.roundObiettivo() - 1 && reg.intOf("rinvio_round", 0) != round) {
+        keep.addAll(gathered());
+      }
+      if (target != null && !Matches.isTerritoryAllied(player).test(target)) {
+        final StimaUnica.Stima st =
+            StimaUnica.conquista(proData, calc, def, target, reg.roundObiettivo() - round + 1);
+        (def.isApre(player.getName()) ? st.tappa1() : st.tappa2())
+            .stream()
+                .filter(u -> u.isOwnedBy(player) && Matches.unitIsLand().test(u))
+                .filter(u -> !keep.contains(u))
+                .forEach(keep::add);
+      }
+      return keep;
+    }
     if (round != reg.roundObiettivo()
         || target == null
         || Matches.isTerritoryAllied(player).test(target)) {
@@ -481,6 +494,42 @@ public final class OperazioniCongiunte {
    * Units of {@code ally} that can be on {@code target} this turn ({@link #reach}) plus the troops
    * its transports can pick up on a friendly coast and land there in the same turn.
    */
+  /**
+   * Land and air units of {@code ally} that can be on {@code target} within {@code k} rounds: land
+   * units through the alliance's land ({@code k} x movement), planes that can strike it and land on
+   * the alliance's land.
+   */
+  List<Unit> raggiungibiliEntro(final Territory target, final GamePlayer ally, final int k) {
+    final List<Unit> units = new ArrayList<>();
+    final Predicate<Territory> friendly =
+        t -> !t.isWater() && Matches.isTerritoryAllied(ally).test(t) && !t.equals(target);
+    int landingDistance = 99;
+    for (final Territory t : map.getNeighbors(target, 6)) {
+      if (friendly.test(t)) {
+        landingDistance = Math.min(landingDistance, map.getDistance(target, t));
+      }
+    }
+    for (final Territory t : map.getNeighbors(target, Math.min(12, 3 * k + 3))) {
+      if (t.isWater() || !Matches.isTerritoryAllied(ally).test(t)) {
+        continue;
+      }
+      final int landDistance =
+          map.getDistance(t, target, x -> x.equals(target) || friendly.test(x));
+      final int airDistance = map.getDistance(t, target);
+      for (final Unit u : t.getMatches(Matches.unitIsOwnedBy(ally).and(attacks(ally)))) {
+        final int move = Math.max(1, u.getUnitAttachment().getMovement(ally));
+        if (Matches.unitIsAir().test(u)) {
+          if (airDistance >= 0 && airDistance + landingDistance <= move * k) {
+            units.add(u);
+          }
+        } else if (Matches.unitIsLand().test(u) && landDistance > 0 && landDistance <= move * k) {
+          units.add(u);
+        }
+      }
+    }
+    return units;
+  }
+
   List<Unit> raggiungibiliOra(final Territory target, final GamePlayer ally) {
     final List<Unit> units = new ArrayList<>(reach(target, ally));
     sbarcabili(target, ally).stream().filter(u -> !units.contains(u)).forEach(units::add);
@@ -2822,6 +2871,9 @@ public final class OperazioniCongiunte {
   /** Reserves to the gathering place (preparation and positioning). */
   private void prepare(final Territory target) {
     final List<String> moves = new ArrayList<>();
+    if (stratega() && OperazioneCongiunta.tipoStratega(def.id()).matches("offensiva|sbarco")) {
+      avvicina(target, moves);
+    }
     if (def.isApre(player.getName()) && def.aereiApre() > 0) {
       gatherPlanes(target, moves);
     }
@@ -2864,6 +2916,49 @@ public final class OperazioniCongiunte {
             player.getName(),
             moves.isEmpty() ? "nessuna mossa" : String.join("; ", moves),
             gathered().isEmpty() ? "nessuna unita'" : OperazioniAnfibie.unitsText(gathered())));
+  }
+
+  /**
+   * Step COERENZA STIME: the land units of this nation the single estimate counts for the target
+   * round move one safe step a turn toward the gathering places (allied land next to the target)
+   * and stay out of Hard's moves: the estimate's forces are the ones the operation brings.
+   */
+  private void avvicina(final Territory target, final List<String> moves) {
+    final int k = Math.max(1, reg.roundObiettivo() - round + 1);
+    final StimaUnica.Stima st = StimaUnica.conquista(proData, calc, def, target, k);
+    final List<Unit> counted = def.isApre(player.getName()) ? st.tappa1() : st.tappa2();
+    List<Territory> places =
+        (def.isApre(player.getName()) ? def.raccoltaApre() : def.raccoltaChiude())
+            .stream()
+                .map(map::getTerritoryOrNull)
+                .filter(Objects::nonNull)
+                .filter(t -> !t.isWater() && Matches.isTerritoryAllied(player).test(t))
+                .toList();
+    if (places.isEmpty()) {
+      places =
+          map.getNeighbors(target, Matches.territoryIsLand()).stream()
+              .filter(Matches.isTerritoryAllied(player))
+              .toList();
+    }
+    int stepped = 0;
+    for (final Unit u : counted) {
+      if (!u.isOwnedBy(player) || !Matches.unitIsLand().test(u) || held.contains(u)) {
+        continue;
+      }
+      final Territory from = proData.getUnitTerritory(u);
+      if (from == null) {
+        continue;
+      }
+      if (places.contains(from) || map.getNeighbors(target).contains(from)) {
+        held.add(u);
+        continue;
+      }
+      if (Matches.unitHasMovementLeft().test(u) && stepToward(u, from, places, moves)) {
+        held.add(u);
+        stepped++;
+      }
+    }
+    reg.set("avvicinate_ultimo_turno", stepped);
   }
 
   /**
