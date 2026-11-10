@@ -4012,3 +4012,41 @@ fine partita 1 (prima 27-29); reddito tedesco R4 20,5 contro 43,5. Alleati Strat
   chieste sempre < PU_strategia; strategia 58-69% dei PU contro il 30% fisso di prima). Tracciamento: 6 cali >= 30 punti, tutti
   "tenuta: contrattacco nemico aumentato" (Holland Belgium: 13 unita' contate spostate, 2 perse).
 - Offensive/sbarchi eseguiti dal motore 0/4, artefatti 1/24 (4%).
+
+### Step C2-bis — difesa di Hard, budget dinamico sopra la difesa, piano C2 in ombra (2026-11-10)
+
+Decisione di Matteo dopo la [smoke] del C2: la difesa torna a Hard, il budget delle operazioni si costruisce sopra. Vedi
+"Difesa di Hard e budget dinamico (step C2-bis)". File: nuovi `ai/pro/ProDefenseLists`, `ProStrategyBudget`, test
+`ai/pro/StrategyBudgetDefenseTest` (4, al posto di `DefensePlanPurchaseTest`); tolti `ai/pro/ProDefensePlan` e
+`ProTuning.defensePlan`; modificati `ProTuning` (+`strategyCapPercent`, `defenseLists`, vuoti), `ProPurchaseAi` (difesa di Hard,
+tetto degli ordini dopo la difesa, sacrificabili/irrinunciabili in `prioritizeTerritoriesToDefend`, `purchaseDefenders`,
+`placeDefenders`), `ProNonCombatMoveAi.prioritizeDefendOptions`, `ProDecisionRecorder.strategyBudget`, `ProPlusTuning`,
+`ProPlusAi` (niente guarnigioni del piano, niente `playDefense`), `ProPlusStrategaAi` (`Difesa.fineTurno`), `Difesa` (ombra,
+limiti separati, fabbriche vicine, `registraBudget`), `DiaryRecorder`, `Stratega` (testo dei vincoli), prompt v5,
+`stratega-llm.json`, `ConfrontoSmoke`, workflow (semi 1001-1006). Test locali: 535 test AI di game-core (golden Hard, `NudoHardTest`,
+`DiaryNeutralityTest` compresi; quest'ultimo fallito 1 volta nella suite, verde 2/2 da solo: instabilita' nota) + autoplay + `:ai` verdi.
+
+#### Autoplay in CI (run 42890953654, commit 81e89b0, tutto verde, 12 partite [smoke] semi 1001-1006)
+12/12 completate, 144/144 round decisi dall'LLM, 0 ripieghi, 208 chiamate, **$3,63** ($0,30 a partita).
+
+| Metrica | C1-ter (42848125217) | C2 (42868691448) | C2-bis |
+|---|---|---|---|
+| VC R12 Asse Stratega (semi) | 5,17 (5,5,7,7,3,4) | 0,33 | **4,17** (4,4,3,3,5,6) |
+| Capitali dell'Asse cadute | 0 | 13 | 2 (Southern Italy R9 e R10, seme 1004) |
+| VC R12 Alleati Stratega | 5,00 | 3,83 | **5,00** (4,6,4,7,4,5) |
+| Capitali alleate cadute | 12 (France R1 6/6 + Russia 6) | 11 | 10 (France R1 6/6 + Russia 4/6) |
+| PU di difesa di Hard, Germania (media per turno) | ~21 | 0,6 | 20,3 |
+
+- **Paracadute**: Alleati uguali a C1-ter; Asse −1 VC (Welch: errore ~0,8, IC 95% ~±1,8: dentro il rumore, ma la direzione e'
+  negativa) e Southern Italy caduta in una partita (R8 Italia: 26 PU tutti nella difesa di Hard, 0 → 3 unita', presa al R9: difesa
+  di Hard, non unita' tolte dalle operazioni). Il crollo del C2 e' sparito.
+- **Budget**: operazioni 1-3% dei PU per nazione (mediana 0%, massimo 17-58%): con poche offensive le riserve sono quasi nulle;
+  difesa di Hard Germania 20,3, Italia 8,4, URSS 11,4, UK 4,4, USA 3,8 PU per turno; turni con difesa 0: USA 53/72, UK 42/72,
+  Germania 21/72. Il tetto 70% trattiene PU in 27 turni su 336 e **non limita mai** le riserve (0 turni con obbligati non comprati).
+- **Ombra contro Hard** (1.558 territori minacciati valutati, esito al turno dopo): ombra difende / Hard non rinforza 666 (tenuti
+  88%); ombra difende / Hard rinforza 263 (98%); ombra sacrifica / Hard non rinforza 539 (67%); ombra sacrifica / Hard rinforza 90
+  (76%). Calibrazione della stima in ombra (tenuta senza rinforzi): errore medio **50 punti**, molto pessimista (0-19% → reale 74%
+  su 912 stime). Fabbriche vicine: 277 territori con acquisti vicini, 99 arriverebbero alla soglia al turno dopo.
+- Offensive/sbarchi eseguiti dal motore 2/11 (18%, criterio 30%: NO); artefatti C1-C5 4/54 (7%: SI'); lancio → round dopo per
+  le offensive mediana 18,5 punti (criterio 15: NO); calibrazione del motore al lancio: offensive 99% → reale 0% (7), tenute 99%
+  → 72% (36). Irrinunciabili difesi e persi al turno dopo 32/414.
