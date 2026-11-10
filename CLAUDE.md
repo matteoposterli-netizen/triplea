@@ -4185,3 +4185,24 @@ invariate; `avvia.bat` e `aggiorna.ps1` NON toccati.
   a regole (annulla < 30%, continua, avvia per valore). `CoerenzaStimeTest.anEmptyTargetIsTaken...` aggiornato: con l'insieme
   eseguibile gli aerei non entrano in un territorio vuoto (presa 0 "solo aerei" invariata).
 - Non verificato nel codice e quindi non toccato: nessuno dei punti A; i numeri di riga del prompt corrispondevano a f0f5e3f.
+
+#### Autoplay in CI (run 42921405264, commit cebbd59, tutto verde, 40 partite [correzioni] semi 1101-1110)
+40/40 completate, 0 eccezioni, costo LLM **4,90 $** (tetto 15). Stessi semi di R0.
+
+| Configurazione | Lato | VC R12 | Reddito finale | Δ VC da Hard vs Hard (IC 95% Welch) |
+|---|---|---|---|---|
+| a Hard / Hard | Asse | 5,60 ± 1,26 | 61,6 | - |
+| a Hard / Hard | Alleati | 5,40 ± 1,26 | 104 | - |
+| c Asse Stratega LLM | Asse | 4,40 ± 0,97 | 40,5 | **−1,20 [−2,26; −0,14] esclude lo 0** (R0: −1,70) |
+| f Alleati Stratega LLM | Alleati | 4,40 ± 0,70 | 91,1 | **−1,00 [−1,98; −0,02] esclude lo 0** |
+| g Asse Stratega a regole | Asse | 4,00 ± 1,49 | 42,4 | −1,60 [−2,90; −0,30]; g − c −0,40 [−1,59; 0,79] include lo 0 |
+
+- Hard vs Hard sugli stessi semi: 5,7 in R0, 5,6 in R1 (le simulazioni dell'AI restano casuali): la differenza c R1 − c R0 (+0,4)
+  e' dentro il rumore.
+- **A8 funziona sul costo**: unita' tenute fuori dagli attacchi di Hard all'acquisto (Asse) 2.144 in 99 turni (R0) → **638 in 75**;
+  500 righe "trattenute ... solo" nel combattimento. Ma le VC restano sotto Hard: in R0 solo "senza tenute" (e) era alla pari.
+- Operazioni: c 36 tenute + 5 offensive (tutte annullate), f 27 tenute + 3 offensive + 1 sbarco + 1 rinforzo, g 79 tenute + 6 offensive
+  + 1 sbarco. **Menu vuoto** in 30/120 round (c), 56/120 (f), 32/120 (g). 0 tentativi falliti, 0 round senza LLM, 0 unita' contate e non
+  mosse, piani di Hard ricalcolati 3 (c) / 8 (f) / 24 (g), 0 pause per paracadute (l'LLM ha sempre risposto).
+- **La linea a regole non e' distinguibile dall'LLM** (−0,4 VC, include lo 0): con questi candidati l'LLM non aggiunge valore
+  misurabile rispetto a una regola semplice; entrambi restano sotto Hard di ~1-1,6 VC.
