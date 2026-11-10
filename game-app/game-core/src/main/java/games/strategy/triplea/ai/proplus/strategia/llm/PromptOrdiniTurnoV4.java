@@ -10,9 +10,9 @@ import lombok.experimental.UtilityClass;
  * contract 1.2) and guard rails as {@link PromptOperazione}; fixed part from {@value #RISORSA}.
  */
 @UtilityClass
-public final class PromptOrdiniTurnoV3 {
-  public static final String RISORSA = "proplus/strategia/prompt-ordini-turno-v3.md";
-  public static final String VERSIONE = "prompt-ordini-turno-v3";
+public final class PromptOrdiniTurnoV4 {
+  public static final String RISORSA = "proplus/strategia/prompt-ordini-turno-v4.md";
+  public static final String VERSIONE = "prompt-ordini-turno-v4";
 
   private static volatile String system;
 

@@ -68,8 +68,14 @@ final class ConfrontoSmoke {
     double cost = 0;
     int calls = 0;
     final Map<String, Integer> reasons = new TreeMap<>();
-    final Map<String, int[]> byType =
-        new TreeMap<>(); // avviate, completate, fallite, annullate, in corso, eseguite
+    // avviate, completate, fallite, annullate, in corso, eseguite dal motore, prese da Hard
+    final Map<String, int[]> byType = new TreeMap<>();
+    final Map<String, Integer> causes = new TreeMap<>();
+    final Map<String, Integer> blocks = new TreeMap<>();
+    final List<Double> coherence = new ArrayList<>();
+    final List<Double> coherenceHold = new ArrayList<>();
+    final Map<String, double[][]> bandsByType = new TreeMap<>();
+    final Map<String, double[][]> engineByType = new TreeMap<>();
     final Map<String, Integer> rejected = new TreeMap<>();
     final double[][] bands = new double[5][3]; // sum estimated, sum real, n
     final double[][] bandsOrders = new double[5][3];
@@ -116,19 +122,37 @@ final class ConfrontoSmoke {
         final JsonObject o = e.getAsJsonObject();
         final String tipo = RiepilogoGenerale.text(o, "tipo");
         final String stato = RiepilogoGenerale.text(o, "stato");
-        final int[] t = byType.computeIfAbsent(tipo, k -> new int[6]);
+        final int[] t = byType.computeIfAbsent(tipo, k -> new int[7]);
         t[0]++;
         switch (stato) {
           case "completata" -> t[1]++;
           case "fallita" -> t[2]++;
-          case "annullata" -> t[3]++;
+          case "annullata" -> {
+            t[3]++;
+            causes.merge(
+                o.has("causa_annullamento")
+                    ? RiepilogoGenerale.text(o, "causa_annullamento")
+                    : "non classificata",
+                1,
+                Integer::sum);
+          }
           default -> t[4]++;
         }
-        if (o.has("tappa1_round")
-            || "tenuta".equals(tipo)
-            || "rinforzo".equals(tipo)
-            || (o.has("presa") && o.get("presa").getAsBoolean())) {
+        if (eseguitaDalMotore(o)) {
           t[5]++;
+        }
+        if (flag(o, "presa_senza_operazione")) {
+          t[6]++;
+        }
+        final double start = successo(o, "stima_avvio");
+        final double first = successo(o, "stima_decisione_prima");
+        if (start >= 0 && first >= 0) {
+          coherence.add(Math.abs(start - first));
+          final double h0 = pct(o, "stima_avvio", "tenuta_pct");
+          final double h1 = pct(o, "stima_decisione_prima", "tenuta_pct");
+          if (h0 >= 0 && h1 >= 0) {
+            coherenceHold.add(Math.abs(h0 - h1));
+          }
         }
         opText.add(tipo + " " + RiepilogoGenerale.text(o, "bersaglio") + " (" + stato + ")");
         if (o.has("previsioni")) {
@@ -138,6 +162,22 @@ final class ConfrontoSmoke {
               band(
                   bands,
                   x.get("prob_tenuta_stimata").getAsDouble(),
+                  x.get("esito_reale").getAsBoolean());
+              band(
+                  bandsByType.computeIfAbsent(tipo, k -> new double[5][3]),
+                  x.get("prob_tenuta_stimata").getAsDouble(),
+                  x.get("esito_reale").getAsBoolean());
+            }
+          }
+        }
+        // the engine's single estimate at the launch against the same real outcome
+        if (start >= 0 && o.has("previsioni")) {
+          for (final JsonElement p : o.getAsJsonArray("previsioni")) {
+            final JsonObject x = p.getAsJsonObject();
+            if ("avvia".equals(RiepilogoGenerale.text(x, "azione")) && x.has("esito_reale")) {
+              band(
+                  engineByType.computeIfAbsent(tipo, k -> new double[5][3]),
+                  start / 100,
                   x.get("esito_reale").getAsBoolean());
             }
           }
@@ -151,6 +191,13 @@ final class ConfrontoSmoke {
                   x.get("prob_llm").getAsDouble(),
                   x.get("esito_reale").getAsBoolean());
             }
+          }
+        }
+      }
+      if (a.has("blocchi") && a.get("blocchi").isJsonObject()) {
+        for (final var b : a.getAsJsonObject("blocchi").entrySet()) {
+          if (b.getValue().isJsonPrimitive() && b.getValue().getAsJsonPrimitive().isNumber()) {
+            blocks.merge(b.getKey(), b.getValue().getAsInt(), Integer::sum);
           }
         }
       }
@@ -198,8 +245,9 @@ final class ConfrontoSmoke {
         .append(reasons.isEmpty() ? "nessuno" : reasons.toString())
         .append("\n\n");
     md.append(
-        "| Tipo | Avviate | Eseguite (tappe o tenuta) | Completate | Fallite | Annullate | Ancora in corso |\n");
-    md.append("|---|---|---|---|---|---|---|\n");
+        "| Tipo | Avviate | Eseguite dal motore | Prese da Hard (senza operazione) | Completate |"
+            + " Fallite | Annullate | Ancora in corso |\n");
+    md.append("|---|---|---|---|---|---|---|---|\n");
     byType.forEach(
         (k, t) ->
             md.append("| ")
@@ -208,6 +256,8 @@ final class ConfrontoSmoke {
                 .append(t[0])
                 .append(" | ")
                 .append(t[5])
+                .append(" | ")
+                .append(t[6])
                 .append(" | ")
                 .append(t[1])
                 .append(" | ")
@@ -222,14 +272,114 @@ final class ConfrontoSmoke {
     md.append("Rifiutate dal motore: ")
         .append(rejected.isEmpty() ? "nessuna" : rejected.toString())
         .append("\n\n");
+    coerenza(md, byType, causes, blocks, coherence, coherenceHold);
     calibration(
         md,
         "livello strategico (avvia/continua/modifica; stima a inizio round, esito a fine durata)",
         bands);
+    bandsByType.forEach(
+        (k, b) -> calibration(md, "livello strategico, solo " + k + " (stima dell'LLM)", b));
+    engineByType.forEach(
+        (k, b) ->
+            calibration(
+                md,
+                "stima unica del MOTORE al lancio, "
+                    + k
+                    + " (successo_pct, esito della previsione"
+                    + " di avvio)",
+                b));
     calibration(
         md,
         "ordini del turno (lancia/procedi/tieni; stima nel punto di decisione, esito al round dopo)",
         bandsOrders);
+  }
+
+  /** Artefact causes of a cancellation (analysis of run 42775993327): C1-C5. */
+  static final Set<String> ARTEFATTI = Set.of("C1", "C2", "C3", "C4", "C5");
+
+  /**
+   * Step COERENZA STIME: an operation carried out by the ENGINE: a step of a conquest moved by the
+   * engine, or a garrison kept / reinforced by the engine for a hold or reinforcement. A target
+   * taken by Hard without the operation does not count.
+   */
+  static boolean eseguitaDalMotore(final JsonObject o) {
+    final String tipo = RiepilogoGenerale.text(o, "tipo");
+    return "tenuta".equals(tipo) || "rinforzo".equals(tipo)
+        ? flag(o, "tenuta_motore")
+        : flag(o, "tappa_motore");
+  }
+
+  private static boolean flag(final JsonObject o, final String key) {
+    return o.has(key) && o.get(key).isJsonPrimitive() && o.get(key).getAsBoolean();
+  }
+
+  private static double successo(final JsonObject o, final String key) {
+    return pct(o, key, "successo_pct");
+  }
+
+  private static double pct(final JsonObject o, final String key, final String field) {
+    return o.has(key) && o.get(key).isJsonObject() && o.getAsJsonObject(key).has(field)
+        ? o.getAsJsonObject(key).get(field).getAsDouble()
+        : -1;
+  }
+
+  static double mediana(final List<Double> values) {
+    if (values.isEmpty()) {
+      return Double.NaN;
+    }
+    final List<Double> v = new ArrayList<>(values);
+    v.sort(Double::compare);
+    final int n = v.size();
+    return n % 2 == 1 ? v.get(n / 2) : (v.get(n / 2 - 1) + v.get(n / 2)) / 2;
+  }
+
+  private static void coerenza(
+      final StringBuilder md,
+      final Map<String, int[]> byType,
+      final Map<String, Integer> causes,
+      final Map<String, Integer> blocks,
+      final List<Double> coherence,
+      final List<Double> coherenceHold) {
+    final int launched = byType.values().stream().mapToInt(t -> t[0]).sum();
+    final int artefacts =
+        causes.entrySet().stream()
+            .filter(e -> ARTEFATTI.contains(e.getKey()))
+            .mapToInt(Map.Entry::getValue)
+            .sum();
+    int conquests = 0;
+    int byEngine = 0;
+    for (final String k : List.of("offensiva", "sbarco")) {
+      if (byType.containsKey(k)) {
+        conquests += byType.get(k)[0];
+        byEngine += byType.get(k)[5];
+      }
+    }
+    md.append("### Coerenza delle stime (step COERENZA STIME)\n\n");
+    md.append("Cause degli annullamenti (registrate dal motore): ")
+        .append(causes.isEmpty() ? "nessun annullamento" : causes.toString())
+        .append("\n\n");
+    md.append(
+        String.format(
+            Locale.ROOT,
+            "- Annullamenti per artefatto (C1-C5): **%d su %d avviate (%.0f%%)**, criterio <= 10%%.%n"
+                + "- Offensive e sbarchi eseguiti DAL MOTORE: **%d su %d avviati (%.0f%%)**,"
+                + " criterio >= 30%%.%n"
+                + "- Differenza tra la stima del candidato (lancio) e la prima stima al punto di"
+                + " decisione: mediana **%s punti** di successo su %d operazioni (tenuta: %s punti),"
+                + " criterio <= 15.%n"
+                + "- Blocchi del motore: %s.%n%n",
+            artefacts,
+            launched,
+            launched == 0 ? 0.0 : artefacts * 100.0 / launched,
+            byEngine,
+            conquests,
+            conquests == 0 ? 0.0 : byEngine * 100.0 / conquests,
+            coherence.isEmpty() ? "-" : String.format(Locale.ROOT, "%.1f", mediana(coherence)),
+            coherence.size(),
+            coherenceHold.isEmpty()
+                ? "-"
+                : String.format(Locale.ROOT, "%.1f", mediana(coherenceHold)),
+            blocks.isEmpty() ? "nessuno" : blocks.toString()));
   }
 
   /** True when the decision is one the engine carries out (not annulla / rinvia / ritira). */

@@ -17,7 +17,7 @@ import games.strategy.triplea.ai.proplus.OperazioneCongiunta.Stato;
 import games.strategy.triplea.ai.proplus.StrategaCandidati.Candidato;
 import games.strategy.triplea.ai.proplus.StrategaCandidati.Tipo;
 import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
-import games.strategy.triplea.ai.proplus.strategia.llm.PromptStrategaV4;
+import games.strategy.triplea.ai.proplus.strategia.llm.PromptStrategaV5;
 import games.strategy.triplea.ai.proplus.strategia.llm.Risposta;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
@@ -40,7 +40,7 @@ import java.util.Set;
  *
  * <p>Two levels: the strategic one here (start of the round, per alliance: portfolio chosen from
  * the candidates computed by {@link StrategaCandidati}) and the turn orders at the operations'
- * decision points ({@link DecisoreOperazione} with prompt-ordini-turno-v3). Without a key, on an
+ * decision points ({@link DecisoreOperazione} with prompt-ordini-turno-v4). Without a key, on an
  * error, a timeout or the game's cap reached: no new operation (Hard), the decision points fall
  * back to Hard, and a warning once in the game log.
  */
@@ -56,6 +56,15 @@ public final class Stratega {
   public static final String KEY_BUDGET = "Pro+ stratega llm budget usd";
   public static final String KEY_MODELLO = "Pro+ stratega llm modello";
   public static final String KEY_USO = DecisoreOperazione.KEY_USO_STRATEGICO;
+  static final String KEY_BLOCCHI = "Pro+ stratega llm blocchi: ";
+
+  /** Kinds of engine blocks counted per alliance (step COERENZA STIME). */
+  static final String BLOCCO_TETTO = "tetto_perdita";
+
+  static final String BLOCCO_SICUREZZA = "sicurezza_raduni";
+  static final String BLOCCO_QUOTA = "quota_pu";
+  static final String BLOCCO_FATTIBILITA = "candidati_scartati";
+  static final String BLOCCO_RIAVVIO = "riavvii_rifiutati";
 
   /** The warning written once in the game log when the LLM can't be used. */
   public static final String AVVISO = "Stratega LLM non disponibile: gioco con le regole";
@@ -192,6 +201,7 @@ public final class Stratega {
     private final List<String> righe = new ArrayList<>();
     private final JsonObject diario = new JsonObject();
     private Optional<String> avviso = Optional.empty();
+    private final Set<String> candidateTargets = new LinkedHashSet<>();
 
     Round(
         final ProData proData,
@@ -212,6 +222,13 @@ public final class Stratega {
       diario.addProperty("round", round);
       diario.addProperty("alleanza", alliance);
       final JsonObject portfolio = portafoglio(props, alliance);
+      // step COERENZA STIME: the engine brings the operations up to date first (target lost =
+      // FALLITA, target taken by Hard = TENUTA or closed), then the finished ones leave the list
+      try {
+        righe.addAll(OperazioniCongiunte.primaDellaDecisione(proData, calc, alliance));
+      } catch (final RuntimeException e) {
+        ProLogger.warn("[Pro+] Stratega: stato delle operazioni non aggiornato: " + e);
+      }
       chiudiFinite(portfolio);
       // no key, cap reached...: no call, no candidates (the round plays as Hard)
       final Optional<DecisoreOperazione.Trasporto> transport = trasporto();
@@ -224,6 +241,20 @@ public final class Stratega {
       JsonObject reading = new JsonObject();
       try {
         candidates = gen.calcola();
+        for (final JsonElement e : gen.scartati()) {
+          final JsonObject x = e.getAsJsonObject();
+          contaBlocco(
+              props,
+              alliance,
+              BLOCCO_FATTIBILITA,
+              x.get("tipo").getAsString()
+                  + " "
+                  + x.get("bersaglio").getAsString()
+                  + ": "
+                  + x.get("motivo").getAsString());
+        }
+        candidateTargets.clear();
+        candidates.forEach(c -> candidateTargets.add(c.bersaglio()));
         reading = gen.letturaAvversario(lettura(props, alliance));
         if (reading.has("_fronti_ora")) {
           props.set(KEY_LETTURA + alliance, (Serializable) null);
@@ -234,14 +265,27 @@ public final class Stratega {
         ProLogger.warn("[Pro+] Stratega: candidati non calcolati: " + e);
         righe.add("Stratega LLM: candidati non calcolati (" + e + ")");
       }
-      final JsonObject state = stato(candidates, reading, portfolio);
+      final JsonObject state = stato(candidates, reading, portfolio, gen.scartati());
       diario.add("stato_inviato", riassuntoStato(state));
       diario.addProperty("caratteri_stato", state.toString().length());
       DiaryRecorder.operationInput(
-          data, String.format(Locale.ROOT, "stratega-ingresso-R%d-%s.json", round, alliance), state);
+          data,
+          String.format(Locale.ROOT, "stratega-ingresso-R%d-%s.json", round, alliance),
+          state);
       final Optional<JsonObject> answer = chiedi(transport.get(), state);
       if (answer.isPresent()) {
-        applica(answer.get(), candidates, gen, portfolio);
+        try {
+          applica(answer.get(), candidates, gen, portfolio);
+        } catch (final RuntimeException e) {
+          // step COERENZA STIME: a failure here lost the record of the round (seed 503, R7): the
+          // decisions applied so far stay, the record and the portfolio are written anyway
+          ProLogger.warn("[Pro+] Stratega: risposta applicata solo in parte: " + e);
+          diario.addProperty("errore_applicazione", String.valueOf(e));
+          righe.add(
+              "Stratega: ERRORE nell'applicazione della risposta ("
+                  + e
+                  + "): le decisioni gia' applicate restano");
+        }
       }
       return chiudi(answer, portfolio);
     }
@@ -256,7 +300,7 @@ public final class Stratega {
                 + ", R"
                 + round
                 + "): nessuna decisione, nessuna operazione nuova ("
-                + diario.get("ripiego").getAsString()
+                + (diario.has("ripiego") ? diario.get("ripiego").getAsString() : "nessuna risposta")
                 + ")");
       }
       if (!portfolio.has("rifiutate")) {
@@ -266,8 +310,14 @@ public final class Stratega {
       final String key = answer.isPresent() ? "round_decisi" : "round_senza_llm";
       portfolio.addProperty(key, (portfolio.has(key) ? portfolio.get(key).getAsInt() : 0) + 1);
       salvaPortafoglio(props, alliance, portfolio);
-      diario.add("uso_partita", usoTotale(props));
-      StrategaDiario.scrivi(data, diario, righe);
+      try {
+        diario.add("uso_partita", usoTotale(props));
+        diario.add("blocchi", blocchi(props, alliance));
+        StrategaDiario.scrivi(data, diario, righe);
+      } catch (final RuntimeException e) {
+        ProLogger.warn("[Pro+] Stratega: diario del round non scritto: " + e);
+        StrategaDiario.scriviMinimo(data, diario, righe, e);
+      }
       return new Esito(List.copyOf(righe), avviso);
     }
 
@@ -316,7 +366,7 @@ public final class Stratega {
       u.addProperty("chiamate", calls + 1);
       final Risposta r;
       try {
-        r = t.chiama(PromptStrategaV4.richiesta(vincoli(), state));
+        r = t.chiama(PromptStrategaV5.richiesta(vincoli(), state));
       } catch (final RuntimeException e) {
         u.addProperty("errori", u.get("errori").getAsInt() + 1);
         return ripiego(u, DecisoreOperazione.RIPIEGO_ERRORE, String.valueOf(e.getMessage()));
@@ -379,23 +429,28 @@ public final class Stratega {
         final Registro reg = Registro.leggi(props, id);
         switch (action) {
           case "annulla" -> {
+            String cause = "";
             if (!reg.stato().isFinale()) {
               reg.setStato(Stato.ANNULLATA);
               reg.set(
                   "motivo_fine", "stratega: annulla (" + v.get("motivazione").getAsString() + ")");
+              cause = causa(def.get(), reg);
               final JsonObject ev = new JsonObject();
               ev.addProperty("round", round);
               ev.addProperty("tipo", "annullata");
               ev.addProperty("motivo", "decisione dello stratega");
+              ev.addProperty("causa", cause);
               reg.evento(ev);
               reg.salva(props);
             }
             rec.addProperty("esito", "annullata");
+            rec.addProperty("causa", cause);
             righe.add(
                 "Stratega: ANNULLA "
-                    + def.get().get("nome").getAsString()
+                    + (def.get().has("nome") ? def.get().get("nome").getAsString() : id)
                     + " - "
-                    + v.get("motivazione").getAsString());
+                    + v.get("motivazione").getAsString()
+                    + (cause.isEmpty() ? "" : " [causa " + cause + "]"));
           }
           case "modifica" -> {
             modifica(def.get(), reg, v, rec);
@@ -534,7 +589,60 @@ public final class Stratega {
               v.get("tetto_perdita_TUV").getAsDouble(),
               v.get("durata_tenuta").getAsInt(),
               c.tipo() == Tipo.SBARCO && c.successivi().contains(next) ? next : "");
+      // step COERENZA STIME: the engine's single estimate of the launch (the candidate's; computed
+      // now for a proposal outside the list) and the safety net against relaunching the same
+      // target without better numbers
+      JsonObject st =
+          c.json().has("stima_motore") && c.json().get("stima_motore").isJsonObject()
+              ? c.json().getAsJsonObject("stima_motore").deepCopy()
+              : null;
+      if (st == null) {
+        try {
+          final OperazioneCongiunta.Definizione parsed =
+              OperazioneCongiunta.parse(StrategaCandidati.wrap(def)).get(0);
+          final Territory t = data.getMap().getTerritoryOrNull(c.bersaglio());
+          st =
+              (c.tipo().conquista()
+                      ? StimaUnica.conquista(
+                          proData, calc, parsed, t, Math.max(1, parsed.roundMin() - round + 1))
+                      : StimaUnica.tenuta(proData, calc, parsed, t))
+                  .json();
+        } catch (final RuntimeException ex) {
+          ProLogger.warn("[Pro+] Stratega: stima del lancio non calcolata: " + ex);
+        }
+      }
+      // the operations on the same target ended in this very answer are not in the portfolio yet
+      final JsonObject seen = portfolio.deepCopy();
+      for (final JsonElement e : defs) {
+        final JsonObject d = e.getAsJsonObject();
+        final Registro r = Registro.leggi(props, d.get("id").getAsString());
+        if (d.get("bersaglio").getAsString().equals(c.bersaglio())
+            && (r.stato() == Stato.ANNULLATA || r.stato() == Stato.FALLITA)) {
+          final JsonObject x = new JsonObject();
+          x.addProperty("id", d.get("id").getAsString());
+          x.addProperty("bersaglio", c.bersaglio());
+          x.addProperty("esito", r.stato().testo());
+          x.addProperty("fine_round", round);
+          if (r.json().has("stima_avvio")) {
+            x.add("stima_motore_avvio", r.json().get("stima_avvio"));
+          }
+          seen.getAsJsonArray("operazioni").add(x);
+        }
+      }
+      final Optional<String> again =
+          riavvioVietato(
+              seen, c.bersaglio(), round, st == null ? -1 : StimaUnica.successo(st), cfg);
+      if (again.isPresent()) {
+        contaBlocco(props, alliance, BLOCCO_RIAVVIO, c.bersaglio() + ": " + again.get());
+        rifiuta(rec, again.get());
+        return;
+      }
       defs.add(def);
+      if (st != null) {
+        final Registro r0 = Registro.leggi(props, id);
+        r0.json().add("stima_avvio", st);
+        r0.salva(props);
+      }
       if (!c.tipo().conquista()) {
         // hold and reinforcement: the operation starts in TENUTA on the territory
         final Registro reg = Registro.leggi(props, id);
@@ -568,6 +676,10 @@ public final class Stratega {
       p.addProperty("fuori_lista", outside);
       p.add("prob_tenuta_stimata", v.get("prob_tenuta_stimata"));
       p.add("motivazione", v.get("motivazione"));
+      p.addProperty("tetto_perdita", def.get("tetto_perdita").getAsDouble());
+      if (st != null) {
+        p.add("stima_motore_avvio", st);
+      }
       p.add("previsioni", new JsonArray());
       portfolio.getAsJsonArray("operazioni").add(p);
       aggiornaPrevisione(portfolio, id, v);
@@ -581,6 +693,23 @@ public final class Stratega {
               def.get("round_min").getAsInt(),
               v.get("prob_tenuta_stimata").getAsDouble() * 100,
               v.get("motivazione").getAsString()));
+    }
+
+    /** The cause of a cancellation by the strategist, recorded in the register (never throws). */
+    private String causa(final JsonObject d, final Registro reg) {
+      try {
+        final OperazioneCongiunta.Definizione def =
+            OperazioneCongiunta.parse(StrategaCandidati.wrap(d)).get(0);
+        JsonObject now = null;
+        if (reg.json().has("stima_strategica_ultima")
+            && reg.json().get("stima_strategica_ultima").isJsonObject()) {
+          now = reg.json().getAsJsonObject("stima_strategica_ultima");
+        }
+        return CauseAnnullamento.classifica(data, def, reg, candidateTargets, now);
+      } catch (final RuntimeException e) {
+        ProLogger.warn("[Pro+] Stratega: causa dell'annullamento non classificata: " + e);
+        return "";
+      }
     }
 
     private void modifica(
@@ -598,8 +727,9 @@ public final class Stratega {
       }
       final int cap = v.get("tetto_perdita_TUV").getAsInt();
       if (cap > 0) {
-        def.addProperty("tetto_perdita", Math.min(cfg.tettoPerditaMax(), cap));
-        changes.add("tetto di perdita " + (int) Math.min(cfg.tettoPerditaMax(), cap));
+        final double c = cfg.tettoPerdita(def.get("valore").getAsDouble(), cap);
+        def.addProperty("tetto_perdita", Math.round(c));
+        changes.add("tetto di perdita " + Math.round(c));
       }
       final int hold = v.get("durata_tenuta").getAsInt();
       if (hold > 0) {
@@ -630,6 +760,20 @@ public final class Stratega {
               o.addProperty(
                   "presa",
                   reg.flag("presa") || o.get("tipo").getAsString().matches("tenuta|rinforzo"));
+              for (final String k :
+                  List.of(
+                      "causa_annullamento",
+                      "causa_testo",
+                      "presa_senza_operazione",
+                      "tappa_motore",
+                      "tenuta_motore",
+                      "chiusa_dal_motore",
+                      "annullata_dal_motore",
+                      "fallita_prima_della_decisione")) {
+                if (reg.json().has(k)) {
+                  o.add(k, reg.json().get(k));
+                }
+              }
             }
           }
         } else {
@@ -659,9 +803,12 @@ public final class Stratega {
     // --------------------------------------------------------------------------- state sent
 
     private JsonObject stato(
-        final List<Candidato> candidates, final JsonObject reading, final JsonObject portfolio) {
+        final List<Candidato> candidates,
+        final JsonObject reading,
+        final JsonObject portfolio,
+        final JsonArray discarded) {
       final JsonObject s = new JsonObject();
-      s.addProperty("contratto", PromptStrategaV4.CONTRATTO);
+      s.addProperty("contratto", PromptStrategaV5.CONTRATTO);
       s.addProperty("round", round);
       s.addProperty("alleanza", alliance);
       s.add(
@@ -691,6 +838,24 @@ public final class Stratega {
         if (reg.json().has("tenuta_dal")) {
           o.addProperty("tenuta_dal_round", reg.intOf("tenuta_dal", 0));
           o.addProperty("durata_tenuta", d.getAsJsonObject("tenuta").get("round").getAsInt());
+        }
+        if (reg.flag("presa_senza_operazione")) {
+          o.addProperty("presa_senza_operazione", true);
+        }
+        // step COERENZA STIME: the numbers of every operation in progress, always up to date (also
+        // when its candidate left the list), with the same function as the candidates
+        if (!reg.stato().isFinale()) {
+          try {
+            final JsonObject now = stimaOra(d).json();
+            o.add("stima_motore_ora", now);
+            reg.json().add("stima_strategica_ultima", now);
+            reg.salva(props);
+          } catch (final RuntimeException ex) {
+            o.addProperty("stima_motore_ora", "non calcolata (" + ex.getMessage() + ")");
+          }
+        }
+        if (reg.json().has("stima_avvio")) {
+          o.add("stima_motore_al_lancio", reg.json().get("stima_avvio"));
         }
         final Territory t = data.getMap().getTerritoryOrNull(d.get("bersaglio").getAsString());
         if (t != null) {
@@ -724,6 +889,7 @@ public final class Stratega {
       final JsonArray cands = new JsonArray();
       candidates.forEach(c -> cands.add(c.json()));
       s.add("candidati", cands);
+      s.add("candidati_scartati", discarded);
       s.add("lettura_avversario", reading);
       s.add("partita", partita());
       return s;
@@ -761,10 +927,15 @@ public final class Stratega {
               + Math.round(cfg.quotaPuMaxPct())
               + "% dei PU del turno per nazione (la difesa urgente puo' usare il resto);",
           "- la guarnigione della capitale (25% di rischio nemico) non la lascia mai;",
-          "- tetto di perdita per tappa: predefinito "
-              + Math.round(cfg.tettoPerditaDefault())
-              + " TUV, massimo "
+          "- tetto di perdita per tappa (perdita attesa oltre il tetto = tappa non eseguita):"
+              + " predefinito "
+              + Math.round(cfg.tettoPerditaPerPu())
+              + " TUV per PU di valore dell'operazione, tra "
+              + Math.round(cfg.tettoPerditaMinimo())
+              + " e "
               + Math.round(cfg.tettoPerditaMax())
+              + " (campo tetto_perdita_TUV dei candidati); puoi chiederne un altro fino a "
+              + Math.round(cfg.tettoPerditaMaxLlm())
               + "; durata della tenuta: predefinita "
               + cfg.tenutaRoundDefault()
               + " round, massimo "
@@ -776,11 +947,25 @@ public final class Stratega {
               + cfg.durataOperazioneRound()
               + " round dal round obiettivo si annulla da sola;",
           "- una sola operazione attiva per bersaglio; la Francia (nazione) non ha ruoli;",
+          "- un bersaglio con un'operazione annullata o fallita negli ultimi "
+              + cfg.riavvioRound()
+              + " round non si riavvia se la stima del motore non e' migliorata di almeno "
+              + Math.round(cfg.riavvioMiglioramentoPunti())
+              + " punti;",
+          "- i candidati infattibili (raccolta oltre l'orizzonte, raduno non sicuro, tappa 1 oltre il"
+              + " tetto, tenuta troppo bassa anche con i rinforzi) e i bersagli che Hard prende da"
+              + " sola nel round sono gia' stati scartati (lista candidati_scartati);",
           "- risposta non valida, assente o fuori tempo, o tetto di costo della partita raggiunto: nessuna"
               + " operazione nuova, l'alleanza gioca come Hard.");
     }
 
     // ------------------------------------------------------------------------- helpers
+
+    private StimaUnica.Stima stimaOra(final JsonObject d) {
+      final OperazioneCongiunta.Definizione def =
+          OperazioneCongiunta.parse(StrategaCandidati.wrap(d)).get(0);
+      return StimaUnica.ora(proData, calc, def);
+    }
 
     private JsonObject registro(final JsonArray decisions, final JsonObject v) {
       final JsonObject rec = v.deepCopy();
@@ -867,6 +1052,93 @@ public final class Stratega {
       }
       return Optional.empty();
     }
+  }
+
+  // ================================================================================= blocks
+
+  /**
+   * Counts a block of the engine for {@code alliance} ({@link #BLOCCO_TETTO}, {@link
+   * #BLOCCO_SICUREZZA}, {@link #BLOCCO_QUOTA}...), with the last texts. Never throws.
+   */
+  public static void contaBlocco(
+      final GameProperties props, final String alliance, final String kind, final String text) {
+    try {
+      final JsonObject o = blocchi(props, alliance);
+      o.addProperty(kind, (o.has(kind) ? o.get(kind).getAsInt() : 0) + 1);
+      final JsonArray last = o.has("ultimi") ? o.getAsJsonArray("ultimi") : new JsonArray();
+      last.add(kind + ": " + (text.length() > 200 ? text.substring(0, 200) + "..." : text));
+      while (last.size() > 20) {
+        last.remove(0);
+      }
+      o.add("ultimi", last);
+      props.set(KEY_BLOCCHI + alliance, (Serializable) null);
+      props.set(KEY_BLOCCHI + alliance, o.toString());
+    } catch (final RuntimeException e) {
+      ProLogger.warn("[Pro+] Stratega: blocco non contato: " + e);
+    }
+  }
+
+  /** The blocks counted for {@code alliance} (kind → count, "ultimi" = last texts). */
+  public static JsonObject blocchi(final GameProperties props, final String alliance) {
+    if (props.get(KEY_BLOCCHI + alliance) instanceof String s && !s.isBlank()) {
+      try {
+        return JsonParser.parseString(s).getAsJsonObject();
+      } catch (final RuntimeException e) {
+        // a fresh one
+      }
+    }
+    return new JsonObject();
+  }
+
+  /**
+   * Step COERENZA STIME, safety net: {@code target} had an operation cancelled or failed in the
+   * last {@code riavvio_round} rounds and the engine's success estimate now ({@code successoPct},
+   * points; -1 unknown) is not at least {@code riavvio_miglioramento_punti} better than at that
+   * launch: no relaunch. Empty = allowed.
+   */
+  static Optional<String> riavvioVietato(
+      final JsonObject portfolio,
+      final String target,
+      final int round,
+      final double successoPct,
+      final StrategaConfig cfg) {
+    for (final JsonElement e : portfolio.getAsJsonArray("operazioni")) {
+      final JsonObject o = e.getAsJsonObject();
+      if (!o.get("bersaglio").getAsString().equals(target)
+          || !o.has("esito")
+          || !o.get("esito").getAsString().matches("annullata|fallita")
+          || !o.has("fine_round")
+          || o.get("fine_round").getAsInt() < round - cfg.riavvioRound()) {
+        continue;
+      }
+      final double before =
+          o.has("stima_motore_avvio") ? StimaUnica.successo(o.get("stima_motore_avvio")) : -1;
+      if (successoPct < 0 || before < 0) {
+        return Optional.of(
+            String.format(
+                Locale.ROOT,
+                "%s %s al R%d: riavvio entro %d round senza stime confrontabili",
+                o.get("id").getAsString(),
+                o.get("esito").getAsString(),
+                o.get("fine_round").getAsInt(),
+                cfg.riavvioRound()));
+      }
+      if (successoPct < before + cfg.riavvioMiglioramentoPunti()) {
+        return Optional.of(
+            String.format(
+                Locale.ROOT,
+                "%s %s al R%d: riavvio entro %d round con stima del motore %.0f%% non migliore di"
+                    + " %.0f%% (+%.0f punti richiesti)",
+                o.get("id").getAsString(),
+                o.get("esito").getAsString(),
+                o.get("fine_round").getAsInt(),
+                cfg.riavvioRound(),
+                successoPct,
+                before,
+                cfg.riavvioMiglioramentoPunti()));
+      }
+    }
+    return Optional.empty();
   }
 
   // ============================================================================== portfolio

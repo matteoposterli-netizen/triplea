@@ -829,6 +829,47 @@ class AutoplayTest {
     assertThat(text).contains("Errore medio pesato: 30.0 punti (1 stime)");
   }
 
+  @Test
+  void smokeCountsOnlyTheEngineStepsAsExecutedAndReportsCausesAndCoherence() {
+    final JsonObject game =
+        JsonParser.parseString(
+                """
+                {"stato":"completata",
+                 "parametri":{"tipi":{"Axis":"stratega","Allies":"hard"}},
+                 "stratega_llm":{"uso":{"chiamate":3,"costo_usd":0.03},
+                  "Axis":{"round_decisi":2,"round_senza_llm":0,
+                   "blocchi":{"tetto_perdita":2,"sicurezza_raduni":1,"quota_pu":3,"ultimi":["x"]},
+                   "operazioni":[
+                   {"tipo":"offensiva","bersaglio":"France","stato":"tenuta",
+                    "presa_senza_operazione":true,
+                    "stima_avvio":{"successo_pct":60,"tenuta_pct":70},
+                    "stima_decisione_prima":{"successo_pct":50,"tenuta_pct":60}},
+                   {"tipo":"offensiva","bersaglio":"Egypt","stato":"completata","tappa_motore":true,
+                    "stima_avvio":{"successo_pct":40,"tenuta_pct":50},
+                    "stima_decisione_prima":{"successo_pct":44,"tenuta_pct":52}},
+                   {"tipo":"rinforzo","bersaglio":"Rostov","stato":"annullata",
+                    "causa_annullamento":"C2"},
+                   {"tipo":"tenuta","bersaglio":"Rome","stato":"completata",
+                    "tenuta_motore":true}]}}}
+                """)
+            .getAsJsonObject();
+    final StringBuilder md = new StringBuilder();
+
+    ConfrontoSmoke.write(
+        md, List.of(new RiepilogoGenerale.Game("1-stratega", game)), List.of("Axis", "Allies"));
+
+    final String text = md.toString();
+    // France taken by Hard: not executed by the engine, in its own column
+    assertThat(text).contains("| offensiva | 2 | 1 | 1 | 1 | 0 | 0 | 1 |");
+    assertThat(text).contains("| rinforzo | 1 | 0 | 0 | 0 | 0 | 1 | 0 |");
+    assertThat(text).contains("| tenuta | 1 | 1 | 0 | 1 | 0 | 0 | 0 |");
+    assertThat(text).contains("Annullamenti per artefatto (C1-C5): **1 su 4 avviate (25%)**");
+    assertThat(text).contains("Offensive e sbarchi eseguiti DAL MOTORE: **1 su 2 avviati (50%)**");
+    assertThat(text).contains("mediana **7.0 punti** di successo su 2 operazioni");
+    assertThat(text).contains("quota_pu=3").contains("tetto_perdita=2");
+    assertThat(ConfrontoSmoke.mediana(List.of(3.0, 1.0, 2.0))).isEqualTo(2.0);
+  }
+
   private static final String SAMPLE =
       """
       {"nome":"A / 1","stato":"completata","durata_s":75,"round_giocati":1,

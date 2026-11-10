@@ -20,8 +20,10 @@ public record StrategaConfig(
     int maxCandidati,
     int orizzonteRound,
     int durataOperazioneRound,
-    double tettoPerditaDefault,
     double tettoPerditaMax,
+    double tettoPerditaPerPu,
+    double tettoPerditaMinimo,
+    double tettoPerditaMaxLlm,
     int tenutaRoundDefault,
     int durataTenutaMax,
     double sogliaRinforzi,
@@ -43,7 +45,18 @@ public record StrategaConfig(
     List<String> nazioniSenzaRuoli,
     String modello,
     double budgetDefaultUsd,
-    int tettoChiamateStrategiche) {
+    int tettoChiamateStrategiche,
+    double impegnoNemicoMinimo,
+    double impegnoNemicoPrudente,
+    int osservazioniMinimeStorico,
+    int produzioneFabbricaChiave,
+    double sogliaSicurezzaRaduno,
+    double sogliaPresaHard,
+    double sogliaTenutaPresaHard,
+    double tenutaMinimaCandidato,
+    int candidatiValutati,
+    int riavvioRound,
+    double riavvioMiglioramentoPunti) {
 
   static final String RESOURCE = "proplus/strategia/stratega-llm.json";
 
@@ -73,8 +86,10 @@ public record StrategaConfig(
         o.get("max_candidati").getAsInt(),
         o.get("orizzonte_round").getAsInt(),
         o.get("durata_operazione_round").getAsInt(),
-        o.get("tetto_perdita_default").getAsDouble(),
         o.get("tetto_perdita_max").getAsDouble(),
+        o.get("tetto_perdita_per_pu").getAsDouble(),
+        o.get("tetto_perdita_minimo").getAsDouble(),
+        o.get("tetto_perdita_max_llm").getAsDouble(),
         o.get("tenuta_round_default").getAsInt(),
         o.get("durata_tenuta_max").getAsInt(),
         o.get("soglia_rinforzi").getAsDouble(),
@@ -96,7 +111,31 @@ public record StrategaConfig(
         strings(o, "nazioni_senza_ruoli"),
         o.get("modello").getAsString(),
         o.get("budget_default_usd").getAsDouble(),
-        o.get("tetto_chiamate_strategiche").getAsInt());
+        o.get("tetto_chiamate_strategiche").getAsInt(),
+        o.get("impegno_nemico_minimo").getAsDouble(),
+        o.get("impegno_nemico_prudente").getAsDouble(),
+        o.get("osservazioni_minime_storico").getAsInt(),
+        o.get("produzione_fabbrica_chiave").getAsInt(),
+        o.get("soglia_sicurezza_raduno").getAsDouble(),
+        o.get("soglia_presa_hard").getAsDouble(),
+        o.get("soglia_tenuta_presa_hard").getAsDouble(),
+        o.get("tenuta_minima_candidato").getAsDouble(),
+        o.get("candidati_valutati").getAsInt(),
+        o.get("riavvio_round").getAsInt(),
+        o.get("riavvio_miglioramento_punti").getAsDouble());
+  }
+
+  /**
+   * Step COERENZA STIME: the loss cap of a step, proportional to the operation's value: {@code
+   * tetto_perdita_per_pu} TUV per PU of value, between {@code tetto_perdita_minimo} and {@code
+   * tetto_perdita_max}. A cap asked by the LLM ({@code richiesto} > 0) replaces it, up to {@code
+   * tetto_perdita_max_llm}.
+   */
+  public double tettoPerdita(final double valore, final double richiesto) {
+    if (richiesto > 0) {
+      return Math.min(tettoPerditaMaxLlm, richiesto);
+    }
+    return Math.max(tettoPerditaMinimo, Math.min(tettoPerditaMax, tettoPerditaPerPu * valore));
   }
 
   private static List<String> strings(final JsonObject o, final String key) {

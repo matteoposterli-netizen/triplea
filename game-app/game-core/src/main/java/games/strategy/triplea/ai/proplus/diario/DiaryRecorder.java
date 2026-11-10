@@ -603,6 +603,29 @@ public final class DiaryRecorder implements ProDecisionRecorder {
       final ProPurchaseOrders.DefenseShare share) {
     guard(
         () -> {
+          // step COERENZA STIME: the strategist's count of the defenses cut by the operations'
+          // share of the PUs (threatened land left with no more than the allowance), diary on/off
+          if (!share.limited().isEmpty()
+              && share.spentCritical() + share.spentLimited() + 3 > share.defenseCap()
+              && games.strategy.triplea.ai.proplus.Stratega.gioca(
+                  proData.getData(), proData.getPlayer())) {
+            games.strategy.triplea.ai.proplus.ProPlusSettings.allianceOf(
+                    proData.getData(), proData.getPlayer())
+                .ifPresent(
+                    a ->
+                        games.strategy.triplea.ai.proplus.Stratega.contaBlocco(
+                            proData.getData().getProperties(),
+                            a,
+                            "quota_pu",
+                            String.format(
+                                Locale.ROOT,
+                                "R%d %s: difesa di %s limitata a %d PU (quota operazioni %.0f%%)",
+                                proData.getData().getSequence().getRound(),
+                                proData.getPlayer().getName(),
+                                String.join(", ", share.limited().keySet()),
+                                share.defenseCap(),
+                                share.minimumShare())));
+          }
           if (!active || !"purchase".equals(phase)) {
             return;
           }

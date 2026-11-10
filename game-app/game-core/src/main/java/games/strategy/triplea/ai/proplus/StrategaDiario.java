@@ -71,6 +71,32 @@ final class StrategaDiario {
   }
 
   /**
+   * Step COERENZA STIME: the record of a round whose diary failed to be written in full: the lines
+   * and the decision record without the summaries, never throws.
+   */
+  static void scriviMinimo(
+      final GameData data, final JsonObject record, final List<String> lines, final Exception e) {
+    try {
+      final List<String> text = new ArrayList<>();
+      text.add("");
+      text.add(
+          "=== R"
+              + (record.has("round") ? record.get("round").getAsString() : "?")
+              + " "
+              + (record.has("alleanza") ? record.get("alleanza").getAsString() : "?")
+              + " - livello strategico (diario ridotto: "
+              + e
+              + ") ===");
+      text.addAll(lines);
+      record.addProperty("errore_diario", String.valueOf(e));
+      DiaryRecorder.stratega(data, text, record, null);
+    } catch (final RuntimeException again) {
+      games.strategy.triplea.ai.pro.logging.ProLogger.warn(
+          "[Pro+] Stratega: diario ridotto non scritto: " + again);
+    }
+  }
+
+  /**
    * End of the turn of a nation of the strategist: the events of the alliance's operations not
    * written yet (decisions of the turn orders with estimates and reasons, steps, outcomes).
    */
@@ -133,7 +159,23 @@ final class StrategaDiario {
         c.addProperty("presa", reg.flag("presa"));
         c.addProperty("rinvii", reg.rinvii());
         for (final String k :
-            List.of("tenuta_esito", "motivo_fine", "tappa1_round", "tappa2_round")) {
+            List.of(
+                "tenuta_esito",
+                "motivo_fine",
+                "tappa1_round",
+                "tappa2_round",
+                "tappa_motore",
+                "tenuta_motore",
+                "presa_senza_operazione",
+                "chiusa_dal_motore",
+                "annullata_dal_motore",
+                "fallita_prima_della_decisione",
+                "causa_annullamento",
+                "causa_testo",
+                "stima_avvio",
+                "stima_decisione_prima",
+                "stima_decisione_ultima",
+                "blocchi_tetto")) {
           if (reg.json().has(k)) {
             c.add(k, reg.json().get(k));
           }
@@ -149,6 +191,7 @@ final class StrategaDiario {
       x.addProperty("round_decisi", pf.has("round_decisi") ? pf.get("round_decisi").getAsInt() : 0);
       x.addProperty(
           "round_senza_llm", pf.has("round_senza_llm") ? pf.get("round_senza_llm").getAsInt() : 0);
+      x.add("blocchi", Stratega.blocchi(props, a));
       o.add(a, x);
     }
     o.add("uso", Stratega.usoTotale(props));

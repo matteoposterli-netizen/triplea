@@ -11,10 +11,10 @@ import lombok.experimental.UtilityClass;
  * the round (candidates, operations in progress, reading of the opponent).
  */
 @UtilityClass
-public final class PromptStrategaV4 {
-  public static final String RISORSA = "proplus/strategia/prompt-stratega-v4.md";
-  public static final String VERSIONE = "prompt-stratega-v4";
-  public static final String CONTRATTO = "1.3";
+public final class PromptStrategaV5 {
+  public static final String RISORSA = "proplus/strategia/prompt-stratega-v5.md";
+  public static final String VERSIONE = "prompt-stratega-v5";
+  public static final String CONTRATTO = "1.4";
 
   /** The fixed part with the limits text ({@code vincoli}: one rule a line). */
   public static String sistema(final String vincoli) {

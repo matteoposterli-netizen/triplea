@@ -248,3 +248,28 @@ combattimento (`ProPlusTuning.stagingOrders`, risposta marcata come operazione).
 tappa2, tenuta) = decisione v1.2 (`decisione_operazione`); l'ingresso ha `tipo_operazione` e il prompt e'
 `prompt-ordini-turno-v3.md` (`PromptOrdiniTurnoV3`). Ripiego (errore, timeout, non valida, tetto) = **Hard**: tappa →
 rinvia, tenuta → ritira (non la formula), registrato con `ripiego_hard`.
+
+## Schema v1.4: stima unica del motore (step COERENZA STIME)
+
+Stessa uscita della v1.3 (portafoglio, fuori_lista, rinforzi, motivazione) e della v1.2 per gli ordini del turno. Prompt
+`prompt-stratega-v5.md` (`PromptStrategaV5`) e `prompt-ordini-turno-v4.md` (`PromptOrdiniTurnoV4`): niente affermazioni
+sulla stima del motore (pessimista/ottimista), niente spinta a lanciare contro i numeri; l'LLM usa `stima_motore` e se ne
+discosta solo con un dato dello storico del nemico scritto nella motivazione.
+
+Ingresso del livello strategico (contratto `1.4`), differenze dalla 1.3:
+- ogni candidato ha `stima_motore` (`StimaUnica.Stima.json()`): `funzione`, `calcolata_al_round`, `per_il_round`;
+  conquiste `attaccanti_tappa1`, `win_tappa1_pct`, `perdita_attesa_tappa1_TUV`, `attaccanti_tappa2`, `win_tappa2_pct`,
+  `perdita_attesa_tappa2_TUV`, `tuv_difensori`, `tuv_rinforzi_nemici_tra_le_tappe`, `presa_pct`; tutti `presidio`,
+  `contrattacco_contato_TUV`, `contrattacco_massimo_TUV`, `impegno_nemico`, `base_impegno`, `tenuta_pct`, `successo_pct`;
+  `tetto_perdita_TUV` del candidato (proporzionale al valore); tenute/rinforzi `rinforzi_possibili` (quelli che il motore
+  puo' muovere). TOLTI: `tappa1`/`tappa2`/`presa_stimata_pct` della stima rapida, `tenuta_ora_50_pct`,
+  `tenuta_ora_100_pct`, `tenuta_50_con_rinforzi_pct`, `nemici_in_portata_TUV` (fonte del 100% contro 0-29% della run
+  42775993327). Restano `contrattacco_massimo` e `tenuta_per_impegno` (stesso presidio della stima);
+- `candidati_scartati` [{tipo, bersaglio, nazioni, motivo}]: Hard lo prende da sola nel round, infattibile (raccolta oltre
+  l'orizzonte, zona di raduno o raccolta aerea non sicura), perdita attesa della tappa 1 oltre il tetto, tenuta sotto
+  `tenuta_minima_candidato` anche con i rinforzi;
+- `operazioni_in_corso[]`: `stima_motore_ora` (ricalcolata a ogni round con la stessa funzione, anche se il candidato non
+  e' piu' in lista), `stima_motore_al_lancio`, `presa_senza_operazione`.
+
+Ordini del turno (dinamiche): `numeri.stima_motore` (stessa funzione), `stima_motore_azione` {azione, prob_tenuta_stimata,
+nota} al posto di `formula_v2`.

@@ -143,7 +143,21 @@ public final class StrategaCandidati {
 
   // =========================================================================== candidates
 
-  /** The candidates of the round, best first, at most {@code max_candidati}, with full numbers. */
+  /** Candidates discarded this round by the engine (target, type, why), for the state and diary. */
+  private final JsonArray scartati = new JsonArray();
+
+  JsonArray scartati() {
+    return scartati;
+  }
+
+  /**
+   * The candidates of the round, best first, at most {@code max_candidati}. A cheap screening ranks
+   * them; the best {@code candidati_valutati} get the single estimate ({@link StimaUnica}, the same
+   * function as the decision points) and the feasibility at the launch; the infeasible ones, the
+   * conquests whose step 1 is over the loss cap, the holds under {@code tenuta_minima_candidato}
+   * even with the reinforcements and the targets Hard takes alone this round are discarded with
+   * their reason.
+   */
   List<Candidato> calcola() {
     final List<Candidato> all = new ArrayList<>();
     if (nations.isEmpty()) {
@@ -158,28 +172,29 @@ public final class StrategaCandidati {
     // a short, varied list: at most 3 of a type, one per target and type
     final List<Candidato> chosen = new ArrayList<>();
     final Map<Tipo, Integer> perType = new LinkedHashMap<>();
+    int evaluated = 0;
     for (final Candidato c : all) {
-      if (chosen.size() >= cfg.maxCandidati()) {
+      if (chosen.size() >= cfg.maxCandidati() || evaluated >= cfg.candidatiValutati()) {
         break;
       }
       if (perType.getOrDefault(c.tipo(), 0) >= 3
           || chosen.stream()
-              .anyMatch(x -> x.tipo() == c.tipo() && x.bersaglio().equals(c.bersaglio()))) {
+              .anyMatch(x -> x.tipo() == c.tipo() && x.bersaglio().equals(c.bersaglio()))
+          || scartato(c)) {
         continue;
       }
-      perType.merge(c.tipo(), 1, Integer::sum);
-      chosen.add(c);
+      evaluated++;
+      final Optional<Candidato> ok = valuta(c);
+      if (ok.isPresent()) {
+        perType.merge(c.tipo(), 1, Integer::sum);
+        chosen.add(ok.get());
+      }
     }
     final List<Candidato> out = new ArrayList<>();
     for (final Candidato c : chosen) {
       final String id = "C" + (out.size() + 1);
       final JsonObject j = c.json().deepCopy();
       j.addProperty("id", id);
-      try {
-        completa(c, j);
-      } catch (final RuntimeException e) {
-        ProLogger.warn("[Pro+] Stratega: numeri del candidato " + c.bersaglio() + ": " + e);
-      }
       out.add(
           new Candidato(
               id,
@@ -198,41 +213,172 @@ public final class StrategaCandidati {
     return List.copyOf(out);
   }
 
-  /** Counterattack by origin, hold per enemy commitment, enemy priorities (full calculator). */
-  private void completa(final Candidato c, final JsonObject j) {
-    final Territory t = map.getTerritoryOrNull(c.bersaglio());
-    if (t == null) {
-      return;
+  private boolean scartato(final Candidato c) {
+    for (final var e : scartati) {
+      final JsonObject x = e.getAsJsonObject();
+      if (x.get("bersaglio").getAsString().equals(c.bersaglio())
+          && x.get("tipo").getAsString().equals(c.tipo().id())) {
+        return true;
+      }
     }
-    final OperazioneCongiunta.Definizione def =
-        OperazioneCongiunta.parse(wrap(definizione(c, "tmp-" + c.bersaglio(), round + 1, 0, 0, "")))
-            .get(0);
-    final Collection<Unit> garrison = presidioAtteso(c, t);
-    j.addProperty("presidio_atteso", OperazioniAnfibie.unitsText(garrison));
-    final JsonObject h = OperazioniCongiunte.valutaTenuta(proData, calc, def, t, garrison);
-    j.add("contrattacco_massimo", h.get("contrattacco_massimo"));
-    j.add("tenuta_per_impegno", h.get("tenuta_per_impegno"));
+    return false;
   }
 
-  /** Who would hold the target: the survivors of the steps, or the defenders now. */
-  private Collection<Unit> presidioAtteso(final Candidato c, final Territory t) {
-    if (!c.tipo().conquista()) {
-      return t.getMatches(
-          Matches.isUnitAllied(player(c.apre())).and(Matches.unitIsNotInfrastructure()));
+  private void scarta(final Candidato c, final String why) {
+    final JsonObject x = new JsonObject();
+    x.addProperty("tipo", c.tipo().id());
+    x.addProperty("bersaglio", c.bersaglio());
+    x.addProperty("nazioni", c.apre().equals(c.chiude()) ? c.apre() : c.apre() + ">" + c.chiude());
+    x.addProperty("motivo", why);
+    scartati.add(x);
+  }
+
+  /**
+   * The single estimate, the feasibility and the full numbers of a candidate; empty when discarded
+   * (reason in {@link #scartati}).
+   */
+  private Optional<Candidato> valuta(final Candidato c) {
+    final Territory t = map.getTerritoryOrNull(c.bersaglio());
+    if (t == null) {
+      return Optional.empty();
     }
-    final List<Unit> a2 = attaccanti(player(c.chiude()), t, c.roundMinimo() - round);
-    final List<Unit> a1 = attaccanti(player(c.apre()), t, c.roundMinimo() - round);
+    try {
+      int roundMin = c.roundMinimo();
+      final OperazioneCongiunta.Definizione def0 = definizioneTmp(c, roundMin);
+      if (c.tipo().conquista()) {
+        final Optional<String> hard = presaDaHard(t);
+        if (hard.isPresent()) {
+          scarta(c, hard.get());
+          return Optional.empty();
+        }
+        final OperazioniCongiunte.Lancio l =
+            OperazioniCongiunte.lancio(proData, calc, def0, round + cfg.orizzonteRound() - 1);
+        if (l.motivo().isPresent()) {
+          scarta(c, "infattibile: " + l.motivo().get());
+          return Optional.empty();
+        }
+        roundMin = Math.max(roundMin, l.round());
+      }
+      final OperazioneCongiunta.Definizione def =
+          roundMin == c.roundMinimo() ? def0 : definizioneTmp(c, roundMin);
+      final StimaUnica.Stima st =
+          c.tipo().conquista()
+              ? StimaUnica.conquista(proData, calc, def, t, roundMin - round + 1)
+              : StimaUnica.tenuta(proData, calc, def, t);
+      if (c.tipo().conquista() && !difensori(t).isEmpty() && st.tappa1().isEmpty()) {
+        scarta(
+            c,
+            "nessuna unita' di " + c.apre() + " puo' essere sul bersaglio entro il R" + roundMin);
+        return Optional.empty();
+      }
+      if (c.tipo().conquista() && st.perdita1() > def.tettoPerdita()) {
+        scarta(
+            c,
+            String.format(
+                Locale.ROOT,
+                "perdita attesa della tappa 1 %.0f TUV > tetto %.0f",
+                st.perdita1(),
+                def.tettoPerdita()));
+        return Optional.empty();
+      }
+      if (!c.tipo().conquista() && st.tenuta() < cfg.tenutaMinimaCandidato()) {
+        scarta(
+            c,
+            String.format(
+                Locale.ROOT,
+                "tenuta stimata %.0f%% < %.0f%% anche con i rinforzi possibili",
+                st.tenuta(),
+                cfg.tenutaMinimaCandidato()));
+        return Optional.empty();
+      }
+      final JsonObject j = c.json().deepCopy();
+      j.addProperty("round_minimo", roundMin);
+      for (final String k :
+          List.of(
+              "tappa1",
+              "tappa2",
+              "presa_stimata_pct",
+              "tenuta_ora_50_pct",
+              "tenuta_ora_100_pct",
+              "tenuta_50_con_rinforzi_pct",
+              "nemici_in_portata_TUV",
+              "rinforzi_possibili")) {
+        j.remove(k);
+      }
+      j.add("stima_motore", st.json());
+      j.addProperty("tetto_perdita_TUV", Math.round(def.tettoPerdita()));
+      if (!c.tipo().conquista()) {
+        j.addProperty(
+            "rinforzi_possibili",
+            st.tappa2().isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(st.tappa2()));
+      }
+      j.addProperty("presidio_atteso", OperazioniAnfibie.unitsText(st.presidio()));
+      final JsonObject h = OperazioniCongiunte.valutaTenuta(proData, calc, def, t, st.presidio());
+      j.add("contrattacco_massimo", h.get("contrattacco_massimo"));
+      j.add("tenuta_per_impegno", h.get("tenuta_per_impegno"));
+      return Optional.of(
+          new Candidato(
+              c.id(),
+              c.tipo(),
+              c.bersaglio(),
+              c.apre(),
+              c.chiude(),
+              roundMin,
+              c.raccolta(),
+              c.zona(),
+              c.successivi(),
+              c.valore(),
+              c.punteggio(),
+              j));
+    } catch (final RuntimeException e) {
+      ProLogger.warn("[Pro+] Stratega: numeri del candidato " + c.bersaglio() + ": " + e);
+      scarta(c, "numeri non calcolati (" + e + ")");
+      return Optional.empty();
+    }
+  }
+
+  private OperazioneCongiunta.Definizione definizioneTmp(final Candidato c, final int roundMin) {
+    return OperazioneCongiunta.parse(
+            wrap(
+                definizione(
+                    c,
+                    OperazioneCongiunta.PREFISSO_STRATEGA + "candidato-" + c.tipo().id(),
+                    roundMin,
+                    0,
+                    0,
+                    "")))
+        .get(0);
+  }
+
+  /**
+   * Step COERENZA STIME: a nation of the alliance can take {@code t} alone this round with its
+   * ordinary forces (Hard), at least {@code soglia_presa_hard}% win: an operation would be
+   * redundant.
+   */
+  private Optional<String> presaDaHard(final Territory t) {
     final List<Unit> defenders = difensori(t);
-    final ProBattleResult r1 = stima(t, a1, defenders);
-    final List<Unit> left =
-        a1.isEmpty() ? defenders : new ArrayList<>(r1.getAverageDefendersRemaining());
-    final ProBattleResult r2 = stima(t, a2, left);
-    final List<Unit> g =
-        r2.getAverageAttackersRemaining().stream().filter(Matches.unitIsLand()).toList();
-    if (!g.isEmpty()) {
-      return g;
+    for (final GamePlayer p : data.getPlayerList().getPlayers()) {
+      if (p.isNull()
+          || !ProPlusSettings.allianceOf(data, p).filter(alliance::equals).isPresent()
+          || !inGuerra(p, t)) {
+        continue;
+      }
+      final List<Unit> own = attaccanti(p, t, 1);
+      if (own.stream().noneMatch(Matches.unitIsLand())) {
+        continue;
+      }
+      final double win = defenders.isEmpty() ? 100 : stima(t, own, defenders).getWinPercentage();
+      if (win >= cfg.sogliaPresaHard()) {
+        return Optional.of(
+            String.format(
+                Locale.ROOT,
+                "Hard lo prende da solo in questo round (%s, win %.0f%% >= %.0f%%)",
+                p.getName(),
+                win,
+                cfg.sogliaPresaHard()));
+      }
     }
-    return a2.stream().filter(Matches.unitIsLand()).limit(1).toList();
+    return Optional.empty();
   }
 
   // ------------------------------------------------------------------------------- offensive
@@ -846,8 +992,9 @@ public final class StrategaCandidati {
     }
     o.add("riserve", reserves);
     o.addProperty("valore", Math.max(1, c.valore()));
-    final double cap = tettoPerdita > 0 ? tettoPerdita : cfg.tettoPerditaDefault();
-    o.addProperty("tetto_perdita", Math.min(cfg.tettoPerditaMax(), cap));
+    // step COERENZA STIME: proportional to the value, the LLM may ask another cap up to a maximum
+    o.addProperty(
+        "tetto_perdita", Math.round(cfg.tettoPerdita(Math.max(1, c.valore()), tettoPerdita)));
     o.addProperty("tolleranza_difensori", cfg.tolleranzaDifensori());
     o.addProperty("soglia_chiusura", cfg.sogliaChiusura());
     o.addProperty("max_rinvii", cfg.maxRinvii());

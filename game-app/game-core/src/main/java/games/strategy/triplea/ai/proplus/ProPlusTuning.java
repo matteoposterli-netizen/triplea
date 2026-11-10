@@ -488,6 +488,21 @@ public final class ProPlusTuning implements ProTuning {
     combatHeldPlayer = player;
     combatHeldRound = data.getSequence().getRound();
     combatHeld = java.util.Set.copyOf(units);
+    combatHeldIds = java.util.Set.of();
+  }
+
+  /**
+   * Step COERENZA STIME: units the strategist's operations hold out of Hard's combat this turn, set
+   * at the purchase (before the Pro AI plans its attacks on a copy of the game): the copy's units
+   * with the same ids are held in that plan too.
+   */
+  private java.util.Set<java.util.UUID> combatHeldIds = java.util.Set.of();
+
+  public void holdCombatForPurchase(
+      final GameState data, final GamePlayer player, final java.util.Set<Unit> units) {
+    holdCombat(data, player, units);
+    combatHeldIds =
+        units.stream().map(Unit::getId).collect(java.util.stream.Collectors.toUnmodifiableSet());
   }
 
   @Override
@@ -497,6 +512,20 @@ public final class ProPlusTuning implements ProTuning {
         && proData.getData().getSequence().getRound() == combatHeldRound
         && !combatHeld.isEmpty()) {
       return operationAnswer(combatHeld);
+    }
+    if (!combatHeldIds.isEmpty()
+        && combatHeldPlayer != null
+        && proData.getData() != combatHeldData
+        && proData.getPlayer() != null
+        && proData.getPlayer().getName().equals(combatHeldPlayer.getName())
+        && proData.getData().getSequence().getRound() == combatHeldRound) {
+      final java.util.Set<Unit> copy = new java.util.LinkedHashSet<>();
+      for (final Territory t : proData.getData().getMap().getTerritories()) {
+        t.getUnits().stream().filter(u -> combatHeldIds.contains(u.getId())).forEach(copy::add);
+      }
+      if (!copy.isEmpty()) {
+        return operationAnswer(copy);
+      }
     }
     return java.util.Set.of();
   }

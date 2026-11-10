@@ -28,8 +28,8 @@ import games.strategy.triplea.ai.proplus.StrategaCandidati.Candidato;
 import games.strategy.triplea.ai.proplus.StrategaCandidati.Tipo;
 import games.strategy.triplea.ai.proplus.strategia.llm.ErroreStratega;
 import games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega;
-import games.strategy.triplea.ai.proplus.strategia.llm.PromptOrdiniTurnoV3;
-import games.strategy.triplea.ai.proplus.strategia.llm.PromptStrategaV4;
+import games.strategy.triplea.ai.proplus.strategia.llm.PromptOrdiniTurnoV4;
+import games.strategy.triplea.ai.proplus.strategia.llm.PromptStrategaV5;
 import games.strategy.triplea.ai.proplus.strategia.llm.Richiesta;
 import games.strategy.triplea.ai.proplus.strategia.llm.Risposta;
 import games.strategy.triplea.delegate.Matches;
@@ -193,9 +193,10 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
     assertThat(OperazioneCongiunta.tipoStratega("stratega-offensiva-R1-Egypt"))
         .isEqualTo("offensiva");
     // the turn orders of the general operations use their own prompt
-    assertThat(PromptOrdiniTurnoV3.sistema())
-        .contains("67%")
-        .contains("31%")
+    assertThat(PromptOrdiniTurnoV4.sistema())
+        .contains("stima_motore")
+        .doesNotContain("pessimista")
+        .doesNotContain("ottimist")
         .contains("offensiva")
         .contains("rinforzo")
         .doesNotContain("{{");
@@ -220,9 +221,13 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
       assertThat(Set.of("Germans", "Italians")).contains(c.apre(), c.chiude());
       if (c.tipo().conquista()) {
         assertThat(c.apre()).isNotEqualTo(c.chiude());
-        assertThat(c.json().has("tappa1")).isTrue();
-        assertThat(c.json().has("tappa2")).isTrue();
-        assertThat(c.json().has("presa_stimata_pct")).isTrue();
+        // step COERENZA STIME: the steps' numbers come from the single estimate only
+        assertThat(c.json().has("tappa1")).isFalse();
+        final JsonObject st = c.json().getAsJsonObject("stima_motore");
+        assertThat(st.has("attaccanti_tappa1")).isTrue();
+        assertThat(st.has("attaccanti_tappa2")).isTrue();
+        assertThat(st.has("presa_pct")).isTrue();
+        assertThat(st.has("successo_pct")).isTrue();
       }
       if (c.json().has("tenuta_per_impegno")) {
         assertThat(c.json().getAsJsonArray("tenuta_per_impegno")).hasSize(4);
@@ -231,7 +236,11 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
       final JsonObject def = gen.definizione(c, "stratega-" + c.tipo().id() + "-R2-x", 0, 0, 0, "");
       final var parsed = OperazioneCongiunta.parse(StrategaCandidati.wrap(def)).get(0);
       assertThat(parsed.roundMin()).isGreaterThanOrEqualTo(c.roundMinimo());
-      assertThat(parsed.tettoPerdita()).isEqualTo(StrategaConfig.get().tettoPerditaDefault());
+      assertThat(parsed.tettoPerdita())
+          .isEqualTo(
+              (double) Math.round(StrategaConfig.get().tettoPerdita(Math.max(1, c.valore()), 0)));
+      assertThat(c.json().has("stima_motore")).isTrue();
+      assertThat(c.json().has("tenuta_50_con_rinforzi_pct")).isFalse();
       assertThat(parsed.riserve().values())
           .allMatch(r -> r.quota() <= StrategaConfig.get().quotaPuMaxPct());
     }
@@ -306,12 +315,14 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
                 StrategaDecisione.leggi(
                     portfolio(List.of(avvia("C1").replace("0.6", "6")), none())))
         .isInstanceOf(ErroreStratega.class);
-    final JsonObject schema = PromptStrategaV4.schema();
+    final JsonObject schema = PromptStrategaV5.schema();
     assertThat(schema.get("additionalProperties").getAsBoolean()).isFalse();
     assertThat(schema.getAsJsonArray("required")).hasSize(4);
-    assertThat(PromptStrategaV4.sistema("- vincolo"))
-        .contains("REALE")
-        .contains("67%")
+    assertThat(PromptStrategaV5.sistema("- vincolo"))
+        .contains("stima_motore")
+        .contains("StoricoNemico".isEmpty() ? "" : "storico_nemico_per_tipo")
+        .doesNotContain("pessimista")
+        .doesNotContain("ottimist")
         .doesNotContain("{{");
   }
 

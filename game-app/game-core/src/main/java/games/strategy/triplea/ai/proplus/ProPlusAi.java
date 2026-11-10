@@ -83,6 +83,17 @@ public class ProPlusAi extends ProAi {
       try {
         initializeData();
         report(data, OperazioniCongiunte.aggiorna(getProData(), getCalc()));
+        // step COERENZA STIME: the units the strategist's estimates count stay out of the attacks
+        // the Pro AI plans now (on a copy of the game) for its combat move
+        if (Stratega.gioca(data, player)
+            && ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning) {
+          initializeData();
+          final java.util.Set<games.strategy.engine.data.Unit> keep =
+              OperazioniCongiunte.trattenuteAllAcquisto(getProData(), getCalc());
+          if (!keep.isEmpty()) {
+            tuning.holdCombatForPurchase(data, player, keep);
+          }
+        }
       } catch (final RuntimeException e) {
         ProLogger.warn(LOG_PREFIX + "Joint operation update failed: " + e);
       }

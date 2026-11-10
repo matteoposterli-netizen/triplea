@@ -1,13 +1,16 @@
 {
   "versione": 1,
   "nota": "Stratega LLM (step STRATEGA LLM): vincoli del motore e valori delle operazioni generali. Valori ragionevoli scelti a mano, NON tarati (vedi CLAUDE.md 'Stratega LLM completo'). Le soglie di rischio, i pesi dei bersagli, la postura e il mix degli acquisti NON sono qui: restano quelli di Hard (Pro+ nudo).",
+  "nota_coerenza": "Step COERENZA STIME: una sola stima (StimaUnica) per candidato, punto di decisione ed esecuzione. Contrattacco: capitali e fabbriche con produzione >= produzione_fabbrica_chiave con attacco MASSIMO; altri territori con attacco REALISTICO = frazione delle forze nemiche in portata (le piu' vicine prima) pari alla frazione davvero impegnata dal nemico in questa partita (StoricoNemico, media pesata sulle osservazioni di tutte le operazioni dell'alleanza), mai sotto impegno_nemico_minimo; con meno di osservazioni_minime_storico osservazioni almeno impegno_nemico_prudente (storico scarso: meta' delle forze in portata). Tetto di perdita per tappa = clamp(tetto_perdita_minimo, tetto_perdita_max, tetto_perdita_per_pu x valore dell'operazione in PU); l'LLM puo' chiedere un tetto diverso fino a tetto_perdita_max_llm. Valori ragionevoli, NON tarati.",
   "max_operazioni_per_alleanza": 3,
   "quota_pu_max_pct": 30,
   "max_candidati": 8,
   "orizzonte_round": 3,
   "durata_operazione_round": 3,
-  "tetto_perdita_default": 40,
   "tetto_perdita_max": 80,
+  "tetto_perdita_per_pu": 3,
+  "tetto_perdita_minimo": 20,
+  "tetto_perdita_max_llm": 120,
   "tenuta_round_default": 2,
   "durata_tenuta_max": 4,
   "soglia_rinforzi": 70,
@@ -24,10 +27,29 @@
   "valore_obiettivo_nazionale": 5,
   "minaccia_tenuta_50_max": 80,
   "valore_minimo_tenuta": 2,
-  "tipi_terra": ["infantry", "artillery", "armour"],
-  "tipi_trasporto": ["transport"],
-  "nazioni_senza_ruoli": ["French"],
+  "tipi_terra": [
+    "infantry",
+    "artillery",
+    "armour"
+  ],
+  "tipi_trasporto": [
+    "transport"
+  ],
+  "nazioni_senza_ruoli": [
+    "French"
+  ],
   "modello": "claude-sonnet-5-5",
   "budget_default_usd": 2.0,
-  "tetto_chiamate_strategiche": 30
+  "tetto_chiamate_strategiche": 30,
+  "impegno_nemico_minimo": 0.25,
+  "impegno_nemico_prudente": 0.5,
+  "osservazioni_minime_storico": 4,
+  "produzione_fabbrica_chiave": 3,
+  "soglia_sicurezza_raduno": 40,
+  "soglia_presa_hard": 70,
+  "soglia_tenuta_presa_hard": 30,
+  "tenuta_minima_candidato": 20,
+  "candidati_valutati": 14,
+  "riavvio_round": 3,
+  "riavvio_miglioramento_punti": 5
 }

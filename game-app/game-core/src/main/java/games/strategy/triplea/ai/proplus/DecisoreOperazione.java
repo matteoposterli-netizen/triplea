@@ -10,7 +10,7 @@ import games.strategy.triplea.ai.proplus.strategia.llm.Fornitore;
 import games.strategy.triplea.ai.proplus.strategia.llm.Http;
 import games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega;
 import games.strategy.triplea.ai.proplus.strategia.llm.PromptOperazione;
-import games.strategy.triplea.ai.proplus.strategia.llm.PromptOrdiniTurnoV3;
+import games.strategy.triplea.ai.proplus.strategia.llm.PromptOrdiniTurnoV4;
 import games.strategy.triplea.ai.proplus.strategia.llm.Richiesta;
 import games.strategy.triplea.ai.proplus.strategia.llm.Risposta;
 import java.io.Serializable;
@@ -241,7 +241,7 @@ public final class DecisoreOperazione {
       r =
           t.chiama(
               stato.has("tipo_operazione")
-                  ? PromptOrdiniTurnoV3.richiesta(stato)
+                  ? PromptOrdiniTurnoV4.richiesta(stato)
                   : PromptOperazione.richiesta(stato));
     } catch (final RuntimeException e) {
       u.addProperty("errori", u.get("errori").getAsInt() + 1);

@@ -164,6 +164,12 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `StrategaDiario`, `StrategaConfig` (`proplus/strategia/stratega-llm.json`), `StrategaSimulato` (solo test/prove locali);
   operazioni dinamiche in `OperazioneCongiunta` (`DYNAMIC_PREFIX`, `tutte`, `setDinamiche`); prompt `prompt-stratega-v4.md`,
   `prompt-ordini-turno-v3.md` (`strategia/llm/PromptStrategaV4`, `PromptOrdiniTurnoV3`). Vedi "Stratega LLM completo".
+- Step COERENZA STIME: `ai/proplus/StimaUnica` (una sola stima di presa e tenuta per candidati, punti di decisione ed
+  esecuzione), `CauseAnnullamento` (C1-C6/giustificato registrati in automatico); in `OperazioniCongiunte` `step1Stratega`,
+  `presaSenzaOperazione`, `primaDellaDecisione`, `lancio` (fattibilita'), `holdPct`/`sicuro` (attacco realistico solo per le
+  operazioni dello Stratega), `raggiungibiliOra`/`sbarcabili`, `rinforziPossibili`, `trattenuteAllAcquisto` (+
+  `ProPlusTuning.holdCombatForPurchase`, da `ProPlusAi.purchase` solo per le nazioni dello Stratega); prompt `prompt-stratega-v5.md`, `prompt-ordini-turno-v4.md`
+  (`PromptStrategaV5`, `PromptOrdiniTurnoV4`, sostituiscono v4/v3). Vedi "Coerenza delle stime (step COERENZA STIME)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -383,13 +389,18 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   sezione **"Decisioni LLM delle operazioni congiunte"** (`ConfrontoLlm`): decisioni per tipo e azione, diverse dalla formula, ripieghi con i
   motivi, calibrazione LLM contro formula sulle stesse decisioni (fasce 20%, errore medio pesato, Brier), costo totale/per partita.
 - **Modalita' "smoke" (step STRATEGA LLM)**: `[smoke]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒ `modalita:
-  smoke`. Controllo, non misura di forza: 12 round, Equilibrato, **semi 501-506**, 2 configurazioni = 12 partite (`1-Asse-Stratega-LLM-
+  smoke`. Controllo, non misura di forza: 12 round, Equilibrato, **semi 601-606** (dallo step COERENZA STIME; prima 501-506), 2 configurazioni = 12 partite (`1-Asse-Stratega-LLM-
   vs-Hard`, `2-Hard-vs-Alleati-Stratega-LLM`), matrice mescolata, `max-parallel` 6, tetto per partita min(2, 30/12) = 2 $ (run <= 24 $,
   tetto 30 $). La chiave va ai job con `matrix.stratega`; senza secret le partite girano lo stesso (paracadute = Hard). Sezione
   "Stratega LLM: controllo [smoke]" (`ConfrontoSmoke`): stato, round decisi/senza LLM, chiamate, costo, ripieghi per livello e motivo,
   operazioni per tipo (avviate, eseguite, completate, fallite, annullate, in corso), rifiutate per motivo, calibrazione per fasce
   (livello strategico: stima a inizio round contro bersaglio dell'alleanza a fine durata; ordini: `prob_llm` contro `esito_reale`), VC
-  finali solo informative.
+  finali solo informative. Dallo step COERENZA STIME: colonna "Eseguite dal motore" (offensiva/sbarco: tappa 1 mossa dal
+  motore o tappa 2 approvata con l'attacco forzato; tenuta/rinforzo: presidio tenuto o rinforzato dal motore) e colonna separata "Prese da Hard (senza
+  operazione)"; sottosezione "Coerenza delle stime": cause degli annullamenti, artefatti C1-C5 / avviate, offensive+sbarchi
+  eseguiti dal motore / avviati, mediana |stima del candidato - prima stima al punto di decisione| (punti di successo e di
+  tenuta), blocchi del motore (tetto di perdita, sicurezza raduni, quota PU, candidati scartati, riavvii rifiutati);
+  calibrazione per tipo (stima dell'LLM) e della stima unica del motore al lancio per tipo.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -1730,6 +1741,70 @@ esistenti non cambiano (nessuna proprieta' nuova senza la voce, `OperazioneCongi
   (bersaglio preso da Hard prima delle tappe 15, rinforzi con tenuta "con rinforzi" gonfiata nel candidato 18, forze della tappa
   insufficienti 7, raccolta/flotta 4, candidato sparito 2), 5% ripensamento dell'LLM, 12,5% giustificati; offensive davvero eseguite 3/49
   (le altre "eseguite" sono prese di Hard senza operazione). Correzioni proposte (non fatte) nel documento.
+
+## Coerenza delle stime (step COERENZA STIME)
+
+Causa misurata (analisi `proplus/analisi/annullamenti-smoke-42775993327.md`): lo Stratega decideva bene su numeri incoerenti del
+motore (candidato, punto di decisione ed esecuzione usavano stime diverse). Ora **una sola stima** (`StimaUnica`), solo per le
+operazioni dello Stratega (`OperazioneCongiunta.isStratega`): le operazioni scritte a mano (egitto/francia, [prova]/[prova2]/
+[provallm]) e Hard non cambiano.
+- **Forze**: unita' delle nazioni dell'operazione che possono essere sul bersaglio entro il round obiettivo: nel round stesso
+  (`raggiungibiliOra`) terra per territori dell'alleanza, aerei con atterraggio, truppe sbarcabili (anche caricate su una costa
+  amica e sbarcate nello stesso turno, `sbarcabili`); per un round successivo SOLO cio' che l'operazione trattiene (unita' ai
+  luoghi di raccolta, carico dei trasporti nella zona di raduno, aerei di chi apre che arrivano in tempo alla raccolta, al
+  massimo `aerei_apre`): le altre unita' restano a Hard fino ad allora (prova locale: Syria 100% al lancio, 11% alla tappa
+  contando le unita' "raggiungibili ora"). Escluse le unita' di altre
+  operazioni attive dell'alleanza (`StimaUnica.riservate`: presidio tenuto, aerei/terra/trasporti ai raduni) e senza la guarnigione
+  delle capitali (`guardiaCapitali`, stessa soglia delle operazioni). Conquista: tappa 1 (`calculateBattleResults`, solo aerei con
+  ritirata), rinforzi nemici tra le tappe visti dal turno di chi apre, tappa 2; presa = P1 + (1 - P1) x P2; presidio = superstiti
+  di terra (o l'unita' di terra piu' forte). Tenuta/rinforzo: difensori alleati + `rinforziPossibili` delle nazioni
+  dell'operazione (terra entro 2 per territori alleati, niente antiaerea/difesa 0, non la guardia della capitale, al massimo
+  `aerei_copertura` aerei che possono atterrare).
+- **Contrattacco**: capitali e fabbriche con produzione >= `produzione_fabbrica_chiave` (3) = MASSIMO; altrove REALISTICO = la
+  frazione `impegno` delle forze in portata + acquisti (le piu' vicine prima, per TUV), con `impegno` = frazione impegnata media
+  di `StoricoNemico` pesata sulle osservazioni di tutte le operazioni dell'alleanza, almeno `impegno_nemico_minimo` 0,25; con
+  meno di `osservazioni_minime_storico` 4 osservazioni almeno `impegno_nemico_prudente` 0,5 (`base_impegno` dice quale).
+  Successo = presa x tenuta.
+- **Dove**: candidati (`StrategaCandidati.valuta`, i primi `candidati_valutati` 14 dello screening rapido, che resta solo per
+  ordinarli), stato strategico (`stima_motore_ora` di ogni operazione in corso, anche fuori lista), tappa 1 (`step1Stratega`:
+  numeri, decisione del motore, LLM, unita' mosse = quelle contate; "contate ma non mosse" nel diario), punto `tenuta`
+  (`tieni` del motore se la stima con i rinforzi > `soglia_ritirata`), soglie di rinforzo/ritirata (`holdPct`). La tappa 2
+  resta quella di prima (attacco forzato di Hard) con la tenuta realistica. Prima stima a un punto di decisione salvata in
+  `stima_decisione_prima` (misura di coerenza con `stima_avvio`).
+- **Unita' contate = unita' trattenute**: Hard pianifica gli attacchi gia' nella fase d'acquisto (su una copia della partita), quindi
+  trattenerle solo al combattimento era tardi (prova locale: 2 caccia russi del rinforzo di Egypt usati da Hard sui Paesi
+  Baltici). All'acquisto di una nazione dello Stratega `OperazioniCongiunte.trattenuteAllAcquisto` (presidio tenuto e, sotto
+  `soglia_rinforzi`, i rinforzi della stima; unita' in raccolta nel round di posizionamento; forze della tappa della nazione nel
+  round obiettivo) va in `ProPlusTuning.holdCombatForPurchase`, che `combatHeldUnits` riconosce anche sulla copia (stessi id,
+  stessa nazione e round). Anche nel combattimento di una tenuta i rinforzi sotto soglia restano fuori dagli attacchi di Hard.
+  Costo: se poi la tappa viene rinviata, quelle unita' restano ferme quel turno.
+- **Bersagli gia' in mano / presi da Hard**: niente candidato se una nazione dell'alleanza lo prende da sola nel round (stima rapida
+  delle sue forze, win >= `soglia_presa_hard` 70%). Se il bersaglio di una conquista diventa dell'alleanza senza le tappe (a
+  inizio turno di ogni nazione, prima della decisione strategica, alla tappa 1): TENUTA senza chiamare l'LLM se la tenuta stimata
+  >= `soglia_tenuta_presa_hard` 30%, altrimenti chiusa dal motore (ANNULLATA, `chiusa_dal_motore`, causa C1). Flag
+  `presa_senza_operazione`: non conta come eseguita.
+- **Prima della decisione di inizio round** (`OperazioniCongiunte.primaDellaDecisione`): bersaglio tenuto perso ⇒ FALLITA
+  (`fallita_prima_della_decisione`), conquista presa da Hard ⇒ come sopra; poi `chiudiFinite`.
+- **Fattibilita' al lancio** (`OperazioniCongiunte.lancio`): scartati i candidati con raccolta oltre `orizzonte_round` (la
+  `fattibilita` non limitata; dentro l'orizzonte il round minimo sale a quello della raccolta), zona di raduno non sicura (navi
+  da guerra delle nazioni entro 2 zone + alleate nella zona contro l'attacco realistico), nessun luogo di raccolta aerea sicuro,
+  tappa 1 oltre il tetto, tenuta < `tenuta_minima_candidato` 20% anche con i rinforzi; tutti in `candidati_scartati` con il
+  motivo. **Sicurezza raduni**: `SOGLIA_SICUREZZA` 40 contro l'attacco massimo resta per le operazioni scritte a mano; per lo
+  Stratega win% nemica dell'attacco realistico <= `soglia_sicurezza_raduno` 40 (`sicuro`).
+- **Tetto di perdita** (`StrategaConfig.tettoPerdita`): `tetto_perdita_per_pu` 3 TUV per PU di valore, tra `tetto_perdita_minimo`
+  20 e `tetto_perdita_max` 80; l'LLM puo' chiederne un altro fino a `tetto_perdita_max_llm` 120 (avvia e modifica). Riga
+  "TETTO DI PERDITA - ..." nel diario quando ferma una tappa (`bloccoTetto`).
+- **Riavvio**: niente riavvio dello stesso bersaglio entro `riavvio_round` 3 round da un'operazione annullata/fallita se il
+  successo stimato dal motore non e' migliorato di `riavvio_miglioramento_punti` 5 (`Stratega.riavvioVietato`, rifiuto motivato).
+- **Diario e misure**: `causa_annullamento`/`causa_testo` (`CauseAnnullamento`: C1 bersaglio dell'alleanza senza tappe, C5
+  candidato fuori lista, C4 niente in raccolta dopo 2 round, giustificato = contrattacco massimo +30% dal lancio, C3/C2 successo
+  del motore -15 punti dal lancio, altrimenti C6) per annulla dello stratega, degli ordini, del motore (rinvii) e chiusure del
+  motore; flag `tappa_motore`, `tenuta_motore`; blocchi per alleanza in `Pro+ stratega llm blocchi: <alleanza>`
+  (`tetto_perdita`, `sicurezza_raduni` = fasi con mosse verso il raduno negate, `quota_pu` = difesa limitata dalla quota delle
+  operazioni, contata in `DiaryRecorder.purchaseDefenseShare`, `candidati_scartati`, `riavvii_rifiutati`) nel riepilogo.
+- **Record perso (seme 503, R7)**: l'eccezione in `applica` dopo un annullamento saltava `chiudi`; causa non ricostruibile dai
+  file. Ora `applica` e' in try/catch (riga "ERRORE nell'applicazione", `errore_applicazione` nel record), il diario del round
+  e' scritto comunque (`StrategaDiario.scriviMinimo` se il diario completo fallisce).
 
 ## Come configurare lo stratega
 
@@ -3607,3 +3682,37 @@ comportamento. Documento completo con la tabella delle 56 operazioni: `proplus/a
   ConfrontoHard, ConfrontoVarianza, TestQualita): ripristinati, non committare quelle differenze.
 - Push senza `[smoke]`/`[autoplay]`: solo build e release `proplus-latest`, nessuna partita in CI.
 
+
+### Step COERENZA STIME — una sola stima per candidati, punti di decisione ed esecuzione (2026-11-10)
+
+Dall'analisi degli annullamenti (684652e): 46/56 annullamenti erano artefatti di numeri incoerenti del motore. Questo step rende i
+numeri coerenti (una sola stima), senza inerzia sugli annullamenti e senza budget difensivo. Vedi "Coerenza delle stime (step
+COERENZA STIME)" e lo schema 1.4 in `proplus/strategia/contratto-v1.md`.
+File: nuovi `ai/proplus/StimaUnica`, `CauseAnnullamento`, risorse `prompt-stratega-v5.md`, `prompt-ordini-turno-v4.md`
+(`PromptStrategaV4`→`PromptStrategaV5`, `PromptOrdiniTurnoV3`→`PromptOrdiniTurnoV4`, contratto 1.4), test `CoerenzaStimeTest`;
+modificati `OperazioniCongiunte` (solo per le operazioni dello Stratega: `step1Stratega`, presa di Hard, stato prima della
+decisione, fattibilita', sicurezza realistica, tenuta realistica, unita' trattenute, cause, tetto nel diario), `StrategaCandidati`
+(screening rapido + stima unica sui primi 14, scarti motivati, tetto proporzionale), `Stratega` (aggiornamento prima della
+decisione, `stima_motore_ora`/`al_lancio`, riavvio, cause, blocchi, `applica` robusto), `StrategaConfig` + `stratega-llm.json`
+(valori nuovi documentati nella `nota_coerenza`, NON tarati), `StrategaDiario` (`scriviMinimo`, chiavi nuove nel riepilogo),
+`DiaryRecorder.purchaseDefenseShare` (conteggio quota PU), `ProPlusAi.purchase` + `ProPlusTuning.holdCombatForPurchase`
+(solo nazioni dello Stratega), `DecisoreOperazione` (prompt v4), autoplay `ConfrontoSmoke` (+ test), workflow `[smoke]` semi
+601-606. `avvia.bat` e `aggiorna.ps1` NON toccati. Hard, Hard Beta, Pro+ (AI) e le operazioni scritte a mano invariati (ogni
+cambiamento e' dietro `OperazioneCongiunta.isStratega` o `Stratega.gioca`).
+- Test locali (JDK 25 da apt, mirror Google di Maven Central in `~/.gradle/init.d` con repository dal nome univoco e controllo
+  `findByName`, altrimenti "repository with name ... already exists"): `:game-core:test --tests 'games.strategy.triplea.ai.*'`
+  516, `:ai:test` 13, `:game-headed:test` 94, `:proplus-autoplay:test` 25: **0 falliti** (golden Hard `HardPriorityGoldenTest`
+  1 + `HardNeutralityGoldenTest` 2, `NudoHardTest` 2, `DiaryNeutralityTest` 3 diario on/off, `ProPlusGoldenTest`,
+  `OperazioniCongiunteTest` 11, `OperazioniLlmTest` 6, `StrategaLlmCompletoTest` 13 aggiornato). Nuovi `CoerenzaStimeTest` 8:
+  stessa stima al candidato e al punto di decisione (stesso stato, dadi con lo stesso seme), bersaglio preso da Hard → TENUTA
+  senza LLM / chiuso senza LLM (C1), FALLITA prima della chiamata strategica, candidato infattibile scartato (zona non sicura) e
+  mai tra i candidati, tetto proporzionale e richiesta dell'LLM entro il massimo, nessun riavvio entro 3 round senza +5 punti,
+  record del round scritto anche con un errore in `applica`; `AutoplayTest.smokeCountsOnlyTheEngineStepsAsExecutedAnd...`.
+  PMD/spotless: le violazioni restano solo in file preesistenti non toccati (stesse di prima: `OperazioniAnfibie` 839,
+  `OperazioniCongiunte.ordiniTenuta`/`gatherPlanes`, `Direttive`; formattazione di `ProPlusAi`, `StrategaSimulato`, ...):
+  `spotlessApply` NON va lanciato sull'intero modulo (riformatta file non toccati).
+- Prove locali con lo Stratega simulato (`-Dproplus.stratega.simulato=true`, 3-7 round, semi 601-604, nessun errore, 25-30 s a
+  round): hanno trovato e fatto correggere due incoerenze vere: (1) per un round futuro la stima contava unita' "raggiungibili
+  ora" che l'operazione non trattiene (Syria 100% → 11% alla tappa): ora solo cio' che l'operazione trattiene; (2) Hard pianifica
+  gli attacchi all'acquisto: i rinforzi trattenuti solo al combattimento erano gia' stati usati (2 caccia russi del rinforzo di
+  Egypt sui Paesi Baltici): ora trattenuti dall'acquisto.
