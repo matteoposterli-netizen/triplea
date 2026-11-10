@@ -61,7 +61,8 @@ public record StrategaConfig(
     double valoreVcPerRound,
     double sogliaTenutaDifesa,
     int maxTerritoriDifesa,
-    int maxUnitaDifesa) {
+    int maxUnitaDifesa,
+    double guadagnoMinimoTenutaPunti) {
 
   static final String RESOURCE = "proplus/strategia/stratega-llm.json";
 
@@ -132,7 +133,10 @@ public record StrategaConfig(
         o.getAsJsonObject("valore_pu").get("victory_city_per_round").getAsDouble(),
         o.getAsJsonObject("difesa").get("soglia_tenuta").getAsDouble(),
         o.getAsJsonObject("difesa").get("max_territori").getAsInt(),
-        o.getAsJsonObject("difesa").get("max_unita_per_territorio").getAsInt());
+        o.getAsJsonObject("difesa").get("max_unita_per_territorio").getAsInt(),
+        o.has("guadagno_minimo_tenuta_punti")
+            ? o.get("guadagno_minimo_tenuta_punti").getAsDouble()
+            : 5);
   }
 
   /**

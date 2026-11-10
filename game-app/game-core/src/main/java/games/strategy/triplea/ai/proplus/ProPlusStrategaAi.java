@@ -52,7 +52,14 @@ public class ProPlusStrategaAi extends ProPlusAi {
         Stratega.registra(data, player);
         final Stratega.Esito result = Stratega.inizioTurno(getProData(), getCalc(), data, player);
         Stratega.diarioTurno(data, result.righe());
-        result.avviso().ifPresent(this::avvisa);
+        // step R1 (A7): every failure of the strategic call in the game log (this player's turn)
+        result
+            .avviso()
+            .ifPresent(
+                text -> {
+                  warned = true;
+                  commento(text);
+                });
         if (result.avviso().isEmpty()
             && data.getProperties().get(Stratega.KEY_AVVISO) instanceof String why) {
           // another nation of the game met the warning first: once in this player's turns too

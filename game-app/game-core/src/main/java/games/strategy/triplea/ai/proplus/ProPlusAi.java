@@ -174,6 +174,36 @@ public class ProPlusAi extends ProAi {
       }
       if (nonCombat) {
         tuning.holdForOperation(data, player, result.tenute());
+      } else if (Stratega.gioca(data, player)) {
+        // step R1 (A1): Hard planned its combat move at the purchase (on a copy), so a target
+        // forced now or units held now that the plan did not exclude would be ignored: the units
+        // held at the purchase stay held, and Hard plans again on the real board
+        initializeData();
+        final java.util.Set<games.strategy.engine.data.Unit> before =
+            new java.util.LinkedHashSet<>(tuning.combatHeldUnits(getProData()));
+        before.removeIf(u -> !u.isOwnedBy(player) || !data.getUnits().getUnits().contains(u));
+        final java.util.Set<games.strategy.engine.data.Unit> keep =
+            new java.util.LinkedHashSet<>(before);
+        keep.addAll(result.tenute());
+        tuning.holdCombat(data, player, keep);
+        final boolean forced = OperazioniCongiunte.forzaUnBersaglio(getProData());
+        if (hasStoredCombatMove() && (forced || !before.containsAll(result.tenute()))) {
+          forgetStoredCombatMove();
+          ProPlusSettings.allianceOf(data, player)
+              .ifPresent(
+                  a ->
+                      Stratega.contaBlocco(
+                          data.getProperties(),
+                          a,
+                          Stratega.BLOCCO_RIPIANIFICA,
+                          player.getName() + (forced ? ": bersaglio forzato" : ": unita' trattenute")));
+          final List<String> lines = new java.util.ArrayList<>(result.righe());
+          lines.add(
+              "Stratega: piano d'attacco di Hard ricalcolato dopo le operazioni ("
+                  + (forced ? "bersaglio forzato" : "unita' trattenute non escluse all'acquisto")
+                  + ")");
+          result = new OperazioniCongiunte.Esito(result.tenute(), List.copyOf(lines), result.eventi());
+        }
       } else {
         tuning.holdCombat(data, player, result.tenute());
       }

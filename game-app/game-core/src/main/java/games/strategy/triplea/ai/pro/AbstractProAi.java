@@ -110,6 +110,20 @@ public abstract class AbstractProAi extends AbstractAi {
     storedStrafingTerritories = new ArrayList<>();
   }
 
+  /**
+   * Forgets the combat move planned at the purchase (on a copy of the game): the next combat move
+   * plans again on the real board. Never called by Hard; a subclass calls it when something it did
+   * after the purchase (a forced target, units held) makes the stored plan stale.
+   */
+  protected void forgetStoredCombatMove() {
+    storedCombatMoveMap = null;
+  }
+
+  /** True if a combat move planned at the purchase is waiting to be executed. */
+  protected boolean hasStoredCombatMove() {
+    return storedCombatMoveMap != null;
+  }
+
   @Override
   protected boolean choosesBombingTargetsByValue() {
     return proData.isBeta();

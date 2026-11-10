@@ -69,9 +69,11 @@ final class StrategaFuoriLista {
       }
       if (t.getOwner().isNull()
           || Matches.isTerritoryAllied(pa).test(t)
-          || !data.getRelationshipTracker().isAtWar(pa, t.getOwner())
-          || !data.getRelationshipTracker().isAtWar(pc, t.getOwner())) {
-        return Optional.of(t.getName() + " non e' di un nemico in guerra con " + a + " e " + c);
+          || !OperazioniCongiunte.guerraPossibile(data, pa, t.getOwner())
+          || !OperazioniCongiunte.guerraPossibile(data, pc, t.getOwner())) {
+        // step R1 (A4): war now or possible by the map's rules, for each of the two nations
+        return Optional.of(
+            t.getName() + " non e' di un nemico in guerra (o che puo' entrarci) con " + a + " e " + c);
       }
       if (tipo.get() == Tipo.SBARCO && zona(data, t, pa).isEmpty()) {
         return Optional.of(

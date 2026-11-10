@@ -430,6 +430,12 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   configurazione VC R12 del lato (media ± ds, min-max), reddito finale, TUV perso, capitali cadute; differenze di ogni configurazione
   Stratega da Hard vs Hard e di "[senza liste]"/"[senza tenute]" dallo Stratega completo, con IC 95% di Welch (`ConfrontoConferma.Welch`)
   ed esito "esclude / include lo 0"; per "[senza chiave]" il contatore di `ControlloTuning` (domande, differenze, risposte "operazione").
+- **Modalita' "correzioni" (step R1)**: `[correzioni]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒
+  `modalita: correzioni`. Stessi semi di R0 (1101-1110), 12 round, Equilibrato, mescolata, `max-parallel` 20, 4 configurazioni = 40
+  partite: a `Hard-vs-Hard`, c `Asse-Stratega-LLM-vs-Hard`, f `Hard-vs-Alleati-Stratega-LLM`, g `Asse-Stratega-regole-vs-Hard`
+  (linea di base a regole `--stratega-regole si`, nessuna chiave, costo 0). Chiave solo a c e f, tetto 15 $ sulle 20 partite LLM (0,75 $
+  a partita). Etichetta "Stratega LLM [regole]"; la sezione "Diagnosi Stratega (R0)" confronta anche g con c e mostra i contatori
+  dello Stratega (round decisi/senza LLM, tentativi falliti, menu vuoto, unita' contate non mosse, piani di Hard ricalcolati).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -1968,6 +1974,62 @@ nessun pannello.
   rinforzo fuori lista ("tenute e rinforzi spenti"). I "rinforzi prioritari" (pesi dell'ammassamento) NON sono toccati.
 - Test: `StrategaLlmCompletoTest.theSwitchesOfStepR0TurnOffTheListsAndTheHolds`, `AutoplayTest.parsesTheStrategistSwitchesOfStepR0`,
   `AutoplayTest.diagnosisOfStepR0ComparesTheStrategistConfigurations`.
+
+### Correzioni dello Stratega (step R1, gruppo A)
+
+Solo per la voce "Pro+ Stratega LLM" (operazioni `stratega-*`, `Stratega.gioca`); Hard, Pro+ (AI), operazioni scritte a mano
+invariate. Valori nuovi in `stratega-llm.json` (`guadagno_minimo_tenuta_punti`, `nota_r1`), NON tarati.
+- **A1 piano di Hard ricalcolato**: Hard pianifica il combattimento all'acquisto su una copia ed esegue il piano memorizzato
+  (`AbstractProAi.move`), quindi il bersaglio forzato della tappa 2 (scritto nel combattimento) e le unita' trattenute dopo le
+  operazioni non entravano nel piano. Hook minimo `AbstractProAi.forgetStoredCombatMove`/`hasStoredCombatMove` (protetti, mai
+  chiamati da Hard); `ProPlusAi.playJointOperation` (solo Stratega): trattenute = quelle dell'acquisto ∪ quelle delle operazioni,
+  e se c'e' un bersaglio forzato (`OperazioniCongiunte.forzaUnBersaglio`) o unita' trattenute non escluse all'acquisto il piano viene
+  dimenticato e Hard ripianifica sul tabellone reale (blocco `piano_hard_ricalcolato`). Win% della tappa 2 dello Stratega con le
+  stesse unita' dell'esecuzione (`attackers(..., false)`, senza gli sbarchi che Hard potrebbe aggiungere).
+- **A2 insieme eseguibile**: `OperazioniCongiunte.eseguibili` = unita' che l'esecuzione muove nel turno (attaccanti diretti senza la
+  guardia della capitale + carico dei trasporti nella zona di raduno), usato da `StimaUnica.forze` per il round corrente della nazione
+  di turno (candidato, punto di decisione, presidio, tenuta); `step1Stratega` muove solo le contate (anche negli sbarchi). Contate e
+  non mosse dopo `execute`: riga nel diario + `contate_non_mosse` nel registro e nei blocchi (riepilogo). Per i round futuri il
+  conteggio resta quello del C1-ter.
+- **A3 impegno per tipo di bersaglio** (`StimaUnica.TipoBersaglio`: conquista = offensiva, costa = sbarco, tenuta di territorio
+  proprio = tenuta/rinforzo/difesa in ombra): lo storico del nemico e' mediato solo sulle operazioni dello stesso tipo; per una
+  conquista o una costa (anche dopo la presa) mai sotto `impegno_nemico_prudente`.
+- **A4 nemico**: in `StrategaCandidati` nemico = proprietario di un'altra alleanza non neutrale (non piu' "nemico della prima nazione");
+  la guerra si verifica per OGNI nazione dell'operazione con `OperazioniCongiunte.guerraPossibile` (in guerra o puo' dichiararla per
+  le regole della mappa, `StimaUnica.nemiciReali` in entrambe le direzioni) per la preparazione; unita' nemiche vicine e flotte nelle
+  zone di sbarco = di nazioni di altre alleanze in guerra possibile con una nazione dello Stratega; acquisti nemici
+  (`enemyPurchases`) = `nemicoDellOperazione`; esecuzione delle tappe solo con la guerra reale (`inGuerraPerLaTappa`, altrimenti
+  rinvio "non e' ancora in guerra"); `presaDaHard` con la guerra reale; fuori lista con la guerra possibile.
+- **A5 guardia della capitale fissata al lancio**: `OperazioniCongiunte.fissaGuardia` (da `Stratega.avvia`) salva in `Pro+ stratega
+  guardia: <id>` le unita' che la minaccia del momento tiene in ogni capitale delle nazioni dell'operazione; `guardCapital` delle
+  operazioni dello Stratega riusa quella guardia (a tabellone invariato le stime successive contano le stesse unita').
+- **A6 paracadute = pausa**: nei punti di decisione il paracadute non e' piu' "decisione LLM: rinvia/ritira": la tappa resta in
+  ESECUZIONE al round dopo senza rinvio contato (`pausa`, `pause_paracadute`, testo "PAUSA per paracadute"; oltre `round_max` la fine
+  normale), la tenuta e' TIENI; nel record dell'ordine `azione = "paracadute"` (esclusa dalla calibrazione in `ConfrontoSmoke`).
+- **A7 chiamata strategica ripetuta**: `KEY_ROUND` scritto solo dopo una risposta valida o dopo l'ultimo tentativo
+  (`Pro+ stratega llm tentativi: <alleanza>` = "round:n", `MAX_TENTATIVI` 2); un errore o una risposta non valida viene riprovato una
+  volta dalla nazione successiva dell'alleanza nello stesso round; "nessuna chiave", tetto $ e tetto chiamate non si riprovano.
+  Portafoglio: `tentativi_falliti`, `round_decisi_al_secondo_tentativo`. Una riga nel log di gioco per OGNI fallimento (la chiave
+  mancante una volta sola) e una nel diario dello Stratega.
+- **A8 tenute**: candidato tenuta/rinforzo scartato se la tenuta che Hard ottiene da solo (`StimaUnica.tenutaDaSolo`: difensori presenti,
+  senza rinforzi, stesso contrattacco realistico) e' gia' >= `soglia_rinforzi` o se il guadagno e' < `guadagno_minimo_tenuta_punti` 5;
+  nel candidato `tenuta_hard_da_solo_pct`, `guadagno_tenuta_punti`, `valore_tenuta` = guadagno x valore. Costo ridotto:
+  `trattenutaMinima` = il minimo di unita' (presidio prima, difensori piu' forti prima, poi rinforzi possibili; ricerca binaria) che
+  porta la tenuta a `soglia_rinforzi`, nessuna se gia' tenuta, tutte se nemmeno tutte bastano; usata all'acquisto (`trattenute`) e nel
+  combattimento della tenuta (evento `trattenuta_minima`, `presidio_liberato`). Il non combattimento continua a tenere tutto il
+  presidio (le unita' non attaccano in quella fase).
+- **Gruppo B fatto**: **B5** in `attackers` (solo Stratega) gli attaccanti diretti senza la guardia delle capitali e senza le unita'
+  riservate da altre operazioni (tappa 1, tappa 2, insieme eseguibile); **B6** tetto di perdita della definizione proporzionale al
+  valore in PU (`valore`, come il valore d'alleanza) e non all'indice; **B7** il presidio della stima di conquista comprende i
+  rinforzi del non combattimento di chi chiude (`rinforziPossibili`, unita' non usate nelle tappe), come diceva gia' il commento;
+  **B8** obiettivi nazionali in gioco di TUTTE le nazioni dell'alleanza nel valore del bersaglio. **D6** chiave di scarto = bersaglio
+  + tipo + nazioni, candidati con successo stimato < 30% (`SUCCESSO_MINIMO_MENU`) fuori dal menu, menu ordinato per valore d'alleanza
+  della stima unica. **Non fatto**: D5 (filtro "Hard lo prende da solo" con le soglie d'attacco vere di Hard e la stessa portata della
+  stima): tempo.
+- **Menu vuoto**: round con 0 candidati contati nel portafoglio (`round_menu_vuoto`, `round_menu_vuoto_elenco`) e riga nel diario.
+- **Linea di base a regole** (`StrategaRegole`, `-Dproplus.stratega.regole=true`, autoplay `--stratega-regole si`): annulla le operazioni
+  con successo stimato < 30%, continua le altre, avvia i candidati con valore d'alleanza positivo piu' alto fino al massimo; liste vuote;
+  ai punti di decisione l'azione del motore. Nessuna rete, costo 0.
 
 ## Come configurare lo stratega
 
@@ -4084,3 +4146,42 @@ File: nuovi `ai/proplus/StrategaInterruttori`, autoplay `ConfrontoDiagnosi`; mod
 `Riepilogo` (`chiave_llm`, `stratega_spento`), `RiepilogoGenerale` (etichetta, sezione), workflow (`[diagnosi]`). Hard, Pro+ (AI) e le
 altre voci invariate. `avvia.bat` e `aggiorna.ps1` NON toccati.
 
+
+#### Autoplay in CI (run 42915599025, commit 9d73dd4, tutto verde, 50 partite [diagnosi] semi 1101-1110)
+50/50 completate, 0 eccezioni nei log, costo LLM **7,99 $** (tetto 15). Cancello R0: SI'. Asse, VC R12 (media ± ds, min-max),
+reddito finale, capitali dell'Asse cadute (totale su 10 partite):
+
+| Configurazione | VC R12 | Reddito finale | TUV perso | Capitali cadute |
+|---|---|---|---|---|
+| a Hard / Hard | 5,70 ± 1,64 (2-8) | 66,1 | 884 | 1 |
+| b Stratega senza chiave | 5,50 ± 1,43 (4-7) | 62,0 | 849 | 3 |
+| c Stratega LLM | 4,00 ± 1,63 (2-6) | 35,8 | 871 | 5 |
+| d Stratega LLM senza liste | 4,70 ± 1,83 (2-8) | 50,0 | 894 | 7 |
+| e Stratega LLM senza tenute | 5,50 ± 1,08 (4-7) | 55,6 | 894 | 3 |
+
+Differenze VC R12 (IC 95% Welch; con 10 semi si distinguono solo ~1,2 VC o piu'): b − a −0,20 [−1,65; 1,25] include lo 0;
+**c − a −1,70 [−3,24; −0,16] esclude lo 0** (reddito −30,3 [−53,7; −6,9] esclude lo 0); d − c +0,70 [−0,93; 2,33] include lo 0;
+**e − c +1,50 [0,18; 2,82] esclude lo 0**; e − a −0,20 include lo 0. `ControlloTuning` di b: 449.743 domande, **0 differenze**,
+949 risposte "operazione" (il tetto della strategia 70%, inerte senza operazioni).
+- **Regole del prompt applicate**: b NON e' distinguibile da a ⇒ il percorso Stratega senza LLM e' Hard, nessuna correzione "b" in R1.
+  e migliora c (+1,5 VC, esclude lo 0); d migliora c di +0,7 (non distinguibile). **Default NON cambiati: decide Matteo.**
+- Perche' (dai riepiloghi): in c l'LLM avvia quasi solo tenute (33 tenute, 4 offensive in 10 partite; d: 33/2; e: 0/4) e le unita'
+  tenute fuori dagli attacchi di Hard all'acquisto sono **2.144 in 99 turni** (c), 1.726 in 80 (d), **58 in 13** (e): le tenute
+  bloccano l'esercito dell'Asse (presidio + rinforzi interi, OC:457-474), da qui il reddito −30 e le VC −1,7. E' il punto A8 di R1.
+
+### Step R1 — correzioni del gruppo A (+ B5-B8, D6, linea di base a regole) (2026-11-10, notte)
+
+Vedi "Correzioni dello Stratega (step R1, gruppo A)" e la modalita' `[correzioni]`. File: nuovi `ai/proplus/StrategaRegole`;
+modificati `ai/pro/AbstractProAi` (hook protetto `forgetStoredCombatMove`/`hasStoredCombatMove`, mai chiamato da Hard),
+`ProPlusAi`, `ProPlusStrategaAi`, `OperazioniCongiunte`, `StimaUnica`, `Stratega`, `StrategaCandidati`, `StrategaFuoriLista`,
+`StrategaDiario`, `StrategaConfig` + `stratega-llm.json`, `DecisoreOperazione`; autoplay `--stratega-regole`, `ConfrontoDiagnosi`
+(contatori, g contro c), `ConfrontoSmoke` (paracadute fuori dalla calibrazione), workflow `[correzioni]`. Hard e le altre voci
+invariate; `avvia.bat` e `aggiorna.ps1` NON toccati.
+- Test locali (JDK 25, mirror Google): `:game-core:test --tests 'games.strategy.triplea.ai.*'` + `:ai:test` + `:proplus-autoplay:test`
+  **581, 0 falliti** (golden Hard `HardPriorityGoldenTest` e `HardNeutralityGoldenTest`, `NudoHardTest`, `DiaryNeutralityTest`
+  compresi). Nuovi in `StrategaLlmCompletoTest`: chiamata fallita ripetuta dalla nazione successiva e round chiuso dopo 2 fallimenti
+  (A7), impegno di una conquista/costa mai abbassato dallo storico delle tenute (A3), guardia della capitale fissata al lancio e
+  invariata con una minaccia nuova (A5), candidati tenuta con `tenuta_hard_da_solo_pct` < soglia e guadagno >= 5 (A8), linea di base
+  a regole (annulla < 30%, continua, avvia per valore). `CoerenzaStimeTest.anEmptyTargetIsTaken...` aggiornato: con l'insieme
+  eseguibile gli aerei non entrano in un territorio vuoto (presa 0 "solo aerei" invariata).
+- Non verificato nel codice e quindi non toccato: nessuno dei punti A; i numeri di riga del prompt corrispondevano a f0f5e3f.

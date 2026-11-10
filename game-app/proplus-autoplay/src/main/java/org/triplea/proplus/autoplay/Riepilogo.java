@@ -454,6 +454,9 @@ final class Riepilogo {
     }
     if (strategist) {
       p.addProperty("chiave_llm", llmKeyPresent());
+      if (o.strategaRegole()) {
+        p.addProperty("stratega_regole", true);
+      }
     }
     return p;
   }

@@ -226,6 +226,10 @@ public final class AutoplayRunner {
       // step STRATEGA LLM: the cap of the game for both levels of the strategist
       games.strategy.triplea.ai.proplus.Stratega.setBudget(
           data.getProperties(), options.budgetOperazioni());
+      // step R1: the rule-based baseline instead of the LLM (both levels, no network)
+      if (options.strategaRegole()) {
+        System.setProperty("proplus.stratega.regole", "true");
+      }
       // step R0: the strategist's switches turned off (default: all on)
       for (final String alliance : monitor.alliances().keySet()) {
         if (AutoplayOptions.STRATEGA.equals(options.tipo(alliance))) {

@@ -329,6 +329,9 @@ public final class DecisoreOperazione {
     if (StrategaSimulato.attivo()) {
       return new StrategaSimulato();
     }
+    if (StrategaRegole.attivo()) {
+      return new StrategaRegole(); // step R1: rule-based baseline (autoplay only)
+    }
     final Optional<String> key = ProfiloStratega.carica().chiave(Fornitore.ANTHROPIC);
     final ClientApi client = new ClientApi(Http.REALE, model);
     return new Trasporto() {

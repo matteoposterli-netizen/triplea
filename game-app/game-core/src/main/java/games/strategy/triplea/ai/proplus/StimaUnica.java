@@ -282,7 +282,16 @@ public final class StimaUnica {
                       .thenComparing(u -> -op.tuvOf(List.of(u))))
               .ifPresent(garrison::add);
     }
-    final Impegno imp = impegno(data, def.alleanza(), target);
+    // step R1 (B7): plus the closer's units left out of the steps that its non-combat move of the
+    // same turn can bring in (the same reinforcements as a hold), as the comment above says
+    if (take > 0 && closer != null) {
+      final Set<Unit> used = new HashSet<>(t1);
+      used.addAll(t2);
+      op.rinforziPossibili(target, closer, reserved).stream()
+          .filter(u -> !used.contains(u) && !garrison.contains(u))
+          .forEach(garrison::add);
+    }
+    final Impegno imp = impegno(data, def.alleanza(), target, TipoBersaglio.of(def.id()));
     final Minaccia m = op.minaccia(target);
     final List<Unit> counter = parte(op, target, m, imp.frazione());
     final double hold = tenuta(proData, calc, target, m, counter, garrison);
@@ -418,7 +427,7 @@ public final class StimaUnica {
       }
     }
     garrison.addAll(help);
-    final Impegno imp = impegno(data, def.alleanza(), target);
+    final Impegno imp = impegno(data, def.alleanza(), target, TipoBersaglio.of(def.id()));
     final Minaccia m = op.minaccia(target);
     final List<Unit> counter = parte(op, target, m, imp.frazione());
     final double hold = tenuta(proData, calc, target, m, counter, garrison);
@@ -451,6 +460,24 @@ public final class StimaUnica {
         false,
         false,
         List.of());
+  }
+
+  /**
+   * Step R1 (A8): the hold% of {@code target} Hard gets alone (the alliance's defenders there now,
+   * no reinforcement of the operation), against the same realistic counterattack as {@link
+   * #tenuta(ProData, ProOddsCalculator, Definizione, Territory)}.
+   */
+  public static double tenutaDaSolo(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final Definizione def,
+      final Territory target) {
+    final OperazioniCongiunte op = OperazioniCongiunte.perStima(proData, calc, def);
+    final Impegno imp =
+        impegno(proData.getData(), def.alleanza(), target, TipoBersaglio.of(def.id()));
+    final Minaccia m = op.minaccia(target);
+    return tenuta(
+        proData, calc, target, m, parte(op, target, m, imp.frazione()), op.alliedDefendersOf(target));
   }
 
   /** The estimate of any operation of the strategist now (conquest before the take, else hold). */
@@ -488,6 +515,53 @@ public final class StimaUnica {
    */
   public static Impegno impegno(
       final GameState data, final String alliance, final Territory target) {
+    return impegno(data, alliance, target, TipoBersaglio.TENUTA);
+  }
+
+  /**
+   * Step R1 (A3): the kind of target of an operation, with its own history of the enemy's
+   * commitment: a conquest (offensive), a coast (landing), the hold of an own territory (hold,
+   * reinforcement). A conquest keeps its kind after the take (the hold of a conquered territory).
+   */
+  public enum TipoBersaglio {
+    CONQUISTA("conquista"),
+    COSTA("costa"),
+    TENUTA("tenuta di territorio proprio");
+
+    private final String testo;
+
+    TipoBersaglio(final String testo) {
+      this.testo = testo;
+    }
+
+    public String testo() {
+      return testo;
+    }
+
+    /** The kind of the operation {@code id} (a strategist's id, else a hold). */
+    public static TipoBersaglio of(final String id) {
+      return switch (OperazioneCongiunta.tipoStratega(id)) {
+        case "offensiva" -> CONQUISTA;
+        case "sbarco" -> COSTA;
+        default -> TENUTA;
+      };
+    }
+
+    boolean conquista() {
+      return this != TENUTA;
+    }
+  }
+
+  /**
+   * As {@link #impegno(GameState, String, Territory)} with the history of the operations of the
+   * same kind only (step R1, A3); for a conquest or a coast never under {@code
+   * impegno_nemico_prudente}.
+   */
+  public static Impegno impegno(
+      final GameState data,
+      final String alliance,
+      final Territory target,
+      final TipoBersaglio kind) {
     final StrategaConfig cfg = StrategaConfig.get();
     final var ta = TerritoryAttachment.get(target);
     if (ta.isPresent()
@@ -510,6 +584,9 @@ public final class StimaUnica {
     double weighted = 0;
     int n = 0;
     for (final String id : ids) {
+      if (TipoBersaglio.of(id) != kind) {
+        continue; // step R1 (A3): the history of this kind of target only
+      }
       final JsonObject s = StoricoNemico.riassunto(props, id);
       final int obs = s.has("osservazioni") ? s.get("osservazioni").getAsInt() : 0;
       if (obs > 0) {
@@ -524,19 +601,27 @@ public final class StimaUnica {
           f,
           String.format(
               Locale.ROOT,
-              "minimo prudente %.2f (storico scarso: %d osservazioni%s)",
+              "minimo prudente %.2f (storico scarso per " + kind.testo() + ": %d osservazioni%s)",
               cfg.impegnoNemicoPrudente(),
               n,
               n == 0 ? "" : String.format(Locale.ROOT, ", frazione %.2f", seen)));
     }
-    final double f = Math.min(1, Math.max(cfg.impegnoNemicoMinimo(), seen));
+    final double floor =
+        kind.conquista()
+            ? Math.max(cfg.impegnoNemicoMinimo(), cfg.impegnoNemicoPrudente())
+            : cfg.impegnoNemicoMinimo();
+    final double f = Math.min(1, Math.max(floor, seen));
     return new Impegno(
         f,
         String.format(
             Locale.ROOT,
-            "storico del nemico: frazione impegnata %.2f su %d osservazioni",
+            "storico del nemico (%s): frazione impegnata %.2f su %d osservazioni%s",
+            kind.testo(),
             seen,
-            n));
+            n,
+            kind.conquista() && seen < floor
+                ? String.format(Locale.ROOT, ", minimo per una conquista %.2f", floor)
+                : ""));
   }
 
   /** The {@code share} of the counterattack (TUV), the closest units first; all with 1. */
@@ -616,7 +701,8 @@ public final class StimaUnica {
     }
     final List<Unit> list = new ArrayList<>();
     if (k <= 1) {
-      list.addAll(op.raggiungibiliOra(target, owner));
+      // step R1 (A2): this turn the executable set, the same units the execution moves
+      list.addAll(op.eseguibili(target, owner));
     } else {
       // a later round: the land and air units that can be there by then (the engine brings the
       // counted land units closer and holds them, OperazioniCongiunte.avvicina/trattenute), plus

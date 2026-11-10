@@ -197,6 +197,15 @@ final class StrategaDiario {
       x.addProperty("round_decisi", pf.has("round_decisi") ? pf.get("round_decisi").getAsInt() : 0);
       x.addProperty(
           "round_senza_llm", pf.has("round_senza_llm") ? pf.get("round_senza_llm").getAsInt() : 0);
+      // step R1: retries of the strategic call (A7) and rounds with an empty menu of candidates
+      for (final String key :
+          List.of(
+              "tentativi_falliti", "round_decisi_al_secondo_tentativo", "round_menu_vuoto")) {
+        x.addProperty(key, pf.has(key) ? pf.get(key).getAsInt() : 0);
+      }
+      x.add(
+          "round_menu_vuoto_elenco",
+          pf.has("round_menu_vuoto_elenco") ? pf.get("round_menu_vuoto_elenco") : new JsonArray());
       x.add("blocchi", Stratega.blocchi(props, a));
       // step C2: the computed defense of every nation's turn (with the outcome of the turn after)
       x.add("difesa", Difesa.registro(props, a).getAsJsonArray("turni"));

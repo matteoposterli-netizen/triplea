@@ -58,6 +58,16 @@ public final class Stratega {
   public static final String KEY_USO = DecisoreOperazione.KEY_USO_STRATEGICO;
   static final String KEY_BLOCCHI = "Pro+ stratega llm blocchi: ";
 
+  /**
+   * Step R1 (A7): attempts of the round's strategic decision, "round:attempts" per alliance. A
+   * failed call (error, invalid answer) is tried again once by the next nation of the alliance in
+   * the same round; {@link #KEY_ROUND} is written only after a valid answer or the last attempt.
+   */
+  static final String KEY_TENTATIVI = "Pro+ stratega llm tentativi: ";
+
+  /** At most this many strategic calls per alliance and round (the first one and one retry). */
+  static final int MAX_TENTATIVI = 2;
+
   /** Kinds of engine blocks counted per alliance (step COERENZA STIME). */
   static final String BLOCCO_TETTO = "tetto_perdita";
 
@@ -65,6 +75,12 @@ public final class Stratega {
   static final String BLOCCO_QUOTA = "quota_pu";
   static final String BLOCCO_FATTIBILITA = "candidati_scartati";
   static final String BLOCCO_RIAVVIO = "riavvii_rifiutati";
+
+  /** Step R1 (A2): units counted by step 1 that the execution did not move. */
+  static final String BLOCCO_NON_MOSSE = "contate_non_mosse";
+
+  /** Step R1 (A1): Hard's combat plan made at the purchase dropped and planned again. */
+  static final String BLOCCO_RIPIANIFICA = "piano_hard_ricalcolato";
 
   /** The warning written once in the game log when the LLM can't be used. */
   public static final String AVVISO = "Stratega LLM non disponibile: gioco con le regole";
@@ -191,9 +207,33 @@ public final class Stratega {
     if (props.get(KEY_ROUND + alliance.get()) instanceof Integer done && done >= round) {
       return Esito.NESSUNO;
     }
-    props.set(KEY_ROUND + alliance.get(), (Serializable) null);
-    props.set(KEY_ROUND + alliance.get(), round);
-    return new Round(proData, calc, data, alliance.get(), round).decidi();
+    // step R1 (A7): KEY_ROUND only after a valid answer (or the last attempt); a failure is tried
+    // again once by the next nation of the alliance in this round
+    final int tries = tentativi(props, alliance.get(), round);
+    if (tries >= MAX_TENTATIVI) {
+      return Esito.NESSUNO;
+    }
+    props.set(KEY_TENTATIVI + alliance.get(), (Serializable) null);
+    props.set(KEY_TENTATIVI + alliance.get(), round + ":" + (tries + 1));
+    return new Round(proData, calc, data, alliance.get(), round, tries + 1).decidi();
+  }
+
+  /** Strategic calls already tried by {@code alliance} in {@code round}. */
+  static int tentativi(final GameProperties props, final String alliance, final int round) {
+    if (props.get(KEY_TENTATIVI + alliance) instanceof String s) {
+      final String[] p = s.split(":");
+      try {
+        return p.length == 2 && Integer.parseInt(p[0]) == round ? Integer.parseInt(p[1]) : 0;
+      } catch (final NumberFormatException e) {
+        return 0;
+      }
+    }
+    return 0;
+  }
+
+  private static void fatto(final GameProperties props, final String alliance, final int round) {
+    props.set(KEY_ROUND + alliance, (Serializable) null);
+    props.set(KEY_ROUND + alliance, round);
   }
 
   /** One decision of the strategic level. */
@@ -209,25 +249,32 @@ public final class Stratega {
     private final JsonObject diario = new JsonObject();
     private Optional<String> avviso = Optional.empty();
     private final Set<String> candidateTargets = new LinkedHashSet<>();
+    private final int tentativo;
+
+    /** True when the failure of this attempt may be tried again (error, invalid answer). */
+    private boolean riprovabile;
 
     Round(
         final ProData proData,
         final ProOddsCalculator calc,
         final GameData data,
         final String alliance,
-        final int round) {
+        final int round,
+        final int tentativo) {
       this.proData = proData;
       this.calc = calc;
       this.data = data;
       this.props = data.getProperties();
       this.alliance = alliance;
       this.round = round;
+      this.tentativo = tentativo;
     }
 
     Esito decidi() {
       diario.addProperty("tipo", "strategico");
       diario.addProperty("round", round);
       diario.addProperty("alleanza", alliance);
+      diario.addProperty("tentativo", tentativo);
       final JsonObject portfolio = portafoglio(props, alliance);
       // step COERENZA STIME: the engine brings the operations up to date first (target lost =
       // FALLITA, target taken by Hard = TENUTA or closed), then the finished ones leave the list
@@ -272,6 +319,25 @@ public final class Stratega {
         ProLogger.warn("[Pro+] Stratega: candidati non calcolati: " + e);
         righe.add("Stratega LLM: candidati non calcolati (" + e + ")");
       }
+      if (candidates.isEmpty()) {
+        // step R1: the round's menu of candidates is empty (the LLM is still called)
+        portfolio.addProperty(
+            "round_menu_vuoto",
+            (portfolio.has("round_menu_vuoto") ? portfolio.get("round_menu_vuoto").getAsInt() : 0)
+                + 1);
+        final JsonArray rounds =
+            portfolio.has("round_menu_vuoto_elenco")
+                ? portfolio.getAsJsonArray("round_menu_vuoto_elenco")
+                : new JsonArray();
+        if (!rounds.contains(new com.google.gson.JsonPrimitive(round))) {
+          rounds.add(round);
+        } else {
+          portfolio.addProperty(
+              "round_menu_vuoto", portfolio.get("round_menu_vuoto").getAsInt() - 1);
+        }
+        portfolio.add("round_menu_vuoto_elenco", rounds);
+        righe.add("Stratega: menu dei candidati VUOTO al R" + round);
+      }
       final JsonObject state = stato(candidates, reading, portfolio, gen.scartati());
       diario.add("stato_inviato", riassuntoStato(state));
       diario.addProperty("caratteri_stato", state.toString().length());
@@ -307,6 +373,12 @@ public final class Stratega {
     }
 
     private Esito chiudi(final Optional<JsonObject> answer, final JsonObject portfolio) {
+      // step R1 (A7): the round is decided after a valid answer or the last attempt; a retryable
+      // failure leaves it open for the next nation of the alliance in this round
+      final boolean retry = answer.isEmpty() && riprovabile && tentativo < MAX_TENTATIVI;
+      if (!retry) {
+        fatto(props, alliance, round);
+      }
       if (answer.isEmpty()) {
         // parachute: no new operation (Hard); the ones in progress go on with Hard's fallbacks
         props.set(KEY_RINFORZI + alliance, (Serializable) null);
@@ -317,14 +389,24 @@ public final class Stratega {
                 + round
                 + "): nessuna decisione, nessuna operazione nuova ("
                 + (diario.has("ripiego") ? diario.get("ripiego").getAsString() : "nessuna risposta")
+                + (retry ? "; nuovo tentativo con la prossima nazione dell'alleanza" : "")
                 + ")");
       }
       if (!portfolio.has("rifiutate")) {
         portfolio.add("rifiutate", new JsonArray());
       }
       portfolio.getAsJsonArray("rifiutate").addAll(rifiutate);
-      final String key = answer.isPresent() ? "round_decisi" : "round_senza_llm";
+      final String key =
+          answer.isPresent() ? "round_decisi" : retry ? "tentativi_falliti" : "round_senza_llm";
       portfolio.addProperty(key, (portfolio.has(key) ? portfolio.get(key).getAsInt() : 0) + 1);
+      if (answer.isPresent() && tentativo > 1) {
+        portfolio.addProperty(
+            "round_decisi_al_secondo_tentativo",
+            (portfolio.has("round_decisi_al_secondo_tentativo")
+                    ? portfolio.get("round_decisi_al_secondo_tentativo").getAsInt()
+                    : 0)
+                + 1);
+      }
       salvaPortafoglio(props, alliance, portfolio);
       try {
         diario.add("uso_partita", usoTotale(props));
@@ -409,9 +491,28 @@ public final class Stratega {
       DecisoreOperazione.salvaUso(props, KEY_USO, u);
       final String d = detail.length() > 200 ? detail.substring(0, 200) + "..." : detail;
       diario.addProperty("ripiego", why + ": " + d);
-      if (!(props.get(KEY_AVVISO) instanceof String)) {
+      riprovabile =
+          DecisoreOperazione.RIPIEGO_ERRORE.equals(why)
+              || DecisoreOperazione.RIPIEGO_NON_VALIDA.equals(why);
+      final boolean first = !(props.get(KEY_AVVISO) instanceof String);
+      if (first) {
         props.set(KEY_AVVISO, why + ": " + d);
-        avviso = Optional.of(AVVISO + " (" + why + ")");
+      }
+      // step R1 (A7): one game log line per failure (the missing key only once per game)
+      if (first || !DecisoreOperazione.RIPIEGO_NON_DISPONIBILE.equals(why)) {
+        avviso =
+            Optional.of(
+                AVVISO
+                    + " ("
+                    + why
+                    + ", R"
+                    + round
+                    + ", tentativo "
+                    + tentativo
+                    + (riprovabile && tentativo < MAX_TENTATIVI
+                        ? "; riprova la prossima nazione dell'alleanza"
+                        : "")
+                    + ")");
       }
       return Optional.empty();
     }
@@ -662,6 +763,13 @@ public final class Stratega {
         return;
       }
       defs.add(def);
+      // step R1 (A5): the capital guard of the operation fixed now, reused by its later estimates
+      try {
+        OperazioniCongiunte.fissaGuardia(
+            proData, calc, OperazioneCongiunta.parse(StrategaCandidati.wrap(def)).get(0));
+      } catch (final RuntimeException ex) {
+        ProLogger.warn("[Pro+] Stratega: guardia della capitale non fissata: " + ex);
+      }
       if (st != null) {
         final Registro r0 = Registro.leggi(props, id);
         r0.json().add("stima_avvio", st);

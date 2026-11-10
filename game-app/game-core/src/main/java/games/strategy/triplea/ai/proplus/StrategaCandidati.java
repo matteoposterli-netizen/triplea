@@ -215,6 +215,10 @@ public final class StrategaCandidati {
         chosen.add(ok.get());
       }
     }
+    // step R1 (D6): the menu ordered by the single estimate (alliance value), not the screening
+    chosen.sort(
+        Comparator.comparingDouble((Candidato c) -> -valoreStimato(c))
+            .thenComparing(Candidato::bersaglio));
     final List<Candidato> out = new ArrayList<>();
     for (final Candidato c : chosen) {
       final String id = "C" + (out.size() + 1);
@@ -238,22 +242,43 @@ public final class StrategaCandidati {
     return List.copyOf(out);
   }
 
+  /** Step R1 (D6): candidates under this engine success (%) are not in the menu. */
+  static final double SUCCESSO_MINIMO_MENU = 30;
+
+  /** The alliance value (PU) of the single estimate of a chosen candidate. */
+  private static double valoreStimato(final Candidato c) {
+    final JsonObject st = c.json().getAsJsonObject("stima_motore");
+    if (st != null && st.has("valore_alleanza") && st.get("valore_alleanza").isJsonObject()) {
+      final JsonObject v = st.getAsJsonObject("valore_alleanza");
+      if (v.has("totale_PU")) {
+        return v.get("totale_PU").getAsDouble();
+      }
+    }
+    return 0;
+  }
+
   private boolean scartato(final Candidato c) {
     for (final var e : scartati) {
       final JsonObject x = e.getAsJsonObject();
+      // step R1 (D6): the key of a discard is target + type + nations
       if (x.get("bersaglio").getAsString().equals(c.bersaglio())
-          && x.get("tipo").getAsString().equals(c.tipo().id())) {
+          && x.get("tipo").getAsString().equals(c.tipo().id())
+          && x.get("nazioni").getAsString().equals(nazioniDi(c))) {
         return true;
       }
     }
     return false;
   }
 
+  private static String nazioniDi(final Candidato c) {
+    return c.apre().equals(c.chiude()) ? c.apre() : c.apre() + ">" + c.chiude();
+  }
+
   private void scarta(final Candidato c, final String why) {
     final JsonObject x = new JsonObject();
     x.addProperty("tipo", c.tipo().id());
     x.addProperty("bersaglio", c.bersaglio());
-    x.addProperty("nazioni", c.apre().equals(c.chiude()) ? c.apre() : c.apre() + ">" + c.chiude());
+    x.addProperty("nazioni", nazioniDi(c));
     x.addProperty("motivo", why);
     scartati.add(x);
     if (stimaCorrente != null) {
@@ -321,8 +346,54 @@ public final class StrategaCandidati {
                 cfg.tenutaMinimaCandidato()));
         return Optional.empty();
       }
+      // step R1 (D6): a candidate under 30% of success by the engine stays out of the menu
+      if (st.successo() * 100 < SUCCESSO_MINIMO_MENU) {
+        scarta(
+            c,
+            String.format(
+                Locale.ROOT,
+                "successo stimato %.0f%% < %.0f%%",
+                st.successo() * 100,
+                SUCCESSO_MINIMO_MENU));
+        return Optional.empty();
+      }
+      double alone = -1;
+      if (!c.tipo().conquista()) {
+        // step R1 (A8): no hold when Hard holds alone, or when the operation adds too little
+        alone = StimaUnica.tenutaDaSolo(proData, calc, def, t);
+        if (alone >= def.tenuta().sogliaRinforzi()) {
+          scarta(
+              c,
+              String.format(
+                  Locale.ROOT,
+                  "Hard lo tiene da solo (tenuta %.0f%% >= soglia rinforzi %.0f%%)",
+                  alone,
+                  def.tenuta().sogliaRinforzi()));
+          return Optional.empty();
+        }
+        if (st.tenuta() - alone < cfg.guadagnoMinimoTenutaPunti()) {
+          scarta(
+              c,
+              String.format(
+                  Locale.ROOT,
+                  "guadagno della tenuta %.0f punti < %.0f (Hard da solo %.0f%%, con"
+                      + " l'operazione %.0f%%)",
+                  st.tenuta() - alone,
+                  cfg.guadagnoMinimoTenutaPunti(),
+                  alone,
+                  st.tenuta()));
+          return Optional.empty();
+        }
+      }
       final JsonObject j = c.json().deepCopy();
       j.addProperty("round_minimo", roundMin);
+      if (alone >= 0) {
+        j.addProperty("tenuta_hard_da_solo_pct", Math.round(alone));
+        j.addProperty("guadagno_tenuta_punti", Math.round(st.tenuta() - alone));
+        // value of the hold = (hold with the operation - hold of Hard alone) x value
+        j.addProperty(
+            "valore_tenuta", Math.round((st.tenuta() - alone) / 100 * c.valore() * 10) / 10.0);
+      }
       for (final String k :
           List.of(
               "tappa1",
@@ -392,7 +463,7 @@ public final class StrategaCandidati {
     for (final GamePlayer p : data.getPlayerList().getPlayers()) {
       if (p.isNull()
           || !ProPlusSettings.allianceOf(data, p).filter(alliance::equals).isPresent()
-          || !inGuerra(p, t)) {
+          || !inGuerraOra(p, t)) {
         continue;
       }
       final List<Unit> own = attaccanti(p, t, 1);
@@ -529,8 +600,7 @@ public final class StrategaCandidati {
         continue;
       }
       for (final Territory zone : map.getNeighbors(t, Matches.territoryIsWater())) {
-        if (zone.anyUnitsMatch(
-            Matches.unitIsEnemyOf(player(nations.get(0))).and(Matches.unitIsSea()))) {
+        if (zone.anyUnitsMatch(Matches.unitIsSea().and(this::unitaNemica))) {
           continue;
         }
         final Optional<Territory> gather =
@@ -784,11 +854,7 @@ public final class StrategaCandidati {
     for (final Territory x : map.getNeighbors(t, 6)) {
       final int land = x.isWater() ? -1 : map.getDistance(x, t, Matches.territoryIsLand());
       final int any = map.getDistance(x, t);
-      for (final Unit u :
-          x.getMatches(Matches.unitIsEnemyOf(p).and(Matches.unitIsNotInfrastructure()))) {
-        if (!data.getRelationshipTracker().isAtWar(p, u.getOwner())) {
-          continue;
-        }
+      for (final Unit u : x.getMatches(Matches.unitIsNotInfrastructure().and(this::unitaNemica))) {
         final int move = u.getUnitAttachment().getMovement(u.getOwner());
         if (Matches.unitIsLand().test(u) && land >= 1 && land <= move) {
           list.add(u);
@@ -1037,9 +1103,11 @@ public final class StrategaCandidati {
         Math.max(1, parts.has("totale_PU") ? parts.get("totale_PU").getAsDouble() : c.valore()));
     o.addProperty("indice_valore", Math.max(1, c.valore()));
     o.add("valore_componenti", parts);
-    // step COERENZA STIME: proportional to the value, the LLM may ask another cap up to a maximum
+    // step COERENZA STIME: proportional to the value, the LLM may ask another cap up to a maximum;
+    // step R1 (B6): to the value in PU (as the alliance value), not to the old index
     o.addProperty(
-        "tetto_perdita", Math.round(cfg.tettoPerdita(Math.max(1, c.valore()), tettoPerdita)));
+        "tetto_perdita",
+        Math.round(cfg.tettoPerdita(o.get("valore").getAsDouble(), tettoPerdita)));
     o.addProperty("tolleranza_difensori", cfg.tolleranzaDifensori());
     o.addProperty("soglia_chiusura", cfg.sogliaChiusura());
     o.addProperty("max_rinvii", cfg.maxRinvii());
@@ -1171,9 +1239,14 @@ public final class StrategaCandidati {
     final TerritoryAttachment a = TerritoryAttachment.get(t).orElse(null);
     final int production = a == null ? 0 : a.getProduction();
     final int vc = a == null ? 0 : a.getVictoryCity();
-    final GamePlayer me = player(nation);
-    final double objectives =
-        me == null ? 0 : games.strategy.triplea.ai.pro.util.ProNationalObjectiveUtils.stake(me, t);
+    // step R1 (B8): the national objectives at stake of every nation of the alliance, not only of
+    // the nation that opens
+    double objectives = 0;
+    for (final GamePlayer p : data.getPlayerList().getPlayers()) {
+      if (!p.isNull() && ProPlusSettings.allianceOf(data, p).filter(alliance::equals).isPresent()) {
+        objectives += games.strategy.triplea.ai.pro.util.ProNationalObjectiveUtils.stake(p, t);
+      }
+    }
     // the owner's own capital (rules of the map: ProUtils, as Hard): its cash when it falls and
     // its income while it is held
     final int cash = games.strategy.triplea.ai.pro.util.ProUtils.capturedTreasury(t, data);
@@ -1206,14 +1279,32 @@ public final class StrategaCandidati {
         .orElse(0.0);
   }
 
+  /**
+   * Step R1 (A4): a territory of a nation of another alliance (not a neutral), whatever the first
+   * nation of the alliance is at war with; the war is checked for each nation of an operation.
+   */
   private boolean nemico(final Territory t) {
-    final GamePlayer p = player(nations.get(0));
-    return p != null
-        && Matches.isTerritoryEnemy(p).test(t)
-        && !Matches.isTerritoryAllied(p).test(t)
+    return !t.getOwner().isNull()
         && ProPlusSettings.allianceOf(data, t.getOwner())
             .filter(a -> !a.equals(alliance))
             .isPresent();
+  }
+
+  /** Step R1 (A4): a unit of a nation of another alliance a nation of the strategist may fight. */
+  private boolean unitaNemica(final Unit u) {
+    final GamePlayer owner = u.getOwner();
+    if (owner == null
+        || owner.isNull()
+        || ProPlusSettings.allianceOf(data, owner).filter(a -> !a.equals(alliance)).isEmpty()) {
+      return false;
+    }
+    for (final String n : nations) {
+      final GamePlayer p = player(n);
+      if (p != null && OperazioniCongiunte.guerraPossibile(data, p, owner)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** A territory of a nation of the alliance (not a neutral's). */
@@ -1221,7 +1312,18 @@ public final class StrategaCandidati {
     return ProPlusSettings.allianceOf(data, t.getOwner()).filter(alliance::equals).isPresent();
   }
 
+  /**
+   * Step R1 (A4): {@code p} may fight the owner of {@code t} within the horizon (at war, or able to
+   * go to war by the map's rules): the preparation of an operation.
+   */
   private boolean inGuerra(final GamePlayer p, final Territory t) {
+    return p != null
+        && !t.getOwner().isNull()
+        && OperazioniCongiunte.guerraPossibile(data, p, t.getOwner());
+  }
+
+  /** At war now (what Hard can attack this round). */
+  private boolean inGuerraOra(final GamePlayer p, final Territory t) {
     return p != null
         && !t.getOwner().isNull()
         && data.getRelationshipTracker().isAtWar(p, t.getOwner());

@@ -28,7 +28,7 @@ final class ConfrontoSmoke {
    * engine carries out, it only says why the operation stops; counting them fills the low bands
    * with stops whose target was held anyway (run 42775993327: error 30.1 instead of 18.7 points).
    */
-  static final Set<String> NON_ESEGUITE = Set.of("annulla", "rinvia", "ritira");
+  static final Set<String> NON_ESEGUITE = Set.of("annulla", "rinvia", "ritira", "paracadute");
 
   static void write(
       final StringBuilder md,

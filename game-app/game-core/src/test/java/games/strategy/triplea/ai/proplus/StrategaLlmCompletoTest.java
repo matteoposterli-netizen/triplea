@@ -238,7 +238,7 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
       assertThat(parsed.roundMin()).isGreaterThanOrEqualTo(c.roundMinimo());
       assertThat(parsed.tettoPerdita())
           .isEqualTo(
-              (double) Math.round(StrategaConfig.get().tettoPerdita(Math.max(1, c.valore()), 0)));
+              (double) Math.round(StrategaConfig.get().tettoPerdita(def.get("valore").getAsDouble(), 0)));
       assertThat(c.json().has("stima_motore")).isTrue();
       assertThat(c.json().has("tenuta_50_con_rinforzi_pct")).isFalse();
       assertThat(parsed.riserve().values())
@@ -299,6 +299,161 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
     assertThatThrownBy(() -> StrategaInterruttori.set(props, "Axis", "difesa"))
         .isInstanceOf(IllegalArgumentException.class);
     StrategaInterruttori.set(props, "Axis", "");
+  }
+
+  // ------------------------------------------------------------------------- step R1 fixes
+
+  @Test
+  void aFailedStrategicCallIsTriedAgainOnceByTheNextNationOfTheRound() {
+    registerAxis();
+    fake(
+        r -> {
+          throw new ErroreStratega("timeout");
+        });
+    final Stratega.Esito first = start("Germans", 2);
+    assertThat(first.avviso()).hasValueSatisfying(a -> assertThat(a).contains("tentativo 1"));
+    assertThat(data.getProperties().get(Stratega.KEY_ROUND + "Axis")).isNull();
+    // the next nation of the alliance in the same round tries again, and gets an answer
+    asked.clear();
+    fake(r -> answer(portfolio(List.of(), none())));
+    final Stratega.Esito second = start("Italians", 2);
+    assertThat(asked).hasSize(1);
+    assertThat(second.avviso()).isEmpty();
+    assertThat(data.getProperties().get(Stratega.KEY_ROUND + "Axis")).isEqualTo(2);
+    // decided: no third call in the round
+    asked.clear();
+    start("Germans", 2);
+    assertThat(asked).isEmpty();
+    final JsonObject pf = Stratega.portafoglio(data.getProperties(), "Axis");
+    assertThat(pf.get("tentativi_falliti").getAsInt()).isEqualTo(1);
+    assertThat(pf.get("round_decisi").getAsInt()).isEqualTo(1);
+    assertThat(pf.get("round_decisi_al_secondo_tentativo").getAsInt()).isEqualTo(1);
+    assertThat(pf.has("round_senza_llm")).isFalse();
+    // two failures in a round: the round is closed without the LLM, one warning per failure
+    fake(
+        r -> {
+          throw new ErroreStratega("timeout");
+        });
+    assertThat(start("Germans", 3).avviso()).isPresent();
+    assertThat(start("Italians", 3).avviso()).isPresent();
+    assertThat(data.getProperties().get(Stratega.KEY_ROUND + "Axis")).isEqualTo(3);
+    assertThat(Stratega.portafoglio(data.getProperties(), "Axis").get("round_senza_llm").getAsInt())
+        .isEqualTo(1);
+  }
+
+  @Test
+  void aConquestNeverCountsTheEnemyCommitmentOfTheHoldsOfOwnTerritories() {
+    registerAxis();
+    final var props = data.getProperties();
+    final String hold = "stratega-tenuta-R1-Germany";
+    props.set(
+        Stratega.KEY_PORTAFOGLIO + "Axis",
+        "{\"operazioni\":[{\"id\":\"" + hold + "\"}],\"rifiutate\":[]}");
+    final JsonArray history = new JsonArray();
+    for (int i = 1; i <= 6; i++) {
+      history.add(
+          JsonParser.parseString(
+              "{\"valutata\":true,\"round\":"
+                  + i
+                  + ",\"nazione\":\"Germans\",\"territori\":[{\"tuv_in_portata\":100,"
+                  + "\"tuv_impegnato\":10,\"frazione_impegnata\":0.1,\"attaccato\":false,"
+                  + "\"ripreso\":false}]}"));
+    }
+    props.set(StoricoNemico.PREFIX + hold, history.toString());
+    final Territory t = territory("Poland");
+    final var held = StimaUnica.impegno(data, "Axis", t, StimaUnica.TipoBersaglio.TENUTA);
+    final var conquest = StimaUnica.impegno(data, "Axis", t, StimaUnica.TipoBersaglio.CONQUISTA);
+    final var coast = StimaUnica.impegno(data, "Axis", t, StimaUnica.TipoBersaglio.COSTA);
+    assertThat(held.frazione()).isEqualTo(StrategaConfig.get().impegnoNemicoMinimo());
+    assertThat(conquest.frazione()).isEqualTo(StrategaConfig.get().impegnoNemicoPrudente());
+    assertThat(coast.frazione()).isEqualTo(StrategaConfig.get().impegnoNemicoPrudente());
+    assertThat(StimaUnica.TipoBersaglio.of("stratega-offensiva-R2-Egypt"))
+        .isEqualTo(StimaUnica.TipoBersaglio.CONQUISTA);
+    assertThat(StimaUnica.TipoBersaglio.of("stratega-sbarco-R2-Egypt"))
+        .isEqualTo(StimaUnica.TipoBersaglio.COSTA);
+    assertThat(StimaUnica.TipoBersaglio.of("stratega-rinforzo-R2-Egypt"))
+        .isEqualTo(StimaUnica.TipoBersaglio.TENUTA);
+  }
+
+  @Test
+  void theCapitalGuardIsFixedAtTheLaunch() {
+    registerAxis();
+    final StrategaCandidati gen = generator("Germans", 2);
+    final Candidato c =
+        gen.calcola().stream()
+            .filter(x -> x.tipo().conquista())
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("no conquest candidate"));
+    install(gen, c, "stratega-offensiva-R2-guardia", 2);
+    final var def =
+        OperazioneCongiunta.dinamiche(data.getProperties(), "Axis").stream()
+            .filter(d -> d.id().equals("stratega-offensiva-R2-guardia"))
+            .findFirst()
+            .orElseThrow();
+    final ProData pd = proData(player("Germans"), 2, "Purchase");
+    OperazioniCongiunte.fissaGuardia(pd, calc(), def);
+    final Territory germany = territory("Germany");
+    final var fixed = OperazioniCongiunte.guardiaFissata(data, def.id(), germany);
+    assertThat(fixed).isPresent();
+    final List<Unit> all =
+        germany.getMatches(
+            Matches.unitIsOwnedBy(player("Germans")).and(Matches.unitIsNotInfrastructure()));
+    final OperazioniCongiunte op = OperazioniCongiunte.perStima(pd, calc(), def);
+    final List<Unit> before = op.guardiaCapitali(all, player("Germans"));
+    // a big enemy army next to the capital changes the threat, not the guard of the operation
+    add("Poland", player("Russians"), "armour", 30);
+    final List<Unit> after =
+        OperazioniCongiunte.perStima(proData(player("Germans"), 2, "Purchase"), calc(), def)
+            .guardiaCapitali(all, player("Germans"));
+    assertThat(after).containsExactlyInAnyOrderElementsOf(before);
+    assertThat(before).noneMatch(u -> fixed.get().contains(u.getId().toString()));
+  }
+
+  @Test
+  void aHoldIsNotProposedWhenHardHoldsAloneOrGainsLittle() {
+    registerAxis();
+    for (final Candidato c : generator("Germans", 2).calcola()) {
+      if (!c.tipo().conquista()) {
+        assertThat(c.json().get("tenuta_hard_da_solo_pct").getAsDouble())
+            .isLessThan(StrategaConfig.get().sogliaRinforzi());
+        assertThat(c.json().get("guadagno_tenuta_punti").getAsDouble())
+            .isGreaterThanOrEqualTo(StrategaConfig.get().guadagnoMinimoTenutaPunti() - 0.5);
+        assertThat(c.json().has("valore_tenuta")).isTrue();
+      }
+    }
+  }
+
+  @Test
+  void theRuleBasedBaselineLaunchesTheBestValuesAndCancelsTheWeakOperations() {
+    final JsonObject state =
+        JsonParser.parseString(
+                """
+                {"candidati":[
+                  {"id":"C1","tipo":"offensiva","stima_motore":{"successo_pct":60,
+                   "valore_alleanza":{"totale_PU":12}}},
+                  {"id":"C2","tipo":"offensiva","stima_motore":{"successo_pct":80,
+                   "valore_alleanza":{"totale_PU":-3}}},
+                  {"id":"C3","tipo":"tenuta","stima_motore":{"successo_pct":90,
+                   "valore_alleanza":{"totale_PU":30}}}],
+                 "operazioni_in_corso":[
+                  {"operazione":"stratega-a","stima_motore_ora":{"successo_pct":20}},
+                  {"operazione":"stratega-b","stima_motore_ora":{"successo_pct":70}}]}
+                """)
+            .getAsJsonObject();
+    final JsonObject a = StrategaRegole.strategico(state);
+    final List<String> actions = new ArrayList<>();
+    a.getAsJsonArray("portafoglio")
+        .forEach(
+            e ->
+                actions.add(
+                    e.getAsJsonObject().get("azione").getAsString()
+                        + " "
+                        + e.getAsJsonObject().get("candidato").getAsString()
+                        + e.getAsJsonObject().get("operazione").getAsString()));
+    assertThat(actions)
+        .containsExactly("annulla stratega-a", "continua stratega-b", "avvia C3", "avvia C1");
+    assertThat(a.getAsJsonArray("irrinunciabili")).isEmpty();
+    assertThat(StrategaDecisione.leggi(a.toString())).isNotNull();
   }
 
   // ------------------------------------------------------------------------------ portfolio

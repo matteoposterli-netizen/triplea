@@ -282,6 +282,9 @@ final class RiepilogoGenerale {
   static String strategistLabel(final JsonObject json, final String alliance) {
     final JsonObject p = json.getAsJsonObject("parametri");
     final StringBuilder label = new StringBuilder();
+    if (p.has("stratega_regole") && p.get("stratega_regole").getAsBoolean()) {
+      return " [regole]";
+    }
     if (p.has("chiave_llm") && !p.get("chiave_llm").getAsBoolean()) {
       label.append(" [senza chiave]");
     }

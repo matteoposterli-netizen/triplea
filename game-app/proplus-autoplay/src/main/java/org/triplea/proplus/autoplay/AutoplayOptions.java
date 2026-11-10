@@ -34,6 +34,8 @@ import javax.annotation.Nullable;
  *                      strategy after its computed defense (default: the data file, 70)
  * --stratega-spento A=S+S,..  step R0: switches of the "Pro+ Stratega LLM" turned off per
  *                      alliance (liste, tenute; see StrategaInterruttori), default all on
+ * --stratega-regole S  step R1: "si" = the strategist answers with the rule-based baseline
+ *                      (StrategaRegole, no network, cost 0) instead of the LLM
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
@@ -53,6 +55,7 @@ record AutoplayOptions(
     double budgetOperazioni,
     @Nullable Double tettoStrategia,
     Map<String, String> strategaSpenti,
+    boolean strategaRegole,
     long seme,
     Path output,
     int minuti,
@@ -95,6 +98,7 @@ record AutoplayOptions(
                     games.strategy.triplea.ai.proplus.DecisoreOperazione.BUDGET_DEFAULT))),
         cap(values.get("tetto-strategia")),
         strategistSwitches(values.get("stratega-spento")),
+        "si".equalsIgnoreCase(values.getOrDefault("stratega-regole", "no")),
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
         Integer.parseInt(values.getOrDefault("minuti", "55")),

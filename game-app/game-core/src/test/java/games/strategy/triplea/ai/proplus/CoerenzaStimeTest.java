@@ -394,7 +394,8 @@ class CoerenzaStimeTest extends AbstractClientSettingTestCase {
     final StimaUnica.Stima planes =
         StimaUnica.conquista(
             proData(player("Germans"), 3, "Purchase"), calc(), def, territory("Alexandria"), 1);
-    assertThat(planes.tappa1()).anyMatch(Matches.unitIsAir());
+    // step R1 (A2): this turn the estimate counts the executable set, and planes cannot move into
+    // an empty enemy territory: no land unit, take 0, "planes alone"
     assertThat(Stream.concat(planes.tappa1().stream(), planes.tappa2().stream()))
         .noneMatch(Matches.unitIsLand());
     assertThat(planes.presa()).isZero();

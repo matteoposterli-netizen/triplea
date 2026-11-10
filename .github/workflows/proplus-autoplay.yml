@@ -55,7 +55,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD)"
         default: "normale"
 permissions:
   contents: write
@@ -145,6 +145,34 @@ jobs:
                           "tipo": tipo, "piano": piano, "seme": seed, "decisore": decisore}
                          for (n, key, name, tipo, piano, decisore) in confronto
                          for seed in (1, 2, 3, 4)]
+              print("matrix=" + json.dumps({"include": include}))
+              print(f"round={rounds}")
+              raise SystemExit(0)
+          if os.environ["MODALITA"] == "correzioni":
+              # step R1: the corrections of group A on the same seeds as R0 (1101-1110): Hard vs
+              # Hard, Axis Stratega LLM, Allies Stratega LLM, Axis rule-based baseline (no key, no
+              # cost). Hard cap of the run 15 USD split over the LLM games
+              correzioni = [
+                  ("a", "Hard-vs-Hard", "Hard vs Hard", "Axis=hard,Allies=hard", "", ""),
+                  ("c", "Asse-Stratega-LLM-vs-Hard", "Asse Stratega LLM / Alleati Hard",
+                   "Axis=stratega,Allies=hard", "1", ""),
+                  ("f", "Hard-vs-Alleati-Stratega-LLM", "Asse Hard / Alleati Stratega LLM",
+                   "Axis=hard,Allies=stratega", "1", ""),
+                  ("g", "Asse-Stratega-regole-vs-Hard", "Asse Stratega a regole / Alleati Hard",
+                   "Axis=stratega,Allies=hard", "", "si"),
+              ]
+              seeds = range(1101, 1111)
+              n_llm = sum(1 for c in correzioni if c[4]) * len(seeds)
+              budget = f"{min(2.0, 15.0 / n_llm):.4f}"
+              include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
+                          "tipo": tipo, "piano": "", "seme": seed, "decisore": "",
+                          "ablazione": "", "operazione": "", "opllm": "", "stratega": llm,
+                          "budget": budget if "stratega" in tipo else "",
+                          "tetto": "70" if "stratega" in tipo else "", "spento": "",
+                          "regole": regole}
+                         for (n, key, name, tipo, llm, regole) in correzioni
+                         for seed in seeds]
+              include.sort(key=lambda g: (g["seme"], g["id"]))
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
               raise SystemExit(0)
@@ -397,7 +425,7 @@ jobs:
     strategy:
       fail-fast: false
       # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
-      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi') && 20 || 6 }}
+      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni') && 20 || 6 }}
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     name: play (${{ matrix.id }})
     steps:
@@ -433,6 +461,7 @@ jobs:
           if [ -n "${{ matrix.budget }}" ]; then args+=(--budget-operazioni "${{ matrix.budget }}"); fi
           if [ -n "${{ matrix.tetto }}" ]; then args+=(--tetto-strategia "${{ matrix.tetto }}"); fi
           if [ -n "${{ matrix.spento }}" ]; then args+=(--stratega-spento "${{ matrix.spento }}"); fi
+          if [ -n "${{ matrix.regole }}" ]; then args+=(--stratega-regole "${{ matrix.regole }}"); fi
           start=$(date +%s)
           autoplay-kit/runner/bin/proplus-autoplay "${args[@]}" 2>&1 | tee "$out/partita.log" \
             | { grep --line-buffered -E "AUTOPLAY|ERROR" || true; }
@@ -488,7 +517,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.loads(os.environ['MATRIX'])['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
           # LLM strategist: offline quality test on 30 strategic states of these games (skipped,

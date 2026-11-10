@@ -86,13 +86,16 @@ final class ConfrontoDiagnosi {
     strategist.forEach(
         (config, side) -> {
           differences(md, config, byConfig.get(config), reference, ref, side, last);
-          if (config.contains("[senza ") && !config.contains(SENZA_CHIAVE)) {
+          if ((config.contains("[senza ") || config.contains("[regole]"))
+              && !config.contains(SENZA_CHIAVE)) {
             final String full = full(config);
             if (byConfig.containsKey(full) && side.equals(strategist.get(full))) {
               differences(md, config, byConfig.get(config), full, byConfig.get(full), side, last);
             }
           }
         });
+
+    strategistCounts(md, byConfig, strategist);
 
     // the strategist without a key must be Hard: the check against Hard
     final List<String> noKey =
@@ -124,9 +127,74 @@ final class ConfrontoDiagnosi {
     }
   }
 
+  /**
+   * Step R1: the strategist's counters per configuration (summed over the games): rounds decided
+   * by the LLM and without it, failed attempts retried (A7), rounds with an empty menu of
+   * candidates, units counted by step 1 and not moved (A2), Hard's combat plans dropped (A1),
+   * operations started per type.
+   */
+  private static void strategistCounts(
+      final StringBuilder md,
+      final Map<String, List<JsonObject>> byConfig,
+      final Map<String, String> strategist) {
+    md.append(
+        "\nContatori dello Stratega (somma sulle partite): round decisi dall'LLM / senza LLM,"
+            + " tentativi falliti e ripetuti, round con il menu dei candidati VUOTO (non e' un"
+            + " errore), unita' contate dalla tappa 1 e non mosse, piani d'attacco di Hard"
+            + " ricalcolati dopo le operazioni, operazioni avviate per tipo:\n\n"
+            + "| Configurazione | Round decisi | Senza LLM | Tentativi falliti | Menu vuoto |"
+            + " Contate non mosse | Piani di Hard ricalcolati | Avviate (tipo: n) |\n"
+            + "|---|---|---|---|---|---|---|---|\n");
+    strategist.forEach(
+        (config, side) -> {
+          final long[] n = new long[6];
+          final Map<String, Integer> types = new java.util.TreeMap<>();
+          for (final JsonObject j : byConfig.get(config)) {
+            if (!j.has("stratega_llm") || !j.getAsJsonObject("stratega_llm").has(side)) {
+              continue;
+            }
+            final JsonObject x = j.getAsJsonObject("stratega_llm").getAsJsonObject(side);
+            n[0] += longOf(x, "round_decisi");
+            n[1] += longOf(x, "round_senza_llm");
+            n[2] += longOf(x, "tentativi_falliti");
+            n[3] += longOf(x, "round_menu_vuoto");
+            if (x.has("blocchi") && x.get("blocchi").isJsonObject()) {
+              n[4] += longOf(x.getAsJsonObject("blocchi"), "contate_non_mosse");
+              n[5] += longOf(x.getAsJsonObject("blocchi"), "piano_hard_ricalcolato");
+            }
+            if (x.has("operazioni") && x.get("operazioni").isJsonArray()) {
+              for (final JsonElement e : x.getAsJsonArray("operazioni")) {
+                final JsonObject o = e.getAsJsonObject();
+                if (o.has("tipo")) {
+                  types.merge(o.get("tipo").getAsString(), 1, Integer::sum);
+                }
+              }
+            }
+          }
+          md.append("| ").append(config);
+          for (final long v : n) {
+            md.append(" | ").append(v);
+          }
+          md.append(" | ")
+              .append(
+                  types.isEmpty()
+                      ? "nessuna"
+                      : String.join(
+                          ", ",
+                          types.entrySet().stream()
+                              .map(e -> e.getKey() + ": " + e.getValue())
+                              .toList()))
+              .append(" |\n");
+        });
+  }
+
+  private static long longOf(final JsonObject o, final String key) {
+    return o.has(key) && o.get(key).isJsonPrimitive() ? o.get(key).getAsLong() : 0;
+  }
+
   /** The configuration with every switch on and the key ("Pro+ Stratega LLM / Hard"). */
   static String full(final String config) {
-    return config.replaceAll(" \\[senza [a-z]+\\]", "");
+    return config.replaceAll(" \\[(senza [a-z]+|regole)\\]", "");
   }
 
   private static void row(
