@@ -3545,3 +3545,22 @@ Nessun hook nuovo nelle classi Pro: Hard invariata.
   chiave (nessuna chiamata, nessun candidato calcolato, "nessuna decisione ... LLM non disponibile", gioca come Hard).
   Correzioni dalle prove: tenuta proposta su minacce di soli aerei (ora servono nemici di terra); offensiva aerea senza raccolta aerei
   (ora `aerei_apre` + raccolta entro 2).
+
+#### Autoplay in CI (run 42775993327, commit 805c684, tutto verde al 1° tentativo: test, release `proplus-latest`, 12 partite [smoke])
+`[smoke]`, 12 round, Equilibrato, semi 501-506, Stratega LLM (Sonnet 5.5 vero, secret) contro Hard. **Non e' una misura di forza.**
+- **12/12 partite completate**, nessun errore nei log, nessun ripiego (paracadute mai usato), 11-12 round decisi dall'LLM su 12 per
+  partita; durata 5-8 min per partita.
+- **Costo**: 207 chiamate (17,3 a partita), **$2,84 la run** (tetto 30), **$0,237 a partita** (max $0,31; tetto per partita 2).
+- **Operazioni** (93 avviate): offensiva 49 (eseguite 13, completate 7, fallite 3, annullate 30, in corso 9), rinforzo 36 (eseguite
+  36, completate 8, fallite 3, annullate 21), tenuta 5 (completate 2, annullate 2), sbarco 3 (eseguito 1, annullate 3): **4 tipi usati
+  realmente**. Rifiutate dal motore 3 (bersaglio gia' in un'operazione 2, massimo 3 attive 1). Azioni strategiche: avvia 93, continua
+  77, annulla 51, modifica 2; ordini: tenuta tieni 25 / ritira 28, tappa1 lancia 4 / rinvia 1 / annulla 4, tappa2 procedi 1.
+  Lo stratega annulla molto (spesso "bersaglio gia' nostro" o "trattiene unita' che servono altrove") e molte offensive non arrivano alla
+  tappa 1.
+- **Calibrazione** (la tabella della sezione [smoke] conta anche le stime di annulla/rinvia/ritira, che hanno prob ~0 e falsano le fasce
+  basse: difetto di `ConfrontoSmoke`, da correggere al prossimo push di codice). Ricalcolata a mano sulle sole azioni eseguite:
+  livello strategico (avvia/continua/modifica, 124 stime, esito a fine durata) errore medio **18,7 punti**, troppo pessimista (0-19% →
+  reale 57%, 20-39% → 73%, 60-79% → 80%, 80-100% 88% → 95%); per tipo offensiva 0,54 / reale 0,63, rinforzo 0,62 / 0,93, tenuta 0,47 /
+  0,60, sbarco 0,26 / 0,60 (n 5); ordini del turno (lancia/procedi/tieni, 24 stime) errore **15,6 punti**.
+- VC R12 del lato Stratega (solo informative, 6 semi, nessun riferimento Hard vs Hard nella run): Asse 3, 6, 5, 5, 6, 7 (media 5,3);
+  Alleati 5, 5, 8, 4, 6, 4 (media 5,3).
