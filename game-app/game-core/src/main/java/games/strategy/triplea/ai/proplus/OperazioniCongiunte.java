@@ -421,7 +421,29 @@ public final class OperazioniCongiunte {
         continue;
       }
       try {
-        out.addAll(new OperazioniCongiunte(proData, calc, null, d).trattenute());
+        final OperazioniCongiunte op = new OperazioniCongiunte(proData, calc, null, d);
+        final List<Unit> keep = op.trattenute();
+        out.addAll(keep);
+        if (!keep.isEmpty()) {
+          // diary only: units kept out of Hard's attacks at the purchase (analysis of the holds)
+          final JsonObject x = new JsonObject();
+          x.addProperty("round", op.round);
+          x.addProperty("nazione", op.player.getName());
+          x.addProperty("stato", op.reg.stato().testo());
+          x.addProperty("round_obiettivo", op.reg.roundObiettivo());
+          x.addProperty("unita", keep.size());
+          x.addProperty("tuv", Math.round(op.tuv(keep)));
+          x.addProperty(
+              "ids", String.join(",", keep.stream().map(u -> u.getId().toString()).toList()));
+          final JsonArray list =
+              op.reg.json().has("trattenute_acquisto")
+                      && op.reg.json().get("trattenute_acquisto").isJsonArray()
+                  ? op.reg.json().getAsJsonArray("trattenute_acquisto")
+                  : new JsonArray();
+          list.add(x);
+          op.reg.json().add("trattenute_acquisto", list);
+          op.reg.salva(op.data.getProperties());
+        }
       } catch (final RuntimeException e) {
         ProLogger.warn(
             "[Pro+] Stratega: unita' da trattenere non calcolate (" + d.id() + "): " + e);

@@ -175,7 +175,8 @@ final class StrategaDiario {
                 "stima_avvio",
                 "stima_decisione_prima",
                 "stima_decisione_ultima",
-                "blocchi_tetto")) {
+                "blocchi_tetto",
+                "trattenute_acquisto")) {
           if (reg.json().has(k)) {
             c.add(k, reg.json().get(k));
           }

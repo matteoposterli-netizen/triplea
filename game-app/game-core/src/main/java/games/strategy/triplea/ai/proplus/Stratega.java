@@ -272,6 +272,15 @@ public final class Stratega {
           data,
           String.format(Locale.ROOT, "stratega-ingresso-R%d-%s.json", round, alliance),
           state);
+      // diary only (not sent): the exchange implied by the estimate of every evaluated conquest
+      final JsonObject analysis = new JsonObject();
+      analysis.addProperty("round", round);
+      analysis.addProperty("alleanza", alliance);
+      analysis.add("conquiste_valutate", gen.analisi());
+      DiaryRecorder.operationInput(
+          data,
+          String.format(Locale.ROOT, "stratega-analisi-R%d-%s.json", round, alliance),
+          analysis);
       final Optional<JsonObject> answer = chiedi(transport.get(), state);
       if (answer.isPresent()) {
         try {

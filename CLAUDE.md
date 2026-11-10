@@ -3740,3 +3740,9 @@ modello era Sonnet). 6 partite su 12 (semi 604-606) senza nessun round deciso da
   in 4 candidati offensivi su 34. Coerenza locale mista: Syria 26 → 27, Egypt 6 → 0, Morocco 7 → 0; rinforzi Denmark 99 → 1,
   France 100 → 16 (stato cambiato tra lancio e decisione).
 - **Da rifare**: [smoke] con credito API ricaricato (stessi semi 601-606).
+- **Diagnostica per la nuova [smoke]** (solo diario, NON nello stato inviato all'LLM, nessun cambio di comportamento):
+  `stratega-analisi-R<N>-<alleanza>.json` (per ogni conquista valutata: presa, tenuta, impegno nemico e se era il minimo
+  prudente, TUV nemico distrutto atteso = difensori + rinforzi tra le tappe - residui dopo la tappa 2, TUV perso atteso nelle
+  tappe, presidio perso atteso, scambio TUV, esito del motore "in lista"/"scartato: motivo"; `StimaUnica.Stima.jsonAnalisi`,
+  `StrategaCandidati.analisi`); nel registro di ogni operazione `trattenute_acquisto` [{round, nazione, stato, round_obiettivo,
+  unita, tuv, ids}] (unita' tenute fuori dagli attacchi di Hard all'acquisto), copiato in `stratega-riepilogo.json`.

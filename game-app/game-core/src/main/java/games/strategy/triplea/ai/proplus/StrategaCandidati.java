@@ -150,6 +150,29 @@ public final class StrategaCandidati {
     return scartati;
   }
 
+  /** Diary only: the exchange implied by the single estimate of every evaluated conquest. */
+  private final JsonArray analisi = new JsonArray();
+
+  /** The single estimate of the candidate being evaluated (diary of the discards). */
+  private @javax.annotation.Nullable StimaUnica.Stima stimaCorrente;
+
+  JsonArray analisi() {
+    return analisi;
+  }
+
+  private void annota(final Candidato c, final StimaUnica.Stima st, final String esito) {
+    if (!c.tipo().conquista()) {
+      return;
+    }
+    final JsonObject x = st.jsonAnalisi();
+    x.addProperty("tipo", c.tipo().id());
+    x.addProperty("bersaglio", c.bersaglio());
+    x.addProperty("nazioni", c.apre() + ">" + c.chiude());
+    x.addProperty("per_il_round", st.roundObiettivo());
+    x.addProperty("esito_motore", esito);
+    analisi.add(x);
+  }
+
   /**
    * The candidates of the round, best first, at most {@code max_candidati}. A cheap screening ranks
    * them; the best {@code candidati_valutati} get the single estimate ({@link StimaUnica}, the same
@@ -231,6 +254,9 @@ public final class StrategaCandidati {
     x.addProperty("nazioni", c.apre().equals(c.chiude()) ? c.apre() : c.apre() + ">" + c.chiude());
     x.addProperty("motivo", why);
     scartati.add(x);
+    if (stimaCorrente != null) {
+      annota(c, stimaCorrente, "scartato: " + why);
+    }
   }
 
   /**
@@ -238,6 +264,7 @@ public final class StrategaCandidati {
    * (reason in {@link #scartati}).
    */
   private Optional<Candidato> valuta(final Candidato c) {
+    stimaCorrente = null;
     final Territory t = map.getTerritoryOrNull(c.bersaglio());
     if (t == null) {
       return Optional.empty();
@@ -265,6 +292,7 @@ public final class StrategaCandidati {
           c.tipo().conquista()
               ? StimaUnica.conquista(proData, calc, def, t, roundMin - round + 1)
               : StimaUnica.tenuta(proData, calc, def, t);
+      stimaCorrente = st;
       if (c.tipo().conquista() && !difensori(t).isEmpty() && st.tappa1().isEmpty()) {
         scarta(
             c,
@@ -316,6 +344,8 @@ public final class StrategaCandidati {
       final JsonObject h = OperazioniCongiunte.valutaTenuta(proData, calc, def, t, st.presidio());
       j.add("contrattacco_massimo", h.get("contrattacco_massimo"));
       j.add("tenuta_per_impegno", h.get("tenuta_per_impegno"));
+      annota(c, st, "in lista");
+      stimaCorrente = null;
       return Optional.of(
           new Candidato(
               c.id(),

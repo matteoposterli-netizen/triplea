@@ -73,6 +73,8 @@ public final class StimaUnica {
       double tuvDifensori,
       double tuvRinforziNemici,
       double tuvResidui,
+      double tuvDistrutto,
+      double tuvPresidio,
       double tuvContrattacco,
       double tuvContrattaccoMassimo,
       int round,
@@ -104,6 +106,35 @@ public final class StimaUnica {
       o.addProperty("base_impegno", base);
       o.addProperty("tenuta_pct", Math.round(tenuta));
       o.addProperty("successo_pct", Math.round(successo * 100));
+      return o;
+    }
+
+    /**
+     * Diary only (never sent to the LLM): the exchange the estimate implies, for the analysis of
+     * the launches. TUV destroyed = enemy defenders and reinforcements between the steps minus what
+     * is left after step 2; TUV lost in the steps = step 1 + step 2 when step 1 does not take it;
+     * garrison lost = (1 - hold) x garrison TUV.
+     */
+    public JsonObject jsonAnalisi() {
+      final double take1 = tappa1.stream().anyMatch(Matches.unitIsLand()) ? win1 / 100 : 0;
+      final double lostSteps = perdita1 + (1 - take1) * perdita2;
+      final double lostGarrison = (1 - tenuta / 100) * tuvPresidio;
+      final JsonObject o = new JsonObject();
+      o.addProperty("presa_pct", Math.round(presa * 100));
+      o.addProperty("tenuta_pct", Math.round(tenuta));
+      o.addProperty("successo_pct", Math.round(successo * 100));
+      o.addProperty("impegno_nemico", Math.round(impegno * 100) / 100.0);
+      o.addProperty("impegno_minimo_prudente", base.startsWith("minimo prudente"));
+      o.addProperty("base_impegno", base);
+      o.addProperty("tuv_nemico_distrutto_atteso", Math.round(tuvDistrutto));
+      o.addProperty("tuv_perso_atteso_tappe", Math.round(lostSteps));
+      o.addProperty("tuv_presidio", Math.round(tuvPresidio));
+      o.addProperty("tuv_presidio_perso_atteso", Math.round(lostGarrison));
+      o.addProperty("scambio_tuv_tappe", Math.round(tuvDistrutto - lostSteps));
+      o.addProperty(
+          "scambio_tuv_con_presidio", Math.round(tuvDistrutto - lostSteps - lostGarrison));
+      o.addProperty("contrattacco_contato_TUV", Math.round(tuvContrattacco));
+      o.addProperty("contrattacco_massimo_TUV", Math.round(tuvContrattaccoMassimo));
       return o;
     }
   }
@@ -203,6 +234,14 @@ public final class StimaUnica {
         op.tuvOf(defenders),
         op.tuvOf(enemyIn),
         op.tuvOf(left),
+        Math.max(
+            0,
+            op.tuvOf(defenders)
+                + op.tuvOf(enemyIn)
+                - (r2 != null
+                    ? op.tuvOf(r2.getAverageDefendersRemaining())
+                    : op.tuvOf(defenders2))),
+        op.tuvOf(garrison),
         op.tuvOf(counter),
         op.tuvOf(m.tutti()),
         data.getSequence().getRound(),
@@ -257,6 +296,8 @@ public final class StimaUnica {
         0,
         0,
         0,
+        0,
+        op.tuvOf(garrison),
         op.tuvOf(counter),
         op.tuvOf(m.tutti()),
         round,
