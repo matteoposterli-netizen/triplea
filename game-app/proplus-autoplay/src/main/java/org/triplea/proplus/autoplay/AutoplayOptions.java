@@ -30,6 +30,8 @@ import javax.annotation.Nullable;
  *                      ANTHROPIC_API_KEY (llm:MODEL another model)
  * --budget-operazioni USD  hard cap in USD of the LLM calls of the operations in this game
  *                      (default 1.0); over it the formula decides
+ * --tetto-strategia P  step C2: cap (percent) of the PUs the "Pro+ Stratega LLM" gives to the
+ *                      strategy after its computed defense (default: the data file, 70)
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
@@ -47,6 +49,7 @@ record AutoplayOptions(
     Map<String, String> operazioni,
     Map<String, String> decisoriOperazione,
     double budgetOperazioni,
+    @Nullable Double tettoStrategia,
     long seme,
     Path output,
     int minuti,
@@ -87,10 +90,23 @@ record AutoplayOptions(
                 "budget-operazioni",
                 String.valueOf(
                     games.strategy.triplea.ai.proplus.DecisoreOperazione.BUDGET_DEFAULT))),
+        cap(values.get("tetto-strategia")),
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
         Integer.parseInt(values.getOrDefault("minuti", "55")),
         values.get("nome"));
+  }
+
+  /** "--tetto-strategia 70": a percent 0-100, or null (the data file's value). */
+  static @Nullable Double cap(@Nullable final String text) {
+    if (text == null) {
+      return null;
+    }
+    final double v = Double.parseDouble(text.trim());
+    if (v < 0 || v > 100) {
+      throw new IllegalArgumentException("Tetto della strategia non valido: " + text + " (0-100)");
+    }
+    return v;
   }
 
   /** Player type of {@code alliance}: {@link #PROPLUS} unless set to {@link #HARD}. */

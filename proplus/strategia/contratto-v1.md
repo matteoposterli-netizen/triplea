@@ -279,3 +279,25 @@ Step C1-bis (stesso contratto `1.4`, campi in piu'): `stima_motore.valore_allean
 con `indice_valore_PU` (ordina i candidati, ex `valore_PU`), `valore_bersaglio_PU` e `componenti_PU` {`round_tenuta`,
 `reddito_PU`, `obiettivi_nazionali_PU`, `victory_city_PU`, `capitale_PU` (+ `capitale_cassa_PU`,
 `capitale_reddito_per_round_PU`), `totale_PU`}. Formula e razionale in `stratega-llm.json` (`valore_pu`).
+
+## Schema v1.5: budget difensivo calcolato (step C2)
+
+Solo per la voce "Pro+ Stratega LLM". Ingresso del livello strategico (contratto `1.5`), in piu' rispetto alla 1.4:
+- `difesa_calcolata`: per ogni nazione dello Stratega l'ultimo piano difensivo del motore {`round`, `nazione`,
+  `pu_difesa`, `pu_strategia`, `territori` [{`territorio`, `decisione` (difeso | sacrificato), `valore_PU`, `costo_PU`,
+  `tenuta_iniziale_pct`, `tenuta_stimata_pct`, `motivo`}]}.
+
+Uscita, in piu' (schema strict: liste sempre presenti, anche vuote):
+- `irrinunciabili`: [{`territorio`, `motivazione`}], al massimo 5 territori di terra dell'alleanza: il motore li difende
+  anche se il costo supera il valore;
+- `sacrificabili`: [{`territorio`, `motivazione`}], al massimo 5: il motore non li difende. Mai una capitale (tolta);
+  un territorio in entrambe le liste resta irrinunciabile.
+
+Valgono per il round (tutte le nazioni dell'alleanza), proprieta' `Pro+ stratega llm liste difesa: <alleanza>`. Senza
+risposta dell'LLM (paracadute) nessuna lista: decide il motore con valore e costo (capitali sempre irrinunciabili).
+Regole del motore (dati in `stratega-llm.json`, `difesa`): minaccia di tutti i nemici reali che muovono prima del
+prossimo turno della nazione (in guerra o che possono dichiarare guerra ora), contrattacco della stima unica
+(massimo su capitali e fabbriche chiave, realistico altrove), unita' minime per `soglia_tenuta` (prima rinforzi, poi
+acquisti nella fabbrica del territorio), valore in PU (stessa scala del valore d'alleanza + fabbriche + operazioni
+dipendenti), costo = PU degli acquisti + (1 - tenuta) x TUV delle unita' impegnate; PU alla strategia = min(PU - PU
+difesa, `tetto_strategia_pct`% dei PU).

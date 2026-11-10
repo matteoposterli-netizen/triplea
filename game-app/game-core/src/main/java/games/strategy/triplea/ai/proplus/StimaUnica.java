@@ -328,6 +328,71 @@ public final class StimaUnica {
     return Math.max(0, op.tuvOf(defenders) - op.tuvOf(left));
   }
 
+  /**
+   * Step C2 (tracking): the units {@link #conquista} counts in the steps of {@code def} on {@code
+   * target} within {@code rounds} rounds (no battle estimate).
+   */
+  public static List<Unit> contate(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final Definizione def,
+      final Territory target,
+      final int rounds) {
+    final OperazioniCongiunte op = OperazioniCongiunte.perStima(proData, calc, def);
+    final GameState data = proData.getData();
+    final GamePlayer opener = data.getPlayerList().getPlayerId(def.apre());
+    final GamePlayer closer = data.getPlayerList().getPlayerId(def.chiude());
+    final int k = Math.max(1, rounds);
+    final Set<Unit> reserved = riservate(data, def.alleanza(), def.id());
+    final List<Unit> excluded = new ArrayList<>();
+    final List<Unit> t1 = forze(op, def, target, opener, k, reserved, List.of(), excluded);
+    final List<Unit> all = new ArrayList<>(t1);
+    all.addAll(forze(op, def, target, closer, k, reserved, t1, excluded));
+    return all;
+  }
+
+  private static final java.util.Map<String, Set<String>> REAL_ENEMIES =
+      java.util.Collections.synchronizedMap(
+          new java.util.LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(final java.util.Map.Entry<String, Set<String>> e) {
+              return size() > 32;
+            }
+          });
+
+  /**
+   * Step C2: the names of {@code player}'s real enemies now (at war, or able to declare war by the
+   * map's rules: {@link MinacciaReale}), cached per game, round, step and player.
+   */
+  static Set<String> nemiciReali(final GameState data, final GamePlayer player) {
+    final String key =
+        System.identityHashCode(data)
+            + "|"
+            + data.getSequence().getRound()
+            + "|"
+            + (data.getSequence().getStep() == null ? "" : data.getSequence().getStep().getName())
+            + "|"
+            + player.getName();
+    return REAL_ENEMIES.computeIfAbsent(
+        key,
+        k -> {
+          final Set<String> names = new LinkedHashSet<>();
+          MinacciaReale.nemici(data, player, java.util.Optional.empty())
+              .keySet()
+              .forEach(p -> names.add(p.getName()));
+          return Set.copyOf(names);
+        });
+  }
+
+  /** {@code m} with only the units of {@code player}'s real enemies (the purchases already are). */
+  static Minaccia soloNemiciReali(final GameState data, final GamePlayer player, final Minaccia m) {
+    final Set<String> real = nemiciReali(data, player);
+    return new Minaccia(
+        m.attaccanti().stream().filter(u -> real.contains(u.getOwner().getName())).toList(),
+        m.acquisti(),
+        m.bombardamento().stream().filter(u -> real.contains(u.getOwner().getName())).toList());
+  }
+
   // ==================================================================================== hold
 
   /**
@@ -505,7 +570,11 @@ public final class StimaUnica {
     return part;
   }
 
-  private static double tenuta(
+  /**
+   * Hold% of {@code target} with {@code defenders} against {@code counter}: the one estimate of the
+   * strategist's holds, reinforcements and (step C2) computed defense.
+   */
+  static double tenuta(
       final ProData proData,
       final ProOddsCalculator calc,
       final Territory target,

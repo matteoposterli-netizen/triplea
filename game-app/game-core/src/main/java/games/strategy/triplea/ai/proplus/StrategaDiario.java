@@ -178,7 +178,10 @@ final class StrategaDiario {
                 "aerei_turni_fermi",
                 "stima_decisione_ultima",
                 "blocchi_tetto",
-                "trattenute_acquisto")) {
+                "trattenute_acquisto",
+                "unita_contate",
+                "tracciamento",
+                "cali")) {
           if (reg.json().has(k)) {
             c.add(k, reg.json().get(k));
           }
@@ -195,6 +198,8 @@ final class StrategaDiario {
       x.addProperty(
           "round_senza_llm", pf.has("round_senza_llm") ? pf.get("round_senza_llm").getAsInt() : 0);
       x.add("blocchi", Stratega.blocchi(props, a));
+      // step C2: the computed defense of every nation's turn (with the outcome of the turn after)
+      x.add("difesa", Difesa.registro(props, a).getAsJsonArray("turni"));
       o.add(a, x);
     }
     o.add("uso", Stratega.usoTotale(props));

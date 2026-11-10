@@ -460,7 +460,11 @@ class ProPurchaseAi {
     final List<ProPlaceTerritory> needToDefendLandTerritories =
         prioritizeTerritoriesToDefend(purchaseTerritories, true);
     final Optional<ProPurchaseOrders> planOrders = proData.getTuning().purchaseOrders(proData);
-    if (planOrders.isPresent() && planOrders.get().minimumShare() > 0) {
+    final Optional<ProDefensePlan> defensePlan = proData.getTuning().defensePlan(proData);
+    if (defensePlan.isPresent()) {
+      // Pro+ step C2: the computed defense plan replaces the defense of threatened land
+      purchaseDefensePlan(purchaseTerritories, purchaseOptions, defensePlan.get());
+    } else if (planOrders.isPresent() && planOrders.get().minimumShare() > 0) {
       // Pro+: a share of the PUs is reserved for the plan, unless a factory or capital is at risk
       purchaseDefendersWithinPlanShare(
           purchaseTerritories, needToDefendLandTerritories, purchaseOptions, planOrders.get());
@@ -511,6 +515,15 @@ class ProPurchaseAi {
     }
 
     // A strategy plan's purchase orders (Pro+): after urgent defense, the PUs left follow its mix
+    // Pro+ step C2: the PUs over the strategy budget are kept for the Pro AI's own purchases
+    final Resource pusResource = data.getResourceList().getResourceOrThrow(Constants.PUS);
+    final int overBudget =
+        defensePlan
+            .map(p -> Math.max(0, resourceTracker.getRemaining(pusResource) - p.strategyBudget()))
+            .orElse(0);
+    if (overBudget > 0 && planOrders.isPresent()) {
+      resourceTracker.reserve(pusResource, overBudget);
+    }
     planOrders.ifPresent(
         orders -> {
           final ProPurchaseOrders.Result result =
@@ -527,6 +540,9 @@ class ProPurchaseAi {
           proData.getRecorder().purchaseOrders(proData, orders, result);
           proData.getRecorder().purchaseStep(proData, "plan", purchaseTerritories, Map.of());
         });
+    if (overBudget > 0 && planOrders.isPresent()) {
+      resourceTracker.release(pusResource, overBudget);
+    }
 
     // Prioritize land place options purchase AA then land units
     final List<ProPlaceTerritory> prioritizedLandTerritories =
@@ -789,6 +805,57 @@ class ProPurchaseAi {
           ProLogger.debug(ppt.getTerritory() + " placed units: " + unitsToPlace);
         }
       }
+    }
+  }
+
+  /**
+   * Pro+ step C2: buys the defensive units of a computed plan in their territories, while the PUs
+   * and the territory's production allow (nothing else of the "defend land" part).
+   */
+  private void purchaseDefensePlan(
+      final Map<Territory, ProPurchaseTerritory> purchaseTerritories,
+      final ProPurchaseOptionMap purchaseOptions,
+      final ProDefensePlan plan) {
+    for (final ProDefensePlan.Purchase p : plan.purchases()) {
+      final Optional<ProPurchaseOption> option =
+          purchaseOptions.getLandOptions().stream()
+              .filter(o -> o.getUnitType().getName().equals(p.unitType()))
+              .findFirst();
+      final Optional<ProPurchaseTerritory> where =
+          purchaseTerritories.entrySet().stream()
+              .filter(e -> e.getKey().getName().equals(p.territory()))
+              .map(Map.Entry::getValue)
+              .findFirst();
+      if (option.isEmpty() || where.isEmpty()) {
+        ProLogger.info("Defense plan: cannot buy " + p);
+        continue;
+      }
+      final Optional<ProPlaceTerritory> ppt =
+          where.get().getCanPlaceTerritories().stream()
+              .filter(x -> x.getTerritory().getName().equals(p.territory()))
+              .findFirst();
+      if (ppt.isEmpty()) {
+        continue;
+      }
+      int bought = 0;
+      while (bought < p.count()
+          && resourceTracker.hasEnough(option.get())
+          && where.get().getRemainingUnitProduction() >= option.get().getQuantity()) {
+        resourceTracker.purchase(option.get());
+        addUnitsToPlace(ppt.get(), option.get().createTempUnits());
+        bought += option.get().getQuantity();
+      }
+      ProLogger.info(
+          "Defense plan ("
+              + plan.label()
+              + "): bought "
+              + bought
+              + " of "
+              + p.count()
+              + " "
+              + p.unitType()
+              + " in "
+              + p.territory());
     }
   }
 

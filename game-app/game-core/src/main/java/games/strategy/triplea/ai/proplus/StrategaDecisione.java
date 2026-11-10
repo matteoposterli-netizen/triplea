@@ -95,6 +95,24 @@ public final class StrategaDecisione {
       }
     }
     out.add("rinforzi", reinf);
+    // contract 1.5 (step C2): irreplaceable / expendable territories, at most 5 each
+    for (final String key : java.util.List.of("irrinunciabili", "sacrificabili")) {
+      final JsonArray list = new JsonArray();
+      if (root.has(key) && root.get(key).isJsonArray()) {
+        for (final JsonElement e : root.getAsJsonArray(key)) {
+          if (e.isJsonObject() && !string(e.getAsJsonObject(), "territorio").isEmpty()) {
+            final JsonObject r = new JsonObject();
+            r.addProperty("territorio", string(e.getAsJsonObject(), "territorio"));
+            r.addProperty("motivazione", testo(e.getAsJsonObject(), "motivazione"));
+            list.add(r);
+            if (list.size() >= 5) {
+              break;
+            }
+          }
+        }
+      }
+      out.add(key, list);
+    }
     out.addProperty("motivazione", testo(root, "motivazione"));
     return out;
   }

@@ -54,7 +54,8 @@ final class StrategaSimulato implements DecisoreOperazione.Trasporto {
     // two candidates of different types, landings and reinforcements first (to exercise them)
     final java.util.List<JsonObject> cands = new java.util.ArrayList<>();
     state.getAsJsonArray("candidati").forEach(e -> cands.add(e.getAsJsonObject()));
-    final java.util.List<String> order = java.util.List.of("sbarco", "rinforzo", "offensiva", "tenuta");
+    final java.util.List<String> order =
+        java.util.List.of("sbarco", "rinforzo", "offensiva", "tenuta");
     cands.sort(java.util.Comparator.comparingInt(c -> order.indexOf(c.get("tipo").getAsString())));
     final java.util.Set<String> types = new java.util.HashSet<>();
     for (final JsonObject c : cands) {
@@ -76,6 +77,8 @@ final class StrategaSimulato implements DecisoreOperazione.Trasporto {
     f.addProperty("motivazione", "");
     a.add("fuori_lista", f);
     a.add("rinforzi", new JsonArray());
+    a.add("irrinunciabili", new JsonArray());
+    a.add("sacrificabili", new JsonArray());
     a.addProperty("motivazione", "risposta simulata");
     return a;
   }

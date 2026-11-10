@@ -3643,7 +3643,11 @@ public final class OperazioniCongiunte {
           .forEach(attackers::add);
       bombard.addAll(max.getMaxBombardUnits());
     }
-    return new Minaccia(List.copyOf(attackers), enemyPurchases(target), List.copyOf(bombard));
+    final Minaccia m =
+        new Minaccia(List.copyOf(attackers), enemyPurchases(target), List.copyOf(bombard));
+    // step C2: the strategist's estimates (holds, conquests, computed defense) count only the real
+    // enemies (at war, or able to declare war now), as the computed defense
+    return stratega() ? StimaUnica.soloNemiciReali(data, player, m) : m;
   }
 
   /** Hold% of {@code target} with {@code defenders} against the counterattack {@code m}. */

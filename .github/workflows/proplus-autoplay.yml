@@ -55,7 +55,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 801-806, tetto 30 USD)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 901-906, tetto 30 USD)"
         default: "normale"
 permissions:
   contents: write
@@ -150,7 +150,7 @@ jobs:
               raise SystemExit(0)
           if os.environ["MODALITA"] == "smoke":
               # step STRATEGA LLM: a check of the "Pro+ Stratega LLM" player (not a measure of
-              # strength): 2 configurations x 6 new seeds (801-806 from step C1-ter; 701-706 C1-bis; 601-606 COERENZA STIME; 501-506 before), 12 rounds, interleaved; the
+              # strength): 2 configurations x 6 new seeds (901-906 from step C2, tetto strategia 70%; 801-806 C1-ter; 701-706 C1-bis; 601-606 COERENZA STIME; 501-506 before), 12 rounds, interleaved; the
               # strategist's cap per game is 2 USD (as for the players), at most 24 USD for the
               # 12 games, under the 30 USD cap of the run. Without the secret the games still run
               # (the strategist falls back to Hard: the parachute is what they check then)
@@ -160,12 +160,12 @@ jobs:
                   ("2", "Hard-vs-Alleati-Stratega-LLM", "Asse Hard / Alleati Pro+ Stratega LLM",
                    "Axis=hard,Allies=stratega"),
               ]
-              seeds = range(801, 807)
+              seeds = range(901, 907)
               budget = f"{min(2.0, 30.0 / (len(smoke) * len(seeds))):.4f}"
               include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
                           "tipo": tipo, "piano": "", "seme": seed, "decisore": "",
                           "ablazione": "", "operazione": "", "opllm": "", "stratega": "1",
-                          "budget": budget}
+                          "budget": budget, "tetto": "70"}
                          for (n, key, name, tipo) in smoke
                          for seed in seeds]
               include.sort(key=lambda g: (g["seme"], g["id"]))
@@ -401,6 +401,7 @@ jobs:
           if [ -n "${{ matrix.operazione }}" ]; then args+=(--operazione "${{ matrix.operazione }}"); fi
           if [ -n "${{ matrix.opllm }}" ]; then args+=(--operazione-decisore "${{ matrix.opllm }}"); fi
           if [ -n "${{ matrix.budget }}" ]; then args+=(--budget-operazioni "${{ matrix.budget }}"); fi
+          if [ -n "${{ matrix.tetto }}" ]; then args+=(--tetto-strategia "${{ matrix.tetto }}"); fi
           start=$(date +%s)
           autoplay-kit/runner/bin/proplus-autoplay "${args[@]}" 2>&1 | tee "$out/partita.log" \
             | { grep --line-buffered -E "AUTOPLAY|ERROR" || true; }
@@ -456,7 +457,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.loads(os.environ['MATRIX'])['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 801-806)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 901-906)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
           # LLM strategist: offline quality test on 30 strategic states of these games (skipped,

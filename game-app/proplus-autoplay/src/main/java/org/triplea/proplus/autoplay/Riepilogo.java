@@ -434,6 +434,9 @@ final class Riepilogo {
       p.add("operazione_decisore", opDeciders);
       p.addProperty("budget_operazioni_usd", o.budgetOperazioni());
     }
+    if (o.tettoStrategia() != null) {
+      p.addProperty("tetto_strategia_pct", o.tettoStrategia());
+    }
     return p;
   }
 

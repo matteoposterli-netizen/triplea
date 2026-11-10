@@ -16,7 +16,7 @@ import javax.annotation.Nullable;
  */
 public record StrategaConfig(
     int maxOperazioni,
-    double quotaPuMaxPct,
+    double tettoStrategiaPct,
     int maxCandidati,
     int orizzonteRound,
     int durataOperazioneRound,
@@ -58,7 +58,10 @@ public record StrategaConfig(
     int riavvioRound,
     double riavvioMiglioramentoPunti,
     double fattoreReddito,
-    double valoreVcPerRound) {
+    double valoreVcPerRound,
+    double sogliaTenutaDifesa,
+    int maxTerritoriDifesa,
+    int maxUnitaDifesa) {
 
   static final String RESOURCE = "proplus/strategia/stratega-llm.json";
 
@@ -84,7 +87,7 @@ public record StrategaConfig(
   static StrategaConfig parse(final JsonObject o) {
     return new StrategaConfig(
         o.get("max_operazioni_per_alleanza").getAsInt(),
-        o.get("quota_pu_max_pct").getAsDouble(),
+        o.get("tetto_strategia_pct").getAsDouble(),
         o.get("max_candidati").getAsInt(),
         o.get("orizzonte_round").getAsInt(),
         o.get("durata_operazione_round").getAsInt(),
@@ -126,7 +129,10 @@ public record StrategaConfig(
         o.get("riavvio_round").getAsInt(),
         o.get("riavvio_miglioramento_punti").getAsDouble(),
         o.getAsJsonObject("valore_pu").get("fattore_reddito").getAsDouble(),
-        o.getAsJsonObject("valore_pu").get("victory_city_per_round").getAsDouble());
+        o.getAsJsonObject("valore_pu").get("victory_city_per_round").getAsDouble(),
+        o.getAsJsonObject("difesa").get("soglia_tenuta").getAsDouble(),
+        o.getAsJsonObject("difesa").get("max_territori").getAsInt(),
+        o.getAsJsonObject("difesa").get("max_unita_per_territorio").getAsInt());
   }
 
   /**

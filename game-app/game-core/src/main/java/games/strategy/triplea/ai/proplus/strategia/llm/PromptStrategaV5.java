@@ -14,7 +14,7 @@ import lombok.experimental.UtilityClass;
 public final class PromptStrategaV5 {
   public static final String RISORSA = "proplus/strategia/prompt-stratega-v5.md";
   public static final String VERSIONE = "prompt-stratega-v5";
-  public static final String CONTRATTO = "1.4";
+  public static final String CONTRATTO = "1.5";
 
   /** The fixed part with the limits text ({@code vincoli}: one rule a line). */
   public static String sistema(final String vincoli) {
@@ -53,10 +53,16 @@ public final class PromptStrategaV5 {
         PromptStratega.object(
             "territorio", PromptStratega.string("territorio o zona di mare"),
             "peso", PromptStratega.type("integer"));
+    final JsonObject territorio =
+        PromptStratega.object(
+            "territorio", PromptStratega.string("territorio di terra dell'alleanza"),
+            "motivazione", PromptStratega.string("max 1 frase in italiano"));
     return PromptStratega.object(
         "portafoglio", PromptStratega.array(voce),
         "fuori_lista", fuori,
         "rinforzi", PromptStratega.array(rinforzo),
+        "irrinunciabili", PromptStratega.array(territorio),
+        "sacrificabili", PromptStratega.array(territorio),
         "motivazione", PromptStratega.string("max 3 frasi in italiano"));
   }
 

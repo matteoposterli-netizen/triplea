@@ -1017,7 +1017,7 @@ public final class StrategaCandidati {
       buy.add(acquisto("terra", cfg.tipiTerra(), cfg.riserveTerra()));
       r.add("acquisti", buy);
       r.add("piazzamento", new JsonArray());
-      r.addProperty("quota", cfg.quotaPuMaxPct());
+      r.addProperty("quota", cfg.tettoStrategiaPct());
       reserves.add(n, r);
     }
     o.add("riserve", reserves);

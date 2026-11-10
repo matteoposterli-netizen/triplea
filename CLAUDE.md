@@ -177,6 +177,11 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
 - Step C1-ter: un solo controllo di sicurezza per mosse e stima (`OperazioniCongiunte.passiSicuri`/`arriviSicuri`/
   `haPercorsoSicuro`/`luoghiRaccolta`), bersaglio vuoto (presa 100%/0%, `Stima.soloAerei`), TUV distrutti solo dei difensori
   presenti (`StimaUnica.destroyed`). Vedi "Step C1-ter".
+- Step C2: budget difensivo calcolato (solo Stratega LLM): `ai/proplus/Difesa` (minaccia, valore, costo, piano difensivo,
+  esecuzione nel non combattimento, liste dell'LLM, registro `Pro+ stratega llm difesa: <alleanza>`), `ai/proplus/Tracciamento`
+  (unita' contate dalle conquiste, cause dei cali >= 30 punti), hook `ProTuning.defensePlan` + record `ai/pro/ProDefensePlan`
+  (default vuoto; in `ProPurchaseAi` sostituisce la difesa di terra e limita i PU degli ordini), `StimaUnica.nemiciReali`/
+  `soloNemiciReali`/`contate`, contratto 1.5 (`irrinunciabili`, `sacrificabili`). Vedi "Budget difensivo calcolato (step C2)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -396,7 +401,8 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   sezione **"Decisioni LLM delle operazioni congiunte"** (`ConfrontoLlm`): decisioni per tipo e azione, diverse dalla formula, ripieghi con i
   motivi, calibrazione LLM contro formula sulle stesse decisioni (fasce 20%, errore medio pesato, Brier), costo totale/per partita.
 - **Modalita' "smoke" (step STRATEGA LLM)**: `[smoke]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒ `modalita:
-  smoke`. Controllo, non misura di forza: 12 round, Equilibrato, **semi 601-606** (dallo step COERENZA STIME; prima 501-506), 2 configurazioni = 12 partite (`1-Asse-Stratega-LLM-
+  smoke`. Controllo, non misura di forza: 12 round, Equilibrato, **semi 901-906** (step C2, `--tetto-strategia 70`; prima 801-806,
+  701-706, 601-606, 501-506), 2 configurazioni = 12 partite (`1-Asse-Stratega-LLM-
   vs-Hard`, `2-Hard-vs-Alleati-Stratega-LLM`), matrice mescolata, `max-parallel` 6, tetto per partita min(2, 30/12) = 2 $ (run <= 24 $,
   tetto 30 $). La chiave va ai job con `matrix.stratega`; senza secret le partite girano lo stesso (paracadute = Hard). Sezione
   "Stratega LLM: controllo [smoke]" (`ConfrontoSmoke`): stato, round decisi/senza LLM, chiamate, costo, ripieghi per livello e motivo,
@@ -1856,6 +1862,51 @@ una tappa futura non erano trattenuti (Hard li usava).
   per id); i rinforzi nemici attesi restano nel contrattacco/tenuta. Syria (run 42833255633): valore d'alleanza ~38 PU (49 TUV
   distrutti, 46 di rinforzi) → ~−8 PU.
 - `ConfrontoSmoke`: unita' escluse per percorso non sicuro al lancio (per operazione), lanci con presa 0 per "solo aerei".
+
+### Budget difensivo calcolato (step C2)
+
+Solo per la voce "Pro+ Stratega LLM" (`Stratega.gioca`); Hard, Hard Beta, Pro+ (AI) e le operazioni scritte a mano invariati
+(hook `ProTuning.defensePlan` vuoto di default). Valori in `stratega-llm.json` (`difesa`, `tetto_strategia_pct`), NON tarati.
+- **Quando**: nell'acquisto di ogni nazione dello Stratega (`ProPlusAi.purchase`, dopo `trattenuteAllAcquisto`, sul tabellone
+  reale prima della simulazione di Hard): `Tracciamento.aggiorna`, poi `Difesa.calcola`.
+- **Minaccia (A)**: territori di terra della nazione + capitali/fabbriche dell'alleanza alleate alla nazione con sue unita'
+  entro 2; prefiltro con UNA stima d'attacco nemica di Hard (`ProTerritoryManager.populateEnemyAttackOptions` su tutti i
+  candidati: nemici che muovono prima del suo prossimo turno, insieme) e unita' di terra di **nemici reali**
+  (`StimaUnica.nemiciReali` = `MinacciaReale.nemici`: in guerra o che possono dichiarare guerra ora; senza questo filtro al R1
+  le unita' britanniche "minacciavano" Washington, come nello step 3c). Primi `max_territori` 8 (capitali e irrinunciabili
+  prima, poi per valore). Per ognuno `op.minaccia(t)` + `StimaUnica.impegno`/`parte` (massimo su capitali e fabbriche chiave,
+  realistico altrove, minimo prudente 0,5 con storico scarso) + `StimaUnica.tenuta`: la STESSA stima delle tenute (F);
+  dallo step C2 anche `OperazioniCongiunte.minaccia` delle operazioni dello Stratega conta solo i nemici reali.
+- **Valore (B)**: `valoreBersaglioPu` (H = `tenuta_round_default`) + TUV delle fabbriche + valore delle operazioni attive
+  con il territorio tra i luoghi di raccolta. **Costo (C)**: unita' minime per `soglia_tenuta` 70% (ricerca binaria): prima
+  `rinforziPossibili` (le stesse delle tenute, non riservate da altre operazioni, al massimo `max_unita_per_territorio` 12),
+  poi acquisti del miglior difensore (2 x punti ferita + difesa per PU) solo nella fabbrica del territorio (le unita'
+  piazzate altrove non si muovono prima del turno nemico); costo = PU degli acquisti + (1 - tenuta) x TUV delle unita'
+  impegnate. Regola (`Difesa.decidi`): irrinunciabile (capitale, lista LLM) = difendi; sacrificabile (lista LLM, mai una
+  capitale) = sacrifica; tiene gia' = difeso a costo 0; tenuta massima <= `soglia_ritirata` = sacrifica; altrimenti
+  valore >= costo.
+- **Budget (D, J)**: PU_strategia = min(PU - PU_difesa, `tetto_strategia_pct`% dei PU) (`Pro+ stratega llm tetto strategia:
+  <alleanza>`, autoplay `--tetto-strategia`; default 70, al posto del vecchio `quota_pu_max_pct` 30); in `ProPurchaseAi` gli
+  acquisti del piano sostituiscono `defend_land`, gli ordini (riserve delle operazioni) hanno al massimo PU_strategia (il resto
+  accantonato con `reserve/release`), poi Hard spende tutto il resto. "Tetto limita" = taglio > 0 e riserve chieste >
+  PU_strategia (PU tagliati = min(taglio, riserve - PU_strategia)).
+- **Non combattimento (E, parziale)**: `ProPlusAi.playDefense` dopo le operazioni e prima di Hard: i rinforzi del piano vanno
+  nei territori difesi; rinforzi e presidi dei difesi tenuti (`holdForOperation`) e fuori dagli attacchi di Hard
+  (`holdCombatForPurchase`). **Non fatto**: Hard puo' ancora mandare unita' nei territori sacrificati (servirebbe un hook nelle
+  destinazioni di `ProNonCombatMoveAi`, troppo invasivo).
+- **Tracciamento (G)**: al lancio di una conquista `unita_contate` (`StimaUnica.contate`, id e luogo); a ogni turno di una
+  nazione dello Stratega `tracciamento` [{round, turno, ferma, avvicinata, spostata_da_hard, altra_operazione,
+  guardia_capitale, persa, dettagli}]; quando la stima strategica scende di >= 30 punti dal lancio `cali` [{presa/tenuta
+  prima-ora, unita' contate prima-ora, unita' non piu' contate per motivo, difensori e contrattacco, causa, testo}] e una riga
+  nel diario dello Stratega.
+- **Diario e misure (H)**: in `stratega.txt` "=== R<n> <nazione> - piano difensivo: PU = difesa + strategia + Hard ..." con
+  DIFESO/SACRIFICATO (valore, costo, tenuta prima -> dopo, massima, contrattacco, impegno, rinforzi, acquisti, motivo) ed
+  "esito del turno prima"; "Difesa <nazione> R<n> (non combattimento): rinforzi mossi ..."; `stratega-riepilogo.json`
+  `difesa` per alleanza (con `esito_tenuto` al turno dopo della stessa nazione). `ConfrontoSmoke`: sezione "Budget difensivo
+  calcolato (step C2)" (PU per nazione, % strategia contro il 30% fisso, tetto, decisioni per fonte, capitali e irrinunciabili
+  persi, calibrazione della stima di difesa, cause dei cali).
+- **LLM**: stato `difesa_calcolata` (ultimo piano di ogni nazione), risposta `irrinunciabili`/`sacrificabili` (max 5),
+  `Difesa.salvaListe`; prompt v5 aggiornato.
 
 ## Come configurare lo stratega
 

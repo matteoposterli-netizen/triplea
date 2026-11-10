@@ -344,6 +344,173 @@ final class ConfrontoSmoke {
         md,
         "ordini del turno (lancia/procedi/tieni; stima nel punto di decisione, esito al round dopo)",
         bandsOrders);
+    difesa(md, llm, alliances);
+  }
+
+  /**
+   * Step C2: the computed defense (PUs to defense / strategy / Hard per nation, territories
+   * defended and given up, the cap, calibration of the defense estimate, capitals and irreplaceable
+   * territories lost) and the causes of the estimate falls of 30 points or more (tracking).
+   */
+  static void difesa(
+      final StringBuilder md,
+      final List<RiepilogoGenerale.Game> llm,
+      final List<String> alliances) {
+    // per nation: turns, PU, defense, strategy, Hard, cap limits, PU cut
+    final Map<String, double[]> byNation = new TreeMap<>();
+    final Map<String, Integer> decisions = new TreeMap<>();
+    final double[][] bands = new double[5][3];
+    final Map<String, Integer> fallCauses = new TreeMap<>();
+    final List<String> falls = new ArrayList<>();
+    int capitalsLost = 0;
+    int mustLost = 0;
+    int mustDefended = 0;
+    final List<String> capitalText = new ArrayList<>();
+    for (final RiepilogoGenerale.Game g : llm) {
+      if (g.json() == null) {
+        continue;
+      }
+      final JsonObject j = g.json();
+      final JsonObject types = j.getAsJsonObject("parametri").getAsJsonObject("tipi");
+      final String side =
+          alliances.stream()
+              .filter(a -> AutoplayOptions.STRATEGA.equals(RiepilogoGenerale.text(types, a)))
+              .findFirst()
+              .orElse("");
+      final JsonObject s =
+          j.has("stratega_llm") && j.get("stratega_llm").isJsonObject()
+              ? j.getAsJsonObject("stratega_llm")
+              : new JsonObject();
+      if (!s.has(side) || !s.get(side).isJsonObject()) {
+        continue;
+      }
+      final JsonObject a = s.getAsJsonObject(side);
+      final List<String> nations = new ArrayList<>();
+      if (a.has("nazioni")) {
+        a.getAsJsonArray("nazioni").forEach(e -> nations.add(e.getAsString()));
+      }
+      if (j.has("capitali") && j.get("capitali").isJsonArray()) {
+        for (final JsonElement e : j.getAsJsonArray("capitali")) {
+          final JsonObject c = e.getAsJsonObject();
+          if ("caduta".equals(RiepilogoGenerale.text(c, "evento"))
+              && nations.contains(RiepilogoGenerale.text(c, "capitale_di"))) {
+            capitalsLost++;
+            capitalText.add(
+                g.folder()
+                    + " R"
+                    + c.get("round").getAsInt()
+                    + " "
+                    + RiepilogoGenerale.text(c, "territorio"));
+          }
+        }
+      }
+      if (a.has("difesa") && a.get("difesa").isJsonArray()) {
+        for (final JsonElement e : a.getAsJsonArray("difesa")) {
+          final JsonObject t = e.getAsJsonObject();
+          final double[] v =
+              byNation.computeIfAbsent(
+                  side + " " + RiepilogoGenerale.text(t, "nazione"), k -> new double[8]);
+          v[0]++;
+          v[1] += t.get("pu").getAsDouble();
+          v[2] += t.get("pu_difesa").getAsDouble();
+          v[3] += t.get("pu_strategia").getAsDouble();
+          v[4] += t.get("pu_hard").getAsDouble();
+          if (t.has("tetto_limita") && t.get("tetto_limita").getAsBoolean()) {
+            v[5]++;
+            v[6] += t.get("pu_tagliati_dal_tetto").getAsDouble();
+          }
+          v[7] += t.has("taglio_tetto") && t.get("taglio_tetto").getAsDouble() > 0 ? 1 : 0;
+          for (final JsonElement x : t.getAsJsonArray("territori")) {
+            final JsonObject y = x.getAsJsonObject();
+            final String d = RiepilogoGenerale.text(y, "decisione");
+            final String src = RiepilogoGenerale.text(y, "fonte");
+            decisions.merge(d + " (" + src + ")", 1, Integer::sum);
+            if (!y.has("esito_tenuto")) {
+              continue;
+            }
+            final boolean held = y.get("esito_tenuto").getAsBoolean();
+            band(bands, y.get("tenuta_stimata_pct").getAsDouble() / 100, held);
+            if ("difeso".equals(d) && ("capitale".equals(src) || "llm".equals(src))) {
+              mustDefended++;
+              if (!held) {
+                mustLost++;
+              }
+            }
+          }
+        }
+      }
+      if (a.has("operazioni")) {
+        for (final JsonElement e : a.getAsJsonArray("operazioni")) {
+          final JsonObject o = e.getAsJsonObject();
+          if (!o.has("cali")) {
+            continue;
+          }
+          for (final JsonElement c : o.getAsJsonArray("cali")) {
+            final JsonObject x = c.getAsJsonObject();
+            fallCauses.merge(RiepilogoGenerale.text(x, "causa"), 1, Integer::sum);
+            if (falls.size() < 12) {
+              falls.add(
+                  g.folder()
+                      + " "
+                      + RiepilogoGenerale.text(o, "bersaglio")
+                      + " R"
+                      + x.get("round").getAsInt()
+                      + ": "
+                      + RiepilogoGenerale.text(x, "testo"));
+            }
+          }
+        }
+      }
+    }
+    md.append(
+"""
+### Budget difensivo calcolato (step C2)
+
+| Nazione | Turni | PU medi | Difesa | Strategia | Hard | Strategia % | Tetto superato | Tetto limita le riserve | PU tagliati (tot / medi) |
+|---|---|---|---|---|---|---|---|---|---|
+""");
+    byNation.forEach(
+        (k, v) ->
+            md.append(
+                String.format(
+                    Locale.ROOT,
+                    "| %s | %.0f | %.1f | %.1f | %.1f | %.1f | %.0f%% (fisso prima: 30%%) | %.0f |"
+                        + " %.0f | %.0f / %.1f |%n",
+                    k,
+                    v[0],
+                    v[1] / v[0],
+                    v[2] / v[0],
+                    v[3] / v[0],
+                    v[4] / v[0],
+                    v[1] == 0 ? 0 : v[3] / v[1] * 100,
+                    v[7],
+                    v[5],
+                    v[6],
+                    v[5] == 0 ? 0 : v[6] / v[5])));
+    md.append("\nTerritori minacciati valutati, per decisione (fonte): ")
+        .append(decisions.isEmpty() ? "nessuno" : decisions.toString())
+        .append(".\n\n");
+    md.append(
+        String.format(
+            Locale.ROOT,
+            "Capitali dello Stratega cadute: **%d**%s. Irrinunciabili difesi e persi al turno dopo:"
+                + " **%d su %d**.%n%n",
+            capitalsLost,
+            capitalText.isEmpty() ? "" : " (" + String.join("; ", capitalText) + ")",
+            mustLost,
+            mustDefended));
+    calibration(
+        md,
+        "stima della DIFESA (tenuta stimata del piano difensivo, esito al turno dopo della nazione;"
+            + " criterio errore medio <= 20 punti)",
+        bands);
+    md.append("Cali della stima di 30 punti o piu' dal lancio (tracciamento), per causa: ")
+        .append(fallCauses.isEmpty() ? "nessuno" : fallCauses.toString())
+        .append(".\n\n");
+    falls.forEach(f -> md.append("- ").append(f).append('\n'));
+    if (!falls.isEmpty()) {
+      md.append('\n');
+    }
   }
 
   /** Artefact causes of a cancellation (analysis of run 42775993327): C1-C5. */

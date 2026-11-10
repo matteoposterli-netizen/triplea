@@ -242,7 +242,7 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
       assertThat(c.json().has("stima_motore")).isTrue();
       assertThat(c.json().has("tenuta_50_con_rinforzi_pct")).isFalse();
       assertThat(parsed.riserve().values())
-          .allMatch(r -> r.quota() <= StrategaConfig.get().quotaPuMaxPct());
+          .allMatch(r -> r.quota() <= StrategaConfig.get().tettoStrategiaPct());
     }
     final JsonObject reading = gen.letturaAvversario(new JsonObject());
     assertThat(reading.has("minacce_capitali_vc")).isTrue();
@@ -317,7 +317,8 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
         .isInstanceOf(ErroreStratega.class);
     final JsonObject schema = PromptStrategaV5.schema();
     assertThat(schema.get("additionalProperties").getAsBoolean()).isFalse();
-    assertThat(schema.getAsJsonArray("required")).hasSize(4);
+    assertThat(schema.getAsJsonArray("required"))
+        .hasSize(6); // contract 1.5: + irrinunciabili, sacrificabili
     assertThat(PromptStrategaV5.sistema("- vincolo"))
         .contains("stima_motore")
         .contains("StoricoNemico".isEmpty() ? "" : "storico_nemico_per_tipo")
@@ -463,7 +464,8 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
         OperazioniCongiunte.ordiniAcquisto(proData(italians, 1, "Purchase"));
     assertThat(o).isPresent();
     assertThat(o.get().mandatory()).anyMatch(m -> m.category().equals("terra"));
-    assertThat(o.get().minimumShare()).isLessThanOrEqualTo(StrategaConfig.get().quotaPuMaxPct());
+    assertThat(o.get().minimumShare())
+        .isLessThanOrEqualTo(StrategaConfig.get().tettoStrategiaPct());
     // positioning round: the units gathered stay out of Hard's attacks
     final int target = reg.roundObiettivo();
     OperazioniCongiunte.aggiorna(proData(italians, target - 1, "Purchase"), calc());

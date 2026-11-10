@@ -505,6 +505,31 @@ public final class ProPlusTuning implements ProTuning {
         units.stream().map(Unit::getId).collect(java.util.stream.Collectors.toUnmodifiableSet());
   }
 
+  // ---------------------------------------------- step C2: computed defense (Stratega LLM only)
+
+  private String defenseKey = "";
+  private @Nullable games.strategy.triplea.ai.pro.ProDefensePlan defense;
+
+  /** Step C2: the defense plan of {@code player}'s purchase this round (also on the game copy). */
+  public void setDefensePlan(
+      final GamePlayer player,
+      final int round,
+      final games.strategy.triplea.ai.pro.ProDefensePlan plan) {
+    defenseKey = player.getName() + "|" + round;
+    defense = plan;
+  }
+
+  @Override
+  public Optional<games.strategy.triplea.ai.pro.ProDefensePlan> defensePlan(final ProData proData) {
+    if (defense == null
+        || proData.getPlayer() == null
+        || !defenseKey.equals(
+            proData.getPlayer().getName() + "|" + proData.getData().getSequence().getRound())) {
+      return Optional.empty();
+    }
+    return operationAnswer(Optional.of(defense));
+  }
+
   @Override
   public java.util.Set<Unit> combatHeldUnits(final ProData proData) {
     if (proData.getData() == combatHeldData

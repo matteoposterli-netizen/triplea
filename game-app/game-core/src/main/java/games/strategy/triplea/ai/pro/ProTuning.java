@@ -241,6 +241,15 @@ public interface ProTuning {
   }
 
   /**
+   * A computed defense plan (Pro+ step C2, only the "Pro+ Stratega LLM" player): its defensive
+   * purchases replace the purchase's "defend land" part and it caps the PUs of the purchase orders.
+   * Empty by default: Hard and Hard Beta defend as always.
+   */
+  default Optional<ProDefensePlan> defensePlan(final ProData proData) {
+    return Optional.empty();
+  }
+
+  /**
    * Staging orders of a strategy plan for {@code proData}'s player now (where the non-combat move
    * gathers the units not needed for defense). Empty by default: Hard and Hard Beta move as always.
    */

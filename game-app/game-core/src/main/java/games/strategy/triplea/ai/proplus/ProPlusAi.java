@@ -18,6 +18,7 @@ import games.strategy.triplea.delegate.remote.IMoveDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
 import java.util.List;
 import java.util.Locale;
+import javax.annotation.Nullable;
 
 /**
  * "Pro+ (AI)": the fork's own AI, built on top of {@link ProAi} ("Hard (AI)").
@@ -89,7 +90,21 @@ public class ProPlusAi extends ProAi {
             && ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning) {
           initializeData();
           final java.util.Set<games.strategy.engine.data.Unit> keep =
-              OperazioniCongiunte.trattenuteAllAcquisto(getProData(), getCalc());
+              new java.util.LinkedHashSet<>(
+                  OperazioniCongiunte.trattenuteAllAcquisto(getProData(), getCalc()));
+          // step C2: the computed defense first (its units stay out of Hard's attacks too)
+          defense = null;
+          try {
+            initializeData();
+            Tracciamento.aggiorna(data, player);
+            defense = Difesa.calcola(getProData(), getCalc(), keep).orElse(null);
+            if (defense != null) {
+              tuning.setDefensePlan(player, data.getSequence().getRound(), defense.perAcquisto());
+              keep.addAll(defense.trattenute());
+            }
+          } catch (final RuntimeException e) {
+            ProLogger.warn(LOG_PREFIX + "Defense plan failed: " + e);
+          }
           if (!keep.isEmpty()) {
             tuning.holdCombatForPurchase(data, player, keep);
           }
@@ -113,8 +128,40 @@ public class ProPlusAi extends ProAi {
       playAmphibiousOperations(moveDel, data, player);
     }
     playJointOperation(nonCombat, moveDel, data, player);
+    if (nonCombat) {
+      playDefense(moveDel, data, player);
+    }
     super.move(nonCombat, moveDel, data, player);
     saveCheck(data, player);
+  }
+
+  /** Step C2: the defense plan of this turn's purchase (Stratega LLM only), else null. */
+  private @Nullable Difesa.Piano defense;
+
+  /**
+   * Step C2: before Hard's non-combat move the plan's reinforcements go to their territories; they
+   * and the defended garrisons stay there (Hard does not take them away).
+   */
+  private void playDefense(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    final Difesa.Piano plan = defense;
+    if (plan == null
+        || plan.round() != data.getSequence().getRound()
+        || !plan.nazione().equals(player.getName())
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      initializeData();
+      final Difesa.Esecuzione done = Difesa.esegui(getProData(), moveDel, plan);
+      if (!done.trattenute().isEmpty()) {
+        tuning.holdForOperation(data, player, done.trattenute());
+      }
+      games.strategy.triplea.ai.proplus.diario.DiaryRecorder.stratega(
+          data, done.righe(), null, null);
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "Defense moves failed: " + e);
+    }
   }
 
   /**
@@ -182,7 +229,8 @@ public class ProPlusAi extends ProAi {
       }
       if (mine == null) {
         mine =
-            t.getMatches(
+            t
+                .getMatches(
                     games.strategy.triplea.delegate.Matches.unitIsOwnedBy(player)
                         .and(games.strategy.triplea.delegate.Matches.unitIsLand())
                         .and(games.strategy.triplea.delegate.Matches.unitIsNotInfrastructure()))
@@ -192,7 +240,8 @@ public class ProPlusAi extends ProAi {
       }
       if (enemy == null) {
         enemy =
-            t.getMatches(
+            t
+                .getMatches(
                     games.strategy.triplea.delegate.Matches.unitIsEnemyOf(player)
                         .and(games.strategy.triplea.delegate.Matches.unitIsLand())
                         .and(games.strategy.triplea.delegate.Matches.unitIsNotInfrastructure()))

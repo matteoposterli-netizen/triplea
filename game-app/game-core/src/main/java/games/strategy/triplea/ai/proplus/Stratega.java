@@ -133,6 +133,13 @@ public final class Stratega {
     DecisoreOperazione.setBudget(props, usd);
   }
 
+  /** Step C2: the cap (percent) of the PUs to the strategy for {@code alliance} (autoplay). */
+  public static void setTettoStrategia(
+      final GameProperties props, final String alliance, final double pct) {
+    props.set(Difesa.KEY_TETTO + alliance, (Serializable) null);
+    props.set(Difesa.KEY_TETTO + alliance, String.format(Locale.ROOT, "%.1f", pct));
+  }
+
   public static double budget(final GameProperties props) {
     if (props.get(KEY_BUDGET) instanceof String s) {
       try {
@@ -541,6 +548,14 @@ public final class Stratega {
       OperazioneCongiunta.setDinamiche(props, alliance, defs);
       diario.add("decisioni", decisions);
       diario.add("rinforzi", reinf);
+      // step C2: the LLM's irreplaceable / expendable territories for the computed defense
+      final JsonObject lists = Difesa.salvaListe(data, alliance, round, a);
+      diario.add("liste_difesa", lists);
+      if (lists.getAsJsonArray("irrinunciabili").size()
+              + lists.getAsJsonArray("sacrificabili").size()
+          > 0) {
+        righe.add("  Liste della difesa: " + testoListe(lists));
+      }
       righe.add(
           "Stratega LLM ("
               + alliance
@@ -651,6 +666,25 @@ public final class Stratega {
         final Registro r0 = Registro.leggi(props, id);
         r0.json().add("stima_avvio", st);
         r0.salva(props);
+      }
+      // step C2 (tracking): the units the conquest counts, to follow them turn by turn
+      if (c.tipo().conquista()) {
+        try {
+          final OperazioneCongiunta.Definizione parsed =
+              OperazioneCongiunta.parse(StrategaCandidati.wrap(def)).get(0);
+          final Territory t = data.getMap().getTerritoryOrNull(c.bersaglio());
+          if (t != null) {
+            final Registro r0 = Registro.leggi(props, id);
+            Tracciamento.avvio(
+                r0,
+                StimaUnica.contate(
+                    proData, calc, parsed, t, Math.max(1, parsed.roundMin() - round + 1)),
+                data.getMap());
+            r0.salva(props);
+          }
+        } catch (final RuntimeException ex) {
+          ProLogger.warn("[Pro+] Stratega: unita' contate non registrate: " + ex);
+        }
       }
       if (!c.tipo().conquista()) {
         // hold and reinforcement: the operation starts in TENUTA on the territory
@@ -855,8 +889,12 @@ public final class Stratega {
         // when its candidate left the list), with the same function as the candidates
         if (!reg.stato().isFinale()) {
           try {
-            final JsonObject now = stimaOra(d).json();
+            final StimaUnica.Stima nowStima = stimaOra(d);
+            final JsonObject now = nowStima.json();
             o.add("stima_motore_ora", now);
+            // step C2 (tracking): the cause of a fall of 30 points or more from the launch
+            Tracciamento.calo(data, reg, nowStima, now)
+                .ifPresent(text -> righe.add("  " + d.get("id").getAsString() + ": " + text));
             reg.json().add("stima_strategica_ultima", now);
             // step C1-bis: the estimate one round after the launch (coherence of the conquests)
             if (!reg.json().has("stima_round_dopo")
@@ -888,6 +926,9 @@ public final class Stratega {
         ops.add(o);
       }
       s.add("operazioni_in_corso", ops);
+      // step C2: the engine's last computed defense of each nation (threatened territories,
+      // value, cost, decision), for the irreplaceable / expendable lists
+      s.add("difesa_calcolata", Difesa.ultimi(props, alliance));
       final JsonArray done = new JsonArray();
       for (final JsonElement e : portfolio.getAsJsonArray("operazioni")) {
         final JsonObject o = e.getAsJsonObject();
@@ -937,9 +978,10 @@ public final class Stratega {
           "- al massimo "
               + cfg.maxOperazioni()
               + " operazioni attive per alleanza (le altre vengono rifiutate);",
-          "- PU riservabili per le riserve delle operazioni: al massimo il "
-              + Math.round(cfg.quotaPuMaxPct())
-              + "% dei PU del turno per nazione (la difesa urgente puo' usare il resto);",
+          "- PU per le riserve delle operazioni: quelli che restano dopo il piano difensivo"
+              + " calcolato dal motore, al massimo il "
+              + Math.round(cfg.tettoStrategiaPct())
+              + "% dei PU del turno per nazione (tetto di sicurezza); il resto lo spende Hard;",
           "- la guarnigione della capitale (25% di rischio nemico) non la lascia mai;",
           "- tetto di perdita per tappa (perdita attesa oltre il tetto = tappa non eseguita):"
               + " predefinito "
@@ -974,6 +1016,20 @@ public final class Stratega {
     }
 
     // ------------------------------------------------------------------------- helpers
+
+    private String testoListe(final JsonObject lists) {
+      final List<String> parts = new ArrayList<>();
+      for (final String key : List.of("irrinunciabili", "sacrificabili")) {
+        final List<String> names = new ArrayList<>();
+        lists
+            .getAsJsonArray(key)
+            .forEach(e -> names.add(e.getAsJsonObject().get("territorio").getAsString()));
+        if (!names.isEmpty()) {
+          parts.add(key + " " + String.join(", ", names));
+        }
+      }
+      return String.join("; ", parts);
+    }
 
     private StimaUnica.Stima stimaOra(final JsonObject d) {
       final OperazioneCongiunta.Definizione def =
