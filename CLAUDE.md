@@ -174,6 +174,9 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `OperazioniCongiunte.trattenute`/`avvicina`/`colpisceDaQui`/`combat`), cause con il calo di stima prima di C5
   (`CauseAnnullamento`), valore d'alleanza in PU con i TUV nemici distrutti (`StimaUnica.Stima.valoreAlleanza`,
   `StrategaCandidati.valoreBersaglioPu`, `stratega-llm.json` `valore_pu`). Vedi "Step C1-bis".
+- Step C1-ter: un solo controllo di sicurezza per mosse e stima (`OperazioniCongiunte.passiSicuri`/`arriviSicuri`/
+  `haPercorsoSicuro`/`luoghiRaccolta`), bersaglio vuoto (presa 100%/0%, `Stima.soloAerei`), TUV distrutti solo dei difensori
+  presenti (`StimaUnica.destroyed`). Vedi "Step C1-ter".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -1838,6 +1841,21 @@ una tappa futura non erano trattenuti (Hard li usava).
   `valore_minimo_tenuta` e per il tetto di perdita (`indice_valore` nella definizione). Prompt stratega v5: 1 riga sulla formula.
 - Misure nuove in `ConfrontoSmoke`: mediana |stima al lancio − stima del round dopo| per offensive/sbarchi (`stima_round_dopo`,
   scritta da `Stratega` nello stato del round dopo il lancio), turni-aereo fermi. [smoke] semi 701-706.
+
+### Step C1-ter: raggiungibilita' = movimento, bersaglio vuoto, TUV distrutti dei difensori presenti
+
+- **Un solo controllo di sicurezza** (`OperazioniCongiunte.passiSicuri` / `arriviSicuri`, sopra `safeLand` → `sicuro`): lo usano
+  le mosse (`stepToward`, `gatherPlanes`) e la stima (`haPercorsoSicuro`, movimento pieno, memo per stima). Per un round futuro
+  `StimaUnica.forze` conta un'unita' di terra che deve camminare (non raggiungibile ora, non in raccolta ne' accanto al bersaglio)
+  e un aereo per la raccolta aerea solo se una rotta supera quel controllo; le altre in `Stima.esclusePercorso`
+  (`escluse_percorso_non_sicuro`, `_n` nella stima e nel diario della tappa 1). Restano contate le unita' raggiungibili ora (anche
+  sbarcabili da un trasporto in questo turno). Luoghi di raccolta = `luoghiRaccolta` (stessi della stima e delle mosse).
+- **Bersaglio vuoto**: presa 100% se nelle tappe c'e' un'unita' di terra capace di conquistare, 0% con soli aerei (`soloAerei`,
+  `nota_presa` "serve un'unita' di terra"); `win_tappa1_pct`/`win_tappa2_pct` non scritti (nessun win% della tappa 1 nel confronto).
+- **TUV distrutti** = solo i difensori presenti alla stima (`StimaUnica.destroyed`: difensori - quelli che restano dopo le tappe,
+  per id); i rinforzi nemici attesi restano nel contrattacco/tenuta. Syria (run 42833255633): valore d'alleanza ~38 PU (49 TUV
+  distrutti, 46 di rinforzi) → ~−8 PU.
+- `ConfrontoSmoke`: unita' escluse per percorso non sicuro al lancio (per operazione), lanci con presa 0 per "solo aerei".
 
 ## Come configurare lo stratega
 
@@ -3839,3 +3857,36 @@ annullate 13), sbarco 3 (preso da Hard 1, annullato 1). Aerei trattenuti: 130 tu
 - Non tarato (regola dello step). Correzione coerente con lo step (da decidere): contare per un round futuro solo le unita' di
   terra che hanno un percorso SICURO verso la raccolta (la stessa prova di `stepToward`/`sicuro` usata per muoverle), e per una
   tappa senza difensori nemici non usare il win% della tappa 1 nel confronto (presa gia' 100%).
+
+### Step C1-ter — raggiungibilita' = movimento, bersaglio vuoto, TUV distrutti (2026-11-10)
+
+Vedi "Step C1-ter". File: `OperazioniCongiunte` (`passiSicuri`, `arriviSicuri`, `haPercorsoSicuro`, `luoghiRaccolta`,
+`routeFor` con portata, `stepToward`/`gatherPlanes` sullo stesso controllo, testo della tappa 1), `StimaUnica` (forze con
+esclusioni, bersaglio vuoto, `destroyed`, campi `bersaglioVuoto`/`soloAerei`/`esclusePercorso`), `stratega-llm.json` (nota),
+prompt v5 (2 righe), `ConfrontoSmoke`, workflow (semi 801-806), `CoerenzaStimeTest` +3. Hard, Pro+ (AI), operazioni scritte a
+mano invariati (tutto dietro le operazioni dello Stratega).
+- Test locali: `:game-core:test --tests 'games.strategy.triplea.ai.*'` + `:proplus-autoplay:test` + `:ai:test` **560, 0 falliti**
+  (golden Hard, `NudoHardTest`, `DiaryNeutralityTest` compresi); nuovi: fanteria con l'unico passo negato dal controllo di
+  sicurezza non contata (contata se il passo e' sicuro); bersaglio vuoto con soli aerei presa 0 e nota, con un carro presa 100%,
+  senza win% della tappa 1; TUV distrutti <= difensori presenti con rinforzi nemici attesi > 0. Partita locale 3 round con lo
+  Stratega simulato: 89 s (nessun rallentamento).
+
+#### Autoplay in CI (run 42848125217, commit 291b47c, tutto verde, 12 partite [smoke] semi 801-806)
+12/12 completate, 143/144 round decisi (1 risposta non valida), 195 chiamate, **$2,68** (tetto 30), $0,22 a partita. Operazioni
+44: tenuta 38 (eseguite dal motore 36, completate 18, fallite 13, in corso 7), offensiva 4 (prese da Hard 2 = completate senza
+tappe, annullate 2), sbarco 1 (eseguito, fallito), rinforzo 1.
+- **Criteri**: artefatti C1-C5 **1/44 (2%) <= 10%: SI'** (C3 1; giustificato 1); offensive/sbarchi eseguiti dal motore **1/5 (20%)
+  < 30%: NO**; lancio → round dopo per le offensive mediana **18 punti su 5 (<= 15): NO** (era 26, prima 77); calibrazione del
+  motore al lancio: offensive 99% → reale 75% (4; era 92 → 15), sbarco 100 → 0 (1), tenute 99 → 62 (29). LLM strategico 37,9 punti
+  (offensive 12,1), ordini 6,2. Escluse per percorso non sicuro: 1 caccia in 1 operazione; lanci con presa 0 "solo aerei": 0;
+  turni-aereo fermi 39 in 5 operazioni. VC R12 (informative): Asse Stratega 5,2 / Hard 5,8; Alleati Stratega 5,0 / Hard 6,0.
+- **Perche' (dai diari)**: le offensive lanciate sono crollate da 18 a 4 (+1 sbarco): con i TUV distrutti dei soli difensori il
+  valore d'alleanza dei bersagli poveri e' negativo (Syria non e' piu' lanciata in nessuna partita). Delle 5 conquiste: Algeria
+  (R2) e Normandy (R8, offensiva) prese da Hard prima delle tappe (TENUTA, completate, non contano come eseguite dal motore: e'
+  questo che tiene il criterio al 20% su un campione di 5); Libya annullata "giustificato" (rinforzi nemici tra le tappe 3 → 169
+  TUV, contrattacco 3 → 48); Iraq annullata C3 (successo 100 → 25: il presidio stimato passa da 3 carri + 1 mech a 1 carro perche'
+  Hard usa 7 carri contati nella tappa 1 altrove, tappa 2 3 → 2 carri); sbarco su Normandy eseguito dal motore e perso al R9
+  (contrattacco 16 → 30). Le differenze lancio → round dopo: Libya 97, Iraq 75, sbarco 18, Algeria 0, Normandy 0 (mediana 18).
+- Non tarato. Restano: (a) le unita' di terra contate per la tappa di CHI APRE nel round obiettivo non sono trattenute da Hard
+  prima del round (Iraq: 23 → 16 carri) perche' quelle raggiungibili ORA non sono trattenute in preparazione se non sono in
+  raccolta; (b) campione piccolo (5 conquiste): servono piu' partite per giudicare il 30%.
