@@ -76,6 +76,9 @@ final class ConfrontoSmoke {
     final List<Double> coherenceHold = new ArrayList<>();
     final List<Double> coherenceNext = new ArrayList<>();
     final int[] planeTurns = new int[2];
+    final int[] excludedUnits = new int[2];
+    final List<String> excludedText = new ArrayList<>();
+    int onlyPlanes = 0;
     final Map<String, double[][]> bandsByType = new TreeMap<>();
     final Map<String, double[][]> engineByType = new TreeMap<>();
     final Map<String, Integer> rejected = new TreeMap<>();
@@ -151,6 +154,22 @@ final class ConfrontoSmoke {
         final double next = successo(o, "stima_round_dopo");
         if (start >= 0 && next >= 0 && ("offensiva".equals(tipo) || "sbarco".equals(tipo))) {
           coherenceNext.add(Math.abs(start - next));
+        }
+        if (o.has("stima_avvio") && o.get("stima_avvio").isJsonObject()) {
+          final JsonObject launch = o.getAsJsonObject("stima_avvio");
+          if (launch.has("escluse_percorso_non_sicuro_n")) {
+            excludedUnits[0] += launch.get("escluse_percorso_non_sicuro_n").getAsInt();
+            excludedUnits[1]++;
+            excludedText.add(
+                RiepilogoGenerale.text(o, "bersaglio")
+                    + ": "
+                    + RiepilogoGenerale.text(launch, "escluse_percorso_non_sicuro"));
+          }
+          if (launch.has("bersaglio_vuoto")
+              && launch.has("presa_pct")
+              && launch.get("presa_pct").getAsDouble() <= 0) {
+            onlyPlanes++;
+          }
         }
         if (o.has("aerei_turni_fermi") && o.get("aerei_turni_fermi").isJsonPrimitive()) {
           planeTurns[0] += o.get("aerei_turni_fermi").getAsInt();
@@ -288,13 +307,24 @@ final class ConfrontoSmoke {
             Locale.ROOT,
             "- Offensive e sbarchi, stima del motore al lancio contro quella del round dopo: mediana"
                 + " **%s punti** di successo su %d operazioni, criterio <= 15 (step C1-bis).%n"
-                + "- Aerei trattenuti per le tappe future: %d turni-aereo fermi in %d operazioni.%n%n",
+                + "- Aerei trattenuti per le tappe future: %d turni-aereo fermi in %d operazioni.%n"
+                + "- Unita' escluse dalla stima al lancio per percorso non sicuro (step C1-ter): %d"
+                + " in %d operazioni%s.%n"
+                + "- Operazioni lanciate con presa 0 per \"solo aerei\" su un bersaglio vuoto: %d.%n%n",
             coherenceNext.isEmpty()
                 ? "-"
                 : String.format(Locale.ROOT, "%.1f", mediana(coherenceNext)),
             coherenceNext.size(),
             planeTurns[0],
-            planeTurns[1]));
+            planeTurns[1],
+            excludedUnits[0],
+            excludedUnits[1],
+            excludedText.isEmpty()
+                ? ""
+                : " ("
+                    + String.join("; ", excludedText.subList(0, Math.min(8, excludedText.size())))
+                    + ")",
+            onlyPlanes));
     calibration(
         md,
         "livello strategico (avvia/continua/modifica; stima a inizio round, esito a fine durata)",

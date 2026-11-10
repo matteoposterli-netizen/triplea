@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1564,34 +1565,39 @@ public final class OperazioniCongiunte {
     e.add("valore_alleanza_componenti", st.jsonValore());
     final String numbers =
         String.format(
-            Locale.ROOT,
-            "stima unica: tappa 1 %s (TUV %.0f) contro %s (TUV %.0f): win%% %.0f, perdita attesa"
-                + " %.0f TUV (tetto %.0f); tappa 2 di %s con %s: win%% %.0f; presa %.0f%%, tenuta"
-                + " %.0f%% (contrattacco contato TUV %.0f su %.0f massimo, impegno %.2f: %s),"
-                + " successo %.0f%%, valore d'alleanza %.1f PU (bersaglio %.0f x presa x tenuta"
-                + " = %.1f, TUV nemici distrutti %.0f, TUV persi %.0f)",
-            st.tappa1().isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(st.tappa1()),
-            tuv(st.tappa1()),
-            defenders.isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(defenders),
-            tuv(defenders),
-            st.win1(),
-            st.perdita1(),
-            def.tettoPerdita(),
-            def.chiude(),
-            st.tappa2().isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(st.tappa2()),
-            st.win2(),
-            st.presa() * 100,
-            st.tenuta(),
-            st.tuvContrattacco(),
-            st.tuvContrattaccoMassimo(),
-            st.impegno(),
-            st.base(),
-            st.successo() * 100,
-            ev,
-            st.valoreBersaglio(),
-            st.valoreBersaglio() * st.presa() * st.tenuta() / 100,
-            st.tuvDistrutto(),
-            st.tuvPersoAtteso());
+                Locale.ROOT,
+                "stima unica: tappa 1 %s (TUV %.0f) contro %s (TUV %.0f): win%% %.0f, perdita attesa"
+                    + " %.0f TUV (tetto %.0f); tappa 2 di %s con %s: win%% %.0f; presa %.0f%%, tenuta"
+                    + " %.0f%% (contrattacco contato TUV %.0f su %.0f massimo, impegno %.2f: %s),"
+                    + " successo %.0f%%, valore d'alleanza %.1f PU (bersaglio %.0f x presa x tenuta"
+                    + " = %.1f, TUV nemici distrutti %.0f, TUV persi %.0f)",
+                st.tappa1().isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(st.tappa1()),
+                tuv(st.tappa1()),
+                defenders.isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(defenders),
+                tuv(defenders),
+                st.win1(),
+                st.perdita1(),
+                def.tettoPerdita(),
+                def.chiude(),
+                st.tappa2().isEmpty() ? "nessuno" : OperazioniAnfibie.unitsText(st.tappa2()),
+                st.win2(),
+                st.presa() * 100,
+                st.tenuta(),
+                st.tuvContrattacco(),
+                st.tuvContrattaccoMassimo(),
+                st.impegno(),
+                st.base(),
+                st.successo() * 100,
+                ev,
+                st.valoreBersaglio(),
+                st.valoreBersaglio() * st.presa() * st.tenuta() / 100,
+                st.tuvDistrutto(),
+                st.tuvPersoAtteso())
+            + (st.bersaglioVuoto() ? "; " + st.notaPresa() : "")
+            + (st.esclusePercorso().isEmpty()
+                ? ""
+                : "; non contate (percorso non sicuro): "
+                    + OperazioniAnfibie.unitsText(st.esclusePercorso()));
     final boolean noDefenders = defenders.isEmpty();
     final boolean overCap = !noDefenders && st.perdita1() > def.tettoPerdita();
     if (overCap) {
@@ -2988,19 +2994,7 @@ public final class OperazioniCongiunte {
     final int k = Math.max(1, reg.roundObiettivo() - round + 1);
     final StimaUnica.Stima st = StimaUnica.conquista(proData, calc, def, target, k);
     final List<Unit> counted = def.isApre(player.getName()) ? st.tappa1() : st.tappa2();
-    List<Territory> places =
-        (def.isApre(player.getName()) ? def.raccoltaApre() : def.raccoltaChiude())
-            .stream()
-                .map(map::getTerritoryOrNull)
-                .filter(Objects::nonNull)
-                .filter(t -> !t.isWater() && Matches.isTerritoryAllied(player).test(t))
-                .toList();
-    if (places.isEmpty()) {
-      places =
-          map.getNeighbors(target, Matches.territoryIsLand()).stream()
-              .filter(Matches.isTerritoryAllied(player))
-              .toList();
-    }
+    final List<Territory> places = luoghiRaccolta(player, target);
     int stepped = 0;
     final List<Unit> planes = new ArrayList<>();
     for (final Unit u : counted) {
@@ -3127,45 +3121,109 @@ public final class OperazioniCongiunte {
       if (from == null) {
         continue;
       }
-      // the nearest safe place in range this turn
-      boolean done = false;
-      for (final Territory p :
-          places.stream().sorted(Comparator.comparingInt(p -> map.getDistance(from, p))).toList()) {
-        final Optional<Route> route = routeFor(u, from, p, false);
-        if (route.isEmpty() || !safeLand(p, List.of(u))) {
-          continue;
-        }
-        if (move(List.of(u), route.get(), moves)) {
-          there++;
-          done = true;
-          break;
-        }
-      }
-      if (!done && stepToward(u, from, places, moves)) {
+      // the nearest safe place in range this turn (step C1-ter: the same check as the estimate)
+      final boolean done =
+          arriviSicuri(u, from, places, u.getMovementLeft())
+              .anyMatch(route -> move(List.of(u), route, moves));
+      if (done) {
+        there++;
+      } else if (stepToward(u, from, places, moves)) {
         // in range of none: toward the nearest one, to a safe friendly territory on the way
         there++;
       }
     }
   }
 
-  /** A plane one step toward the gathering places: the friendly safe land nearest to them. */
+  /** A unit one step toward the gathering places: the friendly safe land nearest to them. */
   private boolean stepToward(
       final Unit u, final Territory from, final List<Territory> places, final List<String> moves) {
+    return passiSicuri(u, from, places, u.getMovementLeft())
+        .anyMatch(route -> move(List.of(u), route, moves));
+  }
+
+  /**
+   * Step C1-ter: THE safety check of a move toward the gathering places, the same for the single
+   * estimate and for the movement: routes of {@code u} from {@code from}, within {@code range}, to
+   * friendly land closer to {@code places} where {@code u} stays under the enemy's safety threshold
+   * ({@link #safeLand}), nearest to the places first. Lazy: the movement stops at the first route
+   * it can take, the estimate at the first that exists.
+   */
+  java.util.stream.Stream<Route> passiSicuri(
+      final Unit u, final Territory from, final List<Territory> places, final BigDecimal range) {
     final int now = nearest(from, places);
-    final int range = u.getMovementLeft().intValue();
-    final List<Territory> options =
-        map.getNeighbors(from, range).stream()
-            .filter(t -> !t.isWater() && Matches.isTerritoryAllied(player).test(t))
-            .filter(t -> nearest(t, places) < now)
-            .sorted(Comparator.comparingInt(t -> nearest(t, places)))
-            .toList();
-    for (final Territory t : options) {
-      final Optional<Route> route = routeFor(u, from, t, false);
-      if (route.isPresent() && safeLand(t, List.of(u)) && move(List.of(u), route.get(), moves)) {
-        return true;
-      }
+    return map.getNeighbors(from, Math.max(0, range.intValue())).stream()
+        .filter(t -> !t.isWater() && Matches.isTerritoryAllied(player).test(t))
+        .filter(t -> nearest(t, places) < now)
+        .sorted(
+            Comparator.comparingInt((Territory t) -> nearest(t, places))
+                .thenComparing(Territory::getName))
+        .map(t -> routeFor(u, from, t, range).filter(r -> safeLand(t, List.of(u))))
+        .flatMap(Optional::stream);
+  }
+
+  /**
+   * Step C1-ter: the routes of a plane straight to a gathering place in range where it is safe,
+   * nearest first (the first choice of {@link #gatherPlanes}; same check as {@link #passiSicuri}).
+   */
+  java.util.stream.Stream<Route> arriviSicuri(
+      final Unit u, final Territory from, final List<Territory> places, final BigDecimal range) {
+    return places.stream()
+        .sorted(
+            Comparator.comparingInt((Territory p) -> map.getDistance(from, p))
+                .thenComparing(Territory::getName))
+        .map(p -> routeFor(u, from, p, range).filter(r -> safeLand(p, List.of(u))))
+        .flatMap(Optional::stream);
+  }
+
+  /**
+   * Step C1-ter: whether the engine could bring {@code u} toward {@code places} with the same
+   * safety check it uses to move it (estimate of a later step, full movement of the unit): already
+   * there, or a safe route exists (planes: straight to a place, or a safe step). Memoized per
+   * estimate (unit and place of departure).
+   */
+  boolean haPercorsoSicuro(final Unit u, final List<Territory> places) {
+    final Territory from = luogo(u);
+    if (from == null || from.isWater()) {
+      return false;
     }
-    return false;
+    if (places.contains(from)) {
+      return true;
+    }
+    final String key = u.getId() + "|" + from.getName();
+    final Boolean known = percorsi.get(key);
+    if (known != null) {
+      return known;
+    }
+    final BigDecimal full =
+        BigDecimal.valueOf(Math.max(1, u.getUnitAttachment().getMovement(u.getOwner())));
+    final boolean ok =
+        (Matches.unitIsAir().test(u) && arriviSicuri(u, from, places, full).findFirst().isPresent())
+            || passiSicuri(u, from, places, full).findFirst().isPresent();
+    percorsi.put(key, ok);
+    return ok;
+  }
+
+  private final Map<String, Boolean> percorsi = new HashMap<>();
+
+  /**
+   * The gathering places of {@code owner} in this operation (allied land), or the allied land next
+   * to {@code target} when it has none: where the engine brings the counted units.
+   */
+  List<Territory> luoghiRaccolta(final GamePlayer owner, final Territory target) {
+    final List<Territory> places =
+        (def.isApre(owner.getName()) ? def.raccoltaApre() : def.raccoltaChiude())
+            .stream()
+                .map(map::getTerritoryOrNull)
+                .filter(Objects::nonNull)
+                .filter(t -> !t.isWater() && Matches.isTerritoryAllied(owner).test(t))
+                .toList();
+    if (!places.isEmpty()) {
+      return places;
+    }
+    return map.getNeighbors(target, Matches.territoryIsLand()).stream()
+        .filter(Matches.isTerritoryAllied(owner))
+        .sorted(Comparator.comparing(Territory::getName))
+        .toList();
   }
 
   /**
@@ -4693,6 +4751,22 @@ public final class OperazioniCongiunte {
   }
 
   // ================================================================================== helpers
+
+  /**
+   * As {@link #routeFor(Unit, Territory, Territory, boolean)}, non-combat, within {@code range}.
+   */
+  private Optional<Route> routeFor(
+      final Unit u, final Territory from, final Territory to, final BigDecimal range) {
+    final Predicate<Territory> can =
+        Matches.unitIsAir().test(u)
+            ? ProMatches.territoryCanMoveAirUnitsAndNoAa(data, player, false)
+            : ProMatches.territoryCanMoveLandUnitsThrough(player, u, from, false, List.of());
+    final Optional<Route> route = map.getRouteForUnit(from, to, can, u, player);
+    if (route.isEmpty() || route.get().getMovementCost(u).compareTo(range) > 0) {
+      return Optional.empty();
+    }
+    return route;
+  }
 
   private Optional<Route> routeFor(
       final Unit u, final Territory from, final Territory to, final boolean combat) {

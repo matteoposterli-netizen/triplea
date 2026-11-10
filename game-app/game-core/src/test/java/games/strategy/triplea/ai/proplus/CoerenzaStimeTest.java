@@ -347,6 +347,95 @@ class CoerenzaStimeTest extends AbstractClientSettingTestCase {
     }
   }
 
+  // ---------------------------------------------------------- step C1-ter: reach = movement
+
+  @Test
+  void aLandUnitWhoseOnlyStepIsUnsafeIsNotCountedForALaterStep() {
+    // nobody near (no Axis transport: the infantry can only walk; no British army: Tobruk is safe)
+    for (final Territory t : data.getMap().getNeighbors(territory("Alexandria"), 4)) {
+      clear(t.getName());
+    }
+    clear("Alexandria");
+    add("Alexandria", player("British"), "infantry", 1);
+    clear("Tobruk");
+    clear("Libya");
+    add("Libya", player("Italians"), "infantry", 1);
+    final Unit walker = territory("Libya").getMatches(Matches.unitIsLand()).get(0);
+    final String id = "stratega-offensiva-R3-Alexandria";
+    final OperazioneCongiunta.Definizione def = install(Tipo.OFFENSIVA, "Alexandria", id, 4, 0);
+    preparing(id, 4);
+    // nothing threatens Tobruk: the step Libya -> Tobruk is safe, the infantry counts
+    final StimaUnica.Stima safe =
+        StimaUnica.conquista(
+            proData(player("Italians"), 3, "Purchase"), calc(), def, territory("Alexandria"), 2);
+    assertThat(safe.tappa2()).contains(walker);
+    assertThat(safe.esclusePercorso()).doesNotContain(walker);
+    // a British army next to Tobruk: the same safety check that would refuse the move refuses it
+    // in the estimate too
+    add("Alexandria", player("British"), "armour", 12);
+    add("Alexandria", player("British"), "artillery", 6);
+    final StimaUnica.Stima unsafe =
+        StimaUnica.conquista(
+            proData(player("Italians"), 3, "Purchase"), calc(), def, territory("Alexandria"), 2);
+    assertThat(unsafe.tappa2()).doesNotContain(walker);
+    assertThat(unsafe.esclusePercorso()).contains(walker);
+    assertThat(unsafe.json().get("escluse_percorso_non_sicuro_n").getAsInt()).isPositive();
+  }
+
+  // ------------------------------------------------------- step C1-ter: empty target, no win%
+
+  @Test
+  void anEmptyTargetIsTakenByALandUnitAndNeverByPlanesAlone() {
+    clearAxisNear("Alexandria", 4);
+    clear("Alexandria");
+    add("Tobruk", player("Germans"), "fighter", 2);
+    final OperazioneCongiunta.Definizione def =
+        install(Tipo.OFFENSIVA, "Alexandria", "stratega-offensiva-R3-Alexandria", 3, 0);
+    final StimaUnica.Stima planes =
+        StimaUnica.conquista(
+            proData(player("Germans"), 3, "Purchase"), calc(), def, territory("Alexandria"), 1);
+    assertThat(planes.tappa1()).anyMatch(Matches.unitIsAir());
+    assertThat(Stream.concat(planes.tappa1().stream(), planes.tappa2().stream()))
+        .noneMatch(Matches.unitIsLand());
+    assertThat(planes.presa()).isZero();
+    assertThat(planes.soloAerei()).isTrue();
+    assertThat(planes.json().has("win_tappa1_pct")).as("no win% of step 1").isFalse();
+    assertThat(planes.json().get("nota_presa").getAsString()).contains("serve un'unita' di terra");
+    add("Tobruk", player("Italians"), "armour", 1);
+    final StimaUnica.Stima land =
+        StimaUnica.conquista(
+            proData(player("Germans"), 3, "Purchase"), calc(), def, territory("Alexandria"), 1);
+    assertThat(land.presa()).isEqualTo(1.0);
+    assertThat(land.soloAerei()).isFalse();
+    assertThat(land.json().has("win_tappa1_pct")).isFalse();
+  }
+
+  // -------------------------------------------- step C1-ter: TUV destroyed = defenders there now
+
+  @Test
+  void theEnemyTuvDestroyedCountsOnlyTheDefendersThereAtTheEstimate() {
+    clear("Alexandria");
+    add("Alexandria", player("British"), "infantry", 2);
+    add("Egypt", player("British"), "armour", 3);
+    add("Tobruk", player("Germans"), "fighter", 3);
+    add("Tobruk", player("Italians"), "armour", 4);
+    final OperazioneCongiunta.Definizione def =
+        install(Tipo.OFFENSIVA, "Alexandria", "stratega-offensiva-R3-Alexandria", 3, 0);
+    final ProData germans = proData(player("Germans"), 3, "Purchase");
+    final StimaUnica.Stima st =
+        StimaUnica.conquista(germans, calc(), def, territory("Alexandria"), 1);
+    final double defenders =
+        games.strategy.triplea.util.TuvUtils.getTuv(
+            territory("Alexandria").getMatches(Matches.unitIsNotInfrastructure()),
+            germans.getUnitValueMap());
+    assertThat(st.tuvRinforziNemici()).as("enemy reinforcements expected").isPositive();
+    assertThat(st.tuvDistrutto()).isPositive().isLessThanOrEqualTo(defenders + 1e-9);
+    assertThat(st.valoreAlleanza())
+        .isCloseTo(
+            def.valore() * st.presa() * st.tenuta() / 100 + st.tuvDistrutto() - st.tuvPersoAtteso(),
+            within(1e-9));
+  }
+
   // ------------------------------------------------------------ step C1-bis: order of the causes
 
   @Test

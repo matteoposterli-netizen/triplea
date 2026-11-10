@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Step COERENZA STIME: the ONE estimate of an operation of the strategist, used by the candidates
@@ -81,7 +82,17 @@ public final class StimaUnica {
       int round,
       int roundObiettivo,
       Minaccia minaccia,
-      double valoreBersaglio) {
+      double valoreBersaglio,
+      boolean bersaglioVuoto,
+      boolean soloAerei,
+      List<Unit> esclusePercorso) {
+
+    /** Step C1-ter: why the take of an empty target is 100% or 0% (diary and LLM). */
+    public String notaPresa() {
+      return soloAerei
+          ? "bersaglio senza difensori ma solo aerei nelle tappe: presa 0%, serve un'unita' di terra"
+          : "bersaglio senza difensori: presa 100% con un'unita' di terra nelle tappe";
+    }
 
     /**
      * Step C1-bis: expected TUV lost (= PU): step 1, step 2 when step 1 does not take it, the
@@ -124,10 +135,22 @@ public final class StimaUnica {
       o.addProperty("per_il_round", roundObiettivo);
       if (!"tenuta".equals(tipo)) {
         o.addProperty("attaccanti_tappa1", OperazioniAnfibie.unitsText(tappa1));
-        o.addProperty("win_tappa1_pct", Math.round(win1));
+        if (!bersaglioVuoto) {
+          o.addProperty("win_tappa1_pct", Math.round(win1));
+        }
         o.addProperty("perdita_attesa_tappa1_TUV", Math.round(perdita1));
         o.addProperty("attaccanti_tappa2", OperazioniAnfibie.unitsText(tappa2));
-        o.addProperty("win_tappa2_pct", Math.round(win2));
+        if (!bersaglioVuoto) {
+          o.addProperty("win_tappa2_pct", Math.round(win2));
+        } else {
+          o.addProperty("bersaglio_vuoto", true);
+          o.addProperty("nota_presa", notaPresa());
+        }
+        if (!esclusePercorso.isEmpty()) {
+          o.addProperty(
+              "escluse_percorso_non_sicuro", OperazioniAnfibie.unitsText(esclusePercorso));
+          o.addProperty("escluse_percorso_non_sicuro_n", esclusePercorso.size());
+        }
         o.addProperty("perdita_attesa_tappa2_TUV", Math.round(perdita2));
         o.addProperty("tuv_difensori", Math.round(tuvDifensori));
         o.addProperty("tuv_rinforzi_nemici_tra_le_tappe", Math.round(tuvRinforziNemici));
@@ -197,8 +220,11 @@ public final class StimaUnica {
     final GamePlayer closer = data.getPlayerList().getPlayerId(def.chiude());
     final int k = Math.max(1, rounds);
     final Set<Unit> reserved = riservate(data, def.alleanza(), def.id());
-    final List<Unit> t1 = forze(op, def, target, opener, k, reserved, List.of());
-    final List<Unit> t2 = forze(op, def, target, closer, k, reserved, t1);
+    final List<Unit> excluded = new ArrayList<>();
+    final List<Unit> t1 = forze(op, def, target, opener, k, reserved, List.of(), excluded);
+    final List<Unit> t2 = forze(op, def, target, closer, k, reserved, t1, excluded);
+    excluded.removeAll(t1);
+    excluded.removeAll(t2);
     final List<Unit> defenders =
         opener == null
             ? List.of()
@@ -230,8 +256,14 @@ public final class StimaUnica {
         defenders2.isEmpty() ? (land2 ? 100 : 0) : r2 == null ? 0 : r2.getWinPercentage();
     final double loss2 =
         r2 == null ? 0 : op.tuvOf(t2) - op.tuvOf(r2.getAverageAttackersRemaining());
+    // step C1-ter: an empty target is taken by any land unit that can conquer in the steps (100%),
+    // never by planes alone (0%: a land unit is needed); no win% of step 1 in that case
+    final boolean empty = defenders.isEmpty();
+    final boolean anyLand =
+        Stream.concat(t1.stream(), t2.stream())
+            .anyMatch(Matches.unitIsLand().and(Matches.unitIsNotInfrastructure()));
     final double take1 = land1 ? win1 / 100 : 0;
-    final double take = Math.min(1, take1 + (1 - take1) * win2 / 100);
+    final double take = empty ? (anyLand ? 1 : 0) : Math.min(1, take1 + (1 - take1) * win2 / 100);
     // the garrison: land survivors of the last step, else the strongest land unit; plus the
     // closer's land units in reach not used in the steps
     final List<Unit> garrison = new ArrayList<>();
@@ -271,20 +303,29 @@ public final class StimaUnica {
         op.tuvOf(defenders),
         op.tuvOf(enemyIn),
         op.tuvOf(left),
-        Math.max(
-            0,
-            op.tuvOf(defenders)
-                + op.tuvOf(enemyIn)
-                - (r2 != null
-                    ? op.tuvOf(r2.getAverageDefendersRemaining())
-                    : op.tuvOf(defenders2))),
+        // step C1-ter: TUV destroyed = only the defenders there at the estimate (the enemy
+        // reinforcements expected between the steps stay in the counterattack and the hold)
+        destroyed(op, defenders, r2 != null ? r2.getAverageDefendersRemaining() : left),
         op.tuvOf(garrison),
         op.tuvOf(counter),
         op.tuvOf(m.tutti()),
         data.getSequence().getRound(),
         data.getSequence().getRound() + k - 1,
         m,
-        def.valore());
+        def.valore(),
+        empty,
+        empty && !anyLand,
+        List.copyOf(excluded));
+  }
+
+  /** TUV of the {@code defenders} not among {@code remaining} (expected destroyed), at least 0. */
+  static double destroyed(
+      final OperazioniCongiunte op,
+      final Collection<Unit> defenders,
+      final Collection<Unit> remaining) {
+    final Set<Unit> original = new HashSet<>(defenders);
+    final List<Unit> left = remaining.stream().filter(original::contains).toList();
+    return Math.max(0, op.tuvOf(defenders) - op.tuvOf(left));
   }
 
   // ==================================================================================== hold
@@ -341,7 +382,10 @@ public final class StimaUnica {
         round,
         round,
         m,
-        def.valore());
+        def.valore(),
+        false,
+        false,
+        List.of());
   }
 
   /** The estimate of any operation of the strategist now (conquest before the take, else hold). */
@@ -496,7 +540,8 @@ public final class StimaUnica {
       final GamePlayer owner,
       final int k,
       final Set<Unit> reserved,
-      final List<Unit> already) {
+      final List<Unit> already,
+      final List<Unit> excluded) {
     if (owner == null) {
       return List.of();
     }
@@ -508,8 +553,25 @@ public final class StimaUnica {
       // counted land units closer and holds them, OperazioniCongiunte.avvicina/trattenute), plus
       // what the operation already holds (gathering places, transports in the gathering zone, the
       // opener's planes that reach their gathering place in time)
-      list.addAll(op.raggiungibiliEntro(target, owner, k));
-      op.raggiungibiliOra(target, owner).stream().filter(u -> !list.contains(u)).forEach(list::add);
+      final List<Unit> now = op.raggiungibiliOra(target, owner);
+      final List<Territory> gathering = op.luoghiRaccolta(owner, target);
+      final GameMap gameMap = target.getData().getMap();
+      for (final Unit u : op.raggiungibiliEntro(target, owner, k)) {
+        // step C1-ter: a land unit that must walk to the step counts only if the engine could
+        // move it there with its own safety check (OperazioniCongiunte.passiSicuri)
+        final Territory at = op.luogo(u);
+        final boolean inPlace =
+            now.contains(u)
+                || Matches.unitIsAir().test(u)
+                || (at != null
+                    && (gathering.contains(at) || gameMap.getNeighbors(target).contains(at)));
+        if (inPlace || op.haPercorsoSicuro(u, gathering)) {
+          list.add(u);
+        } else if (!excluded.contains(u)) {
+          excluded.add(u);
+        }
+      }
+      now.stream().filter(u -> !list.contains(u)).forEach(list::add);
       final GameMap map = target.getData().getMap();
       final Set<Unit> gatherPlanes = new HashSet<>();
       final boolean opens = def.isApre(owner.getName());
@@ -560,6 +622,17 @@ public final class StimaUnica {
             }
           }
         }
+        // step C1-ter: only the planes the engine can fly there with its safety check
+        planes.removeIf(
+            u -> {
+              if (op.haPercorsoSicuro(u, airPlaces)) {
+                return false;
+              }
+              if (!excluded.contains(u)) {
+                excluded.add(u);
+              }
+              return true;
+            });
         planes.sort(
             Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getAttack(owner))
                 .thenComparing(u -> u.getType().getName()));
