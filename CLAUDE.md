@@ -3942,3 +3942,35 @@ tappe, annullate 2), sbarco 1 (eseguito, fallito), rinforzo 1.
   unita' contate sono trattenute (acquisto, combattimento, non combattimento): causa NON verificata (candidati: perse in difesa
   nel turno nemico, prese da un'altra operazione dell'alleanza, guardia della capitale); (b) campione piccolo (5 conquiste):
   servono piu' partite per giudicare il 30%.
+
+### Step C2 — budget difensivo calcolato (2026-11-10)
+
+Vedi "Budget difensivo calcolato (step C2)". File: nuovi `ai/proplus/Difesa`, `Tracciamento`, `ai/pro/ProDefensePlan`, test
+`DifesaTest` (7), `DefensePlanPurchaseTest` (2); modificati `ProTuning` (+`defensePlan`, default vuoto), `ProPurchaseAi` (piano
+al posto di `defend_land`, ordini limitati a PU_strategia), `ProPlusTuning` (`setDefensePlan`), `ProPlusAi` (calcolo all'acquisto,
+`playDefense`), `StimaUnica` (`nemiciReali`, `soloNemiciReali`, `contate`, `tenuta` condivisa), `OperazioniCongiunte.minaccia`
+(nemici reali per lo Stratega), `Stratega` (liste, stato `difesa_calcolata`, tracciamento, vincoli, `setTettoStrategia`),
+`StrategaDecisione`/`PromptStrategaV5` (contratto 1.5), `StrategaConfig`/`stratega-llm.json` (`tetto_strategia_pct` 70 al posto di
+`quota_pu_max_pct` 30, blocco `difesa`), `StrategaDiario`, `StrategaSimulato`, prompt v5, `contratto-v1.md`; autoplay
+`--tetto-strategia`, `ConfrontoSmoke.difesa`, workflow semi 901-906. Test locali: AI di game-core + autoplay + `:ai` + game-headed
+verdi (golden Hard, `NudoHardTest`, `DiaryNeutralityTest` compresi).
+
+#### Autoplay in CI (run 42868691448, commit 52b7463, tutto verde, 12 partite [smoke] semi 901-906)
+12/12 completate, 0 ripieghi, 177 chiamate, **$2,86**. **Risultato fortemente negativo per l'Asse**: VC R12 Asse Stratega **0,33**
+(1, 0, 0, 1, 0, 0) contro 5,17 in C1-bis e C1-ter; Germany caduta 8 volte (6 partite su 6), Southern Italy 5; territori dell'Asse a
+fine partita 1 (prima 27-29); reddito tedesco R4 20,5 contro 43,5. Alleati Stratega VC 3,83 (prima 4,83 / 5,0), Russia caduta 5/6
+(prima 3/6, 4/6), France R1 6/6 come sempre.
+- **Cause (dai diari, non tarato)**: (1) **guarnigioni congelate**: `Difesa.Piano.trattenute` tiene il presidio di OGNI territorio
+  difeso, anche "tiene gia'" (50-93 unita' tedesche per turno fuori dagli attacchi e dal non combattimento di Hard): l'esercito
+  tedesco non attacca piu'; (2) **difesa di Hard tolta**: Hard comprava 21 PU/turno di difesa per la Germania (C1-ter), il piano 0,6
+  (PU_difesa = 0 in 89/112 turni dell'Asse, 171/192 degli Alleati; media 1,85 / 0,92; massimo 15 / 21); (3) **acquisti mai fatti
+  quando i rinforzi arrivano a 12** (`max_unita_per_territorio` conta rinforzi + acquisti: con 12 rinforzi gli acquisti sono 0; 11
+  casi di territori con fabbrica propria difesi sotto soglia, es. Germany R6 tenuta 0% con 12 fanterie e nessun acquisto);
+  (4) acquisti solo nella fabbrica del territorio (deviazione dal punto C): dei territori minacciati sotto soglia 718 su 856 non
+  hanno una fabbrica propria (Asse 202 senza fabbrica + 70 con fabbrica di un alleato su 368; Alleati 516 + 9 su 578).
+- Difesi persi al turno dopo: Asse 57/520 (capitali 11/170, LLM 16/78, motore 30/272), Alleati 35/303 (capitali 0/46, LLM 13/48,
+  motore 22/209); irrinunciabili persi 40/342. Calibrazione della stima di difesa: errore medio **29,4 punti** (criterio <= 20: NO),
+  troppo pessimista sotto il 20% (585 stime: 1% → reale 58%). Tetto strategia: superato in 268/304 turni ma **mai limitante** (riserve
+  chieste sempre < PU_strategia; strategia 58-69% dei PU contro il 30% fisso di prima). Tracciamento: 6 cali >= 30 punti, tutti
+  "tenuta: contrattacco nemico aumentato" (Holland Belgium: 13 unita' contate spostate, 2 perse).
+- Offensive/sbarchi eseguiti dal motore 0/4, artefatti 1/24 (4%).
