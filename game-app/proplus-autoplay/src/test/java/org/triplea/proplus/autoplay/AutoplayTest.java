@@ -796,6 +796,39 @@ class AutoplayTest {
     assertThat(RiepilogoGenerale.blockedText(List.of(new JsonObject()), 3)).isEqualTo("nessuna");
   }
 
+  @Test
+  void smokeCalibrationLeavesOutCancelPostponeAndWithdraw() {
+    final JsonObject game =
+        JsonParser.parseString(
+                """
+                {"stato":"completata",
+                 "parametri":{"tipi":{"Axis":"stratega","Allies":"hard"}},
+                 "stratega_llm":{"uso":{"chiamate":3,"costo_usd":0.03},
+                  "Axis":{"round_decisi":2,"round_senza_llm":0,"operazioni":[
+                   {"tipo":"offensiva","bersaglio":"France","stato":"annullata",
+                    "previsioni":[
+                     {"round":1,"azione":"avvia","prob_tenuta_stimata":0.9,"esito_reale":true},
+                     {"round":2,"azione":"annulla","prob_tenuta_stimata":0.0,"esito_reale":true}],
+                    "decisioni_ordini":[
+                     {"round":1,"azione":"tieni","prob_llm":0.7,"esito_reale":true},
+                     {"round":1,"azione":"ritira","prob_llm":0.1,"esito_reale":true},
+                     {"round":1,"azione":"rinvia","prob_llm":0.2,"esito_reale":true}]}]}}}
+                """)
+            .getAsJsonObject();
+    final StringBuilder md = new StringBuilder();
+
+    ConfrontoSmoke.write(
+        md, List.of(new RiepilogoGenerale.Game("1-stratega", game)), List.of("Axis", "Allies"));
+
+    final String text = md.toString();
+    assertThat(text)
+        .contains("| 80-100% | 1 | 90% | 100% |")
+        .contains("| 60-79% | 1 | 70% | 100% |");
+    assertThat(text).doesNotContain("| 0-19% |").doesNotContain("| 20-39% |");
+    assertThat(text).contains("Errore medio pesato: 10.0 punti (1 stime)");
+    assertThat(text).contains("Errore medio pesato: 30.0 punti (1 stime)");
+  }
+
   private static final String SAMPLE =
       """
       {"nome":"A / 1","stato":"completata","durata_s":75,"round_giocati":1,

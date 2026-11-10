@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -21,6 +22,13 @@ final class ConfrontoSmoke {
 
   /** Hard cap of the [smoke] run in USD. */
   static final double TETTO_RUN_USD = 30;
+
+  /**
+   * Actions left out of the calibration: their estimate (~0) is not a forecast of an operation the
+   * engine carries out, it only says why the operation stops; counting them fills the low bands
+   * with stops whose target was held anyway (run 42775993327: error 30.1 instead of 18.7 points).
+   */
+  static final Set<String> NON_ESEGUITE = Set.of("annulla", "rinvia", "ritira");
 
   static void write(
       final StringBuilder md,
@@ -126,7 +134,7 @@ final class ConfrontoSmoke {
         if (o.has("previsioni")) {
           for (final JsonElement p : o.getAsJsonArray("previsioni")) {
             final JsonObject x = p.getAsJsonObject();
-            if (x.has("esito_reale")) {
+            if (x.has("esito_reale") && eseguita(x)) {
               band(
                   bands,
                   x.get("prob_tenuta_stimata").getAsDouble(),
@@ -137,7 +145,7 @@ final class ConfrontoSmoke {
         if (o.has("decisioni_ordini")) {
           for (final JsonElement p : o.getAsJsonArray("decisioni_ordini")) {
             final JsonObject x = p.getAsJsonObject();
-            if (x.has("prob_llm") && x.has("esito_reale")) {
+            if (x.has("prob_llm") && x.has("esito_reale") && eseguita(x)) {
               band(
                   bandsOrders,
                   x.get("prob_llm").getAsDouble(),
@@ -214,9 +222,19 @@ final class ConfrontoSmoke {
     md.append("Rifiutate dal motore: ")
         .append(rejected.isEmpty() ? "nessuna" : rejected.toString())
         .append("\n\n");
-    calibration(md, "livello strategico (stima a inizio round, esito a fine durata)", bands);
     calibration(
-        md, "ordini del turno (stima nel punto di decisione, esito al round dopo)", bandsOrders);
+        md,
+        "livello strategico (avvia/continua/modifica; stima a inizio round, esito a fine durata)",
+        bands);
+    calibration(
+        md,
+        "ordini del turno (lancia/procedi/tieni; stima nel punto di decisione, esito al round dopo)",
+        bandsOrders);
+  }
+
+  /** True when the decision is one the engine carries out (not annulla / rinvia / ritira). */
+  static boolean eseguita(final JsonObject decision) {
+    return !NON_ESEGUITE.contains(RiepilogoGenerale.text(decision, "azione"));
   }
 
   private static void band(final double[][] b, final double p, final boolean real) {

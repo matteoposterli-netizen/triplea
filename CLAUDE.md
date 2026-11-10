@@ -1726,6 +1726,10 @@ esistenti non cambiano (nessuna proprieta' nuova senza la voce, `OperazioneCongi
   (= `stratega-riepilogo.json`); sezione "Stratega LLM: controllo [smoke]" (`ConfrontoSmoke`). Prove locali senza rete:
   `JAVA_OPTS=-Dproplus.stratega.simulato=true` (modello finto: avvia i primi 2 candidati, procedi/tieni).
 - Test: `ai/proplus/StrategaLlmCompletoTest` (13, chiamate simulate), `HeadedPlayerTypesTest.proPlusStrategaLlmIsListedAfterProPlusAndInstantiable`.
+- **Perche' annulla** (step ANALISI ANNULLAMENTI, `proplus/analisi/annullamenti-smoke-42775993327.md`): 56 annullate su 93; 82% artefatti
+  (bersaglio preso da Hard prima delle tappe 15, rinforzi con tenuta "con rinforzi" gonfiata nel candidato 18, forze della tappa
+  insufficienti 7, raccolta/flotta 4, candidato sparito 2), 5% ripensamento dell'LLM, 12,5% giustificati; offensive davvero eseguite 3/49
+  (le altre "eseguite" sono prese di Hard senza operazione). Correzioni proposte (non fatte) nel documento.
 
 ## Come configurare lo stratega
 
@@ -3557,10 +3561,49 @@ Nessun hook nuovo nelle classi Pro: Hard invariata.
   77, annulla 51, modifica 2; ordini: tenuta tieni 25 / ritira 28, tappa1 lancia 4 / rinvia 1 / annulla 4, tappa2 procedi 1.
   Lo stratega annulla molto (spesso "bersaglio gia' nostro" o "trattiene unita' che servono altrove") e molte offensive non arrivano alla
   tappa 1.
-- **Calibrazione** (la tabella della sezione [smoke] conta anche le stime di annulla/rinvia/ritira, che hanno prob ~0 e falsano le fasce
-  basse: difetto di `ConfrontoSmoke`, da correggere al prossimo push di codice). Ricalcolata a mano sulle sole azioni eseguite:
+- **Calibrazione** (la tabella della sezione [smoke] contava anche le stime di annulla/rinvia/ritira, che hanno prob ~0 e falsano le fasce
+  basse: corretto nello step ANALISI ANNULLAMENTI, `ConfrontoSmoke.NON_ESEGUITE`). Ricalcolata a mano sulle sole azioni eseguite:
   livello strategico (avvia/continua/modifica, 124 stime, esito a fine durata) errore medio **18,7 punti**, troppo pessimista (0-19% →
   reale 57%, 20-39% → 73%, 60-79% → 80%, 80-100% 88% → 95%); per tipo offensiva 0,54 / reale 0,63, rinforzo 0,62 / 0,93, tenuta 0,47 /
   0,60, sbarco 0,26 / 0,60 (n 5); ordini del turno (lancia/procedi/tieni, 24 stime) errore **15,6 punti**.
 - VC R12 del lato Stratega (solo informative, 6 semi, nessun riferimento Hard vs Hard nella run): Asse 3, 6, 5, 5, 6, 7 (media 5,3);
   Alleati 5, 5, 8, 4, 6, 4 (media 5,3).
+
+### Step ANALISI ANNULLAMENTI — perche' lo Stratega LLM annulla (run [smoke] 42775993327) (2026-11-10)
+
+Solo analisi dei diari della run [smoke] (zip `autoplay-latest`, commit 805c684): nessuna partita nuova, nessuna modifica al
+comportamento. Documento completo con la tabella delle 56 operazioni: `proplus/analisi/annullamenti-smoke-42775993327.md`.
+- **Conteggi**: 93 avviate, **56 annullate** (52 dal livello strategico, 4 dagli ordini; il "51" del riepilogo erano le azioni `annulla`
+  nei record). L'LLM vede sempre le operazioni in corso e il loro stato (55/56): non e' una causa. Limite di 3 operazioni: irrilevante (1 rifiuto).
+- **Cause**: C1 bersaglio preso da Hard/alleato prima delle tappe 15 (France R1 in 6 partite su 6: 3 annullate, 3 "completate" senza
+  operazione); C2 rinforzo con `tenuta_50_con_rinforzi_pct` della stima rapida di `StrategaCandidati.tenuta()` (nemici dal piu' caro al
+  50%, rinforzi = tutte le unita' in portata, aaGun compresi) a 100% contro `valutaTenuta` 0-29% al punto di decisione con gli stessi
+  input: ritirati nel round di avvio, annullati il round dopo, 18; C3 presa del candidato con tutte le unita' in portata, tappa con solo
+  gli aerei riservati (win 0 o perdita > tetto; Mosca lanciata 5 volte, mai eseguita) 7; C4 raccolta/flotta non realizzata 4; C5 candidato
+  uscito dagli 8 2; C6 ripensamento sugli stessi numeri (avviate con tenuta 0 a ogni impegno; il punto 4 del prompt v4 "motore troppo
+  pessimista" spinge a lanciare contro i numeri: 32/52 offensive/sbarchi con tenuta al 50% <= 5%) 3; G giustificati 7.
+  **Artefatti 46 (82%), LLM 3 (5%), giustificati 7 (12,5%)**; nel merito l'annullamento e' giusto in 53/56: niente inerzia sugli
+  annullamenti, il problema e' il lancio. Oscillazione in senso stretto (stesso bersaglio riavviato entro 2-3 round): 6 (11%). 6
+  "annullate" erano gia' perse (FALLITE non registrate perche' la chiamata strategica precede l'aggiornamento del motore).
+- **Offensive non eseguite 36/49**: C1 13, C3 7, C4 2, C5 2, C6 3, G 2, avviate al R12 5, bloccate fino a fine partita 2. Le 13
+  "eseguite" del riepilogo sono 10 prese di Hard senza operazione + **3 tappe vere**. Ordine di turno mai causa.
+- **Costo**: 470 PU di acquisti obbligati per operazioni poi annullate (65% delle riserve, 3,5% dei PU spesi; unita' non perse, mix e
+  luogo non di Hard); 78 unita' (~795 TUV, quasi tutte aeree) spostate verso raduni abbandonati; nessuna perdita in combattimento.
+- **Correzioni proposte (non implementate)**, annullamenti evitati: (1) una sola stima di tenuta nei candidati rinforzo/tenuta con i
+  rinforzi realmente movibili 18; (2) escludere i bersagli che Hard attacca nel round / passare in TENUTA senza chiedere 15; (3) presa
+  del candidato con le forze che l'operazione impegnera' 7; (4) aggiornare lo stato delle operazioni prima della chiamata strategica
+  (contabilita': 6 annullate -> FALLITE); (5) fattibilita' come filtro 4; (6) prompt senza la spinta contro i numeri del motore 3;
+  (7) candidati persistenti per le operazioni in corso 2; (8) isteresi sul RI-avvio (rete di sicurezza). 1+2+3 = 40/56, 1-7 = 49/56.
+- **Anomalie** (non corrette): Alleati seme 503 R7 chiamata strategica fatta (annullamento applicato) ma record del diario e portafoglio
+  del round persi: eccezione in `Stratega.Round.applica` dopo l'annullamento, solo in `ProLogger.warn`; la colonna "Eseguite" di
+  `ConfrontoSmoke` conta le prese di Hard senza operazione e i rinforzi ritirati.
+- **Unica modifica di codice**: `ConfrontoSmoke` esclude dalla calibrazione le azioni annulla/rinvia/ritira (`NON_ESEGUITE`, `eseguita`),
+  + test `AutoplayTest.smokeCalibrationLeavesOutCancelPostponeAndWithdraw`. Verificato rigenerando il riepilogo dalle 12 partite della
+  run: strategico 18,7 punti su 124 stime (prima 30,1 su 162), ordini 15,6 su 24 (prima 34,3 su 51) = ricalcolo a mano.
+- Test locali (JDK 25 da apt; Maven Central 429 ⇒ init script in `~/.gradle/init.d` con il mirror Google SOLO in
+  `dependencyResolutionManagement` (addFirst, dopo le impostazioni) e `pluginManagement` (beforeSettings): un blocco `allprojects
+  { repositories }` rompe la build, `FAIL_ON_PROJECT_REPOS`): `:proplus-autoplay:test` 24/24, `spotlessCheck`, `pmdMain`, `pmdTest`,
+  `:game-headed:compileJava` verdi. Attenzione: `:proplus-autoplay:spotlessApply` riformatta 4 file non toccati (ConfrontoConferma,
+  ConfrontoHard, ConfrontoVarianza, TestQualita): ripristinati, non committare quelle differenze.
+- Push senza `[smoke]`/`[autoplay]`: solo build e release `proplus-latest`, nessuna partita in CI.
+
