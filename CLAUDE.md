@@ -4472,3 +4472,26 @@ matrice). Hard e le altre voci invariate; `avvia.bat` e `aggiorna.ps1` NON tocca
   attacchi forzati vinti su France, Alexandria, Egypt, Baltic States), Alleati 4 round 70 s (Russia su Poland; Stati Uniti e Regno
   Unito senza obiettivo: capitale in caso c o nessun candidato via terra). Visti: Hard scarta un bersaglio forzato per `defensive_stance`
   (la forzatura non scavalca la postura difensiva di Hard); Hard puo' attaccare un forzato con meno unita' di quelle contate (soglia 30%).
+
+#### Autoplay in CI (run 43023379267, commit 89ee22b, tutto verde, 30 partite [impegno] senza chiave, semi 1101-1110)
+30/30 completate, 0 eccezioni, costo API 0. Durata media: a Hard vs Hard 353 s, c1 311 s (**−12%**), c2 334 s (**−6%**): entro +50%.
+
+| VC Asse | R4 | R8 | R12 | Δ R12 da (a) [IC 95% Welch] | Reddito R12 Asse / Alleati | TUV R12 Asse / Alleati |
+|---|---|---|---|---|---|---|
+| a Hard / Hard | 4,40 | 5,80 | 5,60 ± 1,1 | - | 63,1 / 102,8 | 1015 / 1565 |
+| c1 Asse Stratega + impegno | 5,00 (+0,60 [−0,04; 1,24]) | 5,20 (−0,60 [−1,60; 0,40]) | 5,40 ± 2,1 | −0,20 [−1,78; 1,38] include lo 0 | 53,9 / 111,3 | 848 / 1604 |
+| c2 Alleati Stratega + impegno | 4,40 (0,00) | 5,70 (−0,10) | 6,40 ± 1,4 | +0,80 [−0,40; 2,00] include lo 0 (peggio per gli Alleati) | 74,0 / 91,1 | 1168 / 1421 |
+
+- Citta' passate di mano entro R12 (a / c1 / c2, partite su 10, round mediano): Mosca 2 R8,5 / 5 R9 / 7 R8; Stalingrado 9 R8 / 6 R9 / 9 R9;
+  Leningrado 10 R5 / 10 R5 / 9 R5; Egitto 6 R3 / 8 R1 / 6 R3; Parigi 10 R1 in tutte; Berlino mai; Roma 0 / 1 R8 / 1 R7.
+- Obiettivi (c1): Germans France 10, Novgorod 7, Russia 8, Volgograd 4, Egypt 1; 17 presi (France R1 x8, Novgorod R3-R5 x6, Russia R7 e
+  R9, Volgograd R10); chiusi per "capitale in caso c" 9, "non piu' del nemico" 3; durata media 2,6 round. Italians Egypt 16 (presa 9
+  volte, R1-R4), cambi: capitale c 8, non piu' del nemico 6, rotta assente 5. (c2): Russians Poland 8 (presa 3), chiusi 10 volte per
+  capitale in caso c; British Egypt 6 (riconquistata 6 volte R3-R6), Novgorod 8; Americans obiettivi scelti ma mai presi.
+- **PU all'operazione solo 24% (Asse) e 18% (Alleati) dei PU dei turni**, non 70%: obiettivo presente in 144/240 turni dell'Asse e
+  153/360 degli Alleati; **capitale propria in caso c (2.6) in 111/240 turni dell'Asse e 87/360 degli Alleati** (niente obiettivo
+  nuovo) e PU_op calato dal presidio mancante. La regola 2.6 classifica "c" la capitale molto spesso: e' il freno principale.
+- Attacchi forzati: c1 107 (vinti 86, non presi 11, non attaccati da Hard 10); perdite reali <= P80 in 77/97, media 8,7 contro P80
+  10,2 TUV. c2 62 (vinti 39, non presi 12, non attaccati 11); <= P80 44/51 (5,2 contro 11,1).
+- Instradate per round (c1) 1-48 (picco R6), (c2) 2-8; unita' dell'operazione perse nei turni nemici: c1 fino a 5,5 unita' / 23,5 TUV
+  per round (R8), c2 fino a 4,7 / 16,6 (R7).
