@@ -441,6 +441,8 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   c `Asse-Stratega-LLM-vs-Hard`, f `Hard-vs-Alleati-Stratega-LLM` (tenute spente = il nuovo default, ombra accesa). Chiave solo a c e f,
   tetto 15 $ sulle 20 partite LLM. Sezione **"Campagne in ombra"** (`ConfrontoOmbra`, da `stratega_llm.<alleanza>.ombra`).
   Opzione nuova del runner `--stratega-acceso Axis=tenute` (riaccende un interruttore spento di default; etichetta "[con tenute]").
+  **Dallo step R2a-bis** `[ombra]` = 2 configurazioni SENZA chiave (costo API 0), 20 partite: b1 `Asse-Stratega-senza-chiave-vs-Hard`,
+  b2 `Hard-vs-Alleati-Stratega-senza-chiave` (lo Stratega senza chiave gioca come Hard: l'ombra misura Hard).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2073,6 +2075,50 @@ invariate. Valori nuovi in `stratega-llm.json` (`guadagno_minimo_tenuta_punti`, 
 - Test: `CampagnaOmbraTest` (ombra accesa = ombra spenta per le risposte del tuning e le proprieta' della partita; stato salvato e
   ricaricato; i tre casi della 2.6 e il rilascio), `NudoHardTest.axisStrategaWithoutKeyAnswersAsHardWithTheShadowOn` (turno intero),
   `AutoplayTest.shadowCampaignsOfStepR2aAreSummarized`.
+
+### Misure in ombra R2a-bis (step R2a-bis, ancora nessun effetto sul gioco)
+
+- `ai/proplus/CampagnaOmbraMisure` (nuova) + `CampagnaOmbra` (stesse chiamate di R2a). Valori in `stratega-llm.json`
+  `campagna_ombra.r2a_bis`, ognuno `{"valore", "origine"}` (tutti "scelto", nessuno tarato; la quota iniziale di M2 non e'
+  misurabile dalla run 42976494562 perche' non registrava i difensori presenti).
+- **1.1 calcolatore vero**: `CampagnaOmbraMisure.calcolatore` legge (riflessione, nessuna modifica) l'`IBattleCalculator` dentro
+  `ProOddsCalculator` (lo stesso di Hard). Perdite per simulazione: `ListBackedAggregateResults.getResults()` oppure la lista
+  privata `runs` di `BoundedContextAggregateResults` (contatori dei superstiti per tipo, costo per NOME del tipo); se nessuna
+  delle due e' leggibile, `ripetizioni_senza_lista` chiamate da 1 simulazione. Percentile = rango piu' vicino (monotono sulle
+  stesse simulazioni). `simulazioni_calcolatore` 100. Cache per unita' identiche (i margini condividono la prima tappa).
+- **Flusso v2** (`Calcolo.flussoV2`, campo `margini_v2` di ogni campagna, accanto a `margini` R2a che resta = M0 con i fattori):
+  difensori del modello scelto (1.5), nessun fattore; ogni tappa stimata, tranne la PRIMA che la stima blocca e l'OBIETTIVO,
+  combattute col calcolatore: presa = vittoria dell'attaccante, perdite = percentile del margine, tenuta = 100 − vittoria del
+  contrattacco (`contrattacco`, invariato) sui superstiti. Forza necessaria/scarto = stima; se il calcolatore blocca dove la
+  stima basta: "scarto non stimabile", non fattibile. Errore del calcolatore ⇒ la tappa resta stimata (`errore_calcolatore`).
+- **1.2 tre modelli** in ogni previsione (`previsioni[].modelli`: tipo capitale/VC/fabbrica/altro, guerra gia' in corso,
+  presenti, per round [M0, M2]); M1 = presenti. Verifica: righe `verifica.difensori_modelli` (una per territorio e round della
+  previsione), stato `quote_m2` (per orizzonte: somma aumento reale, somma aumento previsto da M0 ⇒ quota di M2, limitata
+  [0, 2]) e `errori_modelli` (ultimi 200 errori assoluti per modello). Modello del flusso v2 = mediana dell'errore assoluto piu'
+  bassa con >= 10 verifiche per modello, prima `m2`.
+- **1.3 contrattacco sulla punta**: a inizio turno (`inizioTurno`, stato `inizio.<nazione>`) i territori nemici e la posizione
+  delle unita' di terra; a fine turno (`fineTurnoBis`, chiamato da `fineTurno`) i territori presi dalla nazione (da chiunque)
+  ⇒ `punte` (forza nemica massima in portata = tutte le unita' di `contrattacco` senza quota ne' acquisti, tenuta stimata con
+  `estimateStrength`); alla verifica successiva `verifica.contrattacco` (attaccato, forza impegnata = TUV perso dall'attaccante
+  + `remainingAttackingUnits` del `BattleRecord`, tenuto).
+- **1.4**: `previsioni[].perdite_calcolatore` (percentili della prima tappa del round valutata col calcolatore) contro la
+  perdita reale ⇒ `verifica.battaglie_calcolatore` e `statistiche.battaglie_calcolatore_<m>`.
+- **Misura 2** (`fineTurnoBis`): per ogni unita' di terra propria (infrastrutture escluse, antiaerea a parte) nei territori
+  dei casi a/b del round: classe (`CampagnaOmbraMisure.classe`: antiaerea, appena piazzata, mossa nel turno, bloccata = nessun
+  territorio amico entro il movimento piu' vicino al fronte, in transito = ferma da 1 turno e avvicinata nel turno prima,
+  ferma davvero = ferma da >= 2 turni e spostabile, ferma da 1 turno), tipo, TUV, fabbrica, ferma da, distanza dal fronte
+  (BFS sui territori di terra dal nemico piu' vicino, a fine turno). Stato `traccia.<nazione>` (id corto → [indice del
+  territorio, round d'arrivo, avvicinata]; l'inizio partita conta come round 0), aggregato `misura2.<nazione>.<caso>.<classe>`
+  = [unita'-turno, TUV] + `turni` + `tipi_ferme`; righe in `retrovie-ombra-R<N>-<alleanza>.json`. Caso b: `persi` (territorio,
+  valore, chi l'ha preso, unita' di Hard a fine turno prima della caduta, `ripreso` "R<n>" se dell'alleanza a fine turno della
+  nazione nel round della scoperta o in quello dopo, altrimenti "no").
+- Autoplay: `OmbraDettagli` legge i file `campagna-ombra-*` e `retrovie-ombra-*` del diario ⇒ `riepilogo.json`
+  `ombra_dettagli.<alleanza>` (righe compatte complete); `ConfrontoOmbra.writeBis` scrive la sottosezione "R2a-bis" della
+  sezione "Campagne in ombra" (1.2 per orizzonte e per tipo/guerra, quota M2 osservata, 1.3 calibrazione a fasce del 20% e
+  quota impegnata per tipo, 1.4, 1.5 fattibili v2 contro M0 per round, Misura 2 per nazione e caso, caso b persi/ripresi).
+- Test: `CampagnaOmbraTest` +4 (percentili ordinati sulle stesse forze e cache; i tre modelli, la quota osservata e la scelta
+  del modello; le classi della Misura 2 su una posizione costruita; un territorio preso diventa una punta) + controllo del
+  calcolatore nell'ombra accesa = spenta; `AutoplayTest.shadowMeasuresOfStepR2aBisAreSummarized`.
 
 ## Come configurare lo stratega
 
@@ -4293,3 +4339,22 @@ tenute), `AutoplayTest` (+1). Hard e le altre voci invariate; `avvia.bat` e `agg
   1 territorio su 3 (retrovie accettate); nel caso c) Hard lascia in media quanto il presidio previsto (Asse) o di piu' (Alleati).
 - Le liste dell'errore nei riepiloghi sono potate a 200 voci per chiave e alleanza (le tabelle contano fino a 1.957 confronti; i file
   `campagna-ombra-*.json` li hanno tutti: 2.167 per gli Alleati a +1).
+
+### Step R2a-BIS — due misure in ombra: previsioni ricalibrate e retrovie di Hard (2026-11-11)
+
+Vedi "Misure in ombra R2a-bis". Nessun effetto sul gioco, nessuna chiave API (costo 0). File: nuovi
+`ai/proplus/CampagnaOmbraMisure`, autoplay `OmbraDettagli`; modificati `CampagnaOmbra` (flusso v2, tre modelli, punte, Misura 2,
+persi/ripresi; `fineTurno` ora solo con l'ombra accesa), `stratega-llm.json` (`campagna_ombra.r2a_bis` con l'origine di ogni
+valore), autoplay `Riepilogo` (`ombra_dettagli`), `ConfrontoOmbra` (`writeBis`), workflow `[ombra]` (b1/b2 senza chiave); test
+`CampagnaOmbraTest` (+4 e controllo del calcolatore), `AutoplayTest` (+1). Hard e le altre voci invariate; `avvia.bat` e
+`aggiorna.ps1` NON toccati.
+- Verificato nel codice: `AggregateResults.getResults()` esiste solo nella versione a lista; quella a contesto
+  (`BoundedContextAggregateResults`) tiene le simulazioni in un campo privato `runs` ⇒ letto per riflessione (come i campi di
+  `BattleRecord` in R2a), nessun codice upstream toccato. Nella partita locale tutte le 54 tappe col calcolatore hanno letto le
+  perdite per simulazione dalla lista (implementazione di default).
+- Test locali (JDK 25, mirror Google solo in sandbox): `:game-core:test --tests 'games.strategy.triplea.ai.*'` + `:ai:test` +
+  `:proplus-autoplay:test` **591, 0 falliti** (golden Hard 1+2, `NudoHardTest` 3 compreso "Stratega senza chiave = Hard" con
+  l'ombra accesa, `DiaryNeutralityTest` 3, `CampagnaOmbraTest` 7 compreso "ombra accesa = ombra spenta").
+- Prova locale (Asse Stratega senza chiave vs Hard, seme 1101, 3 round): 74 s con l'ombra, 86 s con l'ombra spenta (rumore: nessun
+  rallentamento misurabile); 56 chiamate al calcolatore in 3 round; 0 eccezioni. Hard sposta davvero unita' dal fronte ovest alla
+  Germania (classe "mossa nel turno"), verificato con il territorio di partenza nelle righe.

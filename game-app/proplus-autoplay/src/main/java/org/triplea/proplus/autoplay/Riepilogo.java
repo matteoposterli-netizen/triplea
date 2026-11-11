@@ -112,6 +112,8 @@ final class Riepilogo {
     json.add("esito", outcome(o, monitor, rounds, winner, gameOver));
     json.add("contratto", contract(diary));
     json.add("stratega", strategist(diary));
+    // step R2a-bis: the complete rows of the shadow's checks (diary files)
+    json.add("ombra_dettagli", OmbraDettagli.leggi(diary));
     return json;
   }
 

@@ -29,6 +29,7 @@ import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.data.BattleRecord;
 import games.strategy.triplea.delegate.data.BattleRecords;
+import games.strategy.triplea.odds.calculator.IBattleCalculator;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -93,7 +94,8 @@ public final class CampagnaOmbra {
       int roundRiprendere,
       int marginePresidio,
       int maxTerritoriRetrovia,
-      int maxPrevisioni) {
+      int maxPrevisioni,
+      Bis bis) {
 
     private static @Nullable Config cache;
 
@@ -137,11 +139,62 @@ public final class CampagnaOmbra {
           o.get("round_per_riprendere").getAsInt(),
           o.get("margine_presidio").getAsInt(),
           o.get("max_territori_retrovia").getAsInt(),
-          o.get("max_previsioni").getAsInt());
+          o.get("max_previsioni").getAsInt(),
+          Bis.parse(o.getAsJsonObject("r2a_bis")));
     }
 
     double fattore(final int margin) {
       return fattori.getOrDefault(margin, 1.0);
+    }
+  }
+
+  /**
+   * Step R2a-bis: values of {@code campagna_ombra.r2a_bis} (each with its origin in the file:
+   * measured or chosen; none tuned by hand).
+   *
+   * @param simulazioni runs of the real calculator per battle
+   * @param ripetizioni calls with one run each when the per-run results cannot be read
+   * @param quotaM2Iniziale share of the predicted increase of M2 before any check in the game
+   * @param quotaM2Min lowest share of M2
+   * @param quotaM2Max highest share of M2
+   * @param minConfrontiModello checks per model before the error picks the model of 1.5
+   * @param modelloIniziale model of 1.5 before that
+   * @param maxErroriModello abs errors kept per model in the state (the last ones)
+   * @param maxPunte points kept for the counterattack check (1.3)
+   * @param maxPersi lost rear territories kept (case b)
+   */
+  record Bis(
+      int simulazioni,
+      int ripetizioni,
+      double quotaM2Iniziale,
+      double quotaM2Min,
+      double quotaM2Max,
+      int minConfrontiModello,
+      String modelloIniziale,
+      int maxErroriModello,
+      int maxPunte,
+      int maxPersi) {
+
+    static Bis parse(@Nullable final JsonObject o) {
+      if (o == null) {
+        return new Bis(100, 30, 0.5, 0, 2, 10, "m2", 200, 60, 100);
+      }
+      return new Bis(
+          valore(o, "simulazioni_calcolatore").getAsInt(),
+          valore(o, "ripetizioni_senza_lista").getAsInt(),
+          valore(o, "quota_m2_iniziale").getAsDouble(),
+          valore(o, "quota_m2_min").getAsDouble(),
+          valore(o, "quota_m2_max").getAsDouble(),
+          valore(o, "min_confronti_modello").getAsInt(),
+          valore(o, "modello_iniziale").getAsString(),
+          valore(o, "max_errori_modello").getAsInt(),
+          valore(o, "max_punte").getAsInt(),
+          valore(o, "max_persi").getAsInt());
+    }
+
+    /** {@code {"valore": x, "origine": "..."}}: the value. */
+    private static JsonElement valore(final JsonObject o, final String key) {
+      return o.getAsJsonObject(key).get("valore");
     }
   }
 
@@ -179,7 +232,9 @@ public final class CampagnaOmbra {
   public static void fineTurno(final GameState data, final GamePlayer player) {
     try {
       final Optional<String> alliance = ProPlusSettings.allianceOf(data, player);
-      if (alliance.isEmpty() || !Stratega.gioca(data, player)) {
+      if (alliance.isEmpty()
+          || !Stratega.gioca(data, player)
+          || !StrategaInterruttori.OMBRA.acceso(data.getProperties(), alliance.get())) {
         return;
       }
       final GameProperties props = data.getProperties();
@@ -188,6 +243,16 @@ public final class CampagnaOmbra {
       if (!st.has("retrovia")) {
         return;
       }
+      // R2a-bis: the points taken this turn (1.3), the units Hard left behind (Measure 2), the
+      // rear territories lost and retaken
+      final Calcolo c =
+          new Calcolo(
+              data,
+              new games.strategy.triplea.util.TuvCostsCalculator().getCostsForTuv(player),
+              player,
+              alliance.get(),
+              Config.get());
+      c.fineTurnoBis(st);
       for (final JsonElement e : st.getAsJsonArray("retrovia")) {
         final JsonObject r = e.getAsJsonObject();
         if (r.get("round").getAsInt() != round
@@ -215,7 +280,8 @@ public final class CampagnaOmbra {
   static JsonObject riepilogo(final GameProperties props, final String alliance) {
     final JsonObject st = stato(props, alliance);
     final JsonObject o = new JsonObject();
-    for (final String k : List.of("statistiche", "fattibili", "round_con_blocco")) {
+    for (final String k :
+        List.of("statistiche", "fattibili", "round_con_blocco", "quote_m2", "misura2", "persi")) {
       if (st.has(k)) {
         o.add(k, st.get(k).deepCopy());
       }
@@ -248,8 +314,8 @@ public final class CampagnaOmbra {
 
   /** One computation (one nation, one turn). */
   static final class Calcolo {
-    final ProData proData;
-    final ProOddsCalculator calc;
+    @Nullable final ProData proData;
+    @Nullable final ProOddsCalculator calc;
     final GamePlayer player;
     final String alliance;
     final Config cfg;
@@ -259,10 +325,42 @@ public final class CampagnaOmbra {
     final IntegerMap<UnitType> costs;
     final Predicate<Territory> passable;
     final Map<String, Integer> distMemo = new HashMap<>();
+    // step R2a-bis
+    final Map<String, CampagnaOmbraMisure.Distribuzione> cacheCalcolatore = new HashMap<>();
+    final Optional<IBattleCalculator> calcolatore;
+    int chiamateCalcolatore;
+    @Nullable String erroreCalcolatore;
+
+    /** Share of M2 per horizon 1..3 (index 0 unused). */
+    final double[] quoteM2 = new double[4];
+
+    /** Model of the recomputed feasibility (1.5). */
+    String modello;
 
     Calcolo(
         final ProData proData,
         final ProOddsCalculator calc,
+        final GamePlayer player,
+        final String alliance,
+        final Config cfg) {
+      this(proData, calc, proData.getData(), proData.getUnitValueMap(), player, alliance, cfg);
+    }
+
+    /** Without the AI's data (end of the turn): no calculator, no Hard's enemy attack options. */
+    Calcolo(
+        final GameState data,
+        final IntegerMap<UnitType> costs,
+        final GamePlayer player,
+        final String alliance,
+        final Config cfg) {
+      this(null, null, data, costs, player, alliance, cfg);
+    }
+
+    private Calcolo(
+        @Nullable final ProData proData,
+        @Nullable final ProOddsCalculator calc,
+        final GameState data,
+        final IntegerMap<UnitType> costs,
         final GamePlayer player,
         final String alliance,
         final Config cfg) {
@@ -271,10 +369,13 @@ public final class CampagnaOmbra {
       this.player = player;
       this.alliance = alliance;
       this.cfg = cfg;
-      this.data = proData.getData();
+      this.data = data;
       this.map = data.getMap();
       this.round = data.getSequence().getRound();
-      this.costs = proData.getUnitValueMap();
+      this.costs = costs;
+      this.calcolatore = CampagnaOmbraMisure.calcolatore(calc);
+      java.util.Arrays.fill(quoteM2, cfg.bis().quotaM2Iniziale());
+      this.modello = cfg.bis().modelloIniziale();
       this.passable =
           x ->
               !x.isWater()
@@ -296,6 +397,10 @@ public final class CampagnaOmbra {
               + " - Campagne IN OMBRA (nessun effetto sul gioco) ===");
       // 2.8 first: the predictions of the earlier rounds against what happened
       final JsonObject verifica = verifica(st, lines);
+      // R2a-bis: the share of M2 and the model of 1.5 from the checks so far; the start of the
+      // turn for the end of the turn (1.3, Measure 2)
+      leggiModelli(st);
+      inizioTurno(st);
       // 2.1-2.7
       final double income = ProUtils.getPlayerProduction(player, data);
       final double hardDefense = difesaHardUltimoTurno(props);
@@ -335,6 +440,26 @@ public final class CampagnaOmbra {
       out.add("non_valutati_sbarco", land);
       out.add("retrovia", retrovia);
       out.add("verifica", verifica);
+      out.addProperty("modello_difensori_v2", modello);
+      final JsonObject q = new JsonObject();
+      for (int k = 1; k <= 3; k++) {
+        q.addProperty(String.valueOf(k), Math.round(quoteM2[k] * 1000) / 1000.0);
+      }
+      out.add("quote_m2", q);
+      out.addProperty("chiamate_calcolatore", chiamateCalcolatore);
+      if (erroreCalcolatore != null) {
+        out.addProperty("errore_calcolatore", erroreCalcolatore);
+      }
+      lines.add(
+          String.format(
+              Locale.ROOT,
+              "  R2a-bis: difensori del ricalcolo = %s (quota M2 +1/+2/+3: %.2f / %.2f / %.2f);"
+                  + " chiamate al calcolatore %d",
+              modello.toUpperCase(Locale.ROOT),
+              quoteM2[1],
+              quoteM2[2],
+              quoteM2[3],
+              chiamateCalcolatore));
       aggiornaStato(st, campaigns, retrovia, income);
       salva(props, alliance, st);
       scriviFile(out);
@@ -465,6 +590,18 @@ public final class CampagnaOmbra {
       c.add("tappe", tappe);
       c.add("margini", perMargin);
       c.addProperty("fattibile_a_un_margine", anyFeasible);
+      // R2a-bis 1.1 + 1.5: the same campaign with the model of the defenders of 1.5, no factors,
+      // the real calculator on the first stage that blocks and on the target
+      final JsonObject perMarginV2 = new JsonObject();
+      boolean anyV2 = false;
+      for (final int margin : cfg.margini()) {
+        final JsonObject m = flussoV2(o, rounds, mine, where, margin, perRound, deadline);
+        perMarginV2.add(String.valueOf(margin), m);
+        anyV2 |= m.get("fattibile").getAsBoolean();
+      }
+      c.add("margini_v2", perMarginV2);
+      c.addProperty("modello_v2", modello);
+      c.addProperty("fattibile_v2_a_un_margine", anyV2);
       // 2.7 purchases (margin of the garrison rule, the middle one)
       c.add(
           "acquisti",
@@ -477,17 +614,31 @@ public final class CampagnaOmbra {
       // own force
       final JsonObject prev = new JsonObject();
       final JsonObject defs = new JsonObject();
+      final JsonObject models = new JsonObject();
       for (final Territory s : o.percorso()) {
         if (!nemico(s.getOwner())) {
           continue;
         }
         final JsonObject byK = new JsonObject();
+        // R2a-bis 1.2: the three models side by side (M1 = the present defenders)
+        final JsonObject mx = new JsonObject();
+        final double present = tuv(presenti(s));
+        mx.addProperty("tipo", CampagnaOmbraMisure.tipo(s));
+        mx.addProperty("guerra", data.getRelationshipTracker().isAtWar(player, s.getOwner()));
+        mx.addProperty("presenti", Math.round(present));
         for (int k = 1; k <= 3; k++) {
-          byK.addProperty(String.valueOf(round + k), Math.round(tuv(difensori(s, k))));
+          final double m0 = tuv(difensori(s, k));
+          byK.addProperty(String.valueOf(round + k), Math.round(m0));
+          final JsonArray pair = new JsonArray();
+          pair.add(Math.round(m0));
+          pair.add(Math.round(m2(present, m0, k)));
+          mx.add(String.valueOf(round + k), pair);
         }
         defs.add(s.getName(), byK);
+        models.add(s.getName(), mx);
       }
       prev.add("difensori", defs);
+      prev.add("modelli", models);
       final JsonObject inc = new JsonObject();
       final JsonObject force = new JsonObject();
       final JsonObject mid = perMargin.getAsJsonObject(String.valueOf(cfg.marginePresidio()));
@@ -543,6 +694,20 @@ public final class CampagnaOmbra {
                     ? "-"
                     : "R" + m.get("round_stimato").getAsInt(),
                 m.get("quota_pu_pct").getAsDouble(),
+                m.get("presa_obiettivo_pct").getAsDouble(),
+                m.get("tenuta_obiettivo_pct").getAsDouble(),
+                m.has("blocco") ? " (" + m.get("blocco").getAsString() + ")" : ""));
+      }
+      for (final int margin : cfg.margini()) {
+        final JsonObject m = perMarginV2.getAsJsonObject(String.valueOf(margin));
+        lines.add(
+            String.format(
+                Locale.ROOT,
+                "    v2 (difensori %s, calcolatore) margine %d: fattibile %s; presa %.0f%%, tenuta"
+                    + " %.0f%%%s",
+                modello.toUpperCase(Locale.ROOT),
+                margin,
+                m.get("fattibile").getAsBoolean() ? "SI'" : "no",
                 m.get("presa_obiettivo_pct").getAsDouble(),
                 m.get("tenuta_obiettivo_pct").getAsDouble(),
                 m.has("blocco") ? " (" + m.get("blocco").getAsString() + ")" : ""));
@@ -698,6 +863,587 @@ public final class CampagnaOmbra {
         m.addProperty("blocco", block + (feasible ? ", colmabile con acquisti" : ""));
       }
       return m;
+    }
+
+    // ------------------------------------------------------------------ R2a-bis 1.1, 1.5
+
+    /**
+     * 1.1 + 1.5: the point as a flow with the model of the defenders {@link #modello}, no factor:
+     * every stage estimated, except the first one the estimate blocks and the target, fought with
+     * the real calculator ({@link CampagnaOmbraMisure#simula}): take = the attacker's win, losses =
+     * the {@code margin} percentile of the attacker's losses, hold = 100 - the win of the
+     * counterattack on the survivors. The force needed stays the estimate.
+     */
+    JsonObject flussoV2(
+        final Obiettivo o,
+        final List<Integer> rounds,
+        final List<Unit> mine,
+        final Map<Unit, Territory> where,
+        final int margin,
+        final double perRound,
+        final int deadline) {
+      final JsonObject m = new JsonObject();
+      final List<Unit> point = new ArrayList<>();
+      final Set<Unit> used = new LinkedHashSet<>();
+      double lossesTotal = 0;
+      double needMax = 0;
+      double availAtNeed = 0;
+      int okUntil = 0;
+      String block = "";
+      double take = 0;
+      double hold = 0;
+      boolean firstBlockDone = false;
+      boolean gapUnknown = false;
+      int calcStages = 0;
+      final JsonArray stages = new JsonArray();
+      final int last = o.percorso().size() - 1;
+      for (int i = 0; i < o.percorso().size(); i++) {
+        final Territory s = o.percorso().get(i);
+        final int r = rounds.get(i);
+        if (r > 99) {
+          block = "guerra non possibile";
+          break;
+        }
+        for (final Unit u : mine) {
+          if (!used.contains(u) && where.get(u) != null && arrivo(u, where.get(u), s) <= r) {
+            point.add(u);
+            used.add(u);
+          }
+        }
+        final JsonObject x = new JsonObject();
+        x.addProperty("tappa", s.getName());
+        x.addProperty("round", r);
+        x.addProperty("forza_punta_tuv", Math.round(tuv(point)));
+        if (!nemico(s.getOwner())) {
+          x.addProperty("battaglia", false);
+          stages.add(x);
+          okUntil = i + 1;
+          continue;
+        }
+        final List<Unit> defenders = difensoriModello(s, Math.max(1, r - round + 1));
+        final double pointTuv = tuv(point);
+        final double sAtt =
+            point.isEmpty() ? 0 : ProBattleUtils.estimateStrength(s, point, defenders, true);
+        final double sDef =
+            defenders.isEmpty() ? 0 : ProBattleUtils.estimateStrength(s, defenders, point, false);
+        final boolean landPoint = point.stream().anyMatch(Matches.unitIsLand());
+        double stageTake = defenders.isEmpty() ? (landPoint ? 100 : 0) : diff(sAtt, sDef);
+        double loss = sAtt + sDef <= 0 ? 0 : Math.min(pointTuv, pointTuv * sDef / (sAtt + sDef));
+        List<Unit> survivors = superstiti(point, loss);
+        final List<Unit> counter = contrattacco(s);
+        final double sC =
+            counter.isEmpty() ? 0 : ProBattleUtils.estimateStrength(s, counter, survivors, true);
+        final double sS =
+            survivors.isEmpty() ? 0 : ProBattleUtils.estimateStrength(s, survivors, counter, false);
+        double stageHold =
+            100
+                - Math.min(
+                    100,
+                    Math.max(0, counter.isEmpty() ? 0 : survivors.isEmpty() ? 100 : diff(sC, sS)));
+        final double needTake =
+            sDef <= 0
+                ? pointTuv
+                : pointTuv * needed(sDef, cfg.sogliaPresa()) / Math.max(1e-6, sAtt);
+        final double needHold =
+            sC <= 0 ? 0 : loss + tuv(survivors) * neededHold(sC, sS) / Math.max(1e-6, sS);
+        final boolean estimateBlocks =
+            !(stageTake >= cfg.sogliaPresa()
+                && stageHold >= cfg.sogliaTenuta()
+                && !survivors.isEmpty());
+        String source = "stima";
+        if (calcolatore.isPresent()
+            && erroreCalcolatore == null
+            && landPoint
+            && !defenders.isEmpty()
+            && ((estimateBlocks && !firstBlockDone) || i == last)) {
+          if (estimateBlocks) {
+            firstBlockDone = true;
+          }
+          CampagnaOmbraMisure.Distribuzione d = null;
+          double calcHold = 0;
+          List<Unit> calcSurvivors = List.of();
+          try {
+            d = attacco(s, point, defenders);
+            calcSurvivors = superstiti(point, Math.min(pointTuv, d.percentile(margin)));
+            calcHold = tenutaCalcolatore(s, counter, calcSurvivors);
+          } catch (final RuntimeException e) {
+            // the estimate stays (declared in the output); no more calls this turn
+            erroreCalcolatore = String.valueOf(e);
+            x.addProperty("errore_calcolatore", erroreCalcolatore);
+            d = null;
+          }
+          if (d != null) {
+            stageTake = d.vittoriaPct();
+            loss = Math.min(pointTuv, d.percentile(margin));
+            survivors = calcSurvivors;
+            stageHold = calcHold;
+            calcStages++;
+            source = "calcolatore";
+            final JsonObject cx = new JsonObject();
+            cx.addProperty("simulazioni", d.simulazioni());
+            cx.addProperty("metodo", d.metodo());
+            cx.addProperty("vittoria_pct", Math.round(d.vittoriaPct() * 10) / 10.0);
+            cx.addProperty("perdite_media_tuv", Math.round(d.media() * 10) / 10.0);
+            for (final int p : cfg.margini()) {
+              cx.addProperty("perdite_p" + p + "_tuv", Math.round(d.percentile(p) * 10) / 10.0);
+            }
+            x.add("calcolatore", cx);
+          }
+        }
+        final boolean pass =
+            stageTake >= cfg.sogliaPresa()
+                && stageHold >= cfg.sogliaTenuta()
+                && !survivors.isEmpty();
+        final double need = Math.max(needTake, needHold);
+        if (!pass && need <= pointTuv) {
+          // the calculator blocks where the estimate finds the force enough: no gap to buy
+          gapUnknown = true;
+        }
+        take = stageTake;
+        hold = stageHold;
+        lossesTotal += loss;
+        x.addProperty("battaglia", true);
+        x.addProperty("fonte", source);
+        x.addProperty("difensori_attesi_tuv", Math.round(tuv(defenders)));
+        x.addProperty("presa_pct", Math.round(Math.min(100, Math.max(0, stageTake))));
+        x.addProperty("perdite_tuv", Math.round(loss));
+        x.addProperty("contrattacco_tuv", Math.round(tuv(counter)));
+        x.addProperty("tenuta_pct", Math.round(stageHold));
+        x.addProperty("forza_necessaria_tuv", Math.round(need));
+        stages.add(x);
+        if (block.isEmpty() && (need > needMax || !pass)) {
+          needMax = need;
+          availAtNeed = pointTuv;
+        }
+        point.clear();
+        point.addAll(survivors);
+        if (pass) {
+          okUntil = i + 1;
+        } else {
+          block =
+              (stageTake < cfg.sogliaPresa() ? "presa insufficiente a " : "tenuta insufficiente a ")
+                  + s.getName()
+                  + " ("
+                  + source
+                  + ")";
+          break;
+        }
+      }
+      final double gap = Math.max(0, needMax - availAtNeed);
+      final int roundsLeft = Math.max(1, deadline - round);
+      final double puAvail = perRound * roundsLeft;
+      final boolean feasible =
+          okUntil == o.percorso().size()
+              || (!gapUnknown && gap > 0 && gap <= puAvail && !block.startsWith("guerra"));
+      m.add("tappe", stages);
+      m.addProperty("modello", modello);
+      m.addProperty("tappe_col_calcolatore", calcStages);
+      m.addProperty("scarto_tuv", gapUnknown ? -1 : Math.round(gap));
+      m.addProperty("pu_disponibili_entro_scadenza", Math.round(puAvail));
+      m.addProperty("fattibile", feasible);
+      m.addProperty("presa_ok_fino_a_tappa", okUntil);
+      m.addProperty("round_stimato", feasible ? deadline : -1);
+      m.addProperty("perdite_attese_tuv", Math.round(lossesTotal));
+      m.addProperty("presa_obiettivo_pct", Math.round(Math.min(100, Math.max(0, take))));
+      m.addProperty("tenuta_obiettivo_pct", Math.round(hold));
+      if (!block.isEmpty()) {
+        m.addProperty(
+            "blocco",
+            block
+                + (feasible
+                    ? ", colmabile con acquisti"
+                    : gapUnknown ? ", scarto non stimabile (la stima basta)" : ""));
+      }
+      return m;
+    }
+
+    /** One battle with the real calculator, cached on the same units (the margins share it). */
+    CampagnaOmbraMisure.Distribuzione attacco(
+        final Territory s, final List<Unit> attackers, final List<Unit> defenders) {
+      return cacheCalcolatore.computeIfAbsent(
+          CampagnaOmbraMisure.chiave(s, attackers, defenders),
+          k -> {
+            chiamateCalcolatore++;
+            return CampagnaOmbraMisure.simula(
+                calcolatore.orElseThrow(),
+                s,
+                attackers,
+                defenders,
+                cfg.bis().simulazioni(),
+                cfg.bis().ripetizioni(),
+                this::costoNome);
+          });
+    }
+
+    /** 100 - the counterattack's win against the survivors (calculator). */
+    double tenutaCalcolatore(final Territory s, final List<Unit> counter, final List<Unit> held) {
+      if (counter.isEmpty()) {
+        return 100;
+      }
+      if (held.isEmpty()) {
+        return 0;
+      }
+      return 100 - attacco(s, counter, held).vittoriaPct();
+    }
+
+    private final Map<String, Integer> costByName = new HashMap<>();
+
+    int costoNome(final String name) {
+      if (costByName.isEmpty()) {
+        costs.keySet().forEach(t -> costByName.put(t.getName(), costs.getInt(t)));
+      }
+      return costByName.getOrDefault(name, 0);
+    }
+
+    /** The enemy defenders present now (model M1). */
+    List<Unit> presenti(final Territory s) {
+      return new ArrayList<>(
+          s.getMatches(Matches.unitIsNotInfrastructure().and(u -> nemico(u.getOwner()))));
+    }
+
+    /** Model M2 in TUV for horizon {@code k}. */
+    double m2(final double present, final double m0, final int k) {
+      return CampagnaOmbraMisure.m2(
+          present, m0, quoteM2[k], cfg.bis().quotaM2Min(), cfg.bis().quotaM2Max());
+    }
+
+    /**
+     * The defenders of model {@link #modello}: M1 the present ones, M0 those of {@link #difensori},
+     * M2 the present ones + the first units of M0's increase up to the share.
+     */
+    List<Unit> difensoriModello(final Territory s, final int k) {
+      final List<Unit> present = presenti(s);
+      if ("m1".equals(modello)) {
+        return present;
+      }
+      final List<Unit> all = difensori(s, k);
+      if (!"m2".equals(modello)) {
+        return all;
+      }
+      final List<Unit> extra = all.subList(Math.min(present.size(), all.size()), all.size());
+      final double target = m2(tuv(present), tuv(all), Math.min(3, k)) - tuv(present);
+      final List<Unit> out = new ArrayList<>(present);
+      double sum = 0;
+      for (final Unit u : extra) {
+        if (sum >= target - 1e-9) {
+          break;
+        }
+        out.add(u);
+        sum += costs.getInt(u.getType());
+      }
+      return out;
+    }
+
+    /**
+     * The share of M2 per horizon (real increase / increase M0 predicted, over the checks of the
+     * game) and the model of 1.5: the lowest median absolute error with enough checks for each.
+     */
+    void leggiModelli(final JsonObject st) {
+      final JsonObject q = st.has("quote_m2") ? st.getAsJsonObject("quote_m2") : new JsonObject();
+      for (int k = 1; k <= 3; k++) {
+        if (q.has(String.valueOf(k))) {
+          final JsonArray a = q.getAsJsonArray(String.valueOf(k));
+          quoteM2[k] =
+              Math.max(
+                  cfg.bis().quotaM2Min(),
+                  Math.min(
+                      cfg.bis().quotaM2Max(),
+                      CampagnaOmbraMisure.quota(
+                          a.get(0).getAsDouble(),
+                          a.get(1).getAsDouble(),
+                          cfg.bis().quotaM2Iniziale())));
+        }
+      }
+      if (!st.has("errori_modelli")) {
+        return;
+      }
+      final JsonObject e = st.getAsJsonObject("errori_modelli");
+      String best = null;
+      double bestMedian = Double.MAX_VALUE;
+      for (final String mdl : List.of("m0", "m1", "m2")) {
+        if (!e.has(mdl) || e.getAsJsonArray(mdl).size() < cfg.bis().minConfrontiModello()) {
+          return;
+        }
+        final List<Double> v = new ArrayList<>();
+        e.getAsJsonArray(mdl).forEach(x -> v.add(x.getAsDouble()));
+        v.sort(Double::compare);
+        final double med =
+            v.size() % 2 == 1
+                ? v.get(v.size() / 2)
+                : (v.get(v.size() / 2 - 1) + v.get(v.size() / 2)) / 2;
+        if (med < bestMedian) {
+          bestMedian = med;
+          best = mdl;
+        }
+      }
+      if (best != null) {
+        modello = best;
+      }
+    }
+
+    /**
+     * The start of the nation's turn (at the purchase, before any move): the enemy land territories
+     * (1.3: which ones the nation takes) and the position of its land units (Measure 2).
+     */
+    void inizioTurno(final JsonObject st) {
+      final JsonObject ini = st.has("inizio") ? st.getAsJsonObject("inizio") : new JsonObject();
+      final JsonObject mine = new JsonObject();
+      final JsonArray enemies = new JsonArray();
+      final JsonObject units = new JsonObject();
+      final List<Territory> all = territoriOrdinati();
+      for (int i = 0; i < all.size(); i++) {
+        final Territory t = all.get(i);
+        if (t.isWater()) {
+          continue;
+        }
+        if (nemico(t.getOwner())) {
+          enemies.add(i);
+        }
+        for (final Unit u : t.getMatches(unitaTerraProprie())) {
+          units.addProperty(CampagnaOmbraMisure.id(u), i);
+        }
+      }
+      mine.addProperty("round", round);
+      mine.add("nemici", enemies);
+      mine.add("unita", units);
+      ini.add(player.getName(), mine);
+      st.add("inizio", ini);
+    }
+
+    /**
+     * The territories sorted by name: the index in the compact state (the AI's copy of the game may
+     * list them in another order than the real game).
+     */
+    List<Territory> territoriOrdinati() {
+      final List<Territory> out = new ArrayList<>(map.getTerritories());
+      out.sort(Comparator.comparing(Territory::getName));
+      return out;
+    }
+
+    /** The nation's land units (infrastructure excluded, anti-aircraft included: counted apart). */
+    Predicate<Unit> unitaTerraProprie() {
+      return Matches.unitIsOwnedBy(player)
+          .and(Matches.unitIsLand())
+          .and(Matches.unitIsNotInfrastructure().or(Matches.unitIsAaForAnything()));
+    }
+
+    /**
+     * End of the nation's turn (R2a-bis): 1.3 the enemy territories the nation took this turn (by
+     * anyone of its units, Hard's moves too) with the strongest enemy force in reach and the
+     * estimated hold; Measure 2 the class of every land unit of the nation in the rear territories
+     * of rule 2.6 (cases a and b); the lost rear territories retaken within 2 rounds.
+     */
+    JsonArray fineTurnoBis(final JsonObject st) {
+      final JsonObject ini = st.has("inizio") ? st.getAsJsonObject("inizio") : new JsonObject();
+      final JsonObject mine =
+          ini.has(player.getName()) ? ini.getAsJsonObject(player.getName()) : null;
+      ritiri(st);
+      if (mine == null || mine.get("round").getAsInt() != round) {
+        return new JsonArray();
+      }
+      ini.remove(player.getName());
+      final List<Territory> all = territoriOrdinati();
+      final JsonArray rows = new JsonArray();
+      // 1.3
+      final JsonArray points = st.has("punte") ? st.getAsJsonArray("punte") : new JsonArray();
+      for (final JsonElement e : mine.getAsJsonArray("nemici")) {
+        final int i = e.getAsInt();
+        if (i < 0 || i >= all.size() || !all.get(i).isOwnedBy(player)) {
+          continue;
+        }
+        points.add(punta(all.get(i)));
+      }
+      while (points.size() > cfg.bis().maxPunte()) {
+        points.remove(0);
+      }
+      st.add("punte", points);
+      // Measure 2
+      final Map<String, String> cases = new HashMap<>();
+      for (final JsonElement e : st.getAsJsonArray("retrovia")) {
+        final JsonObject r = e.getAsJsonObject();
+        final String caso = r.get("caso").getAsString();
+        if (r.get("round").getAsInt() == round
+            && r.get("nazione").getAsString().equals(player.getName())
+            && (CASO_A.equals(caso) || CASO_B.equals(caso))) {
+          cases.put(r.get("territorio").getAsString(), caso);
+        }
+      }
+      final Predicate<Territory> land =
+          x -> !x.isWater() && !Matches.territoryIsImpassable().test(x);
+      final Map<Territory, Integer> front =
+          CampagnaOmbraMisure.distanzaFronte(map, x -> nemico(x.getOwner()), land);
+      final Predicate<Territory> friendly = land.and(Matches.isTerritoryAllied(player));
+      final JsonObject track = st.has("traccia") ? st.getAsJsonObject("traccia") : new JsonObject();
+      final JsonObject prev =
+          track.has(player.getName()) ? track.getAsJsonObject(player.getName()) : new JsonObject();
+      final JsonObject next = new JsonObject();
+      final JsonObject start = mine.getAsJsonObject("unita");
+      final JsonObject agg = st.has("misura2") ? st.getAsJsonObject("misura2") : new JsonObject();
+      final JsonObject nat =
+          agg.has(player.getName()) ? agg.getAsJsonObject(player.getName()) : new JsonObject();
+      inc(nat, "turni", 1);
+      for (int i = 0; i < all.size(); i++) {
+        final Territory t = all.get(i);
+        if (t.isWater()) {
+          continue;
+        }
+        for (final Unit u : t.getMatches(unitaTerraProprie())) {
+          final String id = CampagnaOmbraMisure.id(u);
+          final boolean placed = !start.has(id);
+          final int from = placed ? -1 : start.get(id).getAsInt();
+          final boolean moved = !placed && from != i;
+          final JsonArray before = prev.has(id) ? prev.getAsJsonArray(id) : null;
+          final int since =
+              placed || moved
+                  ? round
+                  : before != null && before.get(0).getAsInt() == i ? before.get(1).getAsInt() : 0;
+          final boolean closer =
+              moved
+                  && front.containsKey(t)
+                  && (!front.containsKey(all.get(from)) || front.get(t) < front.get(all.get(from)));
+          final JsonArray now = new JsonArray();
+          now.add(i);
+          now.add(since);
+          now.add(closer ? 1 : 0);
+          next.add(id, now);
+          final String caso = cases.get(t.getName());
+          if (caso == null) {
+            continue;
+          }
+          final boolean aa = Matches.unitIsAaForAnything().test(u);
+          final int stillFor = round - since;
+          final boolean closerBefore = before != null && before.get(2).getAsInt() == 1;
+          final int mv = Math.max(0, u.getUnitAttachment().getMovement(player));
+          final boolean canApproach =
+              CampagnaOmbraMisure.puoAvvicinarsi(map, t, mv, friendly, front);
+          final String cls =
+              CampagnaOmbraMisure.classe(aa, placed, moved, stillFor, closerBefore, canApproach);
+          final double value = costs.getInt(u.getType());
+          final JsonObject row = new JsonObject();
+          row.addProperty("territorio", t.getName());
+          row.addProperty("caso", caso);
+          row.addProperty("tipo", u.getType().getName());
+          row.addProperty("tuv", value);
+          row.addProperty("classe", cls);
+          row.addProperty("piazzata", placed);
+          if (moved) {
+            row.addProperty("da", all.get(from).getName());
+          }
+          row.addProperty("fabbrica", t.anyUnitsMatch(Matches.unitCanProduceUnits()));
+          row.addProperty("ferma_da", placed || moved ? 0 : stillFor);
+          row.addProperty("puo_avvicinarsi", canApproach);
+          row.addProperty("distanza_fronte", front.getOrDefault(t, -1));
+          rows.add(row);
+          final JsonObject byCase = nat.has(caso) ? nat.getAsJsonObject(caso) : new JsonObject();
+          final JsonArray cell = byCase.has(cls) ? byCase.getAsJsonArray(cls) : new JsonArray();
+          final double n0 = cell.size() > 0 ? cell.get(0).getAsDouble() : 0;
+          final double v0 = cell.size() > 1 ? cell.get(1).getAsDouble() : 0;
+          final JsonArray cellNew = new JsonArray();
+          cellNew.add(n0 + 1);
+          cellNew.add(v0 + value);
+          byCase.add(cls, cellNew);
+          nat.add(caso, byCase);
+          if (CampagnaOmbraMisure.FERMA_DAVVERO.equals(cls)) {
+            final JsonObject types =
+                nat.has("tipi_ferme") ? nat.getAsJsonObject("tipi_ferme") : new JsonObject();
+            inc(types, u.getType().getName(), 1);
+            nat.add("tipi_ferme", types);
+          }
+        }
+      }
+      agg.add(player.getName(), nat);
+      st.add("misura2", agg);
+      track.add(player.getName(), next);
+      st.add("traccia", track);
+      scriviFileRetrovie(rows);
+      return rows;
+    }
+
+    /** 1.3: the point taken; enemy force in reach (max), estimated hold. */
+    JsonObject punta(final Territory t) {
+      final List<Unit> held =
+          t.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsNotInfrastructure()));
+      final List<Unit> counter = contrattacco(t);
+      final List<Unit> max = forzaInPortata(t);
+      final double sC =
+          counter.isEmpty() ? 0 : ProBattleUtils.estimateStrength(t, counter, held, true);
+      final double sD =
+          held.isEmpty() ? 0 : ProBattleUtils.estimateStrength(t, held, counter, false);
+      final double enemy = counter.isEmpty() ? 0 : held.isEmpty() ? 100 : diff(sC, sD);
+      final JsonObject x = new JsonObject();
+      x.addProperty("territorio", t.getName());
+      x.addProperty("round", round);
+      x.addProperty("nazione", player.getName());
+      x.addProperty("tipo", CampagnaOmbraMisure.tipo(t));
+      x.addProperty("massima_tuv", Math.round(tuv(max)));
+      x.addProperty("contrattacco_previsto_tuv", Math.round(tuv(counter)));
+      x.addProperty("difensori_tuv", Math.round(tuv(held)));
+      x.addProperty("tenuta_stimata", Math.round(100 - Math.min(100, Math.max(0, enemy))));
+      return x;
+    }
+
+    /**
+     * Every enemy unit that can attack {@code s} next turn (as {@link #contrattacco}, no share).
+     */
+    List<Unit> forzaInPortata(final Territory s) {
+      final List<Unit> all = new ArrayList<>();
+      for (final Territory n : map.getNeighbors(s, 3)) {
+        if (n.equals(s)) {
+          continue;
+        }
+        final int d = map.getDistance(n, s);
+        for (final Unit u :
+            n.getMatches(Matches.unitIsNotInfrastructure().and(x -> nemico(x.getOwner())))) {
+          final int mv = u.getUnitAttachment().getMovement(u.getOwner());
+          if (Matches.unitIsLand().test(u) && !n.isWater() && d <= Math.min(2, mv)) {
+            all.add(u);
+          } else if (Matches.unitIsAir().test(u) && d <= Math.max(1, mv / 2)) {
+            all.add(u);
+          }
+        }
+      }
+      return all;
+    }
+
+    /** Lost rear territories: retaken by the alliance by the end of the nation's next turn. */
+    void ritiri(final JsonObject st) {
+      if (!st.has("persi")) {
+        return;
+      }
+      for (final JsonElement e : st.getAsJsonArray("persi")) {
+        final JsonObject x = e.getAsJsonObject();
+        if (!x.get("nazione").getAsString().equals(player.getName())
+            || !"in attesa".equals(x.get("ripreso").getAsString())) {
+          continue;
+        }
+        final Territory t = map.getTerritoryOrNull(x.get("territorio").getAsString());
+        if (t == null) {
+          continue;
+        }
+        final int lostAt = x.get("round").getAsInt();
+        if (Matches.isTerritoryAllied(player).test(t)) {
+          x.addProperty("ripreso", "R" + round);
+        } else if (round >= lostAt + 1) {
+          x.addProperty("ripreso", "no");
+        }
+      }
+    }
+
+    void scriviFileRetrovie(final JsonArray rows) {
+      if (!(data instanceof GameData gd)) {
+        return;
+      }
+      final String name = String.format(Locale.ROOT, "retrovie-ombra-R%d-%s.json", round, alliance);
+      final JsonObject file = new JsonObject();
+      file.addProperty("round", round);
+      file.addProperty("alleanza", alliance);
+      file.addProperty(
+          "nota", "IN OMBRA: unita' di terra lasciate da Hard nelle retrovie (casi a/b)");
+      final JsonObject nations =
+          FILE.computeIfAbsent(name + "|" + System.identityHashCode(gd), k -> new JsonObject());
+      nations.add(player.getName(), rows);
+      file.add("nazioni", nations);
+      DiaryRecorder.operationInput(gd, name, file);
     }
 
     /** {@link ProBattleUtils#estimateStrengthDifference}'s formula on strengths. */
@@ -1208,6 +1954,9 @@ public final class CampagnaOmbra {
       final JsonObject v = new JsonObject();
       final JsonArray errs = new JsonArray();
       final JsonArray battles = new JsonArray();
+      final JsonArray models = new JsonArray();
+      final JsonArray battlesCalc = new JsonArray();
+      final Set<String> seen = new LinkedHashSet<>();
       if (st.has("previsioni")) {
         for (final JsonElement e : st.getAsJsonArray("previsioni")) {
           final JsonObject p = e.getAsJsonObject();
@@ -1252,6 +2001,54 @@ public final class CampagnaOmbra {
             final double real = tuv(tutteMie());
             aggiungi(stats, "forza_" + k, Math.abs(pred - real), real);
           }
+          // R2a-bis 1.2: the three models of the defenders (one row per territory and round)
+          if (p.has("modelli")) {
+            for (final var d : p.getAsJsonObject("modelli").entrySet()) {
+              final JsonObject x = d.getValue().getAsJsonObject();
+              final Territory t = map.getTerritoryOrNull(d.getKey());
+              if (t == null
+                  || !x.has(String.valueOf(round))
+                  || !seen.add(made + "|" + d.getKey())) {
+                continue;
+              }
+              final JsonArray pair = x.getAsJsonArray(String.valueOf(round));
+              final double present = x.get("presenti").getAsDouble();
+              final double m0 = pair.get(0).getAsDouble();
+              final double mm2 = pair.get(1).getAsDouble();
+              final double real = tuv(presenti(t));
+              final JsonObject row = new JsonObject();
+              row.addProperty("territorio", t.getName());
+              row.addProperty("orizzonte", k);
+              row.addProperty("tipo", x.get("tipo").getAsString());
+              row.addProperty("guerra", x.get("guerra").getAsBoolean());
+              row.addProperty("reali_tuv", Math.round(real));
+              row.addProperty("m0", m0);
+              row.addProperty("m1", present);
+              row.addProperty("m2", mm2);
+              models.add(row);
+              aggiornaQuota(st, k, real - present, m0 - present);
+              erroreModello(st, "m0", Math.abs(m0 - real));
+              erroreModello(st, "m1", Math.abs(present - real));
+              erroreModello(st, "m2", Math.abs(mm2 - real));
+            }
+          }
+          // R2a-bis 1.4: the losses of the calculator's percentiles on the first stage
+          if (k == 1 && p.has("perdite_calcolatore")) {
+            final JsonObject pl = p.getAsJsonObject("perdite_calcolatore");
+            final String site = pl.get("territorio").getAsString();
+            final int lost = perditaReale(made, site);
+            if (lost >= 0) {
+              final JsonObject b = new JsonObject();
+              b.addProperty("territorio", site);
+              b.addProperty("perdita_reale_tuv", lost);
+              for (final int margin : cfg.margini()) {
+                final double pred = pl.get(String.valueOf(margin)).getAsDouble();
+                b.addProperty("p" + margin, pred);
+                conta(stats, "battaglie_calcolatore_" + margin, lost <= pred);
+              }
+              battlesCalc.add(b);
+            }
+          }
           // battles of the nation on the first stage predicted for the round the prediction
           // was made (k == 1: the turn is over)
           if (k == 1 && p.has("perdite_tappa1")) {
@@ -1288,6 +2085,28 @@ public final class CampagnaOmbra {
           final boolean attacked = attaccato(t, round - 1) || attaccato(t, round);
           final boolean lost = !Matches.isTerritoryAllied(player).test(t);
           final String caso = r.get("caso").getAsString();
+          if (lost) {
+            // Measure 2, case b: who took it, its value, Hard's units when it fell; retaken
+            // within 2 rounds is checked at the end of the nation's next turns
+            final JsonArray persi = st.has("persi") ? st.getAsJsonArray("persi") : new JsonArray();
+            final JsonObject x = new JsonObject();
+            x.addProperty("territorio", t.getName());
+            x.addProperty("caso", caso);
+            x.addProperty("nazione", player.getName());
+            x.addProperty("round", round);
+            x.addProperty(
+                "valore", TerritoryAttachment.get(t).map(a -> a.getProduction()).orElse(0));
+            x.addProperty("preso_da", t.getOwner().getName());
+            x.addProperty(
+                "unita_hard",
+                r.has("unita_lasciate_da_hard") ? r.get("unita_lasciate_da_hard").getAsInt() : 0);
+            x.addProperty("ripreso", "in attesa");
+            persi.add(x);
+            while (persi.size() > cfg.bis().maxPersi()) {
+              persi.remove(0);
+            }
+            st.add("persi", persi);
+          }
           final JsonObject c =
               stats.has("caso_" + caso) ? stats.getAsJsonObject("caso_" + caso) : new JsonObject();
           inc(c, "n", 1);
@@ -1302,9 +2121,14 @@ public final class CampagnaOmbra {
           r.addProperty("verificato", true);
         }
       }
+      // R2a-bis 1.3: the points taken in the nation's last turn against the enemy turn after
+      final JsonArray points = verificaPunte(st);
       st.add("statistiche", stats);
       v.add("difensori", errs);
       v.add("battaglie", battles);
+      v.add("difensori_modelli", models);
+      v.add("battaglie_calcolatore", battlesCalc);
+      v.add("contrattacco", points);
       if (errs.size() > 0 || battles.size() > 0) {
         lines.add(
             "  Verifica delle previsioni: "
@@ -1314,6 +2138,102 @@ public final class CampagnaOmbra {
                 + " battaglie confrontate");
       }
       return v;
+    }
+
+    /** 1.3: attacked, with how much of the maximum, held; one row per point of the last turn. */
+    JsonArray verificaPunte(final JsonObject st) {
+      final JsonArray out = new JsonArray();
+      if (!st.has("punte")) {
+        return out;
+      }
+      for (final JsonElement e : st.getAsJsonArray("punte")) {
+        final JsonObject p = e.getAsJsonObject();
+        if (!p.get("nazione").getAsString().equals(player.getName())
+            || p.get("round").getAsInt() != round - 1
+            || p.has("verificato")) {
+          continue;
+        }
+        final Territory t = map.getTerritoryOrNull(p.get("territorio").getAsString());
+        if (t == null) {
+          continue;
+        }
+        final int made = p.get("round").getAsInt();
+        final double committed =
+            Math.max(0, forzaImpegnata(t, made)) + Math.max(0, forzaImpegnata(t, round));
+        final boolean attacked = attaccato(t, made) || attaccato(t, round);
+        final JsonObject row = p.deepCopy();
+        row.remove("nazione");
+        row.addProperty("attaccato", attacked);
+        row.addProperty("impegnata_tuv", Math.round(committed));
+        row.addProperty(
+            "quota_impegnata",
+            p.get("massima_tuv").getAsDouble() <= 0
+                ? 0
+                : Math.round(committed / p.get("massima_tuv").getAsDouble() * 1000) / 1000.0);
+        row.addProperty("tenuto", Matches.isTerritoryAllied(player).test(t));
+        out.add(row);
+        p.addProperty("verificato", true);
+      }
+      return out;
+    }
+
+    /**
+     * TUV an enemy attacker brought to {@code t} in {@code r}: lost + left at the end of the battle
+     * (-1 = no battle). Retreated units are not counted when the results do not keep them.
+     */
+    double forzaImpegnata(final Territory t, final int r) {
+      final var all = data.getBattleRecordsList();
+      if (all == null || all.getBattleRecordsMapCopy().get(r) == null) {
+        return -1;
+      }
+      double sum = -1;
+      for (final BattleRecord b :
+          BattleRecords.getAllRecords(all.getBattleRecordsMapCopy().get(r))) {
+        final Territory site = field(b, "battleSite");
+        final GamePlayer att = field(b, "attacker");
+        if (site == null || !site.equals(t) || att == null || !nemico(att)) {
+          continue;
+        }
+        final Integer lost = field(b, "attackerLostTuv");
+        final games.strategy.triplea.delegate.battle.BattleResults res = field(b, "battleResults");
+        sum =
+            Math.max(0, sum)
+                + (lost == null ? 0 : lost)
+                + (res == null || res.getRemainingAttackingUnits() == null
+                    ? 0
+                    : tuvByName(res.getRemainingAttackingUnits()));
+      }
+      return sum;
+    }
+
+    double tuvByName(final Collection<Unit> units) {
+      return CampagnaOmbraMisure.tuv(units, this::costoNome);
+    }
+
+    private void aggiornaQuota(
+        final JsonObject st, final int k, final double realInc, final double predInc) {
+      final JsonObject q = st.has("quote_m2") ? st.getAsJsonObject("quote_m2") : new JsonObject();
+      final JsonArray a =
+          q.has(String.valueOf(k)) ? q.getAsJsonArray(String.valueOf(k)) : new JsonArray();
+      final double r0 = a.size() > 0 ? a.get(0).getAsDouble() : 0;
+      final double p0 = a.size() > 1 ? a.get(1).getAsDouble() : 0;
+      final JsonArray n = new JsonArray();
+      n.add(r0 + realInc);
+      n.add(p0 + Math.max(0, predInc));
+      q.add(String.valueOf(k), n);
+      st.add("quote_m2", q);
+    }
+
+    private void erroreModello(final JsonObject st, final String model, final double absErr) {
+      final JsonObject e =
+          st.has("errori_modelli") ? st.getAsJsonObject("errori_modelli") : new JsonObject();
+      final JsonArray a = e.has(model) ? e.getAsJsonArray(model) : new JsonArray();
+      a.add(Math.round(absErr));
+      while (a.size() > cfg.bis().maxErroriModello()) {
+        a.remove(0);
+      }
+      e.add(model, a);
+      st.add("errori_modelli", e);
     }
 
     private static void aggiungi(
@@ -1402,6 +2322,7 @@ public final class CampagnaOmbra {
         p.addProperty("obiettivo", c.get("obiettivo").getAsString());
         final JsonObject pr = c.getAsJsonObject("previsioni");
         p.add("difensori", pr.get("difensori"));
+        p.add("modelli", pr.get("modelli"));
         p.add("reddito", pr.get("reddito"));
         p.add("forza", pr.get("forza_propria_tuv"));
         // expected losses of the first battle stage this round, per margin
@@ -1423,6 +2344,29 @@ public final class CampagnaOmbra {
         }
         if (has && pl.size() == cfg.margini().size() + 1) {
           p.add("perdite_tappa1", pl);
+        }
+        // R2a-bis 1.4: the calculator's percentiles on the battle stage of this round (the first
+        // stage: before it the point is the same for every margin)
+        for (final JsonElement e :
+            c.getAsJsonObject("margini_v2")
+                .getAsJsonObject(String.valueOf(cfg.margini().get(0)))
+                .getAsJsonArray("tappe")) {
+          final JsonObject x = e.getAsJsonObject();
+          if (x.get("battaglia").getAsBoolean()
+              && x.get("round").getAsInt() == round
+              && x.has("calcolatore")) {
+            final JsonObject pc = new JsonObject();
+            pc.addProperty("territorio", x.get("tappa").getAsString());
+            for (final int margin : cfg.margini()) {
+              pc.addProperty(
+                  String.valueOf(margin),
+                  x.getAsJsonObject("calcolatore")
+                      .get("perdite_p" + margin + "_tuv")
+                      .getAsDouble());
+            }
+            p.add("perdite_calcolatore", pc);
+            break;
+          }
         }
         prev.add(p);
       }
@@ -1450,6 +2394,17 @@ public final class CampagnaOmbra {
         keep.add(r);
       }
       st.add("retrovia", keep);
+      // R2a-bis 1.3: the points waiting for the check (the nation's last turn), pruned
+      if (st.has("punte")) {
+        final JsonArray points = new JsonArray();
+        for (final JsonElement e : st.getAsJsonArray("punte")) {
+          final JsonObject x = e.getAsJsonObject();
+          if (!x.has("verificato") && x.get("round").getAsInt() >= round - 1) {
+            points.add(x);
+          }
+        }
+        st.add("punte", points);
+      }
       // feasible candidates per round and margin (the summary)
       final JsonArray feas = st.has("fattibili") ? st.getAsJsonArray("fattibili") : new JsonArray();
       for (final JsonObject c : campaigns) {

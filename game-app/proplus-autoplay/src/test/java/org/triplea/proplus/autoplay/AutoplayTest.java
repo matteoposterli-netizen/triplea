@@ -972,6 +972,51 @@ class AutoplayTest {
     assertThat(text).contains("| Asse | c | 2 | 1 (50%) | 0 (0%) | 2.0 | 3.0 |");
   }
 
+  @Test
+  void shadowMeasuresOfStepR2aBisAreSummarized() {
+    final JsonObject game =
+        JsonParser.parseString(
+                """
+                {"stato":"completata","parametri":{"tipi":{"Axis":"stratega","Allies":"hard"}},
+                 "round":[{"round":1,"completo":true},{"round":2,"completo":true}],
+                 "ombra_dettagli":{"Axis":{
+                   "chiamate_calcolatore":12,"errori_calcolatore":0,
+                   "metodi":{"per simulazione (risultati della lista)":4},
+                   "difensori":[[1,"VC",1,10,30,10,20],[1,"VC",1,20,40,10,30]],
+                   "contrattacco":[["altro",90,20,1,10,1],["altro",30,40,0,0,0]],
+                   "battaglie_calcolatore":[[5,4,6,8],[2,4,6,8]],
+                   "fattibili":[[1,60,1,0,"m2","Germans","France"],[1,70,1,0,"m2","Germans","France"],
+                     [1,80,0,0,"m2","Germans","France"]],
+                   "retrovie":[]}},
+                 "stratega_llm":{"Axis":{"ombra":{
+                   "round_con_blocco":[1,2],
+                   "quote_m2":{"1":[5,20]},
+                   "misura2":{"Germans":{"turni":2,"a":{"ferma davvero":[4,12],"appena piazzata":[2,6]},
+                     "tipi_ferme":{"infantry":4}}},
+                   "persi":[{"territorio":"Norway","caso":"b","nazione":"Germans","round":3,
+                     "valore":3,"preso_da":"British","unita_hard":1,"ripreso":"R3"},
+                    {"territorio":"Norway","caso":"b","nazione":"Germans","round":6,
+                     "valore":3,"preso_da":"British","unita_hard":0,"ripreso":"no"}]}}}}
+                """)
+            .getAsJsonObject();
+    final StringBuilder md = new StringBuilder();
+
+    ConfrontoOmbra.write(
+        md, List.of(new RiepilogoGenerale.Game("1-x", game)), List.of("Axis", "Allies"));
+
+    final String text = md.toString();
+    assertThat(text).contains("### R2a-bis").contains("chiamate al calcolatore 12");
+    // M0 errors 20 and 20, M1 0 and -10, M2 10 and 10: M1 is the best by absolute error
+    assertThat(text).contains("| Asse | +1 | 2 | 20.0 / 20.0 | -5.0 / 5.0 | 10.0 / 10.0 | M1 |");
+    assertThat(text).contains("Quota M2 osservata").contains("+1 0.25");
+    assertThat(text).contains("| Asse | 80-100% | 1 | 90.0% | 1 (100%) | 1 (100%) |");
+    assertThat(text).contains("| Asse | altro | 2 | 1 (50%) | 50.0% | 25.0% | 1 (50%) |");
+    assertThat(text).contains("| Asse | 2 | 1 (50%) | 2 (100%) | 2 (100%) |");
+    assertThat(text).contains("| Asse | R1 | 1 | 0 / 0 / 0 | 1 / 1 / 0 | M2 1 |");
+    assertThat(text).contains("| Asse | Germans | a | 2 | 1.0 / 3.0 | 0.0 / 0.0 |");
+    assertThat(text).contains("| Asse | Norway | 3 | 2 | British 2 | 1 | 1 | 0 | 0.5 |");
+  }
+
   private static final String SAMPLE =
       """
       {"nome":"A / 1","stato":"completata","durata_s":75,"round_giocati":1,

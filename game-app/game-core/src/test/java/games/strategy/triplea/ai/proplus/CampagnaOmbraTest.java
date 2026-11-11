@@ -86,6 +86,16 @@ class CampagnaOmbraTest extends AbstractClientSettingTestCase {
       }
     }
     assertThat(CampagnaOmbra.riepilogo(props, "Axis").has("round_con_blocco")).isTrue();
+    // step R2a-bis: the recomputed campaign per margin, with the real calculator
+    for (final var c : out.get().getAsJsonArray("campagne")) {
+      final JsonObject m = c.getAsJsonObject().getAsJsonObject("margini_v2");
+      for (final String k : List.of("60", "70", "80")) {
+        assertThat(m.getAsJsonObject(k).has("fattibile")).isTrue();
+        assertThat(m.getAsJsonObject(k).get("modello").getAsString()).isEqualTo("m2");
+      }
+    }
+    assertThat(out.get().get("chiamate_calcolatore").getAsInt()).isPositive();
+    assertThat(out.get().has("errore_calcolatore")).isFalse();
   }
 
   @Test
@@ -143,6 +153,178 @@ class CampagnaOmbraTest extends AbstractClientSettingTestCase {
     assertThat(CampagnaOmbra.rilasciato(CampagnaOmbra.CASO_C, gone.get("caso").getAsString()))
         .isTrue();
     assertThat(CampagnaOmbra.rilasciato(CampagnaOmbra.CASO_C, CampagnaOmbra.CASO_C)).isFalse();
+  }
+
+  // ======================================================================== step R2a-bis
+
+  @Test
+  void theCalculatorPercentilesAreOrderedOnTheSameForces() {
+    final CampagnaOmbra.Calcolo c = calcolo();
+    assertThat(c.calcolatore).isPresent();
+    final List<Unit> attackers = new ArrayList<>(units("Germans", "infantry", 6));
+    attackers.addAll(units("Germans", "armour", 3));
+    final List<Unit> defenders = new ArrayList<>(units("Russians", "infantry", 5));
+    defenders.addAll(units("Russians", "artillery", 1));
+    final CampagnaOmbraMisure.Distribuzione d =
+        c.attacco(territory("Poland"), attackers, defenders);
+    assertThat(d.simulazioni()).isEqualTo(CampagnaOmbra.Config.get().bis().simulazioni());
+    assertThat(d.metodo())
+        .isIn(CampagnaOmbraMisure.METODO_LISTA, CampagnaOmbraMisure.METODO_CONTATORI);
+    assertThat(d.percentile(60)).isLessThanOrEqualTo(d.percentile(70));
+    assertThat(d.percentile(70)).isLessThanOrEqualTo(d.percentile(80));
+    assertThat(d.percentile(80)).isLessThanOrEqualTo(c.tuv(attackers));
+    assertThat(d.vittoriaPct()).isBetween(0.0, 100.0);
+    // the same forces again: from the cache, no second call
+    final int calls = c.chiamateCalcolatore;
+    assertThat(c.attacco(territory("Poland"), attackers, defenders)).isSameAs(d);
+    assertThat(c.chiamateCalcolatore).isEqualTo(calls);
+    // nearest rank on a known sample
+    final CampagnaOmbraMisure.Distribuzione k =
+        new CampagnaOmbraMisure.Distribuzione(
+            50, new double[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, 10, "test");
+    assertThat(k.percentile(60)).isEqualTo(5);
+    assertThat(k.percentile(70)).isEqualTo(6);
+    assertThat(k.percentile(80)).isEqualTo(7);
+  }
+
+  @Test
+  void theThreeModelsOfTheDefendersOnABuiltPosition() {
+    final CampagnaOmbra.Calcolo c = calcolo();
+    final Territory poland = territory("Eastern Poland");
+    // enemy units now (M1) and enemy units next to it (part of M0)
+    final double present = c.tuv(c.presenti(poland));
+    final double m0 = c.tuv(c.difensori(poland, 1));
+    assertThat(m0).isGreaterThanOrEqualTo(present);
+    // M2 with the starting share: half of M0's increase
+    final double start = CampagnaOmbra.Config.get().bis().quotaM2Iniziale();
+    assertThat(c.m2(present, m0, 1)).isEqualTo(present + start * (m0 - present));
+    c.modello = "m1";
+    assertThat(c.tuv(c.difensoriModello(poland, 1))).isEqualTo(present);
+    c.modello = "m0";
+    assertThat(c.tuv(c.difensoriModello(poland, 1))).isEqualTo(m0);
+    c.modello = "m2";
+    final double m2Units = c.tuv(c.difensoriModello(poland, 1));
+    assertThat(m2Units).isBetween(present, m0);
+    // the share observed in the game: real increase 10 over a predicted 40 at +1
+    final JsonObject st = new JsonObject();
+    final JsonObject q = new JsonObject();
+    final com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+    a.add(10);
+    a.add(40);
+    q.add("1", a);
+    st.add("quote_m2", q);
+    // M1 has the lowest median absolute error: it is the model of 1.5
+    final JsonObject errors = new JsonObject();
+    for (final String m : List.of("m0", "m1", "m2")) {
+      final com.google.gson.JsonArray e = new com.google.gson.JsonArray();
+      for (int i = 0; i < 12; i++) {
+        e.add("m1".equals(m) ? 3 : "m2".equals(m) ? 8 : 20);
+      }
+      errors.add(m, e);
+    }
+    st.add("errori_modelli", errors);
+    c.leggiModelli(st);
+    assertThat(c.quoteM2[1]).isEqualTo(0.25);
+    assertThat(c.quoteM2[2]).isEqualTo(start);
+    assertThat(c.modello).isEqualTo("m1");
+    assertThat(c.m2(present, m0, 1)).isEqualTo(present + 0.25 * (m0 - present));
+  }
+
+  @Test
+  void theClassesOfMeasureTwoOnABuiltPosition() {
+    final CampagnaOmbra.Calcolo c = calcolo();
+    final GamePlayer germans = player("Germans");
+    // a German infantry on an island of the Axis: it cannot get closer to the front
+    final Territory sardinia = territory("Sardinia");
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            sardinia, units("Germans", "infantry", 1)));
+    final JsonObject st = new JsonObject();
+    final com.google.gson.JsonArray rear = new com.google.gson.JsonArray();
+    rear.add(record("Germany", "a"));
+    rear.add(record("Sardinia", "b"));
+    st.add("retrovia", rear);
+    c.inizioTurno(st);
+    // one infantry of Germany arrived there in the round before, moving closer to the front
+    final Territory germany = territory("Germany");
+    final Unit transit =
+        germany.getUnitCollection().stream()
+            .filter(u -> u.getOwner().equals(germans) && u.getType().getName().equals("infantry"))
+            .findFirst()
+            .orElseThrow();
+    final JsonObject track = new JsonObject();
+    final JsonObject mine = new JsonObject();
+    final com.google.gson.JsonArray t = new com.google.gson.JsonArray();
+    t.add(c.territoriOrdinati().indexOf(germany));
+    t.add(1);
+    t.add(1);
+    mine.add(CampagnaOmbraMisure.id(transit), t);
+    track.add("Germans", mine);
+    st.add("traccia", track);
+    // placed this turn
+    final List<Unit> placed = units("Germans", "artillery", 1);
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(germany, placed));
+    final com.google.gson.JsonArray rows = c.fineTurnoBis(st);
+    final List<String> classes = new ArrayList<>();
+    for (final var e : rows) {
+      final JsonObject x = e.getAsJsonObject();
+      classes.add(x.get("territorio").getAsString() + ":" + x.get("classe").getAsString());
+    }
+    assertThat(classes)
+        .contains("Germany:" + CampagnaOmbraMisure.APPENA_PIAZZATA)
+        .contains("Germany:" + CampagnaOmbraMisure.IN_TRANSITO)
+        .contains("Germany:" + CampagnaOmbraMisure.FERMA_DAVVERO)
+        .contains("Sardinia:" + CampagnaOmbraMisure.BLOCCATA);
+    // the aggregate of the state: per nation, case and class
+    final JsonObject m2 = st.getAsJsonObject("misura2").getAsJsonObject("Germans");
+    assertThat(m2.get("turni").getAsInt()).isEqualTo(1);
+    assertThat(m2.getAsJsonObject("a").has(CampagnaOmbraMisure.FERMA_DAVVERO)).isTrue();
+    assertThat(m2.getAsJsonObject("b").has(CampagnaOmbraMisure.BLOCCATA)).isTrue();
+    // the pure rule
+    assertThat(CampagnaOmbraMisure.classe(true, true, false, 0, false, true))
+        .isEqualTo(CampagnaOmbraMisure.ANTIAEREA);
+    assertThat(CampagnaOmbraMisure.classe(false, false, false, 1, true, true))
+        .isEqualTo(CampagnaOmbraMisure.IN_TRANSITO);
+    assertThat(CampagnaOmbraMisure.classe(false, false, false, 3, false, true))
+        .isEqualTo(CampagnaOmbraMisure.FERMA_DAVVERO);
+    assertThat(CampagnaOmbraMisure.classe(false, false, false, 3, false, false))
+        .isEqualTo(CampagnaOmbraMisure.BLOCCATA);
+  }
+
+  @Test
+  void aTerritoryTakenInTheTurnIsAPointToCheck() {
+    final CampagnaOmbra.Calcolo c = calcolo();
+    final JsonObject st = new JsonObject();
+    st.add("retrovia", new com.google.gson.JsonArray());
+    c.inizioTurno(st);
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.changeOwner(
+            territory("Eastern Poland"), player("Germans")));
+    c.fineTurnoBis(st);
+    final JsonObject p = st.getAsJsonArray("punte").get(0).getAsJsonObject();
+    assertThat(p.get("territorio").getAsString()).isEqualTo("Eastern Poland");
+    assertThat(p.get("massima_tuv").getAsDouble()).isPositive();
+    assertThat(p.get("tenuta_stimata").getAsDouble()).isBetween(0.0, 100.0);
+  }
+
+  private static JsonObject record(final String territory, final String caso) {
+    final JsonObject r = new JsonObject();
+    r.addProperty("territorio", territory);
+    r.addProperty("round", 2);
+    r.addProperty("nazione", "Germans");
+    r.addProperty("caso", caso);
+    r.addProperty("unita", 0);
+    return r;
+  }
+
+  private CampagnaOmbra.Calcolo calcolo() {
+    return new CampagnaOmbra.Calcolo(
+        proData(player("Germans"), 2),
+        calc(),
+        player("Germans"),
+        "Axis",
+        CampagnaOmbra.Config.get());
   }
 
   // ================================================================================ helpers
