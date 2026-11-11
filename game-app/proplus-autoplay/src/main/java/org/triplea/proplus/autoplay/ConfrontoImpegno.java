@@ -59,6 +59,15 @@ final class ConfrontoImpegno {
                         k -> new ArrayList<>())
                     .add(g.json()));
     final List<JsonObject> ref = byConfig.get(reference);
+    // step R4: games played until the victory have their own tables ("Partite complete")
+    if (byConfig.values().stream()
+        .flatMap(List::stream)
+        .anyMatch(
+            j ->
+                j.getAsJsonObject("parametri").has("fino_a_vittoria")
+                    && j.getAsJsonObject("parametri").get("fino_a_vittoria").getAsBoolean())) {
+      return;
+    }
     final Map<String, String> committed = new LinkedHashMap<>();
     byConfig.forEach(
         (config, list) -> {

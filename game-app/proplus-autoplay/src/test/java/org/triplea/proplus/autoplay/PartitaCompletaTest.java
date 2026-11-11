@@ -91,7 +91,8 @@ class PartitaCompletaTest {
     final String md = Files.readString(dir.resolve(RiepilogoGenerale.FILE), StandardCharsets.UTF_8);
     assertThat(md)
         .contains("## Partite complete (fino alla vittoria)")
-        .contains("| 1-vittoria | vittoria Alleati al round 4 | 4 | 4 |")
+        .contains("| 1-vittoria | vittoria Alleati al round 4 | 4 | Alleati R3 | 4 |")
+        .contains("Per configurazione (step R4)")
         .contains("Alleati 3,4")
         .contains("| Nazione | R4 |")
         .contains("| Russians |")

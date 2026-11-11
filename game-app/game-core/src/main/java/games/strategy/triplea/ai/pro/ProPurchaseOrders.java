@@ -2,6 +2,7 @@ package games.strategy.triplea.ai.pro;
 
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /**
  * Purchase orders a variant of the Pro AI gives its purchase (Pro+ strategy plans, step 3b). They
@@ -33,8 +34,17 @@ public record ProPurchaseOrders(
    */
   public record Category(String name, double percent, List<String> unitTypes) {}
 
-  /** At least {@code minimum} units of category {@code category} (a name in {@code unitTypes}). */
-  public record Mandatory(String category, List<String> unitTypes, int minimum) {}
+  /**
+   * At least {@code minimum} units of category {@code category} (a name in {@code unitTypes});
+   * {@code factory} (Pro+ step R4, may be null) = the factory these units are placed in first,
+   * before the order's preferred placement.
+   */
+  public record Mandatory(
+      String category, List<String> unitTypes, int minimum, @Nullable String factory) {
+    public Mandatory(final String category, final List<String> unitTypes, final int minimum) {
+      this(category, unitTypes, minimum, null);
+    }
+  }
 
   /**
    * What the purchase did with the orders.

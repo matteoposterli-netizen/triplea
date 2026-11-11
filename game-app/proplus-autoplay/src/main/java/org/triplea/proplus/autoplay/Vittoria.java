@@ -102,13 +102,53 @@ final class Vittoria {
     return winningRound;
   }
 
-  /** {"round_tenuta": 1, "condizione": {alliance: [rounds met]}, "vincitore", "round"}. */
+  /**
+   * Step R4 (point 0), reading of the XML: the first end of round with the condition met (what the
+   * engine's trigger would do if the map had the victory message), -1 if never.
+   */
+  static int letturaXml(final List<Integer> metRounds) {
+    return metRounds.isEmpty() ? -1 : metRounds.get(0);
+  }
+
+  /**
+   * Step R4 (point 0), reading of the map's notes (what ends the game for a player, since the
+   * engine never signals it on this map): the first round that closes {@code held} complete rounds
+   * with the condition met at every end of round, -1 if never.
+   */
+  static int letturaNote(final List<Integer> metRounds, final int held) {
+    int start = -1;
+    int last = -2;
+    for (final int r : metRounds) {
+      start = r == last + 1 ? start : r;
+      last = r;
+      if (r - start >= held) {
+        return r;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * {"round_tenuta": 1, "condizione": {alliance: [rounds met]}, "lettura_xml": {alliance: first
+   * round met}, "lettura_note": {alliance: first round held}, "vincitore", "round"}.
+   */
   JsonObject toJson() {
     final JsonObject json = new JsonObject();
     json.addProperty("round_tenuta", ROUNDS_HELD);
     final JsonObject met = new JsonObject();
     metRounds.forEach(met::add);
     json.add("condizione", met);
+    final JsonObject xml = new JsonObject();
+    final JsonObject notes = new JsonObject();
+    metRounds.forEach(
+        (alliance, rounds) -> {
+          final List<Integer> list = new java.util.ArrayList<>();
+          rounds.forEach(e -> list.add(e.getAsInt()));
+          xml.addProperty(alliance, letturaXml(list));
+          notes.addProperty(alliance, letturaNote(list, ROUNDS_HELD));
+        });
+    json.add("lettura_xml", xml);
+    json.add("lettura_note", notes);
     if (winner != null) {
       json.addProperty("vincitore", winner);
       json.addProperty("round", winningRound);

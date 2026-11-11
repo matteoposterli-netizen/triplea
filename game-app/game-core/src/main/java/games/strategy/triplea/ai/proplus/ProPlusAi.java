@@ -108,6 +108,8 @@ public class ProPlusAi extends ProAi {
             Impegno.inizioTurno(getProData(), getCalc(), player);
             // step R3a: the landing force in preparation and the wave stay out of Hard's plan
             keep.addAll(SbarcoCoordinato.trattenute(data, player));
+            // step R4 (A3): the bombers for the raid on Moscow stay out of Hard's attacks
+            keep.addAll(Assedio.trattenute(data, player));
           }
           if (!keep.isEmpty()) {
             tuning.holdCombatForPurchase(data, player, keep);

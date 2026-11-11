@@ -43,7 +43,17 @@ public final class RegistroDecisioni {
           "spola",
           "campagna_africa",
           "campagna_testa_di_ponte",
-          "unita_trattenute");
+          "unita_trattenute",
+          // step R4
+          "obiettivo_assedio",
+          "rinforzo_fabbrica",
+          "bombardamento",
+          "italia_africa",
+          "gibilterra_asse",
+          "snodo_usa",
+          "africa_sudafrica",
+          "neutrali_est",
+          "sbarramento_sud");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
@@ -82,7 +92,35 @@ public final class RegistroDecisioni {
           "NESSUN_FERMO_VUOTO",
           "SPOLA",
           "OBIETTIVO_SCELTO",
-          "PREPARAZIONE");
+          "PREPARAZIONE",
+          // step R4
+          "FABBRICHE_PRIMA",
+          "MOSCA_FABBRICHE_PRESE",
+          "MOSCA_70",
+          "GUADAGNO_MAGGIORE",
+          "NESSUN_CANDIDATO",
+          "FABBRICA_CATTURATA_VICINA",
+          "NESSUNA_FABBRICA_CATTURATA",
+          "BOMBARDA",
+          "NON_RAGGIUNGIBILE",
+          "DANNO_MASSIMO",
+          "NESSUN_BOMBARDIERE",
+          "COMPRA_BOMBARDIERI",
+          "AFRICA_PRIMA",
+          "EST_EGITTO",
+          "SPOLA_AFRICA",
+          "FLOTTA",
+          "AFRICA",
+          "FRANCIA",
+          "MISTO",
+          "GIBILTERRA",
+          "REGNO_UNITO",
+          "COMPRA_SUDAFRICA",
+          "SUDAFRICA_CHIUSO",
+          "PRESO",
+          "NON_PRESO",
+          "PRESIDIO",
+          "NESSUNA_MINACCIA");
 
   private static final int MAX_MEMORIA = 5000;
   private static final Map<GameState, List<JsonObject>> MEMORIA =
@@ -127,7 +165,11 @@ public final class RegistroDecisioni {
 
   /** The outcome row of decision {@code id}. */
   static JsonObject esito(
-      final String id, final int round, final String nation, final String tipo, final JsonObject x) {
+      final String id,
+      final int round,
+      final String nation,
+      final String tipo,
+      final JsonObject x) {
     final JsonObject o = new JsonObject();
     o.addProperty("id", id);
     o.addProperty("riga", "esito");

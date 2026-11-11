@@ -362,6 +362,8 @@ public final class ProPlusTuning implements ProTuning {
       final ProOddsCalculator calc,
       final Map<Territory, games.strategy.triplea.ai.pro.data.ProTerritory> attackMap) {
     Impegno.rivedi(proData, calc, attackMap);
+    // step R4 (A3): the raid on Moscow's factory (switch "assedio")
+    Assedio.bombarda(proData, attackMap);
   }
 
   /** Step R2b: the commitment's orders with the operations' mandatory reserves added. */

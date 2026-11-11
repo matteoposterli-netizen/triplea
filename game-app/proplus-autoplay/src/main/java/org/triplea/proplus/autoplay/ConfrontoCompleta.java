@@ -25,6 +25,23 @@ final class ConfrontoCompleta {
 
   static final int PARALLEL = 20;
 
+  /** Step R4: per-game sections only up to this many games. */
+  static final int MAX_DETAIL = 12;
+
+  /** Step R4 (point 0): the reading of the XML, first end of round with the condition met. */
+  private static String xmlText(final JsonObject json) {
+    if (!json.has("vittoria") || !json.getAsJsonObject("vittoria").has("lettura_xml")) {
+      return "-";
+    }
+    final List<String> parts = new ArrayList<>();
+    for (final var e : json.getAsJsonObject("vittoria").getAsJsonObject("lettura_xml").entrySet()) {
+      if (e.getValue().getAsInt() > 0) {
+        parts.add(Riepilogo.allianceLabel(e.getKey()) + " R" + e.getValue().getAsInt());
+      }
+    }
+    return parts.isEmpty() ? "mai" : String.join("; ", parts);
+  }
+
   static void write(final StringBuilder md, final List<Game> games, final List<String> alliances) {
     final List<Game> complete =
         games.stream()
@@ -53,11 +70,12 @@ final class ConfrontoCompleta {
             + " in notifications.properties). Stallo = tetto di round o minuti senza vincitore"
             + " (non un errore). s/round = somma dei passi del round (tutte le nazioni).\n\n");
     md.append(
-        "| Partita | Esito | Round vittoria | Round giocati | Durata | Condizione vera (round) |");
+        "| Partita | Esito | Round vittoria | Lettura XML (round) | Round giocati | Durata |"
+            + " Condizione vera (round) |");
     for (final int[] b : BANDS) {
       md.append(" s/round ").append(bandLabel(b)).append(" |");
     }
-    md.append("\n|---|---|---|---|---|---|");
+    md.append("\n|---|---|---|---|---|---|---|");
     for (final int[] ignored : BANDS) {
       md.append("---|");
     }
@@ -72,6 +90,8 @@ final class ConfrontoCompleta {
           .append(" | ")
           .append(outcome.has("round_vittoria") ? outcome.get("round_vittoria").getAsString() : "-")
           .append(" | ")
+          .append(xmlText(j))
+          .append(" | ")
           .append(j.get("round_giocati").getAsInt())
           .append(" | ")
           .append(Riepilogo.duration(j.get("durata_s").getAsLong()))
@@ -84,7 +104,14 @@ final class ConfrontoCompleta {
       md.append('\n');
     }
 
-    for (final Game g : complete) {
+    // step R4: the tables per configuration
+    try {
+      ConfrontoR4.write(md, games, alliances);
+    } catch (final RuntimeException e) {
+      md.append("\n(tabelle per configurazione non scritte: ").append(e).append(")\n");
+    }
+    // one section per game only for small runs (200 games would be unreadable)
+    for (final Game g : complete.size() <= MAX_DETAIL ? complete : List.<Game>of()) {
       final JsonObject j = g.json();
       final List<Integer> rounds = everyFour(j);
       md.append("\n### ").append(g.folder()).append("\n\n");

@@ -44,10 +44,10 @@ import javax.annotation.Nullable;
  *
  * <ol>
  *   <li><b>Theater</b> ({@link Turno#teatro}, alliance choice at the start of the round, in the US
- *       turn): NORTH (base United Kingdom) or SOUTH (Morocco or Gibraltar). Open = the shuttle's sea
- *       zones toward its base are safe; one open = that one; both = the score "alliance hold x value
- *       of the best target"; at least {@code round_minimi_tra_cambi} between changes, never with a
- *       wave at sea. The shuttle and its base follow the theater.
+ *       turn): NORTH (base United Kingdom) or SOUTH (Morocco or Gibraltar). Open = the shuttle's
+ *       sea zones toward its base are safe; one open = that one; both = the score "alliance hold x
+ *       value of the best target"; at least {@code round_minimi_tra_cambi} between changes, never
+ *       with a wave at sea. The shuttle and its base follow the theater.
  *   <li><b>Coordinated landing</b>: PREPARATION = the landing force at the base is held out of
  *       Hard's attacks (it still defends the base); GREEN LIGHT in the US turn with win >= {@code
  *       soglia_via_libera} with the load of the transports in position AND the realistic Axis
@@ -70,6 +70,8 @@ public final class SbarcoCoordinato {
   public static final String KEY_TETTO = "Pro+ stratega r3a tetto: ";
   static final String NORD = "NORD";
   static final String SUD = "SUD";
+  private static final String AFRICA_TUTTE = "AFRICA";
+  private static final String FRANCIA_TUTTE = "FRANCIA";
 
   // ================================================================================ config
 
@@ -123,8 +125,7 @@ public final class SbarcoCoordinato {
         final JsonObject t = e.getValue().getAsJsonObject();
         theaters.put(
             e.getKey(),
-            new Teatro(
-                strings(t.getAsJsonArray("basi")), strings(t.getAsJsonArray("bersagli"))));
+            new Teatro(strings(t.getAsJsonArray("basi")), strings(t.getAsJsonArray("bersagli"))));
       }
       final Map<String, Integer> objectives = new LinkedHashMap<>();
       v(o, "obiettivi_nazionali_tolti")
@@ -543,8 +544,7 @@ public final class SbarcoCoordinato {
     final String alliance = ProPlusSettings.allianceOf(data, player).orElseThrow();
     final JsonObject st = stato(data.getProperties(), alliance);
     final int round = data.getSequence().getRound();
-    final String id =
-        RegistroDecisioni.nuovoId(st, round, player.getName(), "acquisto_programma");
+    final String id = RegistroDecisioni.nuovoId(st, round, player.getName(), "acquisto_programma");
     final JsonArray alt = new JsonArray();
     final JsonObject x = programma.deepCopy();
     alt.add(x);
@@ -686,6 +686,9 @@ public final class SbarcoCoordinato {
     final Programmi.Turno p;
     @Nullable IMoveDelegate moveDel;
 
+    /** Step R4 (B2, B3): only these units are loaded by {@link #piano} (null = any). */
+    @Nullable Predicate<Unit> filtro;
+
     Turno(
         final ProData proData,
         final ProOddsCalculator calc,
@@ -707,6 +710,17 @@ public final class SbarcoCoordinato {
 
     boolean usa() {
       return Programmi.USA.equals(player.getName());
+    }
+
+    /** Step R4 block B (switch "alleati_r4"). */
+    boolean r4() {
+      return SnodoAlleati.attivo(data, player);
+    }
+
+    /** Step R4 (B3): the landing program's units (followed by id). */
+    Predicate<Unit> delProgramma() {
+      final Set<String> ids = SnodoAlleati.programma(data, player);
+      return u -> ids.contains(u.getId().toString());
     }
 
     JsonObject parametri() {
@@ -779,8 +793,7 @@ public final class SbarcoCoordinato {
               keep.add(x);
               continue;
             }
-            final Territory t =
-                data.getMap().getTerritoryOrNull(x.get("bersaglio").getAsString());
+            final Territory t = data.getMap().getTerritoryOrNull(x.get("bersaglio").getAsString());
             final boolean held = t != null && dellAlleanza(data, alliance, t);
             final int after = round - since;
             out.addProperty("controllo", "tenuto dopo " + after + " round");
@@ -810,8 +823,7 @@ public final class SbarcoCoordinato {
             out.addProperty("unita_perse_in_mare", lost);
           }
           case "preso" -> {
-            final Territory t =
-                data.getMap().getTerritoryOrNull(x.get("bersaglio").getAsString());
+            final Territory t = data.getMap().getTerritoryOrNull(x.get("bersaglio").getAsString());
             final boolean taken = t != null && dellAlleanza(data, alliance, t);
             if (!taken && round - since < 6) {
               keep.add(x);
@@ -840,6 +852,10 @@ public final class SbarcoCoordinato {
 
     /** 1: the alliance's theater at the start of the round (US turn). */
     private void teatro() {
+      if (r4()) {
+        teatroR4();
+        return;
+      }
       final String current = st.has("teatro") ? st.get("teatro").getAsString() : null;
       final int since = st.has("teatro_dal") ? st.get("teatro_dal").getAsInt() : round;
       final Map<String, Boolean> open = new LinkedHashMap<>();
@@ -940,6 +956,11 @@ public final class SbarcoCoordinato {
     /** The first usable base of {@code theater}: land of the alliance. */
     @Nullable
     Territory baseTeatro(final String theater) {
+      if (r4() && SUD.equals(theater)) {
+        // step R4 (B1): the southern hub is Gibraltar
+        final Territory g = data.getMap().getTerritoryOrNull(ConfigR4.get().gibilterra());
+        return g != null && dellAlleanza(data, alliance, g) ? g : null;
+      }
       final Teatro t = cfg.teatri().get(theater);
       if (t == null) {
         return null;
@@ -1047,7 +1068,8 @@ public final class SbarcoCoordinato {
 
     /** Production + 10 VC + 10 capital (index of R2b) + the national objectives taken away. */
     double valore(final Territory t) {
-      return CampagnaOmbra.Calcolo.valoreIndice(t) + cfg.obiettiviTolti().getOrDefault(t.getName(), 0);
+      return CampagnaOmbra.Calcolo.valoreIndice(t)
+          + cfg.obiettiviTolti().getOrDefault(t.getName(), 0);
     }
 
     /** Targets of {@code theater} owned now by an enemy (at war with the nation if asked). */
@@ -1099,7 +1121,8 @@ public final class SbarcoCoordinato {
         }
         return;
       }
-      if (!usa()) {
+      if (!usa() || r4()) {
+        // step R4: the hub stays Gibraltar (or the United Kingdom)
         return;
       }
       // the most recent bridgehead of the theater, held, with safe zones
@@ -1151,7 +1174,15 @@ public final class SbarcoCoordinato {
       RegistroDecisioni.scrivi(
           data,
           RegistroDecisioni.decisione(
-              id, round, player.getName(), "cambio_base", alt, to.getName(), code, why, parametri()));
+              id,
+              round,
+              player.getName(),
+              "cambio_base",
+              alt,
+              to.getName(),
+              code,
+              why,
+              parametri()));
       st.addProperty("base", to.getName());
       st.addProperty("base_origine", "testa di ponte".equals(code) ? "testa di ponte" : "teatro");
       lines.add("  Base della spola: " + from + " -> " + to.getName() + " (" + why + ")");
@@ -1174,7 +1205,11 @@ public final class SbarcoCoordinato {
         why = "base " + base.getName() + " confinante con terra nemica: niente trattenute";
       } else {
         held.addAll(forzaAllaBase(base, true));
-        why = "PREPARAZIONE a " + base.getName();
+        if (r4()) {
+          // step R4 (B3): only the landing program's units are held, the others stay Hard's
+          held.removeIf(delProgramma().negate());
+        }
+        why = "PREPARAZIONE a " + base.getName() + (r4() ? " (solo unita' del programma)" : "");
       }
       final JsonArray alt = new JsonArray();
       final JsonObject a = new JsonObject();
@@ -1212,7 +1247,9 @@ public final class SbarcoCoordinato {
     private boolean toccaNemico(final Territory t) {
       return data.getMap().getNeighbors(t, Matches.territoryIsLand()).stream()
           .anyMatch(
-              n -> c.nemico(n.getOwner()) && data.getRelationshipTracker().isAtWar(player, n.getOwner()));
+              n ->
+                  c.nemico(n.getOwner())
+                      && data.getRelationshipTracker().isAtWar(player, n.getOwner()));
     }
 
     /** Land units at {@code base} of the nation ({@code own}) or of the USA and the UK. */
@@ -1245,7 +1282,8 @@ public final class SbarcoCoordinato {
         }
         for (final Unit tr :
             z.getMatches(
-                Matches.unitIsSeaTransportButNotCombatSeaTransport().and(Matches.unitIsOwnedBy(usa)))) {
+                Matches.unitIsSeaTransportButNotCombatSeaTransport()
+                    .and(Matches.unitIsOwnedBy(usa)))) {
           out.addAll(tr.getTransporting());
         }
       }
@@ -1271,8 +1309,8 @@ public final class SbarcoCoordinato {
 
     /**
      * The load of {@code nation}'s transports in position for {@code t}: the loaded transports that
-     * reach a free unload zone of {@code t} this turn, and the transports in the base's zones loaded
-     * with the nation's land units at the base (strongest first, minus {@code garrison}).
+     * reach a free unload zone of {@code t} this turn, and the transports in the base's zones
+     * loaded with the nation's land units at the base (strongest first, minus {@code garrison}).
      */
     Piano piano(final Territory t, final GamePlayer nation, final int garrison) {
       final List<Territory> unload =
@@ -1297,14 +1335,16 @@ public final class SbarcoCoordinato {
                     .and(Matches.unitHasMovementLeft())
                     .and(u -> u.getUnitAttachment().getTransportCost() > 0)
                     .and(u -> u.getUnitAttachment().getAttack(u.getOwner()) > 0)));
+        if (filtro != null) {
+          loadable.removeIf(filtro.negate());
+        }
         // the garrison stays: the cheapest first
         loadable.sort(
             Comparator.comparingInt((Unit u) -> u.getUnitAttachment().getTransportCost())
                 .thenComparing(u -> u.getId().toString()));
         loadable.subList(0, Math.min(garrison, loadable.size())).clear();
         loadable.sort(
-            Comparator.comparingInt(
-                    (Unit u) -> -u.getUnitAttachment().getAttack(u.getOwner()))
+            Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getAttack(u.getOwner()))
                 .thenComparing(u -> u.getId().toString()));
       }
       final List<Unit> transports = new ArrayList<>();
@@ -1319,7 +1359,7 @@ public final class SbarcoCoordinato {
       }
       transports.sort(Comparator.comparing(u -> u.getId().toString()));
       for (final Unit tr : transports) {
-        if (!tr.getUnloaded().isEmpty()) {
+        if (!tr.getUnloaded().isEmpty() || trasportiUsati.contains(tr)) {
           continue;
         }
         final Territory z = luogo(tr);
@@ -1328,6 +1368,9 @@ public final class SbarcoCoordinato {
         }
         final boolean loaded = tr.isTransporting();
         if (loaded && !tr.getTransporting().stream().allMatch(u -> u.isOwnedBy(nation))) {
+          continue;
+        }
+        if (loaded && filtro != null && !tr.getTransporting().stream().allMatch(filtro)) {
           continue;
         }
         if (!loaded && !baseZones.contains(z)) {
@@ -1379,8 +1422,7 @@ public final class SbarcoCoordinato {
                   && !x.anyUnitsMatch(Matches.enemyUnit(player));
       Route best = null;
       for (final Territory target : to) {
-        final Optional<Route> r =
-            data.getMap().getRouteForUnits(z, target, free, units, player);
+        final Optional<Route> r = data.getMap().getRouteForUnits(z, target, free, units, player);
         if (r.isPresent()
             && r.get().numberOfSteps() <= range
             && (best == null || r.get().numberOfSteps() < best.numberOfSteps())) {
@@ -1461,7 +1503,8 @@ public final class SbarcoCoordinato {
       for (final Territory z : p.zone(base)) {
         for (final Unit tr :
             z.getMatches(
-                Matches.unitIsSeaTransportButNotCombatSeaTransport().and(Matches.unitIsOwnedBy(uk)))) {
+                Matches.unitIsSeaTransportButNotCombatSeaTransport()
+                    .and(Matches.unitIsOwnedBy(uk)))) {
           if (p.distanzaMare(z, unload) > tr.getUnitAttachment().getMovement(uk)) {
             continue;
           }
@@ -1481,6 +1524,9 @@ public final class SbarcoCoordinato {
 
     /** The US: green light or wait, on the targets of the theater. Returns the wave's units. */
     private List<Unit> viaLiberaUsa() {
+      if (r4()) {
+        return viaLiberaR4();
+      }
       final String theater = st.get("teatro").getAsString();
       final List<Territory> targets = bersagliAttivi(theater, true);
       final JsonArray alt = new JsonArray();
@@ -1503,8 +1549,7 @@ public final class SbarcoCoordinato {
         a.addProperty("trasporti", plan.viaggi().size());
         a.addProperty("unita", plan.carico().size());
         a.addProperty("tuv", Math.round(c.tuv(plan.carico())));
-        a.addProperty(
-            "difensori_tuv", Math.round(c.tuv(t.getMatches(Matches.enemyUnit(player)))));
+        a.addProperty("difensori_tuv", Math.round(c.tuv(t.getMatches(Matches.enemyUnit(player)))));
         if (plan.carico().isEmpty()) {
           a.addProperty("esito", "NESSUN_CARICO");
           alt.add(a);
@@ -1512,7 +1557,8 @@ public final class SbarcoCoordinato {
         }
         final Stima s = stima(plan, true);
         final ViaLibera v =
-            viaLibera(s.vittoria(), s.contrattaccoAlleanza(), cfg.sogliaViaLibera(), cfg.sogliaTenuta());
+            viaLibera(
+                s.vittoria(), s.contrattaccoAlleanza(), cfg.sogliaViaLibera(), cfg.sogliaTenuta());
         a.addProperty("vittoria_pct", round1(s.vittoria()));
         a.addProperty("perdite_p80_tuv", round1(s.p80()));
         a.addProperty("superstiti_attesi", s.superstiti().size());
@@ -1523,8 +1569,7 @@ public final class SbarcoCoordinato {
         alt.add(a);
         if (v.via()) {
           final double value = valore(t);
-          if (value > bestValue
-              || (value == bestValue && s.vittoria() > bestStima.vittoria())) {
+          if (value > bestValue || (value == bestValue && s.vittoria() > bestStima.vittoria())) {
             bestValue = value;
             bestPlan = plan;
             bestStima = s;
@@ -1620,6 +1665,346 @@ public final class SbarcoCoordinato {
               bestPlan.carico().size(),
               bestPlan.viaggi().size()));
       return bestPlan.tutte();
+    }
+
+    // ------------------------------------------------------------- step R4 (B1, B2)
+
+    /** B1: the hub is Gibraltar when usable (the alliance's, no enemy warship in its zones). */
+    private void teatroR4() {
+      final String current = st.has("teatro") ? st.get("teatro").getAsString() : null;
+      final ConfigR4 r = ConfigR4.get();
+      final Territory g = data.getMap().getTerritoryOrNull(r.gibilterra());
+      final boolean allied = g != null && dellAlleanza(data, alliance, g);
+      int ships = 0;
+      if (g != null) {
+        for (final Territory z : p.zone(g)) {
+          ships +=
+              z.getMatches(
+                      Matches.enemyUnit(player)
+                          .and(Matches.unitIsSea())
+                          .and(Matches.unitIsSeaTransportButNotCombatSeaTransport().negate()))
+                  .size();
+        }
+      }
+      final boolean usable = SnodoAlleati.gibilterraUtilizzabile(allied, ships);
+      final String choice = usable ? SUD : NORD;
+      final JsonArray alt = new JsonArray();
+      final JsonObject a = new JsonObject();
+      a.addProperty("teatro", SUD);
+      a.addProperty("base", r.gibilterra());
+      a.addProperty("dell_alleanza", allied);
+      a.addProperty("navi_nemiche_nelle_zone", ships);
+      a.addProperty("utilizzabile", usable);
+      alt.add(a);
+      final JsonObject b = new JsonObject();
+      b.addProperty("teatro", NORD);
+      b.addProperty("base", "United Kingdom");
+      alt.add(b);
+      RegistroDecisioni.scrivi(
+          data,
+          RegistroDecisioni.decisione(
+              RegistroDecisioni.nuovoId(st, round, player.getName(), "teatro"),
+              round,
+              player.getName(),
+              "teatro",
+              alt,
+              choice,
+              usable ? "GIBILTERRA" : "REGNO_UNITO",
+              usable
+                  ? "Gibilterra dell'alleanza e senza navi da guerra nemiche nelle sue zone"
+                  : "Gibilterra non utilizzabile: base United Kingdom dall'Atlantico",
+              parametri()));
+      lines.add(
+          "  R4 snodo: "
+              + (usable
+                  ? "Gibilterra utilizzabile"
+                  : "Gibilterra NON utilizzabile ("
+                      + (allied ? ships + " navi nemiche" : "non dell'alleanza")
+                      + ")")
+              + " -> "
+              + choice);
+      final JsonObject rec = new JsonObject();
+      rec.addProperty("round", round);
+      rec.addProperty("teatro", choice);
+      rec.addProperty("aperto_nord", true);
+      rec.addProperty("aperto_sud", usable);
+      arr(st, "round_teatro").add(rec);
+      if (current == null || !current.equals(choice)) {
+        if (current != null) {
+          final JsonObject ch = new JsonObject();
+          ch.addProperty("round", round);
+          ch.addProperty("da", current);
+          ch.addProperty("a", choice);
+          ch.addProperty("motivo", usable ? "GIBILTERRA" : "REGNO_UNITO");
+          arr(st, "cambi").add(ch);
+        }
+        st.addProperty("teatro", choice);
+        st.addProperty("teatro_dal", round);
+        final Territory base = baseTeatro(choice);
+        if (current != null && base != null) {
+          cambiaBase(base, "CAMBIO_TEATRO", "lo snodo segue Gibilterra: base " + base.getName());
+        }
+      }
+    }
+
+    /** One option of the hub: the best target of a set for some units, with its numbers. */
+    record Opzione(Territory t, Piano piano, Stima stima, double valore, double punteggio) {}
+
+    /**
+     * Transports already taken by the African wave (step R4): the main wave does not count them.
+     */
+    private final Set<Unit> trasportiUsati = new HashSet<>();
+
+    /**
+     * B2: among {@code targets} the one with the green light and the highest score (alliance hold x
+     * value with the gain of rule C); every alternative goes to {@code alt} with its numbers.
+     */
+    @Nullable
+    private Opzione migliore(
+        final List<Territory> targets,
+        final Predicate<Unit> units,
+        final int garrison,
+        final JsonArray alt,
+        final String label) {
+      Opzione best = null;
+      for (final Territory t : targets) {
+        filtro = units;
+        final Piano plan = piano(t, player, garrison);
+        filtro = null;
+        final Reddito.Guadagno g = Reddito.guadagno(data, player, t);
+        final double value =
+            CampagnaOmbra.Calcolo.valoreIndice(t) + g.bonusOttenuti() + g.bonusTolti();
+        final JsonObject a = g.json();
+        a.addProperty("gruppo", label);
+        a.addProperty("territorio", t.getName());
+        a.addProperty("valore", round1(value));
+        a.addProperty("unita", plan.carico().size());
+        a.addProperty("trasporti", plan.viaggi().size());
+        if (plan.carico().isEmpty()) {
+          a.addProperty("esito", "NESSUN_CARICO");
+          alt.add(a);
+          continue;
+        }
+        final Stima s = stima(plan, true);
+        final ViaLibera v =
+            viaLibera(
+                s.vittoria(), s.contrattaccoAlleanza(), cfg.sogliaViaLibera(), cfg.sogliaTenuta());
+        final double score = (100 - s.contrattaccoAlleanza()) / 100.0 * value;
+        a.addProperty("vittoria_pct", round1(s.vittoria()));
+        a.addProperty("tenuta_alleanza_pct", round1(100 - s.contrattaccoAlleanza()));
+        a.addProperty("punteggio", round1(score));
+        a.addProperty("esito", v.codice());
+        alt.add(a);
+        if (v.via()
+            && (best == null
+                || score > best.punteggio()
+                || (score == best.punteggio() && s.vittoria() > best.stima().vittoria()))) {
+          best = new Opzione(t, plan, s, value, score);
+        }
+      }
+      return best;
+    }
+
+    private List<Territory> nemiciInGuerra(final List<String> names) {
+      final List<Territory> out = new ArrayList<>();
+      for (final String n : names) {
+        final Territory t = data.getMap().getTerritoryOrNull(n);
+        if (t != null
+            && !t.isWater()
+            && c.nemico(t.getOwner())
+            && data.getRelationshipTracker().isAtWar(player, t.getOwner())) {
+          out.add(t);
+        }
+      }
+      return out;
+    }
+
+    /**
+     * B2: the US choice at the hub: while the Axis has North Africa the fast program units go to
+     * Africa (Morocco, or an Axis territory of North Africa), the rest to the best-scoring target
+     * of all; otherwise everything to the best-scoring target. Writes snodo_usa and the wave(s).
+     */
+    private List<Unit> viaLiberaR4() {
+      final ConfigR4 r = ConfigR4.get();
+      final int garrison = presidioBase();
+      final Predicate<Unit> prog = delProgramma();
+      final Predicate<Unit> fast = u -> SnodoAlleati.veloce(u, r);
+      final boolean axisNa = SnodoAlleati.asseInNordAfrica(data, player);
+      final List<Territory> africa = nemiciInGuerra(r.bersagliAfrica());
+      final List<Territory> france = nemiciInGuerra(r.bersagliFrancia());
+      final List<Territory> all = new ArrayList<>(africa);
+      all.addAll(france);
+      final JsonArray alt = new JsonArray();
+      trasportiUsati.clear();
+      final Opzione onlyAfrica = migliore(africa, prog, garrison, alt, AFRICA_TUTTE);
+      final Opzione onlyFrance = migliore(france, prog, garrison, alt, FRANCIA_TUTTE);
+      Opzione fastWave = null;
+      Opzione restWave;
+      if (axisNa) {
+        final List<Territory> fastTargets = new ArrayList<>();
+        final Territory morocco = data.getMap().getTerritoryOrNull("Morocco");
+        if (morocco != null && dellAlleanza(data, alliance, morocco)) {
+          fastTargets.add(morocco);
+        } else {
+          africa.stream()
+              .filter(t -> r.nordAfrica().contains(t.getName()))
+              .forEach(fastTargets::add);
+        }
+        fastWave = migliore(fastTargets, prog.and(fast), garrison, alt, "VELOCI_AFRICA");
+        if (fastWave != null) {
+          fastWave.piano().viaggi().forEach(v -> trasportiUsati.add(v.trasporto()));
+        }
+        final Set<Unit> fastCargo =
+            fastWave == null ? Set.of() : new HashSet<>(fastWave.piano().carico());
+        restWave = migliore(all, prog.and(u -> !fastCargo.contains(u)), garrison, alt, "RESTO");
+        trasportiUsati.clear();
+      } else {
+        restWave =
+            onlyAfrica == null
+                ? onlyFrance
+                : onlyFrance == null || onlyAfrica.punteggio() >= onlyFrance.punteggio()
+                    ? onlyAfrica
+                    : onlyFrance;
+      }
+      final Optional<String> choice =
+          SnodoAlleati.sceltaSnodo(
+              fastWave != null, restWave == null ? null : restWave.t().getName(), r);
+      final JsonObject par = parametri();
+      par.addProperty("asse_in_nord_africa", axisNa);
+      par.addProperty("base", base() == null ? "" : base().getName());
+      par.addProperty("unita_del_programma", SnodoAlleati.programma(data, player).size());
+      // waiting: the reason of the loaded alternative closest to the green light (as in R3a)
+      String waitCode = alt.isEmpty() ? "NESSUN_BERSAGLIO" : "NESSUN_CARICO";
+      double closest = -1;
+      for (final var e : alt) {
+        final JsonObject a = e.getAsJsonObject();
+        if (a.has("vittoria_pct") && a.get("vittoria_pct").getAsDouble() > closest) {
+          closest = a.get("vittoria_pct").getAsDouble();
+          waitCode = a.get("esito").getAsString();
+        }
+      }
+      final String code = choice.orElse(waitCode);
+      final String why =
+          choice.isEmpty()
+              ? "nessun bersaglio con via libera"
+              : (fastWave != null ? "veloci su " + fastWave.t().getName() : "")
+                  + (fastWave != null && restWave != null ? ", " : "")
+                  + (restWave != null
+                      ? "resto su "
+                          + restWave.t().getName()
+                          + " (punteggio "
+                          + round1(restWave.punteggio())
+                          + ")"
+                      : "");
+      final String id = RegistroDecisioni.nuovoId(st, round, player.getName(), "snodo_usa");
+      RegistroDecisioni.scrivi(
+          data,
+          RegistroDecisioni.decisione(
+              id,
+              round,
+              player.getName(),
+              "snodo_usa",
+              alt,
+              choice.orElse("attesa"),
+              code,
+              why,
+              par));
+      lines.add("  R4 snodo USA: " + choice.orElse("ATTESA") + " (" + why + ")");
+      st.remove("ondata");
+      st.remove("ondata_africa");
+      final List<Unit> out = new ArrayList<>();
+      if (restWave != null) {
+        st.add(
+            "ondata",
+            onda(restWave, fastWave == null ? "programma" : "resto", id, choice.orElse("")));
+        out.addAll(restWave.piano().tutte());
+      }
+      if (fastWave != null) {
+        st.add(
+            restWave == null ? "ondata" : "ondata_africa",
+            onda(fastWave, "veloci", id, choice.orElse("")));
+        out.addAll(fastWave.piano().tutte());
+      }
+      return out;
+    }
+
+    private JsonObject onda(
+        final Opzione o, final String filter, final String id, final String choice) {
+      final JsonObject w = new JsonObject();
+      w.addProperty("round", round);
+      w.addProperty("nazione", player.getName());
+      w.addProperty("bersaglio", o.t().getName());
+      w.addProperty("id", id);
+      w.addProperty("filtro", filter);
+      w.addProperty("snodo", choice);
+      w.addProperty("vittoria_pct", round1(o.stima().vittoria()));
+      w.addProperty("perdite_p80_tuv", round1(o.stima().p80()));
+      w.addProperty("tenuta_alleanza_pct", round1(100 - o.stima().contrattaccoAlleanza()));
+      w.addProperty("tenuta_usa_pct", round1(100 - o.stima().contrattaccoSolo()));
+      w.addProperty("unita", o.piano().carico().size());
+      w.addProperty("rinforzi_uk_stimati", o.stima().rinforzi().size());
+      w.addProperty("presidio_base", presidioBase());
+      w.addProperty("eseguito", false);
+      return w;
+    }
+
+    /** The units a wave loads (step R4), from its filter; null = any (R3a). */
+    @Nullable
+    private Predicate<Unit> filtroOndata(final JsonObject w) {
+      if (!w.has("filtro")) {
+        return null;
+      }
+      final ConfigR4 r = ConfigR4.get();
+      final Predicate<Unit> prog = delProgramma();
+      final Predicate<Unit> fast = u -> SnodoAlleati.veloce(u, r);
+      return switch (w.get("filtro").getAsString()) {
+        case "veloci" -> prog.and(fast);
+        default -> prog;
+      };
+    }
+
+    /** B2: the African wave of the fast units, before the main wave. */
+    private Set<Unit> ondataAfrica(final int garrison) {
+      final Set<Unit> moved = new LinkedHashSet<>();
+      final JsonObject w = st.getAsJsonObject("ondata_africa");
+      if (w.get("round").getAsInt() != round || w.get("eseguito").getAsBoolean()) {
+        return moved;
+      }
+      final Territory t = data.getMap().getTerritoryOrNull(w.get("bersaglio").getAsString());
+      if (t == null) {
+        return moved;
+      }
+      filtro = filtroOndata(w);
+      final Piano plan = piano(t, player, garrison);
+      filtro = null;
+      final int landed = esegui(plan, t, moved);
+      w.addProperty("eseguito", landed > 0);
+      w.addProperty("unita_sbarcate", landed);
+      final String id = RegistroDecisioni.nuovoId(st, round, player.getName(), "sbarco");
+      final JsonArray alt = new JsonArray();
+      final JsonObject a = new JsonObject();
+      a.addProperty("territorio", t.getName());
+      a.addProperty("unita_previste", plan.carico().size());
+      a.addProperty("unita_sbarcate", landed);
+      a.addProperty("trasporti", plan.viaggi().size());
+      a.addProperty("vittoria_pct", w.get("vittoria_pct").getAsDouble());
+      a.addProperty("filtro", "veloci");
+      alt.add(a);
+      RegistroDecisioni.scrivi(
+          data,
+          RegistroDecisioni.decisione(
+              id,
+              round,
+              player.getName(),
+              "sbarco",
+              alt,
+              t.getName(),
+              landed > 0 ? "ESEGUITO" : "NON_ESEGUITO",
+              "unita' veloci in Africa: " + landed,
+              parametri()));
+      st.add("ondata_africa", w);
+      lines.add("  SBARCO USA (veloci, Africa) su " + t.getName() + ": " + landed + " unita'");
+      return moved;
     }
 
     /** The case-c garrison of the base (Impegno's port garrison when the base is the port). */
@@ -1730,7 +2115,8 @@ public final class SbarcoCoordinato {
           }
           final Stima s = stima(plan, false);
           final ViaLibera v =
-              viaLibera(s.vittoria(), s.contrattaccoSolo(), cfg.sogliaViaLibera(), cfg.sogliaTenuta());
+              viaLibera(
+                  s.vittoria(), s.contrattaccoSolo(), cfg.sogliaViaLibera(), cfg.sogliaTenuta());
           a.addProperty("vittoria_pct", round1(s.vittoria()));
           a.addProperty("tenuta_uk_pct", round1(100 - s.contrattaccoSolo()));
           a.addProperty("esito", v.codice());
@@ -1808,7 +2194,8 @@ public final class SbarcoCoordinato {
               cap ? "Hard non compra trasporti" : "Hard compra come sempre",
               cap ? "TRASPORTO_FERMO_VUOTO" : "NESSUN_FERMO_VUOTO",
               cap
-                  ? idle + " trasporti fermi e vuoti entro 2 zone dal porto: niente trasporti a Hard"
+                  ? idle
+                      + " trasporti fermi e vuoti entro 2 zone dal porto: niente trasporti a Hard"
                   : "nessun trasporto fermo e vuoto utilizzabile",
               parametri()));
       final JsonObject open = new JsonObject();
@@ -1849,8 +2236,15 @@ public final class SbarcoCoordinato {
       if (t == null || !c.nemico(t.getOwner())) {
         return moved;
       }
-      final int garrison = plan.has("presidio_base") ? plan.get("presidio_base").getAsInt() : presidioBase();
+      final int garrison =
+          plan.has("presidio_base") ? plan.get("presidio_base").getAsInt() : presidioBase();
+      // step R4 (B2): the African wave of the fast units first, then the main wave without them
+      if (usa() && r4() && st.has("ondata_africa")) {
+        moved.addAll(ondataAfrica(garrison));
+      }
+      filtro = filtroOndata(plan);
       final Piano piano = piano(t, player, garrison);
+      filtro = null;
       final int landed = esegui(piano, t, moved);
       plan.addProperty("eseguito", landed > 0);
       plan.addProperty("unita_sbarcate", landed);
@@ -1868,7 +2262,8 @@ public final class SbarcoCoordinato {
       a.addProperty("unita_previste", piano.carico().size());
       a.addProperty("unita_sbarcate", landed);
       a.addProperty("trasporti", piano.viaggi().size());
-      a.addProperty("vittoria_pct", plan.has("vittoria_pct") ? plan.get("vittoria_pct").getAsDouble() : -1);
+      a.addProperty(
+          "vittoria_pct", plan.has("vittoria_pct") ? plan.get("vittoria_pct").getAsDouble() : -1);
       alt.add(a);
       RegistroDecisioni.scrivi(
           data,
@@ -1923,8 +2318,7 @@ public final class SbarcoCoordinato {
         group.addAll(cargo);
         Territory at = v.da();
         if (v.rotta().numberOfSteps() > 0) {
-          final Optional<String> error =
-              moveDel.performMove(new MoveDescription(group, v.rotta()));
+          final Optional<String> error = moveDel.performMove(new MoveDescription(group, v.rotta()));
           if (error.isPresent()) {
             ProLogger.warn("[Pro+] R3a: rotta non riuscita " + error.get());
             moved.addAll(group);
@@ -1960,7 +2354,11 @@ public final class SbarcoCoordinato {
       // the landing force still at the base stays (it defends the base)
       final Territory base = base();
       if (base != null && !toccaNemico(base)) {
-        held.addAll(forzaAllaBase(base, true));
+        final List<Unit> force = new ArrayList<>(forzaAllaBase(base, true));
+        if (r4()) {
+          force.removeIf(delProgramma().negate());
+        }
+        held.addAll(force);
       }
       salva(props, alliance, st);
       return held;
@@ -1989,8 +2387,10 @@ public final class SbarcoCoordinato {
       x.addProperty("tenuta_stimata_pct", w.get("tenuta_alleanza_pct").getAsDouble());
       x.addProperty("unita_sbarcate", w.get("unita_sbarcate").getAsInt());
       w.addProperty("esito", taken ? "preso" : "non preso");
-      final String id = w.has("id_sbarco") ? w.get("id_sbarco").getAsString() : w.get("id").getAsString();
-      RegistroDecisioni.scrivi(data, RegistroDecisioni.esito(id, round, player.getName(), "sbarco", x));
+      final String id =
+          w.has("id_sbarco") ? w.get("id_sbarco").getAsString() : w.get("id").getAsString();
+      RegistroDecisioni.scrivi(
+          data, RegistroDecisioni.esito(id, round, player.getName(), "sbarco", x));
       lines.add(
           String.format(
               Locale.ROOT,
@@ -2041,7 +2441,8 @@ public final class SbarcoCoordinato {
       if (t == null) {
         return held;
       }
-      final String id = a.has("id_sbarco") ? a.get("id_sbarco").getAsString() : a.get("id").getAsString();
+      final String id =
+          a.has("id_sbarco") ? a.get("id_sbarco").getAsString() : a.get("id").getAsString();
       if ("rinforzo".equals(kind)) {
         final int sent = rinforzo(t, held);
         final JsonObject x = new JsonObject();
@@ -2051,7 +2452,8 @@ public final class SbarcoCoordinato {
         a.addProperty("esito", "rinforzo " + sent);
         a.addProperty("rinforzi_arrivati", sent);
         RegistroDecisioni.scrivi(
-            data, RegistroDecisioni.esito(id, round, player.getName(), "rinforzo_testa_di_ponte", x));
+            data,
+            RegistroDecisioni.esito(id, round, player.getName(), "rinforzo_testa_di_ponte", x));
         lines.add("  Rinforzo britannico di " + t.getName() + ": " + sent + " unita' arrivate");
         return held;
       }
@@ -2064,9 +2466,13 @@ public final class SbarcoCoordinato {
       x.addProperty("bersaglio", t.getName());
       x.addProperty("preso", taken);
       x.addProperty("perdite_reali_tuv", Math.max(0, lost));
-      x.addProperty("perdite_p80_tuv", a.has("perdite_p80_tuv") ? a.get("perdite_p80_tuv").getAsDouble() : -1);
-      x.addProperty("vittoria_stimata_pct", a.has("vittoria_pct") ? a.get("vittoria_pct").getAsDouble() : -1);
-      x.addProperty("tenuta_stimata_pct", a.has("tenuta_pct") ? a.get("tenuta_pct").getAsDouble() : -1);
+      x.addProperty(
+          "perdite_p80_tuv",
+          a.has("perdite_p80_tuv") ? a.get("perdite_p80_tuv").getAsDouble() : -1);
+      x.addProperty(
+          "vittoria_stimata_pct", a.has("vittoria_pct") ? a.get("vittoria_pct").getAsDouble() : -1);
+      x.addProperty(
+          "tenuta_stimata_pct", a.has("tenuta_pct") ? a.get("tenuta_pct").getAsDouble() : -1);
       a.addProperty("esito", taken ? "preso" : "non preso");
       RegistroDecisioni.scrivi(
           data, RegistroDecisioni.esito(id, round, player.getName(), "rinforzo_testa_di_ponte", x));
@@ -2184,7 +2590,12 @@ public final class SbarcoCoordinato {
     final Map<String, Integer> out = new LinkedHashMap<>();
     for (final String k :
         List.of(
-            "base", "patria", "mare", "europa_occidentale", "mediterraneo_nord_africa", "altrove")) {
+            "base",
+            "patria",
+            "mare",
+            "europa_occidentale",
+            "mediterraneo_nord_africa",
+            "altrove")) {
       out.put(k, 0);
     }
     final List<String> home = cfg.patria().getOrDefault(player.getName(), List.of());

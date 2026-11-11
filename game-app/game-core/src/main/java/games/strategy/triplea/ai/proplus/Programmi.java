@@ -272,10 +272,19 @@ public final class Programmi {
       return UK.equals(player.getName());
     }
 
+    /** Step R4 (A4): Italy's Africa shuttle (switch "assedio"). */
+    boolean italia() {
+      return Assedio.italia(data, player);
+    }
+
     @Nullable
     Territory porto() {
       final Territory t =
-          data.getMap().getTerritoryOrNull(usa() ? cfg.portoUsa() : uk() ? cfg.portoUk() : "");
+          data.getMap()
+              .getTerritoryOrNull(
+                  usa()
+                      ? cfg.portoUsa()
+                      : uk() ? cfg.portoUk() : italia() ? ConfigR4.get().portoItalia() : "");
       return t != null && t.isOwnedBy(player) && t.anyUnitsMatch(Matches.unitCanProduceUnits())
           ? t
           : null;
@@ -292,6 +301,9 @@ public final class Programmi {
 
     @Nullable
     Territory base() {
+      if (italia()) {
+        return Assedio.baseAfrica(data, player);
+      }
       if (!usa()) {
         return null;
       }
@@ -317,7 +329,7 @@ public final class Programmi {
 
     /** The shuttle's sea zones: the port's, the route to the nearest base zone, the base's. */
     List<Territory> zoneSpola() {
-      if (usa() && puoScaricare()) {
+      if ((usa() || italia()) && puoScaricare()) {
         return zoneSpolaVerso(base());
       }
       return List.copyOf(new LinkedHashSet<>(zone(porto())));
@@ -409,6 +421,11 @@ public final class Programmi {
                       .and(Matches.unitIsNotInfrastructure())
                       .and(u -> u.getUnitAttachment().getTransportCost() > 0)
                       .and(u -> u.getUnitAttachment().getAttack(u.getOwner()) > 0)));
+      if (usa() && SnodoAlleati.attivo(data, player)) {
+        // step R4 (B3): only the landing program's units are the shuttle's
+        final Set<String> program = SnodoAlleati.programma(data, player);
+        units.removeIf(u -> !program.contains(u.getId().toString()));
+      }
       // the garrison: the cheapest stay (infantry first)
       units.sort(
           Comparator.comparingInt((Unit u) -> u.getUnitAttachment().getTransportCost())
@@ -426,12 +443,13 @@ public final class Programmi {
       final Territory port = porto();
       final JsonObject p = new JsonObject();
       turn.add("programma", p);
-      p.addProperty("nome", usa() ? "USA" : "forza da sbarco UK");
+      p.addProperty(
+          "nome", usa() ? "USA" : italia() ? "spola Africa Italia" : "forza da sbarco UK");
       p.addProperty("pu", pu);
       if (port == null || pu <= 0) {
         lines.add(
             "  Programma "
-                + (usa() ? "USA" : "Regno Unito")
+                + (usa() ? "USA" : italia() ? "Italia (Africa)" : "Regno Unito")
                 + ": "
                 + (port == null ? "nessun porto con fabbrica propria" : "0 PU")
                 + " -> tutto a Hard");
@@ -493,7 +511,7 @@ public final class Programmi {
               "  Programma %s: %d PU; porto %s: trasporti %d (al porto entro 2 zone: %d fermi vuoti,"
                   + " %d carichi), posti liberi %d, truppe in attesa %d, scorta necessaria %d ->"
                   + " carico bilanciato: %s (%d PU), il resto a Hard",
-              usa() ? "USA" : "Regno Unito (forza da sbarco)",
+              usa() ? "USA" : italia() ? "Italia (spola Africa)" : "Regno Unito (forza da sbarco)",
               pu,
               port.getName(),
               total,
@@ -608,7 +626,7 @@ public final class Programmi {
       final Territory port = porto();
       final JsonObject s = new JsonObject();
       turn.add("spola", s);
-      if (!usa() || port == null) {
+      if (!(usa() || italia()) || port == null) {
         return held;
       }
       final List<Territory> portZones = zone(port);
@@ -621,9 +639,16 @@ public final class Programmi {
       int brought = 0;
       int back = 0;
       int waitingLoaded = 0;
+      // step R4 (B2): with program units waiting at the hub the empty transports there stay (the
+      // landing from the hub loads them)
+      final boolean stayAtHub =
+          usa() && unload && SnodoAlleati.attivo(data, player) && attesaAllaBase(base) > 0;
       // 1 the empty ones back to the port (from the shuttle's zones or within 2 zones of it)
       for (final Unit tr : trasporti()) {
         final Territory z = dove(tr);
+        if (stayAtHub && baseZones.contains(z) && !tr.isTransporting()) {
+          continue;
+        }
         if (z == null
             || tr.isTransporting()
             || !tr.getUnloaded().isEmpty()
@@ -639,6 +664,11 @@ public final class Programmi {
       // 2 load at the port (transports there, also those just arrived)
       final List<Unit> waiting = new ArrayList<>(inAttesa(port, garrison));
       waiting.removeIf(u -> !Matches.unitHasMovementLeft().test(u));
+      if (usa() && SnodoAlleati.attivo(data, player)) {
+        // step R4 (B3): the shuttle carries only the landing program's units (followed by id)
+        final Set<String> program = SnodoAlleati.programma(data, player);
+        waiting.removeIf(u -> !program.contains(u.getId().toString()));
+      }
       waiting.sort(
           Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getTransportCost())
               .thenComparing(u -> u.getId().toString()));
@@ -724,16 +754,19 @@ public final class Programmi {
       lines.add(
           String.format(
                   Locale.ROOT,
-                  "  Spola USA (%s): caricate %d unita' a %s, %d trasporti carichi in rotta, %d unita'"
+                  "  Spola "
+                      + (italia() ? "Italia" : "USA")
+                      + " (%s): caricate %d unita' a %s, %d trasporti carichi in rotta, %d unita'"
                       + " scaricate a %s, %d trasporti vuoti in rientro%s",
                   unload
-                      ? "in guerra, scarico a " + cfg.baseAvanzataUsa()
+                      ? "in guerra, scarico a "
+                          + (italia() && base != null ? base.getName() : cfg.baseAvanzataUsa())
                       : "prima della guerra: niente scarico nel Regno Unito, carichi pronti sulla costa est",
                   loadedNow,
                   port.getName(),
                   sailed,
                   brought,
-                  cfg.baseAvanzataUsa(),
+                  italia() && base != null ? base.getName() : cfg.baseAvanzataUsa(),
                   back,
                   waitingLoaded > 0
                       ? ", " + waitingLoaded + " trasporti carichi fermi al porto"
@@ -746,6 +779,19 @@ public final class Programmi {
                   ready,
                   refused.isEmpty() ? "" : "; rifiuti: " + String.join(" | ", refused)));
       return held;
+    }
+
+    /** Step R4: the landing program's land units waiting at {@code base}. */
+    private int attesaAllaBase(@Nullable final Territory base) {
+      if (base == null) {
+        return 0;
+      }
+      final Set<String> program = SnodoAlleati.programma(data, player);
+      return (int)
+          base.getUnitCollection().stream()
+              .filter(u -> u.isOwnedBy(player) && program.contains(u.getId().toString()))
+              .filter(u -> u.getUnitAttachment().getTransportCost() > 0)
+              .count();
     }
 
     /** Unloads the own cargo of {@code group} from {@code z} to {@code land}; units unloaded. */

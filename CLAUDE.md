@@ -200,6 +200,11 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   ponte, tetto ai trasporti), `ai/proplus/RegistroDecisioni` (`impegno-decisioni.jsonl`), hook `ProTuning.buysSeaTransports` e
   `ProTuning.amphibiousHeldUnits` (default = Hard; in `ProPurchaseAi` e `ProCombatMoveAi`), `ProPurchaseOptionMap.withoutSeaTransports`,
   `ProPlusAi.playCoordinatedLanding`; autoplay `RegistroLettura`, `ConfrontoR3a`. Vedi "Sbarco coordinato e teatri (step R3a)".
+- Step R4 STRATEGIA COMPLETA: `ai/proplus/ConfigR4` (dati `impegno.r4`), `Reddito` (regola C), `Assedio` (blocco A, interruttore
+  `assedio`), `SnodoAlleati` (blocco B, interruttore `alleati_r4`; snodo e ondate in `SbarcoCoordinato.teatroR4`/`viaLiberaR4`),
+  `StrategaInterruttori.ASSEDIO`/`ALLEATI_R4`, `ProPurchaseOrders.Mandatory.factory` (facoltativo, usato da `ProPlanPurchase`),
+  `Assedio.bombarda` dall'hook `reviewAttacks`; autoplay `MonitorR4`, `ConfrontoR4`, `Vittoria.letturaXml`/`letturaNote`. Vedi
+  "Strategia completa (step R4)" e "Scelte di R4".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -480,6 +485,11 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   `fino_a_vittoria`): per partita esito, round della vittoria, round giocati, durata, s/round per fasce R1-R12, R13-R24, R25-R36, R37+;
   per partita VC e reddito / TUV per nazione ogni 4 round e capitali cadute/liberate col round; stima della CI per 60 partite complete
   (20 in parallelo). Senza `--fino-a-vittoria` il runner si comporta come prima.
+  **Dallo step R4** `[completa]` = 5 configurazioni x 40 semi 1141-1180 = 200 partite senza chiave (costo 0), mescolate per seme,
+  `max-parallel` 20: a `Hard-vs-Hard`, c1 `Asse-impegno-vs-Hard` (`Axis=impegno`), c1n `Asse-impegno-assedio-vs-Hard`
+  (`Axis=impegno+assedio`), c2 `Hard-vs-Alleati-R3a` (`Allies=impegno`), c2n `Hard-vs-Alleati-R3a-R4` (`Allies=impegno+alleati_r4`);
+  `publish` timeout 45 min, riepilogo nel sommario della run troncato a 900 KB (completo nello zip). Tabelle per configurazione in
+  "Partite complete" (`ConfrontoR4`).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2384,6 +2394,149 @@ combattimento prima di Hard (poi `holdCombat` delle unita' mosse e `forgetStored
 15. **Registro**: tipo in piu' `campagna_testa_di_ponte` (le campagne da una testa di ponte non sono "Africa"); `acquisto_programma` e
     `spola` registrano le decisioni R2c dei programmi (gia' esistenti) per i conteggi.
 16. **Regioni delle tabelle**: liste scelte (`impegno.r3a.regioni`); la "base" senza R3a (Hard vs Hard) e' United Kingdom.
+
+### Strategia completa (step R4)
+
+Due blocchi nuovi, ciascuno dietro un interruttore proprio di `StrategaInterruttori` (default dal file dati `stratega-llm.json`
+`impegno.r4.assedio_acceso_di_default` / `alleati_r4_acceso_di_default` = **false**: spenti = comportamento di R3a/R2c), entrambi
+sopra `impegno` (attivi solo con `impegno` acceso; autoplay `--stratega-acceso Axis=impegno+assedio`, `Allies=impegno+alleati_r4`;
+etichette "[con assedio]", "[con alleati_r4]"). Regola comune C (reddito e bonus). Valori in `impegno.r4` (`ConfigR4`), ognuno
+`{"valore", "origine"}` ("scelto", "richiesta dello step R4" o "dalla mappa"), nessuno tarato. Nessun cambio al livello LLM, tenute
+spente, Russia = Hard. Classi nuove: `ai/proplus/ConfigR4`, `Reddito` (C), `Assedio` (A), `SnodoAlleati` (B, parti pure e Regno Unito);
+autoplay `MonitorR4`, `ConfrontoR4`.
+- **0 Regola di vittoria** (verificata nel motore): `EndRoundDelegate` (proprieta' "Triggered Victory" = true; "Total Victory" e
+  "Honorable Surrender" spente) prova a ogni fine round i trigger di vittoria e chiama `TriggerAttachment.triggerVictory`, che chiude la
+  partita solo se il testo `victory` del trigger e' una chiave di `notifications.properties`: sulla mappa non lo e' (3 righe, solo
+  dichiarazioni di guerra) ⇒ **nel client di una persona la partita non finisce mai da sola**; il giocatore applica le note della mappa
+  ("maintain it for a complete round of play"). L'autoplay finisce quindi con la **lettura delle note** (condizione vera a fine N-1 e
+  N ⇒ vittoria al round N) e registra anche la **lettura dell'XML** (primo fine round con la condizione vera: cio' che farebbe il
+  trigger se il messaggio esistesse): `riepilogo.json` `vittoria.lettura_xml` / `vittoria.lettura_note` per alleanza
+  (`Vittoria.letturaXml`/`letturaNote`), colonna "Lettura XML" nella tabella delle partite complete.
+- **A1 Germania** (`Assedio.bersagli`, `livelliGermania`, chiamato da `Impegno.scegliObiettivo`): livello 1 = fabbriche russe
+  (`fabbriche_russe` Novgorod, Ukraine, Volgograd: factory_minor dei Russians a inizio partita) di un nemico in guerra; Mosca
+  (`capitale_russa` = Russia) a livello 1 solo con nessuna fabbrica rimasta, a livello 0 se il calcolatore di Hard con tutte le unita'
+  in portata da' >= `soglia_mosca` 70 nel turno (`vittoriaMosca`); in quel caso l'obiettivo corrente viene chiuso subito
+  (`moscaOra`, eccezione all'inerzia di R2b). I territori russi sulla strada sono le tappe (meccanismo di R2b). Senza bersagli (guerra non
+  ancora dichiarata, tutto preso) vale la regola di R2b.
+- **A2 Rinforzi** (`fabbricheCatturate`, `fabbricaOperazione`): gli ordini dell'operazione tedesca vanno nella fabbrica catturata piu'
+  vicina a Mosca (poi le altre in `fabbriche_extra`), il piazzamento verifica la capacita' (`ProPlanPurchase.canPlace`). Mappa: una
+  fabbrica catturata produce 3 unita' (factory_minor `canProduceXUnits` 3; factory_major `whenCapturedChangesInto` factory_minor) meno il
+  danno. Registro `rinforzo_fabbrica` con l'esito (unita' piazzate per territorio).
+- **A3 Bombardamento di Mosca** (`bombardieriDaComprare` all'acquisto, `trattenute`, `bombarda` dall'hook `reviewAttacks`,
+  `nonCombattimento`): se Mosca produce (capacita' = 10 − danno > 0) e c'e' una base sicura entro meta' movimento del bombardiere
+  (3 territori, contrattacco <= 40), si comprano dalla quota dell'operazione bombardieri fino a coprire la produzione col danno atteso
+  (`ceil(produzione / danno atteso)`, danno atteso = (1 − 1/6 antiaerea) x (3,5 + 2) = 4,58, max 2 per turno) e un caccia di scorta se
+  a Mosca ci sono intercettori (max 1 per turno); i bombardieri che raggiungono Mosca e possono atterrare dopo sono tolti agli attacchi di
+  Hard (`Assedio.trattenute` in `ProPlusAi.purchase`) e nel combattimento entrano come incursione (`ProTerritory.getBombers` di Russia: Hard
+  li muove con `isBombing`, il motore chiede il bersaglio e l'AI sceglie la fabbrica), con la scorta (caccia `canEscort`) se ci sono
+  intercettori. Nel non combattimento: esito (danno fatto, bombardieri/scorta persi = mandati − ancora su Mosca), bombardieri fermi
+  verso la base; al turno tedesco dopo l'esito "unita' prodotte da Mosca" (unita' russe nuove a Mosca). Regole verificate: danno alle
+  unita' (`Damage From Bombing Done To Units Instead Of Territories` true), `Use Bombing Max Dice Sides And Bonus` true (bomber d6+2),
+  antiaerea propria della fabbrica (`isAAforBombingThisUnitOnly`), intercettori (`Raids May Be Preceeded By Air Battles` true), maxDamage
+  20, riparazione a carico della Russia. Hard non lo fa: `ProCombatMoveAi.determineTerritoriesThatCanBeBombed` evita i territori con
+  possibili intercettori e le fabbriche con antiaerea.
+- **A4 Italia** (`livelliItalia`, `acquistiItalia`, `Programmi` con porto/base italiani): livello 1 Egitto + Nord Africa
+  (`italia_livello1`), livello 2 resto dell'Africa e a est dell'Egitto (`italia_livello2`, raggiungibili via terra senza neutrali veri;
+  Persia, Northwest Persia, Eastern Persia attaccabili: Italians-Neutral_Allies = Unfriendly_Neutral, archetipo guerra); finche' ce n'e'
+  uno nemico solo questi (mai la Russia). Acquisti: l'Africa e' via mare ⇒ niente ordine della campagna; la quota va alla **spola italiana**
+  (`porto_italia` Northern Italy, capacita' 10, zone 95/97 a una zona dalla 96; base = prima dell'Asse in `basi_africa_italia`) col
+  carico bilanciato degli USA; con Egitto e Nord Africa dell'Asse la quota compra navi (`tipi_flotta_italia` destroyer, cruiser). Le truppe
+  della spola sono seguite per id dalla campagna (instradamento verso il raduno una volta in Africa). **Gibilterra dell'Asse NON fatta**
+  (facoltativa: rimandata; tipo `gibilterra_asse` riservato nel registro, mai scritto).
+- **B1 Snodo** (`SbarcoCoordinato.teatroR4`, `SnodoAlleati.gibilterraUtilizzabile`): teatro SUD con base Gibraltar se e' dell'alleanza e
+  nelle sue zone (91, 92) non ci sono navi da guerra nemiche (trasporti puri esclusi), altrimenti NORD (United Kingdom); niente soglia del
+  40%, niente inerzia; la base non diventa piu' una testa di ponte (resta Gibilterra o il Regno Unito).
+- **B2 Scelta dello snodo** (`viaLiberaR4`, `SnodoAlleati.sceltaSnodo`): ogni round USA, bersagli = `bersagli_africa` (Nord Africa,
+  Sardinia, Sicily, Southern Italy) + `bersagli_francia` (Southern France, Normandy Bordeaux) nemici in guerra; per ognuno piano di carico,
+  stima e via libera di R3a (vittoria >= 70, contrattacco d'alleanza <= 40), punteggio = tenuta d'alleanza x valore (indice + bonus
+  ottenuti + bonus tolti, regola C). Con l'Asse in Nord Africa: le unita' veloci del programma (terra, movimento >= 2) in Marocco se e'
+  alleato (scarico) o sul bersaglio nordafricano migliore, il resto sul bersaglio migliore di tutti con trasporti diversi ⇒ MISTO se il
+  resto va in Francia, AFRICA altrimenti; senza Asse in Nord Africa tutto sul migliore (AFRICA o FRANCIA). Due ondate (`ondata_africa`
+  eseguita prima, poi `ondata`), ognuna con il suo filtro. Registro `snodo_usa` (alternative con i numeri per gruppo AFRICA, FRANCIA,
+  VELOCI_AFRICA, RESTO).
+- **B3 Forza trattenuta** (`delProgramma`): solo le unita' comprate dal programma di sbarco, seguite per id (`programma_ids` della nazione
+  in `Impegno.dopoIlPiazzamento`); la spola USA carica solo quelle; le altre restano a Hard.
+- **B4 Regno Unito** (`SnodoAlleati.acquistiSudafrica`, `nord`): PU nell'ordine Londra (presidio caso c), Africa, forza da sbarco: nella
+  fabbrica Union of South Africa (factory_minor, 3 unita') fino alla capacita' `tipi_sudafrica` (mech_infantry, armour) finche' l'Asse ha
+  territori in Africa o l'Egitto non e' alleato; categoria con fabbrica propria (`ProPurchaseOrders.Mandatory.factory`, nuovo componente
+  facoltativo: null = come prima); le unita' (seguite per id `sudafrica_ids`) salgono verso l'Egitto su terra alleata nel non
+  combattimento. Nord Africa a tenaglia e tetto ai trasporti di R3a restano.
+- **B5 Neutrali a est dell'Egitto** (`neutrali`, `viaMare`): Persia, Northwest Persia, Eastern Persia (Friendly_Neutral per i Britannici:
+  si prendono entrando) via terra o con un trasporto britannico che carica un'unita' vicina e la scarica (stesso non combattimento).
+- **B6 Sbarramento a sud** (`sbarramento`, `distanzaAsse`): passaggi obbligati dalla mappa `passaggi_sud` Trans-Jordan (unico confine
+  terrestre dell'Egitto verso est) e Iraq (Syria confina solo con la Turchia, neutrale vera); sul primo dell'alleanza, con unita' di terra
+  dell'Asse entro 3 mosse, il presidio caso c (`presidioMinimo`) con le unita' gia' li' e quelle dei confinanti (mai da Londra/Egitto, mai
+  in territori russi).
+- **C Reddito e bonus** (`Reddito.guadagno`): guadagno per round = PU del territorio (`pu_territori`) + bonus della nazione ottenuti +
+  bonus tolti alle nazioni dell'altra alleanza, dal modello degli obiettivi nazionali della mappa (`obiettivi_nazionali`: tipo
+  "ciascuno", "almeno N", "altro" = condizioni non di possesso, che il territorio non cambia). A parita' di livello vince il guadagno
+  maggiore (A1, A4: `Assedio.scegli`), nello snodo entra nel valore del bersaglio (B2, C4). Registro con i tre numeri per alternativa.
+- **Registro**: tipi nuovi obiettivo_assedio, rinforzo_fabbrica, bombardamento (acquisto e combattimento, esiti con danno, perdite e
+  produzione di Mosca), italia_africa, snodo_usa, africa_sudafrica, neutrali_est, sbarramento_sud (gibilterra_asse riservato); motivi
+  nuovi nell'elenco chiuso.
+- **Autoplay**: `MonitorR4` scrive in ogni round `r4` (proprietari di Mosca, Stalingrado, Leningrado, Ucraina, Egitto, Parigi, Roma,
+  Berlino, Londra, Gibilterra; esercito per nazione = unita' di terra; danno della fabbrica di Mosca; unita' piazzate a Mosca dai Russi e
+  dall'Asse nelle fabbriche russe catturate; territori dell'Asse dei livelli 1 e 2 italiani; italiani nel sud della Russia; obiettivi
+  nazionali attivi con i PU, provati come la fine turno del motore). `ConfrontoR4` scrive "Per configurazione (step R4)" dentro
+  "Partite complete": vittorie con IC di Wilson e test esatto di Fisher (da (a) e nuova contro attuale), round della vittoria (note e
+  XML), durata; VC Asse, reddito ed esercito per nazione a R4-R20; round di caduta delle citta'; assedio; Italia; bonus; Alleati. Con piu'
+  di 12 partite niente sottosezioni per partita. `ConfrontoImpegno` non scrive con partite fino alla vittoria.
+- Test: `StrategiaR4Test` (12, Global 1940), `StrategiaR4AutoplayTest` (3).
+
+### Scelte di R4 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Vittoria**: l'autoplay finisce con la lettura delle note (condizione tenuta un round intero), come gia' dallo step PARTITA COMPLETA,
+   perche' nel client la partita non finisce mai da sola e il giocatore applica le note; la lettura dell'XML e' registrata accanto.
+   Scartato: fermarsi al primo fine round con la condizione (sarebbe la regola del trigger, che sulla mappa non scatta mai).
+2. **Interruttori sopra `impegno`**: `assedio` e `alleati_r4` valgono solo con `impegno` acceso (il prompt li vuole "sopra l'impegno"
+   / "sostituisce la scelta del teatro di R3a"). Scartato: interruttori indipendenti (senza impegno non ci sono campagne ne' programmi).
+3. **A1 livelli**: Mosca al 70% nel turno = livello 0 (prima delle fabbriche) e chiude subito l'obiettivo corrente (eccezione all'inerzia
+   di R2b); fabbriche al livello 1, a parita' il guadagno di C; i territori russi sulla strada sono le tappe del percorso, non obiettivi
+   propri. Scartato: obiettivi separati per ogni territorio sulla strada (avrebbero rotto la regola "un obiettivo alla volta").
+4. **Senza bersagli R4** (prima della guerra con la Russia, o tutto preso) vale la regola di R2b (es. Francia al R1). Scartato: nessun
+   obiettivo (la Germania resterebbe ferma i primi round).
+5. **A2 capacita'**: la verifica e' quella del piazzamento di Hard (`canPlace`); NON si scavalca l'ordine di `ProPlanPurchase` che mette per
+   ultimi i territori di terra "che non si tengono": una fabbrica catturata indifendibile riceve unita' solo se le altre sono piene.
+   Scartato: forzare il piazzamento (unita' regalate al contrattacco).
+6. **A3 numeri**: danno atteso = (1 − 1/6) x 5,5 = 4,58 per bombardiere (antiaerea propria della fabbrica, 1 colpo su 6 per aereo;
+   intercettori non stimati: per loro la scorta); bombardieri necessari = ceil(produzione residua / 4,58) (3 con la fabbrica intatta);
+   comprati al massimo 2 bombardieri e 1 caccia di scorta per turno ("scelto"), solo con una base sicura entro meta' movimento (3
+   territori); "finche' il danno non blocca la produzione" = capacita' > 0 (danno < 10, non il massimo 20). Atterraggio: un territorio
+   alleato non conquistato nel turno entro il movimento residuo (non la sicurezza del territorio: l'atterraggio vero lo decide il non
+   combattimento di Hard). Bombardieri tolti agli attacchi di Hard all'acquisto (altrimenti Hard li usa e li perde: visto in prova). Perdite
+   = mandati − aerei ancora su Mosca prima dell'atterraggio (il piano memorizzato di Hard sposta unita' dello stesso tipo, non sempre gli
+   stessi id). Scartato: contare gli id.
+7. **A4 acquisti italiani**: la quota dell'operazione (70% dopo il presidio caso c) va tutta alla spola o alla flotta; la spola usa il
+   carico bilanciato degli USA (scorta di cacciatorpediniere compresa) con porto Northern Italy (capacita' 10) e scarico nella prima base
+   dell'Asse da Alexandria verso ovest; navi: destroyer e cruiser alternati. Scartato: Southern Italy come porto (produce 3 unita').
+8. **A4 livello 2**: territori britannici/francesi d'Africa raggiungibili via terra + Trans-Jordan, Syria, Persia, Northwest Persia,
+   Eastern Persia; escluso Iraq (Neutral_Axis: per l'Italia si prende entrando, non si attacca). I neutrali filo-alleati non sono sulla
+   rete "conquistabile" della campagna (solo territori di un'alleanza): restano nella lista ma la campagna non li raggiunge.
+9. **Gibilterra dell'Asse**: lasciata fuori (facoltativa).
+10. **B1**: "navi da guerra nemiche" = navi nemiche che non sono trasporti puri (un incrociatore che trasporta conta); controllate nelle
+    zone 91 e 92 a ogni turno USA, senza inerzia. La base non diventa piu' una testa di ponte (lo snodo resta Gibilterra).
+11. **B2 Marocco**: le unita' veloci vanno in Marocco se e' alleato (scarico nel combattimento) oppure sul bersaglio nordafricano con la
+    via libera migliore; il resto sceglie tra tutti i bersagli con trasporti diversi da quelli dell'ondata africana. AFRICA = tutto su un
+    bersaglio africano/italiano; FRANCIA = tutto in Francia; MISTO = veloci in Africa e resto in Francia. "Unita' veloci" = movimento >= 2.
+    Valore = indice di R2b + bonus ottenuti + bonus tolti (C4 dentro il punteggio, non come spareggio separato).
+12. **B3**: la spola USA carica solo le unita' del programma (altrimenti un trasporto misto non sarebbe ne' trattenuto ne' di Hard).
+13. **B4**: "finche' l'Egitto non e' tenuto e l'Asse ha territori in Africa" letto come: si compra finche' l'Asse ha territori in Africa
+    (Nord Africa, livello 2, Ethiopia, Italian Somaliland) o l'Egitto non e' alleato. Tipi mech_infantry/armour (6 territori fino
+    all'Egitto). Le unita' salgono verso l'Egitto (o il territorio alleato accanto se perso) su terra alleata, mai in territori russi.
+14. **B5**: un trasporto britannico non mosso, vuoto, carica un'unita' da un territorio britannico accanto alla sua zona e la scarica nel
+    neutrale nello stesso non combattimento.
+15. **B6**: passaggi obbligati calcolati sul grafo di terra senza i neutrali veri: Trans-Jordan e Iraq; presidio sul primo dell'alleanza;
+    "entro 3 mosse" = distanza di terra <= 3 da un'unita' di terra dell'Asse; nessuna unita' britannica in territori russi per le mosse
+    di R4 (quelle di Hard non sono limitate).
+16. **C**: obiettivi "altro" (Mediterraneo senza navi, presenza in Egitto, Svezia, commercio con la Russia, lend-lease) non entrano nel
+    guadagno per territorio; il bonus "ottenuto" e' solo della nazione che sceglie (non degli alleati). PU incassati nelle tabelle =
+    somma dei valori attivi a fine round (approssimazione: il motore paga a fine turno della nazione).
+17. **Categoria con fabbrica** (`ProPurchaseOrders.Mandatory.factory`, componente nuovo con costruttore a 3 argomenti invariato): serve
+    perche' le preferenze di piazzamento erano per ordine, non per categoria (le unita' del Sudafrica e quelle della forza da sbarco
+    finivano nella stessa fabbrica). Hard non da' mai ordini: nessun effetto su Hard.
+18. **Trasporti allo snodo**: con unita' del programma ferme a Gibilterra i trasporti USA vuoti nelle zone di Gibilterra restano li' (non
+    tornano al porto) e lo sbarco dallo snodo li carica; visto in prova che altrimenti le unita' si accumulavano a Gibilterra senza
+    trasporti (attese "NESSUN_CARICO" con 30+ unita'). Scartato: comprare trasporti nuovi a Gibilterra (non c'e' fabbrica).
 
 ## Come configurare lo stratega
 
@@ -4841,3 +4994,25 @@ in coda) ⇒ "Re-run failed jobs" (tentativo 2, nessun push): 1103 verde, `autop
 - 1101/1103: Alleati a 11 VC su 11; Roma cade al R20 (1101, Americans) e R17 (1103, British), Berlino al R18 (British) e R21 (Russians);
   Parigi passa di mano piu' volte tra R13 e R20.
 - Stima CI per 60 partite complete (20 in parallelo, 3 ondate, +2 min di preparazione per job): 30-39 min, ~10 h di minuti runner.
+
+### Step R4 STRATEGIA COMPLETA — assedio (Asse), snodo di Gibilterra e Africa (Alleati), reddito e bonus, partite complete (2026-11-11)
+
+Vedi "Strategia completa (step R4)" e "Scelte di R4". Motivo: a 12 round nessuna versione batte Hard sui VC; l'Asse con impegno parte
+meglio e poi cede (R5-R8); gli Alleati con R3a tolgono pressione (Roma mai presa, 101 attese per tenuta, SUD quasi mai aperto); una
+partita finisce tra R16 e R21 ⇒ da ora la misura e' chi vince. File nuovi: `ai/proplus/ConfigR4`, `Reddito`, `Assedio`, `SnodoAlleati`,
+test `StrategiaR4Test`; autoplay `MonitorR4`, `ConfrontoR4`, test `StrategiaR4AutoplayTest`. Modificati: `Impegno` (scelta R4, rinforzi,
+bombardieri, spola italiana, Sudafrica, id del programma), `SbarcoCoordinato` (snodo R4, ondate con filtro, trasporti usati), `Programmi`
+(porto/base italiani, spola USA solo programma, trasporti allo snodo), `ProPlusAi` (+bombardieri trattenuti), `ProPlusTuning` (+bombarda),
+`RegistroDecisioni` (tipi e motivi), `StrategaInterruttori` (+2), `ProPurchaseOrders` (`Mandatory.factory` facoltativo), `ProPlanPurchase`
+(fabbrica della categoria prima), `stratega-llm.json` (`impegno.r4`), autoplay `Vittoria` (due letture), `Monitor` (+`r4`),
+`ConfrontoCompleta` (colonna XML, tabelle R4, niente sottosezioni oltre 12 partite), `ConfrontoImpegno` (non con partite complete),
+`PartitaCompletaTest`, workflow `[completa]` (200 partite). Hard, Hard Beta e le altre voci invariate; interruttori spenti = R3a/R2c.
+- Test locali (JDK 25, mirror Google solo in sandbox): `:game-core:test --tests 'games.strategy.triplea.ai.*'` **586, 0 falliti**
+  (golden Hard, `NudoHardTest` con "Stratega senza chiave = Hard", `DiaryNeutralityTest`, `CampagnaOmbraTest` ombra accesa = spenta,
+  `ImpegnoTest`, `SbarcoCoordinatoTest` = configurazioni c1/c2 di oggi, `StrategiaR4Test` 12), `:ai:test` 13, `:proplus-autoplay:test` 38,
+  `:game-headed:test` 94: 0 falliti.
+- Prove locali (Europa 1940, senza chiave): c1n seme 1143 (12 round): incursioni su Mosca dal R4 (13, 19, 19, 7 di danno; Mosca produce
+  8, 5, 3, 3 unita'), 2 bombardieri persi al R7, Mosca presa al R8. c2n semi 1142/1144 (14 round): snodo Gibilterra, sbarchi Morocco R5,
+  Libya/Tunisia R7, Sicily R9, Southern France R14 (15 unita'); attese per tenuta; Sudafrica 3 unita' a turno; Eastern Persia presa;
+  sbarramento su Trans-Jordan. Prima versione: bombardieri usati e persi da Hard prima di arrivare alla base (corretto: tutti trattenuti
+  con una base in portata) e trasporti USA che tornavano al porto lasciando 30+ unita' ferme a Gibilterra (corretto: restano allo snodo).

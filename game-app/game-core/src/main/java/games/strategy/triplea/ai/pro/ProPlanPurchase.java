@@ -60,6 +60,8 @@ class ProPlanPurchase {
   private final List<Territory> stagingLand = new ArrayList<>();
   private final List<Territory> stagingSea = new ArrayList<>();
   private final ProPurchaseOrders orders;
+  // Pro+ step R4: the factory the current mandatory category is placed in first (null = none)
+  @javax.annotation.Nullable private String factoryFirst;
 
   ProPlanPurchase(
       final ProPurchaseOrders orders,
@@ -105,6 +107,7 @@ class ProPlanPurchase {
           bought.getOrDefault(m.category(), Map.of()).values().stream()
               .mapToInt(Integer::intValue)
               .sum();
+      factoryFirst = m.factory();
       while (count < m.minimum()) {
         final Optional<Integer> units = buyOne(m.category(), m.unitTypes(), Integer.MAX_VALUE);
         if (units.isEmpty()) {
@@ -120,6 +123,7 @@ class ProPlanPurchase {
         count += units.get();
       }
     }
+    factoryFirst = null;
     final int outsideMix =
         spent.entrySet().stream()
             .filter(e -> orders.mix().stream().noneMatch(c -> c.name().equals(e.getKey())))
@@ -253,7 +257,10 @@ class ProPlanPurchase {
 
   private Comparator<Candidate> candidateOrder() {
     final List<String> preferred = orders.preferredPlacement();
-    return Comparator.comparing((Candidate c) -> exposure(c.place()) > 0)
+    final String first = factoryFirst;
+    return Comparator.comparing(
+            (Candidate c) -> first != null && !first.equals(c.factory().getName()))
+        .thenComparing((Candidate c) -> exposure(c.place()) > 0)
         .thenComparingDouble(c -> exposure(c.place()))
         .thenComparingInt(c -> preferenceIndex(preferred, c))
         .thenComparingInt(c -> stagingDistance(c.place().getTerritory()))

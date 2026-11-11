@@ -124,6 +124,10 @@ final class Monitor {
   private final Set<String> atWar = new HashSet<>();
   private final Set<String> fallen = new HashSet<>();
   @Nullable private JsonObject partialRound;
+
+  /** Step R4: cities, factories, Moscow, Africa and the national objectives every round. */
+  private final MonitorR4 r4;
+
   private int lastRound;
 
   /** Step about to run (see {@link #beforeStep}): name and player. */
@@ -171,6 +175,7 @@ final class Monitor {
 
   Monitor(final GameData data) {
     this.data = data;
+    this.r4 = new MonitorR4(data, this::allianceOf);
     // reverse name order: Axis before Allies, as in the plans (Asse / Alleati)
     final List<String> names = new ArrayList<>(ProPlusSettings.configurableAlliances(data));
     names.sort(Comparator.reverseOrder());
@@ -208,6 +213,7 @@ final class Monitor {
     final GameStep step = data.getSequence().getStep();
     runningStep = step.getName();
     runningPlayer = Optional.ofNullable(step.getPlayerId()).map(GamePlayer::getName).orElse("-");
+    r4.beforeStep(runningStep);
     if (!runningPlayer.equals(turnPlayer)) {
       turnPlayer = runningPlayer;
       ownersAtTurnStart.clear();
@@ -241,6 +247,7 @@ final class Monitor {
     }
     recordLostTransports(lastRound);
     recordDelayTools(lastRound);
+    r4.afterStep(runningStep, runningPlayer, lastRound);
     runningStep = "";
     final int round = data.getSequence().getRound();
     final GameStep step = data.getSequence().getStep();
@@ -696,8 +703,7 @@ final class Monitor {
         // step R3a: where the US and British land units are (base of the theater, home, sea, ...)
         if ("Americans".equals(name) || "British".equals(name)) {
           final JsonObject reg = new JsonObject();
-          games.strategy.triplea.ai.proplus.SbarcoCoordinato.regioni(
-                  data, p, r3aBase())
+          games.strategy.triplea.ai.proplus.SbarcoCoordinato.regioni(data, p, r3aBase())
               .forEach(reg::addProperty);
           n.add("regioni", reg);
         }
@@ -731,6 +737,7 @@ final class Monitor {
     json.add("unita_sbarcate", landed);
     json.add("nord_africa_asse", northAfricaOfTheAxis());
     r3aTheater().ifPresent(t -> json.addProperty("teatro_r3a", t));
+    json.add("r4", r4.snapshot(round, alliances));
     if (complete) {
       rounds.put(round, json);
       partialRound = null;
@@ -746,7 +753,7 @@ final class Monitor {
         .orElse("United Kingdom");
   }
 
-  private java.util.Optional<String> r3aTheater() {
+  private Optional<String> r3aTheater() {
     return games.strategy.triplea.ai.proplus.SbarcoCoordinato.teatroCorrente(data, "Allies");
   }
 

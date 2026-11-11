@@ -342,6 +342,32 @@ public final class Impegno {
                   "impegno " + e.getKey(), List.of(e.getKey()), e.getValue().getAsInt()));
         }
         factories.add(o.get("fabbrica").getAsString());
+        // step R4 (A2): the other captured factories, nearest to Moscow first
+        if (o.has("fabbriche_extra")) {
+          o.getAsJsonArray("fabbriche_extra").forEach(e -> factories.add(e.getAsString()));
+        }
+      }
+      // step R4 (B4): the United Kingdom's units for Africa from South Africa
+      if (o.has("tipi_sudafrica")) {
+        for (final var e : o.getAsJsonObject("tipi_sudafrica").entrySet()) {
+          mandatory.add(
+              new ProPurchaseOrders.Mandatory(
+                  "sudafrica " + e.getKey(),
+                  List.of(e.getKey()),
+                  e.getValue().getAsInt(),
+                  o.get("fabbrica_sudafrica").getAsString()));
+        }
+      }
+      // step R4 (A3): bombers and escorts for the raid on Moscow
+      if (o.has("tipi_assedio")) {
+        for (final var e : o.getAsJsonObject("tipi_assedio").entrySet()) {
+          mandatory.add(
+              new ProPurchaseOrders.Mandatory(
+                  "assedio " + e.getKey(),
+                  List.of(e.getKey()),
+                  e.getValue().getAsInt(),
+                  o.has("fabbrica_assedio") ? o.get("fabbrica_assedio").getAsString() : null));
+        }
       }
       // step R2c: the permanent program (USA, landing force of the United Kingdom)
       if (o.has("tipi_programma")) {
@@ -671,6 +697,42 @@ public final class Impegno {
               }
             }
           }
+          // step R4 (A4): the Italian shuttle's troops are the campaign's once in Africa
+          if (Assedio.italia(data, player)) {
+            for (final var e : program.entrySet()) {
+              int n = e.getValue();
+              for (final Unit u : fresh) {
+                if (n <= 0) {
+                  break;
+                }
+                if (u.getType().getName().equals(e.getKey())
+                    && Matches.unitIsLand().test(u)
+                    && !seguite.has(u.getId().toString())) {
+                  seguite.addProperty(u.getId().toString(), u.getType().getName());
+                  n--;
+                }
+              }
+            }
+          }
+          if (bought != null) {
+            Assedio.esitoRinforzo(data, player, bought.placements());
+          }
+          // step R4 (B3, B4): the landing program's units and South Africa's, by id
+          if (bought != null && SnodoAlleati.attivo(data, player)) {
+            final Map<String, Integer> south = new LinkedHashMap<>();
+            bought
+                .units()
+                .forEach(
+                    (category, m) -> {
+                      if (category.startsWith("sudafrica ")) {
+                        m.forEach((type, n) -> south.merge(type, n, Integer::sum));
+                      }
+                    });
+            segui(obj(ns, "programma_ids"), program, fresh, Set.of());
+            final Territory sa =
+                data.getMap().getTerritoryOrNull(ConfigR4.get().fabbricaSudafrica());
+            segui(obj(ns, "sudafrica_ids"), south, fresh, sa == null ? Set.of() : Set.of(sa));
+          }
           final int planned = order.has("pu_op") ? order.get("pu_op").getAsInt() : 0;
           final JsonObject turn = turno(st, round, player.getName());
           turn.addProperty("pu_op_spesi", spent);
@@ -785,6 +847,9 @@ public final class Impegno {
     @Nullable ProTerritoryManager enemy;
     final Map<String, Double> safety = new HashMap<>();
 
+    /** Step R4 (A3): PUs of the share already ordered as bombers this turn. */
+    int riservaR4;
+
     Turno(final ProData proData, final ProOddsCalculator calc, final GamePlayer player) {
       this.proData = proData;
       this.calc = calc;
@@ -826,8 +891,30 @@ public final class Impegno {
       final JsonObject order = new JsonObject();
       order.addProperty("round", round);
       int puOp = 0;
+      // step R4 (A3): Moscow's production since the last German turn; bombers from the share
+      Assedio.produzioneMoscaEsito(data, player);
+      int puAssedio = 0;
+      if (Assedio.germania(data, player)) {
+        final Map<String, Integer> bombers =
+            Assedio.bombardieriDaComprare(
+                proData, calc, player, c, puOperazione(puTurn, puC, cfg.quotaPu()), lines);
+        if (!bombers.isEmpty()) {
+          final Map<String, Integer> costs = costiAcquisto(data, player);
+          for (final var e : bombers.entrySet()) {
+            puAssedio += costs.getOrDefault(e.getKey(), 0) * e.getValue();
+          }
+          order.add("tipi_assedio", mappa(bombers));
+          final List<Territory> captured = Assedio.fabbricheCatturate(data, player);
+          final Territory where = captured.isEmpty() ? proData.getMyCapital() : captured.get(0);
+          if (where != null) {
+            order.addProperty("fabbrica_assedio", where.getName());
+          }
+          turn.addProperty("pu_assedio", puAssedio);
+        }
+      }
+      riservaR4 = puAssedio;
       if (campagnaTerra()) {
-        puOp = campagna(capitalC, puC, puTurn, turn, attacks, forced, order);
+        puOp = campagna(capitalC, puC, puTurn, turn, attacks, forced, order) + puAssedio;
       } else {
         if (ns.has("obiettivo")) {
           chiudi(
@@ -852,10 +939,15 @@ public final class Impegno {
         final Programmi.Turno p = programmi();
         final int garrison = presidioPorto(cases, p.porto());
         ns.addProperty("presidio_porto", garrison);
+        // step R4 (B4): the United Kingdom's PUs: London, Africa (South Africa), landing force
+        final int puAfrica =
+            SnodoAlleati.acquistiSudafrica(
+                data, player, Math.max(0, puTurn - puC - puOp), order, lines);
+        puProg += puAfrica;
         final int pu =
             Programmi.USA.equals(player.getName())
                 ? puOperazione(puTurn, puC, r2c.quotaProgrammaUsa())
-                : puOperazione(puTurn, puC + puOp, r2c.quotaForzaSbarcoUk());
+                : puOperazione(puTurn, puC + puOp + puAfrica, r2c.quotaForzaSbarcoUk());
         final Map<String, Integer> mix = p.acquisti(pu, garrison, turn);
         SbarcoCoordinato.registraProgramma(
             data, player, turn.has("programma") ? turn.getAsJsonObject("programma") : null);
@@ -869,6 +961,22 @@ public final class Impegno {
         }
         forced.addAll(p.forzatiMedioOriente(attacks));
       }
+      // step R4 (A4): Italy's share to the Africa shuttle or to warships
+      if (Assedio.italia(data, player)) {
+        final Programmi.Turno p = programmi();
+        final int garrison = presidioPorto(cases, p.porto());
+        ns.addProperty("presidio_porto", garrison);
+        puProg +=
+            Assedio.acquistiItalia(
+                data,
+                player,
+                Math.max(0, puOperazione(puTurn, puC, cfg.quotaPu()) - puOp),
+                p,
+                garrison,
+                turn,
+                order,
+                lines);
+      }
       // step R3a: theater, preparation, green light, the United Kingdom's action, transport cap
       SbarcoCoordinato.inizio(proData, calc, player, c, lines);
       turn.add("attacchi", attacks);
@@ -877,7 +985,11 @@ public final class Impegno {
         props.set(KEY_FORZATI + player.getName(), round + "|" + String.join(";", forced));
       }
       clear(props, KEY_ORDINE + player.getName());
-      if ((order.has("tipi") || order.has("tipi_programma")) && puTurn > 0) {
+      if ((order.has("tipi")
+              || order.has("tipi_programma")
+              || order.has("tipi_assedio")
+              || order.has("tipi_sudafrica"))
+          && puTurn > 0) {
         order.addProperty("pu_programma", puProg);
         order.addProperty("quota_minima", Math.min(100, 100.0 * (puOp + puProg) / puTurn));
         if (!order.has("obiettivo")) {
@@ -923,7 +1035,7 @@ public final class Impegno {
         final JsonArray attacks,
         final List<String> forced,
         final JsonObject order) {
-      final int puOp = puOperazione(puTurn, puC, cfg.quotaPu());
+      final int puOp = Math.max(0, puOperazione(puTurn, puC, cfg.quotaPu()) - riservaR4);
       // 2: inertia of the current target
       final List<Territory> fronts = c.fronti();
       String suspended = "";
@@ -942,7 +1054,14 @@ public final class Impegno {
         final Optional<String> end =
             motivoFine(
                 taken, enemyStill, route.isPresent(), capitalC, round - since, cfg.durataMinima());
-        if (end.isPresent()) {
+        if (end.isEmpty()
+            && Assedio.moscaOra(proData, calc, player, c, ns.get("obiettivo").getAsString())) {
+          // step R4 (A1): Moscow at the threshold this turn replaces the current target
+          chiudi(
+              "Mosca vinta al " + Math.round(ConfigR4.get().sogliaMosca()) + "% nel turno (R4)",
+              target);
+          route = Optional.empty();
+        } else if (end.isPresent()) {
           chiudi(end.get(), target);
           route = Optional.empty();
         } else if (route.isEmpty()) {
@@ -1310,8 +1429,16 @@ public final class Impegno {
       // Africa); the United Kingdom's Egypt stays R2c's
       final Optional<Map<Territory, String>> r3a =
           SbarcoCoordinato.bersagliCampagna(data, player, c);
+      // step R4 (A1, A4): the siege's and Italy's targets with their levels
+      final Optional<Map<Territory, Integer>> r4 = Assedio.bersagli(proData, calc, player, c);
       final List<CampagnaOmbra.Calcolo.Obiettivo> all;
-      if (r3a.isPresent()) {
+      if (r4.isPresent()) {
+        all = new ArrayList<>();
+        final List<Territory> fronts = c.fronti();
+        for (final Territory t : r4.get().keySet()) {
+          c.obiettivoPer(t, fronts).ifPresent(all::add);
+        }
+      } else if (r3a.isPresent()) {
         all = new ArrayList<>();
         final List<Territory> fronts = c.fronti();
         for (final Territory t : r3a.get().keySet()) {
@@ -1370,8 +1497,43 @@ public final class Impegno {
               + ", M1): "
               + (text.isEmpty() ? "nessuno" : String.join("; ", text)));
       final boolean onlyFeasible = r2c.nazioniSoloFattibili().contains(player.getName());
-      final Optional<Candidato> chosen =
-          onlyFeasible ? scegliFattibile(candidates) : scegli(candidates);
+      Optional<Candidato> chosen = onlyFeasible ? scegliFattibile(candidates) : scegli(candidates);
+      if (r4.isPresent()) {
+        // step R4 (C2): by level, then the gain per round (PUs + bonuses obtained + taken away)
+        final List<Assedio.Scelta> r4c = new ArrayList<>();
+        for (final Candidato k : candidates) {
+          final Territory t = data.getMap().getTerritoryOrNull(k.territorio());
+          r4c.add(
+              new Assedio.Scelta(
+                  k.territorio(),
+                  r4.get().getOrDefault(t, 9),
+                  Reddito.guadagno(data, player, t),
+                  k.fattibile(),
+                  k.tappe()));
+        }
+        final Optional<Assedio.Scelta> best = Assedio.scegli(r4c);
+        chosen =
+            best.flatMap(
+                b ->
+                    candidates.stream()
+                        .filter(k -> k.territorio().equals(b.territorio()))
+                        .findFirst());
+        best.ifPresent(b -> Assedio.registraScelta(data, player, r4c, b, r4.get()));
+        best.ifPresent(
+            b ->
+                lines.add(
+                    "  R4: livello "
+                        + b.livello()
+                        + ", guadagno per round "
+                        + b.guadagno().totale()
+                        + " PU ("
+                        + b.guadagno().pu()
+                        + " + bonus "
+                        + b.guadagno().bonusOttenuti()
+                        + " + tolti "
+                        + b.guadagno().bonusTolti()
+                        + ")"));
+      }
       if (chosen.isEmpty()) {
         lines.add(
             "  Nessun obiettivo scelto"
@@ -1488,7 +1650,18 @@ public final class Impegno {
         final JsonObject turn,
         final JsonObject order) {
       turn.addProperty("pu_op", puOp);
-      final Territory factory = fabbricaVicina(stage);
+      // step R4 (A4): Italy reaches Africa by sea: the shuttle program buys for it
+      if (Assedio.italia(data, player)
+          && (ConfigR4.get().italiaLivello1().contains(o.bersaglio().getName())
+              || ConfigR4.get().italiaLivello2().contains(o.bersaglio().getName()))) {
+        lines.add("  Acquisti: Africa via mare -> spola italiana (R4)");
+        turn.addProperty("pu_op", 0);
+        return 0;
+      }
+      // step R4 (A2): the captured factory nearest to Moscow first
+      final Territory factory =
+          Assedio.fabbricaOperazione(data, player, order, lines)
+              .orElseGet(() -> fabbricaVicina(stage));
       final int best =
           factory == null
               ? -1
@@ -1578,6 +1751,19 @@ public final class Impegno {
         keep.addAll(r2c.presidiPrioritari().getOrDefault(player.getName(), List.of()));
         held.addAll(programmi().medioOriente(delegate, keep, turn));
         held.addAll(SbarcoCoordinato.nonCombattimento(proData, calc, delegate, player, c, lines));
+        // step R4 (B4-B6): South Africa north, neutrals east of Egypt, the southern barrier
+        held.addAll(
+            SnodoAlleati.nonCombattimentoUk(proData, calc, delegate, player, c, keep, lines));
+      }
+      // step R4: the raid's outcome and the bombers' base (Germany), the Africa shuttle (Italy)
+      held.addAll(Assedio.nonCombattimento(proData, calc, delegate, player, c, lines));
+      if (Assedio.italia(data, player)) {
+        held.addAll(
+            programmi()
+                .spola(
+                    delegate,
+                    ns.has("presidio_porto") ? ns.get("presidio_porto").getAsInt() : 0,
+                    turn));
       }
       salvaNc(turn);
       return held;
@@ -2009,6 +2195,44 @@ public final class Impegno {
     final List<String> keys = new ArrayList<>(seguite.keySet());
     for (int i = 0; i < keys.size() - max; i++) {
       seguite.remove(keys.get(i));
+    }
+  }
+
+  /**
+   * Step R4: follows by id {@code want} (type → count) among {@code fresh}; only units placed in
+   * {@code where} when not empty; the ids no longer on the map are dropped.
+   */
+  private static void segui(
+      final JsonObject ids,
+      final Map<String, Integer> want,
+      final List<Unit> fresh,
+      final Set<Territory> where) {
+    final Set<String> taken = new HashSet<>(ids.keySet());
+    for (final var e : want.entrySet()) {
+      int n = e.getValue();
+      for (final Unit u : fresh) {
+        if (n <= 0) {
+          break;
+        }
+        if (u.getType().getName().equals(e.getKey())
+            && !taken.contains(u.getId().toString())
+            && (where.isEmpty()
+                || where.stream().anyMatch(t -> t.getUnitCollection().contains(u)))) {
+          ids.addProperty(u.getId().toString(), u.getType().getName());
+          taken.add(u.getId().toString());
+          n--;
+        }
+      }
+    }
+    final Set<String> onMap = new HashSet<>();
+    if (!fresh.isEmpty()) {
+      final GameState data = fresh.get(0).getData();
+      onMap.addAll(idsSullaMappa(data));
+      for (final String id : new ArrayList<>(ids.keySet())) {
+        if (!onMap.contains(id)) {
+          ids.remove(id);
+        }
+      }
     }
   }
 

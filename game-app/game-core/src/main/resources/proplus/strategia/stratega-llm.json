@@ -260,6 +260,516 @@
         },
         "origine": "scelto per le tabelle (dove sono le unita' di terra USA e britanniche): ordine base del teatro, patria, mare, europa_occidentale, mediterraneo_nord_africa, altrove"
       }
+    },
+    "r4": {
+      "nota": "Step R4 STRATEGIA COMPLETA. Due blocchi dietro interruttori propri (spenti di default = comportamento di R3a/R2c), entrambi sopra l'interruttore impegno: assedio (Asse: Germania prima le fabbriche russe poi Mosca, rinforzi nelle fabbriche catturate, bombardamento della fabbrica di Mosca; Italia prima l'Africa) e alleati_r4 (USA dallo snodo di Gibilterra con scelta AFRICA/FRANCIA/MISTO, forza trattenuta solo per id del programma, Regno Unito: Sudafrica, neutrali a est dell'Egitto, sbarramento a sud). Regola comune C (reddito e bonus): a parita' di priorita' vince il guadagno per round = PU del territorio + bonus ottenuti + bonus tolti al nemico, dai dati qui sotto. Valori scelti o dalla mappa, nessuno tarato.",
+      "assedio_acceso_di_default": {
+        "valore": false,
+        "origine": "richiesta dello step R4: spento = comportamento di oggi"
+      },
+      "alleati_r4_acceso_di_default": {
+        "valore": false,
+        "origine": "richiesta dello step R4: spento = comportamento di oggi"
+      },
+      "nazione_assedio": {
+        "valore": "Germans",
+        "origine": "richiesta dello step R4"
+      },
+      "capitale_russa": {
+        "valore": "Russia",
+        "origine": "dalla mappa: Mosca = territorio Russia (capitale dei Russians, factory_major)"
+      },
+      "fabbriche_russe": {
+        "valore": [
+          "Novgorod",
+          "Ukraine",
+          "Volgograd"
+        ],
+        "origine": "dalla mappa: unitPlacement factory_minor dei Russians a inizio partita (oltre a Russia, factory_major)"
+      },
+      "soglia_mosca": {
+        "valore": 70,
+        "origine": "richiesta dello step R4: Mosca obiettivo anche con le fabbriche non prese se il calcolatore da >= 70% nel turno"
+      },
+      "produzione_fabbrica_catturata": {
+        "valore": 3,
+        "origine": "dalla mappa: factory_minor canProduceXUnits 3 (maxDamage 6); factory_major whenCapturedChangesInto factory_minor: una fabbrica catturata produce al massimo 3 unita' (meno il danno)"
+      },
+      "bombardamento": {
+        "valore": {
+          "bombardiere": "bomber",
+          "scorta": "fighter",
+          "dado": 6,
+          "bonus": 2,
+          "aa_colpisce_su": 1,
+          "max_comprati_per_turno": 2,
+          "max_scorte_comprate_per_turno": 1,
+          "soglia_base_sicura": 40
+        },
+        "origine": "dalla mappa: bomber bombingMaxDieSides 6 bombingBonus 2 (Use Bombing Max Dice Sides And Bonus = true), danno alle unita' (Damage From Bombing Done To Units Instead Of Territories = true), fabbrica con antiaerea propria (isAAforBombingThisUnitOnly, 1 colpo su 6 per aereo), intercettori possibili (Raids May Be Preceeded By Air Battles = true; fighter canIntercept/canEscort). Scelti: al piu' 2 bombardieri e 1 caccia di scorta comprati per turno, base dei bombardieri con contrattacco <= 40"
+      },
+      "nazione_italia": {
+        "valore": "Italians",
+        "origine": "richiesta dello step R4"
+      },
+      "italia_livello1": {
+        "valore": [
+          "Egypt",
+          "Alexandria",
+          "Tobruk",
+          "Libya",
+          "Tunisia",
+          "Algeria",
+          "Morocco"
+        ],
+        "origine": "richiesta dello step R4 (Egitto e Nord Africa intero); dalla mappa: i territori dell'obiettivo italiano North Africa + Egitto"
+      },
+      "italia_livello2": {
+        "valore": [
+          "Anglo Egyptian Sudan",
+          "Kenya",
+          "British Somaliland",
+          "Tanganyika Territory",
+          "Rhodesia",
+          "Belgian Congo",
+          "Union of South Africa",
+          "South West Africa",
+          "French Equatorial Africa",
+          "French Central Africa",
+          "Nigeria",
+          "Gold Coast",
+          "French West Africa",
+          "Trans-Jordan",
+          "Syria",
+          "Persia",
+          "Northwest Persia",
+          "Eastern Persia"
+        ],
+        "origine": "dalla mappa: territori britannici/francesi d'Africa raggiungibili via terra dall'Egitto senza passare dai neutrali veri (Strict_Neutral: servirebbe la guerra), piu' a est dell'Egitto Trans-Jordan, Syria e i neutrali filo-alleati Persia, Northwest Persia, Eastern Persia (Italians-Neutral_Allies = Unfriendly_Neutral, archetipo guerra: attaccabili senza azione politica). Esclusi: Iraq (Neutral_Axis, Friendly_Neutral per l'Italia: si prende entrando, non e' un bersaglio d'attacco), Turkey/Saudi Arabia (Strict_Neutral)"
+      },
+      "italia_livello3": {
+        "valore": [
+          "Gibraltar"
+        ],
+        "origine": "richiesta dello step R4 (facoltativo): NON realizzato in questo step"
+      },
+      "porto_italia": {
+        "valore": "Northern Italy",
+        "origine": "dalla mappa: fabbrica italiana costiera con capacita' 10 (Southern Italy produce 3), zone 95/97 a una zona dalla 96 di Libya/Tobruk"
+      },
+      "basi_africa_italia": {
+        "valore": [
+          "Alexandria",
+          "Tobruk",
+          "Libya",
+          "Tunisia",
+          "Algeria",
+          "Morocco"
+        ],
+        "origine": "scelto: la prima dell'Asse dell'elenco (dalla piu' vicina all'Egitto) e' la base di scarico della spola italiana"
+      },
+      "tipi_flotta_italia": {
+        "valore": [
+          "destroyer",
+          "cruiser"
+        ],
+        "origine": "scelto: navi da guerra di superficie (contano per l'obiettivo Mediterraneo)"
+      },
+      "gibilterra": {
+        "valore": "Gibraltar",
+        "origine": "richiesta dello step R4"
+      },
+      "bersagli_africa": {
+        "valore": [
+          "Morocco",
+          "Algeria",
+          "Tunisia",
+          "Libya",
+          "Tobruk",
+          "Sardinia",
+          "Sicily",
+          "Southern Italy"
+        ],
+        "origine": "dalla mappa: bersagli SUD di R3a in Africa e italiani verso Roma (Southern Italy)"
+      },
+      "bersagli_francia": {
+        "valore": [
+          "Southern France",
+          "Normandy Bordeaux"
+        ],
+        "origine": "dalla mappa: costa francese mediterranea (zona 93) e atlantica (Normandy Bordeaux, zona 106/91: entro il movimento da Gibilterra)"
+      },
+      "nord_africa": {
+        "valore": [
+          "Morocco",
+          "Algeria",
+          "Tunisia",
+          "Libya",
+          "Tobruk",
+          "Alexandria"
+        ],
+        "origine": "dalla mappa: obiettivo italiano North Africa"
+      },
+      "movimento_veloci": {
+        "valore": 2,
+        "origine": "scelto: unita' veloci = di terra con movimento >= 2 (mech_infantry, armour)"
+      },
+      "fabbrica_sudafrica": {
+        "valore": "Union of South Africa",
+        "origine": "dalla mappa: factory_minor britannica (canProduceXUnits 3), unitProduction 3"
+      },
+      "tipi_sudafrica": {
+        "valore": [
+          "mech_infantry",
+          "armour"
+        ],
+        "origine": "scelto: unita' veloci per salire a nord (Union of South Africa -> Egitto 6 territori via terra)"
+      },
+      "neutrali_est": {
+        "valore": [
+          "Persia",
+          "Northwest Persia",
+          "Eastern Persia"
+        ],
+        "origine": "dalla mappa: Neutral_Allies a est dell'Egitto (British-Neutral_Allies = Friendly_Neutral, canTakeOverOwnedTerritory: si prendono entrando nel non combattimento, anche scaricando da un trasporto)"
+      },
+      "passaggi_sud": {
+        "valore": [
+          "Trans-Jordan",
+          "Iraq"
+        ],
+        "origine": "dalla mappa: strada di terra Africa/Medio Oriente -> sud della Russia escludendo i neutrali veri: Egypt-Trans-Jordan-(Syria)-Iraq-Northwest Persia/Persia-Caucasus/Turkmenistan. Passaggi obbligati (un solo territorio che separa l'Africa dalla Russia): Trans-Jordan (unico confine terrestre dell'Egitto verso est) e Iraq (Syria confina solo con Turkey, neutrale vero). Il presidio va sul primo dell'elenco dell'alleanza"
+      },
+      "distanza_sbarramento": {
+        "valore": 3,
+        "origine": "richiesta dello step R4: unita' di terra dell'Asse entro 3 mosse"
+      },
+      "pu_territori": {
+        "valore": {
+          "Albania": 1,
+          "Alberta Saskatchewan Manitoba": 1,
+          "Algeria": 1,
+          "Anglo Egyptian Sudan": 1,
+          "Angola": 1,
+          "Archangel": 1,
+          "Argentina": 2,
+          "Baltic States": 1,
+          "Belarus": 1,
+          "Belgian Congo": 1,
+          "Brazil": 2,
+          "Bryansk": 1,
+          "Bulgaria": 1,
+          "Caucasus": 2,
+          "Central America": 1,
+          "Central United States": 12,
+          "Chile": 2,
+          "Denmark": 2,
+          "Eastern Poland": 1,
+          "Eastern United States": 20,
+          "Egypt": 2,
+          "Ethiopia": 1,
+          "Finland": 2,
+          "France": 4,
+          "French Central Africa": 1,
+          "French Equatorial Africa": 1,
+          "French Madagascar": 1,
+          "French West Africa": 1,
+          "Germany": 5,
+          "Gold Coast": 1,
+          "Greater Southern Germany": 4,
+          "Greece": 2,
+          "Holland Belgium": 3,
+          "Iraq": 2,
+          "Karelia": 1,
+          "Kazakhstan": 1,
+          "Kenya": 1,
+          "Libya": 1,
+          "Morocco": 1,
+          "Mozambique": 1,
+          "New Brunswick Nova Scotia": 1,
+          "Nigeria": 1,
+          "Normandy Bordeaux": 2,
+          "Northern Italy": 4,
+          "Norway": 3,
+          "Novgorod": 2,
+          "Novosibirsk": 1,
+          "Ontario": 2,
+          "Persia": 2,
+          "Poland": 2,
+          "Portugal": 1,
+          "Quebec": 2,
+          "Rhodesia": 1,
+          "Romania": 3,
+          "Rostov": 2,
+          "Russia": 3,
+          "Samara": 1,
+          "Saudi Arabia": 2,
+          "Scotland": 2,
+          "Slovakia Hungary": 3,
+          "Smolensk": 1,
+          "South West Africa": 1,
+          "Southeast Mexico": 1,
+          "Southern France": 3,
+          "Southern Italy": 3,
+          "Spain": 2,
+          "Sweden": 3,
+          "Syria": 1,
+          "Tambov": 1,
+          "Tanganyika Territory": 1,
+          "Trans-Jordan": 1,
+          "Tunisia": 1,
+          "Turkey": 2,
+          "Ukraine": 2,
+          "Union of South Africa": 2,
+          "United Kingdom": 6,
+          "Urals": 1,
+          "Venezuela": 2,
+          "Volgograd": 2,
+          "Vologda": 1,
+          "West India": 2,
+          "West Indies": 1,
+          "Western Germany": 5,
+          "Western Ukraine": 2,
+          "Yugoslavia": 2
+        },
+        "origine": "dalla mappa: production di territoryAttachment (solo i territori con PU > 0)"
+      },
+      "obiettivi_nazionali": {
+        "valore": [
+          {
+            "id": "objectiveAttachment_Germans_1_Trade_with_Russia",
+            "nazione": "Germans",
+            "valore": 5,
+            "tipo": "altro",
+            "condizioni": "[('atWarPlayers', 'Russians', '0')]"
+          },
+          {
+            "id": "objectiveAttachment_Germans_2_Control_Novgorod_Or_Volgograd_Or_Russia",
+            "nazione": "Germans",
+            "valore": 5,
+            "possesso": "diretto",
+            "territori": [
+              "Novgorod",
+              "Volgograd",
+              "Russia"
+            ],
+            "tipo": "ciascuno"
+          },
+          {
+            "id": "objectiveAttachment_Germans_3_Control_Caucasus",
+            "nazione": "Germans",
+            "valore": 5,
+            "possesso": "alleanza",
+            "territori": [
+              "Caucasus"
+            ],
+            "tipo": "almeno",
+            "minimo": 1
+          },
+          {
+            "id": "objectiveAttachment_Germans_6_Control_Iraq_Or_Persia_Or_Northwest_Persia",
+            "nazione": "Germans",
+            "valore": 2,
+            "possesso": "diretto",
+            "territori": [
+              "Iraq",
+              "Persia",
+              "Northwest Persia"
+            ],
+            "tipo": "ciascuno"
+          },
+          {
+            "id": "objectiveAttachment_Russians_2_Spread_Of_Communism",
+            "nazione": "Russians",
+            "valore": 3,
+            "possesso": "diretto",
+            "territori": [
+              "Bulgaria",
+              "Finland",
+              "Iraq",
+              "Greater Southern Germany",
+              "Slovakia Hungary",
+              "Western Germany",
+              "Romania",
+              "Poland",
+              "Germany",
+              "Norway",
+              "Denmark",
+              "Holland Belgium",
+              "Tobruk",
+              "Albania",
+              "Northern Italy",
+              "Libya",
+              "Sicily",
+              "Italian Somaliland",
+              "Southern Italy",
+              "Ethiopia",
+              "Sardinia"
+            ],
+            "tipo": "ciascuno"
+          },
+          {
+            "id": "objectiveAttachment_Russians_3_Berlin",
+            "nazione": "Russians",
+            "valore": 10,
+            "possesso": "diretto",
+            "territori": [
+              "Germany"
+            ],
+            "tipo": "almeno",
+            "minimo": 1,
+            "altre_condizioni": "[('uses', '1', None)]"
+          },
+          {
+            "id": "objectiveAttachment_Russians_4_Far_East_Reserves",
+            "nazione": "Russians",
+            "valore": 9,
+            "possesso": "diretto",
+            "territori": [
+              "Novosibirsk"
+            ],
+            "tipo": "almeno",
+            "minimo": 1,
+            "altre_condizioni": "[('atWarPlayers', 'Germans:Italians', '1')]"
+          },
+          {
+            "id": "objectiveAttachment_British_1_Original",
+            "nazione": "British",
+            "valore": 5,
+            "possesso": "diretto",
+            "territori": [
+              "Alberta Saskatchewan Manitoba",
+              "Alexandria",
+              "Anglo Egyptian Sudan",
+              "Belgian Congo",
+              "British Guiana",
+              "British Somaliland",
+              "Cyprus",
+              "Egypt",
+              "Gibraltar",
+              "Gold Coast",
+              "Iceland",
+              "India",
+              "Kenya",
+              "Malta",
+              "New Brunswick Nova Scotia",
+              "Newfoundland Labrador",
+              "Nigeria",
+              "Ontario",
+              "Quebec",
+              "Rhodesia",
+              "Scotland",
+              "South West Africa",
+              "Tanganyika Territory",
+              "Trans-Jordan",
+              "Union of South Africa",
+              "United Kingdom",
+              "West India"
+            ],
+            "tipo": "almeno",
+            "minimo": 27,
+            "altre_condizioni": "[('atWarPlayers', 'Germans', '1')]"
+          },
+          {
+            "id": "objectiveAttachment_Italians_1_Control_The_Mediterranean",
+            "nazione": "Italians",
+            "valore": 5,
+            "tipo": "altro",
+            "condizioni": "[('enemySurfaceExclusionTerritories', '92 Sea Zone:93 Sea Zone:94 Sea Zone:95 Sea Zone:96 Sea Zone:97 Sea Zone:98 Sea Zone:99 Sea Zone', '8')]"
+          },
+          {
+            "id": "objectiveAttachment_Italians_2_Roman_Empire",
+            "nazione": "Italians",
+            "valore": 5,
+            "possesso": "alleanza",
+            "territori": [
+              "Greece",
+              "Egypt",
+              "Southern France",
+              "Gibraltar"
+            ],
+            "tipo": "almeno",
+            "minimo": 3
+          },
+          {
+            "id": "objectiveAttachment_Italians_3_North_Africa",
+            "nazione": "Italians",
+            "valore": 5,
+            "possesso": "alleanza",
+            "territori": [
+              "Alexandria",
+              "Morocco",
+              "Algeria",
+              "Tunisia",
+              "Tobruk",
+              "Libya"
+            ],
+            "tipo": "almeno",
+            "minimo": 6
+          },
+          {
+            "id": "objectiveAttachment_Italians_4_Control_Iraq_Or_Persia_Or_Northwest_Persia",
+            "nazione": "Italians",
+            "valore": 2,
+            "possesso": "diretto",
+            "territori": [
+              "Iraq",
+              "Persia",
+              "Northwest Persia"
+            ],
+            "tipo": "ciascuno"
+          },
+          {
+            "id": "objectiveAttachment_Americans_1_Homeland",
+            "nazione": "Americans",
+            "valore": 20,
+            "possesso": "diretto",
+            "territori": [
+              "Central United States",
+              "Eastern United States"
+            ],
+            "tipo": "almeno",
+            "minimo": 2,
+            "altre_condizioni": "[('atWarPlayers', 'Germans:Italians', '1')]"
+          },
+          {
+            "id": "objectiveAttachment_Americans_3_Defense_Obligations",
+            "nazione": "Americans",
+            "valore": 5,
+            "possesso": "diretto",
+            "territori": [
+              "Southeast Mexico",
+              "Central America",
+              "West Indies"
+            ],
+            "tipo": "almeno",
+            "minimo": 3,
+            "altre_condizioni": "[('atWarPlayers', 'Germans:Italians', '1')]"
+          },
+          {
+            "id": "triggerAttachment_Germans_4_Presence_In_Egypt",
+            "nazione": "Germans",
+            "valore": 5,
+            "tipo": "altro",
+            "condizioni": "[('directPresenceTerritories', 'Egypt', '1'), ('unitPresence', 'infantry:artillery:mech_infantry:armour:aaGun', '1')]"
+          },
+          {
+            "id": "triggerAttachment_Germans_5_Swedish_Iron_Ore",
+            "nazione": "Germans",
+            "valore": 5,
+            "tipo": "altro",
+            "condizioni": "[('composta', 'conditionAttachment_Germans_5_Control_Norway_And_Denmark:conditionAttachment_Germans_5_Sweden_Not_Enemy', None)]"
+          },
+          {
+            "id": "triggerAttachment_Russians_1_Lend_Lease",
+            "nazione": "Russians",
+            "valore": 5,
+            "tipo": "altro",
+            "condizioni": "[('conditions', 'conditionAttachment_Russians_1_Convoy_Clear', None), ('directOwnershipTerritories', 'Archangel', '1'), ('alliedExclusionTerritories', 'original', None), ('atWarPlayers', 'Germans:Italians', '1')]"
+          }
+        ],
+        "origine": "dalla mappa: objectiveAttachment (objectiveValue) e trigger con resource PUs; tipo ciascuno = valore per ogni territorio posseduto, almeno = valore con almeno minimo territori, altro = condizioni non di possesso (navi, presenza, relazioni): non cambiano col territorio preso. 'original' di British_1 espanso nei territori britannici di inizio partita"
+      }
     }
   },
   "difesa": {

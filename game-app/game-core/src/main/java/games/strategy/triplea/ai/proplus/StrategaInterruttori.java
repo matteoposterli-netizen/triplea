@@ -22,14 +22,19 @@ import java.util.Optional;
  *   <li>{@link #OMBRA} (default on) off: no shadow campaign planner ({@link CampagnaOmbra}, never
  *       an effect on the game anyway);
  *   <li>{@link #IMPEGNO} (step R2b, default from {@code impegno.acceso_di_default} of the data
- *       file: OFF) on: the first campaign that acts ({@link Impegno}).
+ *       file: OFF) on: the first campaign that acts ({@link Impegno});
+ *   <li>{@link #ASSEDIO} and {@link #ALLEATI_R4} (step R4, defaults from {@code impegno.r4}: OFF),
+ *       on top of {@link #IMPEGNO}: the Axis' siege and Africa ({@link Assedio}), the Allies'
+ *       Gibraltar hub and Africa ({@link SnodoAlleati}).
  * </ul>
  */
 public enum StrategaInterruttori {
   LISTE("liste", true),
   TENUTE("tenute", false),
   OMBRA("ombra", true),
-  IMPEGNO("impegno", false);
+  IMPEGNO("impegno", false),
+  ASSEDIO("assedio", false),
+  ALLEATI_R4("alleati_r4", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -50,6 +55,12 @@ public enum StrategaInterruttori {
   public boolean predefinito() {
     if (this == IMPEGNO) {
       return Impegno.Config.get().accesoDiDefault();
+    }
+    if (this == ASSEDIO) {
+      return ConfigR4.get().assedioDiDefault();
+    }
+    if (this == ALLEATI_R4) {
+      return ConfigR4.get().alleatiDiDefault();
     }
     return predefinito;
   }
@@ -111,7 +122,7 @@ public enum StrategaInterruttori {
                                 new IllegalArgumentException(
                                     "Interruttore dello Stratega sconosciuto: "
                                         + x
-                                        + " (liste, tenute, ombra, impegno)"))
+                                        + " (liste, tenute, ombra, impegno, assedio, alleati_r4)"))
                         .id())
             .distinct()
             .toList();
