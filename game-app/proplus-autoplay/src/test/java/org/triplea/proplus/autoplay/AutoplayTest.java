@@ -1005,12 +1005,14 @@ class AutoplayTest {
                     + "\"preso_round\":2}],"
                     + "\"nazioni\":{\"Germans\":{\"obiettivo\":\"Russia\",\"dal_round\":3}},"
                     + "\"turni\":[{\"round\":1,\"nazione\":\"Germans\",\"pu_turno\":30,"
-                    + "\"pu_op\":21,\"pu_op_spesi\":21,\"instradate\":4,"
+                    + "\"pu_op\":21,\"pu_op_spesi\":21,\"instradate\":4,\"fase\":\"ESECUZIONE\","
                     + "\"attacchi\":[{\"territorio\":\"France\",\"forzato\":true,"
+                    + "\"revisione\":\"eseguito\","
                     + "\"vittoria_pct\":90,\"perdite_p80_tuv\":20,\"esito\":\"vinto\","
                     + "\"perdite_reali_tuv\":12}]},"
                     + "{\"round\":2,\"nazione\":\"Germans\",\"pu_turno\":40,\"pu_op\":28,"
-                    + "\"pu_op_spesi\":28,\"perse_viaggio\":2,\"perse_viaggio_tuv\":7}],"
+                    + "\"pu_op_spesi\":28,\"perse_viaggio\":2,\"perse_viaggio_tuv\":7,"
+                    + "\"fase\":\"PREPARAZIONE\"}],"
                     + "\"perse_viaggio\":[]}}}}")
             .getAsJsonObject();
     final StringBuilder md = new StringBuilder();
@@ -1022,7 +1024,14 @@ class AutoplayTest {
         List.of(1, 2));
 
     final String text = md.toString();
-    assertThat(text).contains("## Impegno (step R2b)");
+    assertThat(text).contains("## Impegno (step R2b, R2c)");
+    // step R2c: phases, forced attacks reviewed, Russia, income and army per alliance
+    assertThat(text).contains("### Step R2c: preparazione e programmi");
+    assertThat(text)
+        .contains(
+            "| Stratega LLM [senza chiave] [con impegno] / Hard | Germans | 1 | 1 | 0 | 0 | 1 | 1"
+                + " | 0 | 0 | 0 | 1 |");
+    assertThat(text).contains("| Hard / Hard | 150.00 | 40.00 | 140.00 | 38.00 |");
     assertThat(text).contains("| Hard / Hard | 1 | 2.00 ± 0.0 | - | 2.00 ± 0.0 | - |");
     assertThat(text).contains("| 3.00 ± 0.0 | +1.00 - |");
     assertThat(text).contains("Stratega LLM [senza chiave] [con impegno] / Hard | 1 | 2.00");

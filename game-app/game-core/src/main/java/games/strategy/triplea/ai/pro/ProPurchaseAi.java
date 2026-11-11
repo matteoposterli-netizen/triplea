@@ -542,6 +542,7 @@ class ProPurchaseAi {
                   .buy();
           planResult.add(result);
           proData.getRecorder().purchaseOrders(proData, orders, result);
+          proData.getTuning().purchaseOrdersBought(proData, orders, result);
           proData.getRecorder().purchaseStep(proData, "plan", purchaseTerritories, Map.of());
         });
     final int ordersSpent = afterDefense - overBudget - resourceTracker.getRemaining(pusResource);

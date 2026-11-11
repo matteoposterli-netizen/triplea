@@ -143,6 +143,20 @@ final class Monitor {
   /** Real landings (unloaded from transports on enemy land, or land taken this turn). */
   private final JsonArray landings = new JsonArray();
 
+  /** Step R2c: the forward base of the US shuttle (WW2 Europe 1940). */
+  static final String FORWARD_BASE = "United Kingdom";
+
+  /** Step R2c: round -> nation -> land units unloaded by transports in {@link #FORWARD_BASE}. */
+  private final Map<Integer, Map<String, Integer>> broughtToBase = new TreeMap<>();
+
+  /**
+   * Step R2c: the units in {@link #FORWARD_BASE} and the land next to it when the player's turn
+   * started, and those already counted: a land unit of the player that appears there in a move step
+   * came by sea (the engine clears the transports' "unloaded" list at the end of the non-combat
+   * move, so it can't be read).
+   */
+  private final Set<Unit> broughtCounted = new HashSet<>();
+
   /** Round -> nation -> transports that did nothing in the nation's turn (empty, not moved). */
   private final Map<Integer, Map<String, Integer>> idleTransports = new TreeMap<>();
 
@@ -198,6 +212,16 @@ final class Monitor {
       turnPlayer = runningPlayer;
       ownersAtTurnStart.clear();
       landedCounted.clear();
+      broughtCounted.clear();
+      // the units there and in the land next to it (Scotland) at the start of the turn
+      Optional.ofNullable(data.getMap().getTerritoryOrNull(FORWARD_BASE))
+          .ifPresent(
+              t -> {
+                broughtCounted.addAll(t.getUnits());
+                data.getMap()
+                    .getNeighbors(t, Matches.territoryIsLand())
+                    .forEach(n -> broughtCounted.addAll(n.getUnits()));
+              });
       for (final Territory t : data.getMap().getTerritories()) {
         if (!t.isWater()) {
           ownersAtTurnStart.put(t.getName(), t.getOwner().getName());
@@ -505,6 +529,20 @@ final class Monitor {
         t.getUnits().forEach(u -> location.put(u, t));
       }
     }
+    final Territory base = data.getMap().getTerritoryOrNull(FORWARD_BASE);
+    if (base != null) {
+      for (final Unit u :
+          base.getMatches(
+              Matches.unitIsOwnedBy(player)
+                  .and(Matches.unitIsLand())
+                  .and(Matches.unitIsNotInfrastructure()))) {
+        if (broughtCounted.add(u)) {
+          broughtToBase
+              .computeIfAbsent(round, k -> new TreeMap<>())
+              .merge(runningPlayer, 1, Integer::sum);
+        }
+      }
+    }
     final Map<String, Integer> byTerritory = new TreeMap<>();
     final Map<String, String> phase = new HashMap<>();
     for (final Territory z : data.getMap().getTerritories()) {
@@ -646,6 +684,9 @@ final class Monitor {
         n.addProperty(
             "trasporti_inattivi",
             idleTransports.getOrDefault(round, Map.of()).getOrDefault(name, 0));
+        n.addProperty(
+            "portate_regno_unito",
+            broughtToBase.getOrDefault(round, Map.of()).getOrDefault(name, 0));
         n.addProperty(
             "trasporti_persi", lostTransports.getOrDefault(round, Map.of()).getOrDefault(name, 0));
         n.addProperty(

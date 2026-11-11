@@ -74,7 +74,7 @@ final class ConfrontoImpegno {
     md.append(
 """
 
-## Impegno (step R2b)
+## Impegno (step R2b, R2c)
 
 """);
     md.append(
@@ -176,6 +176,248 @@ final class ConfrontoImpegno {
 
     // 3-5 per configuration with the commitment
     committed.forEach((config, side) -> perConfig(md, config, side, byConfig.get(config)));
+    writeR2c(md, configs, byConfig, committed, alliances, vcRounds);
+  }
+
+  // ===================================================================== step R2c tables
+
+  /**
+   * Step R2c: income and army value per alliance at R4/R8/R12; the operations' phases and forced
+   * attacks; the US and UK transports per round, the units brought to the United Kingdom and landed
+   * in western Europe, the first US landing and the first bridgehead held 2 rounds; Russia.
+   */
+  private static void writeR2c(
+      final StringBuilder md,
+      final List<String> configs,
+      final Map<String, List<JsonObject>> byConfig,
+      final Map<String, String> committed,
+      final List<String> alliances,
+      final List<Integer> vcRounds) {
+    md.append(
+"""
+
+### Step R2c: preparazione e programmi
+
+""");
+    // income and army value per alliance
+    md.append("Reddito e valore dell'esercito (TUV) per alleanza, media sulle partite.\n\n");
+    md.append("| Configurazione |");
+    for (final int r : vcRounds) {
+      for (final String a : alliances) {
+        md.append(" Reddito ").append(a).append(" R").append(r).append(" |");
+      }
+      for (final String a : alliances) {
+        md.append(" TUV ").append(a).append(" R").append(r).append(" |");
+      }
+    }
+    md.append("\n|---|");
+    vcRounds.forEach(r -> md.append("---|".repeat(2 * alliances.size())));
+    md.append('\n');
+    for (final String config : configs) {
+      final List<JsonObject> list = byConfig.get(config);
+      md.append("| ").append(config).append(" |");
+      for (final int r : vcRounds) {
+        for (final String key : List.of("reddito", "tuv")) {
+          for (final String a : alliances) {
+            md.append(' ')
+                .append(num(Stat.of(list, j -> atRound(j, a, r, key)).meanValue()))
+                .append(" |");
+          }
+        }
+      }
+      md.append('\n');
+    }
+    // Russia
+    md.append(
+        "\nRussia: valore dell'esercito (TUV) e reddito, media sulle partite.\n\n| Configurazione |");
+    for (final int r : vcRounds) {
+      md.append(" TUV R").append(r).append(" | Reddito R").append(r).append(" |");
+    }
+    md.append("\n|---|");
+    vcRounds.forEach(r -> md.append("---|---|"));
+    md.append('\n');
+    for (final String config : configs) {
+      final List<JsonObject> list = byConfig.get(config);
+      md.append("| ").append(config).append(" |");
+      for (final int r : vcRounds) {
+        md.append(' ')
+            .append(num(Stat.of(list, j -> nation(j, "Russians", r, "tuv")).meanValue()))
+            .append(" | ")
+            .append(num(Stat.of(list, j -> nation(j, "Russians", r, "reddito")).meanValue()))
+            .append(" |");
+      }
+      md.append('\n');
+    }
+    // phases and forced attacks per operation (nation)
+    md.append(
+"""
+
+Per operazione (nazione, somma sulle partite): turni con obiettivo in PREPARAZIONE e in ESECUZIONE, turni sospesi (la Russia senza obiettivo fattibile gioca come Hard), obiettivi presi; attacchi forzati decisi, eseguiti come mandati da Hard, completati con unita' aggiunte, rinunciati, non attaccati da Hard, vinti.
+
+| Configurazione | Nazione | Preparazione | Esecuzione | Sospesi | Presi | Forzati | Eseguiti | Completati | Rinunciati | Non attaccati | Vinti |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+""");
+    committed.forEach(
+        (config, side) -> {
+          final Map<String, int[]> per = new TreeMap<>();
+          for (final JsonObject j : byConfig.get(config)) {
+            final JsonObject imp = impegno(j, side);
+            for (final JsonElement e : arr(imp, "turni")) {
+              final JsonObject t = e.getAsJsonObject();
+              final int[] x = per.computeIfAbsent(t.get("nazione").getAsString(), k -> new int[11]);
+              final String phase = t.has("fase") ? t.get("fase").getAsString() : "";
+              x[0] += "PREPARAZIONE".equals(phase) ? 1 : 0;
+              x[1] += "ESECUZIONE".equals(phase) ? 1 : 0;
+              x[2] += t.has("sospeso") ? 1 : 0;
+              x[3] += t.has("obiettivo_preso") ? 1 : 0;
+              for (final JsonElement ae : arr(t, "attacchi")) {
+                final JsonObject a = ae.getAsJsonObject();
+                if (!a.get("forzato").getAsBoolean()) {
+                  continue;
+                }
+                x[4]++;
+                final String rev = a.has("revisione") ? a.get("revisione").getAsString() : "";
+                x[5] += "eseguito".equals(rev) ? 1 : 0;
+                x[6] += "completato".equals(rev) ? 1 : 0;
+                x[7] += "rinunciato".equals(rev) ? 1 : 0;
+                final String outcome = a.has("esito") ? a.get("esito").getAsString() : "";
+                x[8] += "non attaccato".equals(outcome) ? 1 : 0;
+                x[9] += "vinto".equals(outcome) ? 1 : 0;
+              }
+            }
+          }
+          per.forEach(
+              (n, x) ->
+                  md.append(
+                      String.format(
+                          Locale.ROOT,
+                          "| %s | %s | %d | %d | %d | %d | %d | %d | %d | %d | %d | %d |%n",
+                          config,
+                          n,
+                          x[0],
+                          x[1],
+                          x[2],
+                          x[3],
+                          x[4],
+                          x[5],
+                          x[6],
+                          x[7],
+                          x[8],
+                          x[9])));
+        });
+    // USA and UK per round
+    final int last = vcRounds.get(vcRounds.size() - 1);
+    for (final String n : List.of("Americans", "British")) {
+      md.append("\n")
+          .append(n)
+          .append(
+              " per round (media per partita): trasporti totali / fermi vuoti a fine movimento /"
+                  + " unita' portate nel Regno Unito / unita' sbarcate in Europa occidentale.\n\n");
+      md.append("| Configurazione |");
+      for (int r = 1; r <= last; r++) {
+        md.append(" R").append(r).append(" |");
+      }
+      md.append("\n|---|");
+      for (int r = 1; r <= last; r++) {
+        md.append("---|");
+      }
+      md.append('\n');
+      for (final String config : configs) {
+        final List<JsonObject> list = byConfig.get(config);
+        md.append("| ").append(config).append(" |");
+        for (int r = 1; r <= last; r++) {
+          final int round = r;
+          md.append(' ')
+              .append(num1(Stat.of(list, j -> nation(j, n, round, "trasporti")).meanValue()))
+              .append(" / ")
+              .append(
+                  num1(Stat.of(list, j -> nation(j, n, round, "trasporti_inattivi")).meanValue()))
+              .append(" / ")
+              .append(
+                  num1(Stat.of(list, j -> nation(j, n, round, "portate_regno_unito")).meanValue()))
+              .append(" / ")
+              .append(num1(Stat.of(list, j -> sbarcateOvest(j, n, round)).meanValue()))
+              .append(" |");
+        }
+        md.append('\n');
+      }
+    }
+    md.append(
+"""
+
+| Configurazione | Partite con sbarco USA in Europa occidentale | Round mediano del primo sbarco USA | Partite con testa di ponte tenuta 2 round | Round mediano |
+|---|---|---|---|---|
+""");
+    for (final String config : configs) {
+      final List<JsonObject> list = byConfig.get(config);
+      final List<Double> us = new ArrayList<>();
+      final List<Double> heads = new ArrayList<>();
+      for (final JsonObject j : list) {
+        int first = -1;
+        for (final JsonElement e : arr(j, "sbarchi")) {
+          final JsonObject l = e.getAsJsonObject();
+          if ("Americans".equals(l.get("nazione").getAsString())
+              && Monitor.WEST_EUROPE.contains(l.get("territorio").getAsString())
+              && (first < 0 || l.get("round").getAsInt() < first)) {
+            first = l.get("round").getAsInt();
+          }
+        }
+        if (first > 0) {
+          us.add((double) first);
+        }
+        if (j.has("prima_testa_di_ponte")) {
+          heads.add(j.getAsJsonObject("prima_testa_di_ponte").get("round").getAsDouble());
+        }
+      }
+      md.append("| ")
+          .append(config)
+          .append(" | ")
+          .append(us.size())
+          .append('/')
+          .append(list.size())
+          .append(" | ")
+          .append(us.isEmpty() ? "-" : "R" + num(ConfrontoOmbra.median(us)))
+          .append(" | ")
+          .append(heads.size())
+          .append('/')
+          .append(list.size())
+          .append(" | ")
+          .append(heads.isEmpty() ? "-" : "R" + num(ConfrontoOmbra.median(heads)))
+          .append(" |\n");
+    }
+  }
+
+  /** {@code key} of {@code nation} at the end of round {@code r} (NaN if missing). */
+  static double nation(final JsonObject json, final String nation, final int r, final String key) {
+    final JsonObject round = round(json, r);
+    if (round == null
+        || !round.has("nazioni")
+        || !round.getAsJsonObject("nazioni").has(nation)
+        || !round.getAsJsonObject("nazioni").getAsJsonObject(nation).has(key)) {
+      return Double.NaN;
+    }
+    return round.getAsJsonObject("nazioni").getAsJsonObject(nation).get(key).getAsDouble();
+  }
+
+  /** Units of {@code nation} really landed in western Europe in round {@code r}. */
+  static double sbarcateOvest(final JsonObject json, final String nation, final int r) {
+    if (round(json, r) == null) {
+      return Double.NaN;
+    }
+    double n = 0;
+    for (final JsonElement e : arr(json, "sbarchi")) {
+      final JsonObject l = e.getAsJsonObject();
+      if (l.get("round").getAsInt() == r
+          && nation.equals(l.get("nazione").getAsString())
+          && Monitor.WEST_EUROPE.contains(l.get("territorio").getAsString())) {
+        n += l.get("unita").getAsDouble();
+      }
+    }
+    return n;
+  }
+
+  private static String num1(final double x) {
+    return Double.isNaN(x) ? "-" : String.format(Locale.ROOT, "%.1f", x);
   }
 
   private static void perConfig(

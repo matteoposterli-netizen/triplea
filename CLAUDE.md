@@ -193,6 +193,9 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `sogliaForzata(proData, t)`; metodi nuovi in `CampagnaOmbra.Calcolo` (`fronti`, `obiettivoPer`, `valutaImpegno`); casella
   "Impegno" nel pannello Stratega (`StrategistPanel`, profilo `ProfiloStratega.impegno`, letto da `Stratega.registra`). Vedi
   "Impegno (step R2b)".
+- Step R2c PREPARAZIONE E PROGRAMMI: `ai/proplus/Programmi` (config `impegno.r2c`, carico bilanciato, spola USA, Medio Oriente),
+  `Impegno` (fasi, base sicura, B1-B4), hook `ProTuning.purchaseOrdersBought` e `ProTuning.reviewAttacks` (default vuoti; chiamati in
+  `ProPurchaseAi` e `ProCombatMoveAi`). Vedi "Preparazione e programmi (step R2c)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -455,6 +458,7 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   (`--stratega-acceso Allies=impegno`). Campo nuovo della matrice `acceso` ⇒ `--stratega-acceso` (prima il workflow non lo passava).
   Etichetta "Stratega LLM [senza chiave] [con impegno]". Sezione **"Impegno (step R2b)"** (`ConfrontoImpegno`, da
   `stratega_llm.<alleanza>.impegno`).
+  **Dallo step R2c** semi 1101-1120 (60 partite, sempre senza chiave) e sezione "Impegno (step R2b, R2c)" con la sottosezione "Step R2c".
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2185,6 +2189,74 @@ margine di scelta 80, distanza "vicina" 2, tipi vicino infantry/artillery, lonta
 - Test: `ImpegnoTest` (8: obiettivo NON annullato quando la stima scende; 70% dei PU dopo il presidio della capitale; l'unita' non
   usata in battaglia si avvicina al raduno; nel combattimento Hard ha le stesse unita' con interruttore acceso e spento; forzato a 70
   e non a 69; spento = Hard; regola di scelta; valori del file), `AutoplayTest.theCommitmentOfStepR2bIsSummarized`.
+
+### Preparazione e programmi (step R2c)
+
+Corregge R2b e aggiunge i programmi permanenti, tutto dietro lo stesso interruttore `impegno` (spento di default = comportamento di
+prima; solo voce "Pro+ Stratega LLM"). Nessuno sbarco coordinato tra nazioni, nessun conto d'alleanza, tenute spente, livello LLM
+invariato; l'assalto anfibio lo decide Hard. Valori in `stratega-llm.json` `impegno.r2c` (tutti "scelto", nessuno tarato), letti da
+`Programmi.Config`. Classe nuova `ai/proplus/Programmi` (config, carico bilanciato, spola USA, Medio Oriente); hook nuovi in `ProTuning`
+(default vuoti, Hard non li usa): `purchaseOrdersBought` (chiamato in `ProPurchaseAi` dopo `ProPlanPurchase.buy`) e `reviewAttacks`
+(chiamato in `ProCombatMoveAi.doCombatMove` subito prima di `doMove`), implementati in `ProPlusTuning` → `Impegno.acquistato`/`rivedi`.
+- **A due fasi** (`Impegno.fase`, stato `fase` della nazione, `turni[].fase`): a ogni acquisto il calcolatore con TUTTE le unita' in
+  portata e i difensori reali sulla prossima tappa: >= `soglia_esecuzione` 70 ⇒ ESECUZIONE (raduno nel territorio prima della tappa,
+  attacchi forzati su tappa/obiettivo >= 70), altrimenti PREPARAZIONE: acquisti per l'operazione, nessun attacco forzato, nel non
+  combattimento le SOLE unita' comprate vanno verso la **base sicura** (`baseSicura`: la via di terra amica dalla fabbrica d'acquisto
+  alla partenza + la rotta prima della tappa; il territorio proprio piu' vicino alla tappa dove il contrattacco realistico
+  `CampagnaOmbra.Calcolo.contrattacco` vince <= `soglia_base_sicura` 40; nessuna ⇒ restano dove piazzate). Un obiettivo non fattibile
+  resta (inerzia R2b) ma in PREPARAZIONE.
+- **B1**: si instradano solo le unita' comprate (seguite per id); le unita' dei territori di caso a/b non sono piu' toccate (tolto
+  `retrovie`).
+- **B2** (`Impegno.rivedi`, `completa`): dopo che Hard ha scelto attacchi e unita', ogni bersaglio forzato e' ricalcolato con le unita'
+  che Hard manda davvero (+ sbarchi e bombardamenti): >= 70 "eseguito"; sotto, unita' di terra proprie in portata (`getMaxUnits`) non
+  impegnate in altre battaglie aggiunte una alla volta (attacco piu' alto prima) fino a 70 "completato"; altrimenti "rinunciato" (unita',
+  sbarchi, bombardamenti tolti: nessuna mossa). Aerei mai aggiunti (atterraggio non verificato). Registro in memoria per
+  "nazione|round" (ultima chiamata = piano eseguito: con il piano memorizzato di Hard la revisione avviene nella simulazione
+  dell'acquisto e passa al piano reale), scritto nel diario e in `turni[].revisioni` / `attacchi[].revisione` al non combattimento.
+- **B3 "0 PU di 23 previsti"** (diagnosi su seme 1102, Alleati): due cause. (1) `purchaseDefendersWithinPlanShare` di Hard difende
+  SENZA limite capitale e fabbriche con win% nemica oltre la sua soglia di guardia (non la regola 2.6): es. Russia R4 "difesa 33 PU,
+  al piano 6 PU" con presidio 2.6 stimato 7 PU ⇒ gli ordini restano senza PU. Non cambiato (e' la difesa di Hard, coerente con C2-bis):
+  ora registrato (`turni[].pu_dopo_difesa_hard`, `obbligati_mancanti`, riga "Ordini non eseguiti" nel diario). (2) Le unita'
+  "dell'operazione" erano riconosciute per TIPO tra tutte le nuove unita' (anche quelle comprate da Hard, o perse se Hard piazzava
+  altrove) ⇒ conti sbagliati in piu' e in meno. Corretto: `Impegno.acquistato` salva il `ProPurchaseOrders.Result` (unita' per
+  categoria e piazzamenti) e `dopoIlPiazzamento` segue esattamente le unita' delle categorie "impegno <tipo>" nei territori di
+  piazzamento del risultato. `quota_minima` degli ordini = PU davvero ordinati (campagna + programma) / PU.
+- **B4**: campagne via terra solo per `nazioni_campagna_terra` (Germans, Italians, Russians, British); USA mai (obiettivo chiuso
+  "nazione senza campagne via terra"); Regno Unito solo verso `territori_uk_campagna` (Africa/Medio Oriente: tra VC e capitali in
+  pratica l'Egitto); Russia (`nazioni_solo_fattibili`) sceglie solo un obiettivo fattibile a margine 80 (`scegliFattibile`) e, se
+  quello tenuto non e' piu' fattibile, nel turno e' SOSPESA "gioca come Hard" (niente ordini, forzature, instradamenti).
+- **C programma USA** (dal R1, `Programmi.Turno.acquisti` + `spola`): PU = 70% di (PU − presidio della capitale in caso c); regola del
+  **carico bilanciato** (`Programmi.caricoBilanciato`, testo in `impegno.r2c.carico_bilanciato`): scorta di cacciatorpediniere solo
+  finche' la zona peggiore della spola (zone del porto, rotta piu' corta fino alle zone del Regno Unito, zone della base) ha contrattacco
+  realistico (unita' in portata dalle opzioni nemiche di Hard, quota A3 di `StimaUnica.impegno`, piu' care prima) > 40, max 2 per turno;
+  truppe (`tipi_spola` alternati) solo finche' truppe in attesa al porto + comprate entrano nei posti liberi dei trasporti entro 2 zone
+  dal porto (+ trasporti comprati ora); un trasporto MAI se ne esiste uno fermo e vuoto entro 2 zone dal porto, altrimenti quando le
+  truppe non entrano piu'. Spola nel non combattimento (prima di Hard): 1) trasporti vuoti nelle zone della spola o entro 2 dal porto
+  tornano verso il porto; 2) carico al porto (unita' con attacco > 0, le piu' grandi prima, presidio della capitale escluso); 3) trasporti
+  carichi verso la zona del Regno Unito piu' vicina, fermandosi nella zona piu' lontana raggiungibile con contrattacco realistico <= 40
+  (con navi da guerra della stessa zona come scorta, max 4), e scarico nel Regno Unito se arrivati. Unita' mosse/tenute ⇒
+  `holdForOperation` (solo non combattimento). **Regole della mappa verificate (XML)**: prima della guerra gli USA sono "Neutrality" con
+  i britannici (non possono scaricare nel Regno Unito), hanno `movementRestrictionTerritories` (zone 65, 66, 85, 86, 88, 90, 103, 106,
+  107, 116, 117, 120, 122 vietate) tolte dal trigger "Americans_Unrestricted_Movement" quando sono in guerra con un paese dell'Asse; la
+  guerra arriva al piu' tardi dopo il piazzamento USA del R3 (`triggerAttachment_Americans_War_Japanese`, alleati con i britannici) o
+  prima se attaccati ⇒ prima della guerra i trasporti caricano e restano carichi sulla costa est (tenuti nel non combattimento).
+- **D programma Regno Unito**: 1) Londra presidio 2.6 caso c e 2) Egitto (`presidi_prioritari`) tolti dai PU (`puCasoC`); Egitto perso
+  ⇒ obiettivo via terra come in R2b; 3) forza da sbarco in patria = 70% di (PU − presidi − PU della campagna) col carico bilanciato
+  (porto United Kingdom); 4) Medio Oriente (`medio_oriente`): Persia e Northwest Persia (Neutral_Allies, Friendly_Neutral con
+  canTakeOverOwnedTerritory) prese entrando nel non combattimento con la unita' piu' economica gia' confinante (non da capitale/Egitto);
+  Iraq (Neutral_Axis, Unfriendly_Neutral = guerra, 3 fanterie, 2 PU, nessun trigger politico) attacco forzato solo con le unita' gia' in
+  portata e vittoria >= 70, nessun acquisto; Arabia Saudita, Turchia, Afghanistan (Neutral_True, Strict_Neutral) esclusi: servirebbe la
+  guerra ai neutrali veri, che rende gli altri neutrali veri amici dell'Asse.
+- Ordini: un solo ordine per nazione e round (`Pro+ stratega impegno ordine: <nazione>`) con `tipi` (campagna, categorie "impegno
+  <tipo>") e `tipi_programma` (categorie "programma <tipo>"), fabbriche preferite = fabbrica della campagna + porto del programma.
+- Riepilogo: `Monitor` conta `portate_regno_unito` per nazione e round (unita' scaricate da trasporti nel Regno Unito); `ConfrontoImpegno`
+  scrive la sottosezione "Step R2c: preparazione e programmi" (reddito e TUV per alleanza a R4/R8/R12, Russia, fasi e attacchi forzati
+  per nazione, USA e Regno Unito per round: trasporti / fermi vuoti / portate nel Regno Unito / sbarcate in Europa occidentale, primo
+  sbarco USA, prima testa di ponte tenuta 2 round = `prima_testa_di_ponte` del riepilogo).
+- Test: `ImpegnoTest` +7 (valori del file; esecuzione a 70 e non a 69; in preparazione nessuna unita' preesistente mossa e nessun
+  attacco forzato; attacco forzato rinunciato con le unita' di Hard insufficienti e intatto a interruttore spento; Russia senza obiettivo
+  fattibile = Hard; carico bilanciato; trasporto USA carico verso il Regno Unito e vuoto di ritorno, posizione costruita su Global 1940),
+  tolto il test R2b dell'instradamento delle retrovie; `AutoplayTest.theCommitmentOfStepR2bIsSummarized` esteso.
 
 ## Come configurare lo stratega
 
@@ -4495,3 +4567,27 @@ matrice). Hard e le altre voci invariate; `avvia.bat` e `aggiorna.ps1` NON tocca
   10,2 TUV. c2 62 (vinti 39, non presi 12, non attaccati 11); <= P80 44/51 (5,2 contro 11,1).
 - Instradate per round (c1) 1-48 (picco R6), (c2) 2-8; unita' dell'operazione perse nei turni nemici: c1 fino a 5,5 unita' / 23,5 TUV
   per round (R8), c2 fino a 4,7 / 16,6 (R7).
+
+### Step R2c PREPARAZIONE E PROGRAMMI — due fasi, correzioni di R2b, programmi USA e Regno Unito (2026-11-11)
+
+Vedi "Preparazione e programmi (step R2c)". Motivo (run 43023379267): l'instradamento R2b portava a est le unita' di caso a/b che
+coprivano dagli sbarchi (2.6 guarda solo la terra); la Russia sceglieva obiettivi non fattibili e svuotava Mosca (caduta 7/10 contro
+2/10); attacchi forzati mandati da Hard con meno unita' di quelle contate; USA e Regno Unito con trasporti fermi e vuoti. File: nuovo
+`ai/proplus/Programmi`; modificati `Impegno`, `ProPlusTuning` (2 hook), `ProTuning` (+2 hook di default vuoti), `ProPurchaseAi` (+1
+chiamata), `ProCombatMoveAi` (+1 chiamata), `stratega-llm.json` (`impegno.r2c`), `ImpegnoTest`, autoplay `Monitor`
+(`portate_regno_unito`), `ConfrontoImpegno` (sottosezione R2c), `AutoplayTest`, workflow `[impegno]` (semi 1101-1120). Hard e le
+altre voci invariate (golden Hard, nudo = Hard, Stratega senza chiave = Hard, diario, ombra accesa = spenta: verdi).
+- Scelte fatte da solo: base sicura cercata anche sulla via amica fabbrica → partenza (con la sola rotta prima della tappa, spesso
+  1 territorio esposto, la base mancava quasi sempre: visto nella prima prova); in revisione si aggiungono solo unita' di TERRA (aerei
+  no: atterraggio non verificato); Russia con obiettivo tenuto ma non piu' fattibile = sospesa nel turno (gioca come Hard), non chiusa;
+  "trasporto utilizzabile" = entro 2 zone (un turno) dalle zone del porto; i trasporti vuoti tornano al porto anche prima della guerra
+  (dalle zone della spola o entro 2 zone); prima della guerra i carichi restano fermi e tenuti al porto; forza da sbarco UK = 70% dei PU
+  dopo presidi E campagna sull'Egitto; Persia presa con l'unita' confinante piu' economica non della capitale ne' dell'Egitto.
+- B3: vedi la sezione (difesa urgente di Hard prima degli ordini: spiegata e registrata; riconoscimento per tipo: corretto).
+- `Monitor`: il motore svuota la lista "scaricate" dei trasporti a fine movimento non di combattimento (`MoveDelegate`,
+  `resetUnitStateAtEnd`), quindi le unita' portate nel Regno Unito si contano come unita' di terra della nazione comparse li' in un
+  passo di movimento e assenti a inizio turno (anche in Scotland).
+- Prove locali (sandbox, senza chiave): seme 1104 Asse 4 round 117 s (fasi ESECUZIONE su France/Egypt/Slovakia Hungary con attacchi
+  forzati "ESEGUITO" alla revisione, PREPARAZIONE con base sicura Northern Italy, un "NON ATTACCATO DA HARD"); seme 1103 Alleati 7
+  round 178 s contro Hard vs Hard 178 s: Russia "gioca come Hard" (nessun obiettivo fattibile), USA trasporti fermi vuoti a R7 5 contro
+  16, 2+8 unita' portate nel Regno Unito a R5-R6, Persia presa, Iraq non attaccato (vittoria 10%).

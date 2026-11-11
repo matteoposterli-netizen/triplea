@@ -328,4 +328,26 @@ public interface ProTuning {
   default Set<Unit> combatHeldUnits(final ProData proData) {
     return Set.of();
   }
+
+  /**
+   * Called once the plan's purchase orders were bought ({@link ProPlanPurchase}): what was bought
+   * and where it will be placed (Pro+, step R2c: the units of an operation are followed exactly).
+   * Nothing by default; Hard never gives orders.
+   */
+  default void purchaseOrdersBought(
+      final ProData proData,
+      final ProPurchaseOrders orders,
+      final ProPurchaseOrders.Result result) {}
+
+  /**
+   * Called by the combat move after Hard chose its attacks and units, before the moves are made
+   * (Pro+, step R2c: a forced attack is checked again with the units really sent, and completed
+   * with units not committed to other battles or given up). Nothing by default.
+   *
+   * @param attackMap Hard's attacks (territory → units, amphibious and bombarding units)
+   */
+  default void reviewAttacks(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final Map<Territory, ProTerritory> attackMap) {}
 }

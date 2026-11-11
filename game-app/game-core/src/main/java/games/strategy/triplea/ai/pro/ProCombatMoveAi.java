@@ -164,6 +164,11 @@ public class ProCombatMoveAi {
 
     planParadrops();
 
+    // Pro+ (step R2c): a forced attack checked with the units really sent (nothing for Hard)
+    proData
+        .getTuning()
+        .reviewAttacks(proData, calc, territoryManager.getAttackOptions().getTerritoryMap());
+
     // Calculate attack routes and perform moves
     doMove(territoryManager.getAttackOptions().getTerritoryMap(), moveDel, data, player);
 

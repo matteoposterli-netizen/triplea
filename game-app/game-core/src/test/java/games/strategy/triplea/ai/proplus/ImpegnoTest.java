@@ -162,48 +162,17 @@ class ImpegnoTest extends AbstractClientSettingTestCase {
     assertThat(nation().get("dal_round").getAsInt()).isEqualTo(2);
     final Optional<ProPurchaseOrders> orders = ((ProPlusTuning) pd.getTuning()).purchaseOrders(pd);
     assertThat(orders).isPresent();
-    assertThat(orders.get().minimumShare())
-        .isCloseTo(
-            100.0 * turn.get("pu_op").getAsInt() / puTurn,
-            org.assertj.core.data.Offset.offset(0.01));
     assertThat(((ProPlusTuning) pd.getTuning()).strategyCapPercent(pd)).isEmpty();
     final Map<String, Integer> costs = Impegno.costiAcquisto(data, player("Germans"));
     int ordered = 0;
     for (final ProPurchaseOrders.Mandatory m : orders.get().mandatory()) {
       ordered += m.minimum() * costs.get(m.unitTypes().get(0));
     }
+    // step R2c: the share reserves the PUs really ordered
+    assertThat(orders.get().minimumShare())
+        .isCloseTo(100.0 * ordered / puTurn, org.assertj.core.data.Offset.offset(0.01));
     assertThat(ordered).isLessThanOrEqualTo(turn.get("pu_op").getAsInt());
     assertThat(ordered).isGreaterThan(turn.get("pu_op").getAsInt() - 5);
-  }
-
-  @Test
-  void aUnitNotUsedInBattleStepsTowardTheGatheringTerritory() {
-    on();
-    final ProData pd = proData(player("Germans"), 2);
-    Impegno.inizioTurno(pd, calc(), player("Germans"));
-    final Territory gather = territory(nation().get("raduno").getAsString());
-    data.getSequence().setRoundAndStep(2, "Non Combat Move", player("Germans"));
-    final List<MoveDescription> moves = new ArrayList<>();
-    final IMoveDelegate moveDel = mock(IMoveDelegate.class);
-    when(moveDel.performMove(any()))
-        .thenAnswer(
-            invocation -> {
-              moves.add(invocation.getArgument(0));
-              return Optional.empty();
-            });
-    final ProData nc = proData(player("Germans"), 2, "Non Combat Move");
-    final Set<Unit> held = Impegno.nonCombattimento(nc, calc(), moveDel, player("Germans"));
-    assertThat(moves).isNotEmpty();
-    for (final MoveDescription m : moves) {
-      final Territory from = m.getRoute().getStart();
-      final Territory to = m.getRoute().getEnd();
-      assertThat(friendlyDistance(to, gather))
-          .as(m.getUnits() + " " + from + " -> " + to + " toward " + gather)
-          .isLessThan(friendlyDistance(from, gather));
-      assertThat(Matches.isTerritoryAllied(player("Germans")).test(to)).isTrue();
-      assertThat(held).containsAll(m.getUnits());
-    }
-    assertThat(lastTurn().get("instradate").getAsInt()).isEqualTo(moves.size());
   }
 
   @Test
@@ -269,6 +238,271 @@ class ImpegnoTest extends AbstractClientSettingTestCase {
                 21, List.of("infantry", "artillery"), Map.of("infantry", 3, "artillery", 4)))
         .containsEntry("infantry", 3)
         .containsEntry("artillery", 3);
+  }
+
+  // ======================================================================== step R2c
+
+  @Test
+  void theDataFileHasTheValuesOfStepR2c() {
+    final Programmi.Config r2c = Programmi.Config.get();
+    assertThat(r2c.sogliaEsecuzione()).isEqualTo(70);
+    assertThat(r2c.sogliaBaseSicura()).isEqualTo(40);
+    assertThat(r2c.nazioniCampagnaTerra())
+        .containsExactly("Germans", "Italians", "Russians", "British");
+    assertThat(r2c.nazioniSoloFattibili()).containsExactly("Russians");
+    assertThat(r2c.quotaProgrammaUsa()).isEqualTo(70);
+    assertThat(r2c.baseAvanzataUsa()).isEqualTo("United Kingdom");
+    assertThat(r2c.occupaSenzaCombattere()).contains("Persia");
+    assertThat(r2c.attacca()).containsExactly("Iraq");
+    assertThat(r2c.esclusi()).contains("Turkey", "Saudi Arabia");
+  }
+
+  @Test
+  void executionAtSeventyAndNotAtSixtyNine() {
+    final double threshold = Programmi.Config.get().sogliaEsecuzione();
+    assertThat(Impegno.fase(70, threshold)).isEqualTo(Impegno.ESECUZIONE);
+    assertThat(Impegno.fase(100, threshold)).isEqualTo(Impegno.ESECUZIONE);
+    assertThat(Impegno.fase(69, threshold)).isEqualTo(Impegno.PREPARAZIONE);
+    assertThat(Impegno.fase(69.99, threshold)).isEqualTo(Impegno.PREPARAZIONE);
+    assertThat(Impegno.fase(0, threshold)).isEqualTo(Impegno.PREPARAZIONE);
+  }
+
+  @Test
+  void inPreparationNoPreexistingUnitMovesAndNoAttackIsForced() {
+    on();
+    Impegno.inizioTurno(proData(player("Germans"), 2), calc(), player("Germans"));
+    final String stage = nation().get("tappa").getAsString();
+    // the next stage out of reach: a large army defends it
+    addUnits(territory(stage), territory(stage).getOwner().getName(), "infantry", 60);
+    addUnits(territory(stage), territory(stage).getOwner().getName(), "armour", 20);
+    final ProData pd = proData(player("Germans"), 2);
+    Impegno.inizioTurno(pd, calc(), player("Germans"));
+    assertThat(nation().get("fase").getAsString()).isEqualTo(Impegno.PREPARAZIONE);
+    assertThat(lastTurn().get("fase").getAsString()).isEqualTo(Impegno.PREPARAZIONE);
+    assertThat(Impegno.forzaQualcosa(pd)).isFalse();
+    for (final var a : lastTurn().getAsJsonArray("attacchi")) {
+      assertThat(a.getAsJsonObject().get("forzato").getAsBoolean()).isFalse();
+    }
+    // no unit bought yet: nothing moves in the non-combat move
+    final List<MoveDescription> moves = new ArrayList<>();
+    final IMoveDelegate moveDel = recording(moves);
+    final ProData nc = proData(player("Germans"), 2, "Non Combat Move");
+    assertThat(Impegno.nonCombattimento(nc, calc(), moveDel, player("Germans"))).isEmpty();
+    assertThat(moves).isEmpty();
+    // a unit bought for the operation (followed by id) may move; the others never
+    final Territory factory = territory("Germany");
+    final Unit bought =
+        data.getUnitTypeList().getUnitTypeOrThrow("infantry").create(1, player("Germans")).get(0);
+    data.performChange(ChangeFactory.addUnits(factory, List.of(bought)));
+    follow(bought);
+    final ProData nc2 = proData(player("Germans"), 2, "Non Combat Move");
+    Impegno.nonCombattimento(nc2, calc(), moveDel, player("Germans"));
+    for (final MoveDescription m : moves) {
+      assertThat(m.getUnits()).containsOnly(bought);
+    }
+  }
+
+  @Test
+  void aForcedAttackIsGivenUpWhenTheUnitsHardSendsAreNotEnough() {
+    // the rule: as sent, completed with extra units, or given up (never half-done)
+    assertThat(Impegno.completa(75, List.of(), 70)).contains(0);
+    assertThat(Impegno.completa(50, List.of(60.0, 72.0, 90.0), 70)).contains(2);
+    assertThat(Impegno.completa(50, List.of(60.0, 69.0), 70)).isEmpty();
+    assertThat(Impegno.completa(50, List.of(), 70)).isEmpty();
+    // on the board: France forced, Hard sends one infantry and nothing else can join
+    on();
+    final ProData pd = proData(player("Germans"), 2, "Combat Move");
+    data.getProperties().set(Impegno.KEY_FORZATI + "Germans", "2|France");
+    final Territory france = territory("France");
+    final Unit one =
+        territory("Western Germany")
+            .getMatches(
+                Matches.unitIsOwnedBy(player("Germans")).and(Matches.unitIsLandTransportable()))
+            .get(0);
+    final games.strategy.triplea.ai.pro.data.ProTerritory attack =
+        new games.strategy.triplea.ai.pro.data.ProTerritory(france, pd);
+    attack.addUnit(one);
+    attack.getMaxUnits().add(one);
+    final Map<Territory, games.strategy.triplea.ai.pro.data.ProTerritory> map =
+        new java.util.HashMap<>(Map.of(france, attack));
+    Impegno.rivedi(pd, calc(), map);
+    assertThat(attack.getUnits()).isEmpty();
+    // switch off: Hard's attack untouched
+    final games.strategy.triplea.ai.pro.data.ProTerritory other =
+        new games.strategy.triplea.ai.pro.data.ProTerritory(france, pd);
+    other.addUnit(one);
+    StrategaInterruttori.accendi(data.getProperties(), "Axis", "");
+    Impegno.rivedi(proData(player("Germans"), 2, "Combat Move"), calc(), Map.of(france, other));
+    assertThat(other.getUnits()).containsExactly(one);
+  }
+
+  @Test
+  void russiaWithoutAFeasibleTargetMovesAsHard() {
+    final var feasible = new Impegno.Candidato("A", 3, true, 0, 1);
+    final var near = new Impegno.Candidato("B", 1, false, 2, 9);
+    assertThat(Impegno.scegliFattibile(List.of(near))).isEmpty();
+    assertThat(Impegno.scegliFattibile(List.of(near, feasible)).map(Impegno.Candidato::territorio))
+        .contains("A");
+    // the general rule keeps the smallest gap
+    assertThat(Impegno.scegli(List.of(near)).map(Impegno.Candidato::territorio)).contains("B");
+    // on the board (Allies with the commitment): no target, no orders, no move
+    Stratega.registra(data, player("Russians"));
+    StrategaInterruttori.accendi(data.getProperties(), "Allies", "impegno");
+    final ProData pd = proData(player("Russians"), 2);
+    final List<String> before = answers(pd);
+    Impegno.inizioTurno(pd, calc(), player("Russians"));
+    final JsonObject russia = alliesNation("Russians");
+    assertThat(russia.has("obiettivo")).isFalse();
+    assertThat(Impegno.ordini(pd)).isEmpty();
+    assertThat(Impegno.forzaQualcosa(pd)).isFalse();
+    assertThat(answers(pd)).isEqualTo(before);
+    final List<MoveDescription> moves = new ArrayList<>();
+    final ProData nc = proData(player("Russians"), 2, "Non Combat Move");
+    assertThat(Impegno.nonCombattimento(nc, calc(), recording(moves), player("Russians")))
+        .isEmpty();
+    assertThat(moves).isEmpty();
+  }
+
+  @Test
+  void theBalancedLoadBuysNoTransportWithAnIdleEmptyOne() {
+    final Programmi.Config cfg = Programmi.Config.get();
+    final Map<String, Integer> costs =
+        Map.of("infantry", 3, "artillery", 4, "armour", 6, "transport", 7, "destroyer", 8);
+    final Map<String, Integer> tc = Map.of("infantry", 2, "artillery", 3, "armour", 3);
+    // an idle empty transport: troops up to its room (5), never a transport
+    final Map<String, Integer> idle = Programmi.caricoBilanciato(60, 1, 5, 0, 0, costs, tc, 5, cfg);
+    assertThat(idle).doesNotContainKey("transport");
+    assertThat(load(idle, tc)).isLessThanOrEqualTo(5).isPositive();
+    // troops already waiting fill the room: nothing more
+    assertThat(Programmi.caricoBilanciato(60, 1, 5, 5, 0, costs, tc, 5, cfg)).isEmpty();
+    // no transport at the port: transports and the troops they carry next turn
+    final Map<String, Integer> none = Programmi.caricoBilanciato(60, 0, 0, 0, 0, costs, tc, 5, cfg);
+    assertThat(none).containsKey("transport");
+    assertThat(load(none, tc)).isLessThanOrEqualTo(5 * none.get("transport")).isPositive();
+    // escort only as needed, at most max_scorta_per_turno
+    assertThat(Programmi.caricoBilanciato(60, 1, 0, 0, 1, costs, tc, 5, cfg))
+        .containsEntry("destroyer", 1);
+    assertThat(Programmi.caricoBilanciato(60, 1, 0, 0, 5, costs, tc, 5, cfg))
+        .containsEntry("destroyer", cfg.maxScortaPerTurno());
+    assertThat(Programmi.caricoBilanciato(60, 1, 0, 0, 0, costs, tc, 5, cfg)).isEmpty();
+  }
+
+  @Test
+  void aLoadedUsTransportGoesTowardTheUnitedKingdomAndAnEmptyOneComesBack() {
+    final GamePlayer usa = player("Americans");
+    Stratega.registra(data, usa);
+    StrategaInterruttori.accendi(data.getProperties(), "Allies", "impegno");
+    // at war: allied to the British, no enemy at sea or in the air
+    final var types = data.getRelationshipTypeList();
+    final GamePlayer uk = player("British");
+    data.performChange(
+        ChangeFactory.relationshipChange(
+            usa,
+            uk,
+            data.getRelationshipTracker().getRelationshipType(usa, uk),
+            types.getDefaultAlliedRelationship()));
+    // the map's trigger at war: no movement restriction any more
+    if (usa.getRulesAttachment() != null) {
+      data.performChange(
+          ChangeFactory.attachmentPropertyReset(
+              usa.getRulesAttachment(), "movementRestrictionTerritories"));
+    }
+    for (final Territory t : data.getMap().getTerritories()) {
+      final List<Unit> enemy =
+          t.getMatches(
+              Matches.isUnitAllied(usa).negate().and(Matches.unitIsSea().or(Matches.unitIsAir())));
+      if (!enemy.isEmpty()) {
+        data.performChange(ChangeFactory.removeUnits(t, enemy));
+      }
+    }
+    final Territory port = territory("Eastern United States");
+    final Territory base = territory("United Kingdom");
+    final Territory portZone =
+        data.getMap().getNeighbors(port, Matches.territoryIsWater()).stream()
+            .sorted(java.util.Comparator.comparing(Territory::getName))
+            .findFirst()
+            .orElseThrow();
+    final Territory baseZone =
+        data.getMap().getNeighbors(base, Matches.territoryIsWater()).stream()
+            .filter(z -> data.getMap().getDistance(portZone, z, Matches.territoryIsWater()) > 2)
+            .sorted(java.util.Comparator.comparing(Territory::getName))
+            .findFirst()
+            .orElseThrow();
+    final Unit loaded =
+        data.getUnitTypeList().getUnitTypeOrThrow("transport").create(1, usa).get(0);
+    final Unit cargo = data.getUnitTypeList().getUnitTypeOrThrow("infantry").create(1, usa).get(0);
+    final Unit empty = data.getUnitTypeList().getUnitTypeOrThrow("transport").create(1, usa).get(0);
+    data.performChange(ChangeFactory.addUnits(portZone, List.of(loaded, cargo)));
+    data.performChange(
+        ChangeFactory.unitPropertyChange(cargo, loaded, Unit.PropertyName.TRANSPORTED_BY));
+    data.performChange(ChangeFactory.addUnits(baseZone, List.of(empty)));
+    final List<MoveDescription> moves = new ArrayList<>();
+    final ProData nc = proData(usa, 2, "Non Combat Move");
+    final Set<Unit> held = Impegno.nonCombattimento(nc, calc(), recording(moves), usa);
+    final List<Territory> baseZones =
+        data.getMap().getNeighbors(base, Matches.territoryIsWater()).stream().toList();
+    final List<Territory> portZones =
+        data.getMap().getNeighbors(port, Matches.territoryIsWater()).stream().toList();
+    final MoveDescription out =
+        moves.stream().filter(m -> m.getUnits().contains(loaded)).findFirst().orElseThrow();
+    assertThat(out.getUnits()).contains(cargo);
+    assertThat(seaDistance(out.getRoute().getEnd(), baseZones))
+        .isLessThan(seaDistance(portZone, baseZones));
+    final MoveDescription back =
+        moves.stream().filter(m -> m.getUnits().contains(empty)).findFirst().orElseThrow();
+    assertThat(seaDistance(back.getRoute().getEnd(), portZones))
+        .isLessThan(seaDistance(baseZone, portZones));
+    assertThat(held).contains(loaded, cargo, empty);
+  }
+
+  private int seaDistance(final Territory from, final List<Territory> to) {
+    int best = Integer.MAX_VALUE;
+    for (final Territory t : to) {
+      final int d =
+          from.equals(t) ? 0 : data.getMap().getDistance(from, t, Matches.territoryIsWater());
+      if (d >= 0) {
+        best = Math.min(best, d);
+      }
+    }
+    return best;
+  }
+
+  private static int load(final Map<String, Integer> mix, final Map<String, Integer> tc) {
+    int n = 0;
+    for (final var e : mix.entrySet()) {
+      n += tc.getOrDefault(e.getKey(), 0) * e.getValue();
+    }
+    return n;
+  }
+
+  private static IMoveDelegate recording(final List<MoveDescription> moves) {
+    final IMoveDelegate moveDel = mock(IMoveDelegate.class);
+    when(moveDel.performMove(any()))
+        .thenAnswer(
+            invocation -> {
+              moves.add(invocation.getArgument(0));
+              return Optional.empty();
+            });
+    return moveDel;
+  }
+
+  private void follow(final Unit u) {
+    final JsonObject st = state();
+    final JsonObject n = st.getAsJsonObject("nazioni").getAsJsonObject("Germans");
+    if (!n.has("unita")) {
+      n.add("unita", new JsonObject());
+    }
+    n.getAsJsonObject("unita").addProperty(u.getId().toString(), u.getType().getName());
+    Impegno.salva(data.getProperties(), "Axis", st);
+  }
+
+  private JsonObject alliesNation(final String name) {
+    final Object s = data.getProperties().get(Impegno.KEY_STATO + "Allies");
+    final JsonObject st =
+        s == null ? new JsonObject() : JsonParser.parseString((String) s).getAsJsonObject();
+    return st.has("nazioni") && st.getAsJsonObject("nazioni").has(name)
+        ? st.getAsJsonObject("nazioni").getAsJsonObject(name)
+        : new JsonObject();
   }
 
   // ================================================================================ helpers

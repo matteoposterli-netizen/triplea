@@ -331,6 +331,24 @@ public final class ProPlusTuning implements ProTuning {
                     .map(o -> plan.isDifensiva() ? withoutPlanShare(o) : o));
   }
 
+  /** Step R2c (B3): the units the commitment's orders really bought are followed exactly. */
+  @Override
+  public void purchaseOrdersBought(
+      final ProData proData,
+      final ProPurchaseOrders orders,
+      final ProPurchaseOrders.Result result) {
+    Impegno.acquistato(proData, orders, result);
+  }
+
+  /** Step R2c (B2): a forced attack checked with the units Hard really sends. */
+  @Override
+  public void reviewAttacks(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final Map<Territory, games.strategy.triplea.ai.pro.data.ProTerritory> attackMap) {
+    Impegno.rivedi(proData, calc, attackMap);
+  }
+
   /** Step R2b: the commitment's orders with the operations' mandatory reserves added. */
   private static ProPurchaseOrders withReserves(
       final ProPurchaseOrders commitment, final ProPurchaseOrders reserves) {

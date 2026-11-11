@@ -99,7 +99,135 @@
     "distanza_vicina": {"valore": 2, "origine": "scelto: fabbrica entro 2 territori di terra dalla tappa = vicina (fanteria e artiglieria arrivano in 2 turni)"},
     "tipi_vicino": {"valore": ["infantry", "artillery"], "origine": "scelto: lenti e economici se la tappa e' vicina"},
     "tipi_lontano": {"valore": ["mech_infantry", "armour"], "origine": "scelto: movimento 2 se la tappa e' lontana"},
-    "max_unita_seguite": {"valore": 200, "origine": "scelto: limite di potatura dello stato (unita' dell'operazione seguite per id)"}
+    "max_unita_seguite": {"valore": 200, "origine": "scelto: limite di potatura dello stato (unita' dell'operazione seguite per id)"},
+    "r2c": {
+      "nota": "Step R2c PREPARAZIONE E PROGRAMMI (dietro lo stesso interruttore impegno, spento di default). Due fasi per operazione: PREPARAZIONE = acquisti per l'operazione e accumulo delle SOLE unita' comprate (seguite per id dal piazzamento esatto dell'ordine) nella base sicura (territorio proprio sulla rotta, il piu' vicino alla tappa, dove il contrattacco realistico vince <= soglia_base_sicura); nessun attacco forzato, nessuna unita' preesistente spostata. ESECUZIONE dal turno in cui il calcolatore con tutte le unita' in portata e i difensori reali da' >= soglia_esecuzione sulla prossima tappa: raduno e attacco forzato. Attacco forzato rivisto dopo le mosse scelte da Hard: sotto soglia_esecuzione si aggiungono unita' di terra in portata non impegnate in altre battaglie fino alla soglia, altrimenti si rinuncia (mai a meta'). Campagne via terra solo per nazioni_campagna_terra; Russia solo con obiettivo fattibile a margine_scelta (altrimenti gioca come Hard nel turno); Regno Unito solo verso territori_uk_campagna. Programmi permanenti: USA (dal R1, base avanzata base_avanzata_usa) e forza da sbarco del Regno Unito in patria, con la regola del CARICO BILANCIATO (carico_bilanciato). Valori SCELTI, nessuno tarato.",
+      "soglia_esecuzione": {
+        "valore": 70,
+        "origine": "scelto (richiesta dello step R2c): vittoria del calcolatore sulla prossima tappa per passare da PREPARAZIONE a ESECUZIONE, e minimo dell'attacco forzato con le unita' mandate da Hard"
+      },
+      "soglia_base_sicura": {
+        "valore": 40,
+        "origine": "scelto (richiesta dello step R2c): base sicura = contrattacco realistico vince <= 40%"
+      },
+      "nazioni_campagna_terra": {
+        "valore": [
+          "Germans",
+          "Italians",
+          "Russians",
+          "British"
+        ],
+        "origine": "scelto (richiesta dello step R2c): USA mai via terra; Regno Unito solo Africa e Medio Oriente; Russia solo se fattibile"
+      },
+      "nazioni_solo_fattibili": {
+        "valore": [
+          "Russians"
+        ],
+        "origine": "scelto (richiesta dello step R2c): obiettivo solo se fattibile a margine_scelta, altrimenti la nazione gioca come Hard"
+      },
+      "territori_uk_campagna": {
+        "valore": [
+          "Egypt",
+          "Alexandria",
+          "Trans-Jordan",
+          "Libya",
+          "Tobruk",
+          "Ethiopia",
+          "Italian Somaliland",
+          "British Somaliland",
+          "Anglo-Egyptian Sudan",
+          "Iraq",
+          "Persia",
+          "Northwest Persia",
+          "Syria",
+          "Morocco",
+          "Algeria",
+          "Tunisia"
+        ],
+        "origine": "scelto: Africa e Medio Oriente (i candidati restano VC o capitali: in pratica Egitto)"
+      },
+      "presidi_prioritari": {
+        "valore": {
+          "British": [
+            "Egypt"
+          ]
+        },
+        "origine": "scelto (richiesta dello step R2c, D2): presidio caso c dell'Egitto dopo Londra, tolto dai PU prima di operazioni e programmi"
+      },
+      "quota_programma_usa": {
+        "valore": 70,
+        "origine": "scelto (richiesta dello step R2c): % dei PU dopo il presidio della capitale in caso c"
+      },
+      "quota_forza_sbarco_uk": {
+        "valore": 70,
+        "origine": "scelto (richiesta dello step R2c): % dei PU rimasti dopo i presidi di Londra ed Egitto e l'eventuale campagna sull'Egitto"
+      },
+      "base_avanzata_usa": {
+        "valore": "United Kingdom",
+        "origine": "scelto (richiesta dello step R2c)"
+      },
+      "porto_usa": {
+        "valore": "Eastern United States",
+        "origine": "scelto: fabbrica USA sulla costa atlantica (zona 101)"
+      },
+      "porto_uk": {
+        "valore": "United Kingdom",
+        "origine": "scelto: forza da sbarco in patria"
+      },
+      "tipi_spola": {
+        "valore": [
+          "infantry",
+          "artillery",
+          "infantry",
+          "armour"
+        ],
+        "origine": "scelto: alternati; fanteria (costo di trasporto 2) + artiglieria o carro (3) = un trasporto pieno (5)"
+      },
+      "tipo_trasporto": {
+        "valore": "transport",
+        "origine": "dalla mappa"
+      },
+      "tipo_scorta": {
+        "valore": "destroyer",
+        "origine": "scelto: la nave da guerra piu' economica"
+      },
+      "max_scorta_per_turno": {
+        "valore": 2,
+        "origine": "scelto: limite di cacciatorpediniere comprati per la scorta in un turno"
+      },
+      "soglia_mare_sicuro": {
+        "valore": 40,
+        "origine": "scelto (richiesta dello step R2c): zona della spola sicura se il contrattacco realistico vince <= 40%"
+      },
+      "max_scorta_mossa": {
+        "valore": 4,
+        "origine": "scelto: navi da guerra della stessa zona che accompagnano i trasporti carichi"
+      },
+      "carico_bilanciato": "REGOLA DEL CARICO BILANCIATO (R2c, USA e forza da sbarco UK): 1) scorta: cacciatorpediniere solo finche' la zona peggiore della spola (porto, zone della rotta fino alla base) ha contrattacco realistico > soglia_mare_sicuro, al massimo max_scorta_per_turno; 2) truppe: solo finche' truppe in attesa al porto + truppe comprate entrano nel posto libero dei trasporti che arrivano al porto entro il turno successivo (compresi quelli comprati ora); 3) trasporti: mai se esiste un trasporto fermo e vuoto utilizzabile (entro 2 zone dal porto); altrimenti uno quando le truppe non entrano piu'. Il resto dei PU a Hard.",
+      "medio_oriente": {
+        "occupa_senza_combattere": {
+          "valore": [
+            "Persia",
+            "Northwest Persia"
+          ],
+          "origine": "dalla mappa: Neutral_Allies, relazione Friendly_Neutral con il Regno Unito (canTakeOverOwnedTerritory): una unita' britannica che entra nel non combattimento prende il territorio (Persia 2 PU + 2 fanterie, Northwest Persia 0 PU) senza battaglia ne' conseguenze"
+        },
+        "attacca": {
+          "valore": [
+            "Iraq"
+          ],
+          "origine": "dalla mappa: Neutral_Axis, relazione Unfriendly_Neutral (archetipo war): 3 fanterie, 2 PU; nessun trigger politico legato ai neutrali filo-Asse. Attacco forzato solo con unita' gia' in zona e vittoria >= soglia_esecuzione"
+        },
+        "esclusi": {
+          "valore": [
+            "Saudi Arabia",
+            "Turkey",
+            "Afghanistan"
+          ],
+          "origine": "dalla mappa: Neutral_True, relazione Strict_Neutral: non attaccabili senza dichiarare guerra ai neutrali veri; attaccarne uno rende gli altri (Turchia, Spagna, Svezia...) amici dell'Asse: sconveniente"
+        }
+      }
+    }
   },
   "difesa": {
     "nota": "Step C2-bis: la difesa la fa Hard (con le liste irrinunciabili/sacrificabili dell'LLM); questo calcolo resta solo IN OMBRA nel diario (nessuna decisione). Limiti separati: max_unita_per_territorio rinforzi + max_unita_per_territorio acquisti nella fabbrica del territorio; fabbriche vicine proprie (unita' che arrivano in una mossa: difendono dal turno nemico dopo, tenuta_turno_dopo). Step C2 (piano originale): A inizio turno di ogni nazione dello Stratega: territori propri (e capitali/fabbriche dell'alleanza dove la nazione puo' portare rinforzi) minacciati dai nemici che muovono prima del suo prossimo turno, tutti insieme (stima d'attacco di Hard, unita' in portata + acquisti nemici); contrattacco = la stessa stima unica delle operazioni (StimaUnica: MASSIMO su capitali e fabbriche chiave, REALISTICO altrove con lo storico del nemico, minimo prudente 0,5 con storico scarso). Valore = valore_bersaglio_PU del territorio (stessa scala del valore d'alleanza, H = tenuta_round_default) + TUV delle fabbriche + valore delle operazioni in corso che dipendono dal territorio. Costo = PU degli acquisti difensivi + (1 - tenuta) x TUV delle unita' mandate o comprate. Unita' minime per arrivare a soglia_tenuta: prima rinforzi che arrivano nel non combattimento (rinforziPossibili, come le tenute), poi acquisti nella fabbrica del territorio (le unita' piazzate non si muovono prima del turno nemico). Difendi se irrinunciabile (capitale, lista dell'LLM) o valore >= costo; sacrifica se sacrificabile (lista dell'LLM) o costo > valore o indifendibile (tenuta massima <= soglia_ritirata). PU alla strategia = min(PU - PU_difesa, tetto_strategia_pct% dei PU); il resto a Hard. Valori ragionevoli scelti a mano, NON tarati.",

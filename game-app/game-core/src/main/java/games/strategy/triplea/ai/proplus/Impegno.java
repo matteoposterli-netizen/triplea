@@ -86,6 +86,18 @@ public final class Impegno {
   static final String NON_NEMICO = "non piu' del nemico";
   static final String ROTTA_ASSENTE = "rotta assente";
   static final String CAPITALE_C = "capitale in caso c";
+  static final String SENZA_CAMPAGNA = "nazione senza campagne via terra (R2c)";
+  static final String COME_HARD = "gioca come Hard";
+  static final String PREPARAZIONE = "PREPARAZIONE";
+  static final String ESECUZIONE = "ESECUZIONE";
+
+  /** Step R2c (B3): what the commitment's orders really bought, by "nation|round". */
+  private static final Map<String, ProPurchaseOrders.Result> ACQUISTI =
+      new java.util.concurrent.ConcurrentHashMap<>();
+
+  /** Step R2c (B2): the forced attacks reviewed after Hard's choice, by "nation|round". */
+  private static final Map<String, JsonArray> REVISIONI =
+      new java.util.concurrent.ConcurrentHashMap<>();
 
   // ================================================================================ config
 
@@ -156,6 +168,34 @@ public final class Impegno {
   /** 5: a forced attack when the calculator's win with every unit in range is >= the threshold. */
   static boolean forza(final double vittoriaPct, final double soglia) {
     return vittoriaPct >= soglia;
+  }
+
+  /** R2c A: the phase of the operation from the calculator's win% on the next stage. */
+  static String fase(final double vittoriaTappaPct, final double soglia) {
+    return vittoriaTappaPct >= soglia ? ESECUZIONE : PREPARAZIONE;
+  }
+
+  /** R2c B4: only a feasible candidate (fewest stages, ties as {@link #scegli}); else none. */
+  static Optional<Candidato> scegliFattibile(final List<Candidato> candidates) {
+    return scegli(candidates.stream().filter(Candidato::fattibile).toList());
+  }
+
+  /**
+   * R2c B2: whether a forced attack goes ahead after Hard's choice: the win% with the units sent
+   * and then with each extra unit added in turn ({@code conAggiunte}, cumulative). Returns the
+   * number of extra units needed (0 = as sent), empty = given up (never an attack left half-done).
+   */
+  static Optional<Integer> completa(
+      final double vittoriaMandate, final List<Double> conAggiunte, final double soglia) {
+    if (vittoriaMandate >= soglia) {
+      return Optional.of(0);
+    }
+    for (int i = 0; i < conAggiunte.size(); i++) {
+      if (conAggiunte.get(i) >= soglia) {
+        return Optional.of(i + 1);
+      }
+    }
+    return Optional.empty();
   }
 
   /**
@@ -294,10 +334,23 @@ public final class Impegno {
         return Optional.empty();
       }
       final List<ProPurchaseOrders.Mandatory> mandatory = new ArrayList<>();
-      for (final var e : o.getAsJsonObject("tipi").entrySet()) {
-        mandatory.add(
-            new ProPurchaseOrders.Mandatory(
-                "impegno " + e.getKey(), List.of(e.getKey()), e.getValue().getAsInt()));
+      final List<String> factories = new ArrayList<>();
+      if (o.has("tipi")) {
+        for (final var e : o.getAsJsonObject("tipi").entrySet()) {
+          mandatory.add(
+              new ProPurchaseOrders.Mandatory(
+                  "impegno " + e.getKey(), List.of(e.getKey()), e.getValue().getAsInt()));
+        }
+        factories.add(o.get("fabbrica").getAsString());
+      }
+      // step R2c: the permanent program (USA, landing force of the United Kingdom)
+      if (o.has("tipi_programma")) {
+        for (final var e : o.getAsJsonObject("tipi_programma").entrySet()) {
+          mandatory.add(
+              new ProPurchaseOrders.Mandatory(
+                  "programma " + e.getKey(), List.of(e.getKey()), e.getValue().getAsInt()));
+        }
+        factories.add(o.get("fabbrica_programma").getAsString());
       }
       if (mandatory.isEmpty()) {
         return Optional.empty();
@@ -307,8 +360,8 @@ public final class Impegno {
               "Impegno " + player.getName() + ": " + o.get("obiettivo").getAsString(),
               List.of(),
               List.copyOf(mandatory),
-              List.of(o.get("fabbrica").getAsString()),
-              List.of(o.get("raduno").getAsString()),
+              List.copyOf(factories),
+              o.has("raduno") ? List.of(o.get("raduno").getAsString()) : List.of(),
               o.get("quota_minima").getAsDouble()));
     } catch (final RuntimeException e) {
       return Optional.empty();
@@ -350,6 +403,140 @@ public final class Impegno {
       }
     }
     return out;
+  }
+
+  /** R2c B3: what the commitment's orders bought (from the purchase, real or simulated). */
+  public static void acquistato(
+      final ProData proData,
+      final ProPurchaseOrders orders,
+      final ProPurchaseOrders.Result result) {
+    final GamePlayer player = proData.getPlayer();
+    if (player == null || !orders.label().startsWith("Impegno ")) {
+      return;
+    }
+    ACQUISTI.put(player.getName() + "|" + proData.getData().getSequence().getRound(), result);
+  }
+
+  /**
+   * R2c B2: after Hard chose its attacks (before the moves), each forced attack is computed again
+   * with the units Hard really sends; below {@code soglia_esecuzione} the land units in range not
+   * committed to other battles are added (strongest first) until it is reached, otherwise the
+   * attack is given up. Never an attack left half-done. Nothing with the switch off.
+   */
+  public static void rivedi(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final Map<Territory, ProTerritory> attackMap) {
+    final GamePlayer player = proData.getPlayer();
+    if (player == null || !attivo(proData.getData(), player) || !forzaQualcosa(proData)) {
+      return;
+    }
+    try {
+      final double threshold = Programmi.Config.get().sogliaEsecuzione();
+      final Set<Unit> committed = new HashSet<>();
+      for (final ProTerritory p : attackMap.values()) {
+        committed.addAll(p.getUnits());
+        committed.addAll(p.getBombers());
+        committed.addAll(p.getAmphibAttackMap().keySet());
+        p.getAmphibAttackMap().values().forEach(committed::addAll);
+        committed.addAll(p.getBombardTerritoryMap().keySet());
+      }
+      final JsonArray out = new JsonArray();
+      final List<Territory> forced =
+          attackMap.keySet().stream()
+              .filter(t -> forzato(proData, t))
+              .sorted(Comparator.comparing(Territory::getName))
+              .toList();
+      for (final Territory t : forced) {
+        final ProTerritory p = attackMap.get(t);
+        final JsonObject x = new JsonObject();
+        x.addProperty("territorio", t.getName());
+        if (attaccanti(p).isEmpty()) {
+          x.addProperty("revisione", "non attaccato da Hard");
+          out.add(x);
+          continue;
+        }
+        final double sent = vittoria(proData, calc, p, t);
+        x.addProperty("vittoria_mandate_pct", Math.round(sent * 10) / 10.0);
+        final List<Unit> extra =
+            p.getMaxUnits().stream()
+                .filter(Matches.unitIsOwnedBy(player).and(Matches.unitIsLand()))
+                .filter(Matches.unitIsNotInfrastructure())
+                .filter(u -> !committed.contains(u))
+                .sorted(
+                    Comparator.comparingInt(
+                            (Unit u) -> -u.getUnitAttachment().getAttack(u.getOwner()))
+                        .thenComparing(u -> u.getId().toString()))
+                .toList();
+        final List<Double> wins = new ArrayList<>();
+        final List<Unit> added = new ArrayList<>();
+        if (sent < threshold) {
+          for (final Unit u : extra) {
+            p.addUnit(u);
+            added.add(u);
+            final double w = vittoria(proData, calc, p, t);
+            wins.add(w);
+            if (w >= threshold) {
+              break;
+            }
+          }
+        }
+        final Optional<Integer> needed = completa(sent, wins, threshold);
+        if (needed.isPresent()) {
+          committed.addAll(added);
+          x.addProperty("revisione", needed.get() == 0 ? "eseguito" : "completato");
+          x.addProperty("aggiunte", needed.get());
+          x.addProperty(
+              "vittoria_finale_pct",
+              Math.round((needed.get() == 0 ? sent : wins.get(needed.get() - 1)) * 10) / 10.0);
+        } else {
+          p.getUnits().removeAll(added);
+          rinuncia(p);
+          x.addProperty("revisione", "rinunciato");
+          x.addProperty("aggiunte", 0);
+        }
+        out.add(x);
+      }
+      REVISIONI.put(player.getName() + "|" + proData.getData().getSequence().getRound(), out);
+    } catch (final RuntimeException e) {
+      ProLogger.warn("[Pro+] Impegno, revisione degli attacchi forzati: " + e);
+    }
+  }
+
+  private static List<Unit> attaccanti(final ProTerritory p) {
+    final List<Unit> out = new ArrayList<>(p.getUnits());
+    p.getAmphibAttackMap().values().forEach(out::addAll);
+    return out;
+  }
+
+  private static double vittoria(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final ProTerritory p,
+      final Territory t) {
+    final List<Unit> defenders = t.getMatches(Matches.enemyUnit(proData.getPlayer()));
+    if (defenders.stream().noneMatch(Matches.unitIsNotInfrastructure())) {
+      return 100;
+    }
+    final List<Unit> bombard = new ArrayList<>();
+    p.getBombardTerritoryMap()
+        .forEach(
+            (u, where) -> {
+              if (t.equals(where)) {
+                bombard.add(u);
+              }
+            });
+    return calc.calculateBattleResults(proData, t, attaccanti(p), defenders, bombard)
+        .getWinPercentage();
+  }
+
+  /** R2c B2: the attack on {@code p} given up (no unit of it moves). */
+  private static void rinuncia(final ProTerritory p) {
+    p.getUnits().clear();
+    p.getBombers().clear();
+    p.getAmphibAttackMap().clear();
+    p.getTransportTerritoryMap().clear();
+    p.getBombardTerritoryMap().clear();
   }
 
   /** 5: the minimum win% Hard keeps for a forced target (the absolute guard rail, 30%). */
@@ -416,8 +603,13 @@ public final class Impegno {
       if (props.get(KEY_ORDINE + player.getName()) instanceof String s && !s.isBlank()) {
         final JsonObject order = JsonParser.parseString(s).getAsJsonObject();
         if (order.get("round").getAsInt() == round) {
+          // step R2c (B3): the units the orders really bought and where (not every new unit of
+          // the same type: Hard buys infantry too)
+          final ProPurchaseOrders.Result bought = ACQUISTI.remove(player.getName() + "|" + round);
           final Territory factory =
-              data.getMap().getTerritoryOrNull(order.get("fabbrica").getAsString());
+              order.has("fabbrica")
+                  ? data.getMap().getTerritoryOrNull(order.get("fabbrica").getAsString())
+                  : null;
           final List<Unit> fresh = new ArrayList<>();
           for (final Territory t : data.getMap().getTerritories()) {
             t.getUnitCollection().stream()
@@ -426,18 +618,47 @@ public final class Impegno {
                 .forEach(fresh::add);
           }
           final Map<Unit, Territory> where = luoghi(data, fresh);
+          final Set<String> placedAt = bought == null ? Set.of() : bought.placements().keySet();
           fresh.sort(
               Comparator.comparingInt(
+                      (Unit u) ->
+                          where.get(u) != null && placedAt.contains(where.get(u).getName()) ? 0 : 1)
+                  .thenComparingInt(
                       (Unit u) ->
                           factory == null || where.get(u) == null
                               ? 99
                               : Math.max(0, data.getMap().getDistance(where.get(u), factory)))
                   .thenComparing(u -> u.getId().toString()));
+          final Map<String, Integer> want = new LinkedHashMap<>();
+          int programSpent = 0;
+          final Map<String, Integer> program = new LinkedHashMap<>();
+          if (bought != null) {
+            bought
+                .units()
+                .forEach(
+                    (category, m) -> {
+                      if (category.startsWith("impegno ")) {
+                        m.forEach((type, n) -> want.merge(type, n, Integer::sum));
+                      } else if (category.startsWith("programma ")) {
+                        m.forEach((type, n) -> program.merge(type, n, Integer::sum));
+                      }
+                    });
+            for (final var e : bought.spent().entrySet()) {
+              if (e.getKey().startsWith("programma ")) {
+                programSpent += e.getValue();
+              }
+            }
+          } else if (order.has("tipi")) {
+            order
+                .getAsJsonObject("tipi")
+                .entrySet()
+                .forEach(e -> want.put(e.getKey(), e.getValue().getAsInt()));
+          }
           final Map<String, Integer> costs = costiAcquisto(data, player);
           final Map<String, Integer> taken = new LinkedHashMap<>();
           int spent = 0;
-          for (final var e : order.getAsJsonObject("tipi").entrySet()) {
-            int n = e.getValue().getAsInt();
+          for (final var e : want.entrySet()) {
+            int n = e.getValue();
             for (final Unit u : fresh) {
               if (n <= 0) {
                 break;
@@ -450,19 +671,51 @@ public final class Impegno {
               }
             }
           }
+          final int planned = order.has("pu_op") ? order.get("pu_op").getAsInt() : 0;
           final JsonObject turn = turno(st, round, player.getName());
           turn.addProperty("pu_op_spesi", spent);
           turn.add("unita_comprate", mappa(taken));
-          lines.add(
-              "  Impegno "
-                  + player.getName()
-                  + ": comprate e piazzate per l'operazione "
-                  + (taken.isEmpty() ? "nessuna unita'" : testo(taken))
-                  + " ("
-                  + spent
-                  + " PU di "
-                  + order.get("pu_op").getAsInt()
-                  + " previsti), seguite per id");
+          turn.addProperty("pu_programma_spesi", programSpent);
+          turn.add("programma_comprate", mappa(program));
+          final List<String> missing = bought == null ? List.of() : bought.mandatoryMissing();
+          if (bought != null) {
+            turn.addProperty("pu_dopo_difesa_hard", bought.budget());
+            final JsonArray m = new JsonArray();
+            missing.forEach(m::add);
+            turn.add("obbligati_mancanti", m);
+          }
+          if (planned > 0 || !taken.isEmpty()) {
+            lines.add(
+                "  Impegno "
+                    + player.getName()
+                    + ": comprate e piazzate per l'operazione "
+                    + (taken.isEmpty() ? "nessuna unita'" : testo(taken))
+                    + " ("
+                    + spent
+                    + " PU di "
+                    + planned
+                    + " previsti), seguite per id");
+          }
+          if (!program.isEmpty() || order.has("tipi_programma")) {
+            lines.add(
+                "  Programma "
+                    + player.getName()
+                    + ": comprate "
+                    + (program.isEmpty() ? "nessuna unita'" : testo(program))
+                    + " ("
+                    + programSpent
+                    + " PU di "
+                    + (order.has("pu_programma") ? order.get("pu_programma").getAsInt() : 0)
+                    + " previsti)");
+          }
+          if (!missing.isEmpty()) {
+            lines.add(
+                "  Ordini non eseguiti: "
+                    + String.join("; ", missing)
+                    + " - PU rimasti agli ordini dopo la difesa urgente di Hard di capitale e"
+                    + " fabbriche: "
+                    + bought.budget());
+          }
         }
       }
       potaSeguite(seguite, Config.get().maxSeguite());
@@ -518,6 +771,7 @@ public final class Impegno {
     final GameProperties props;
     final String alliance;
     final Config cfg = Config.get();
+    final Programmi.Config r2c = Programmi.Config.get();
     final int round;
     final CampagnaOmbra.Calcolo c;
     final JsonObject st;
@@ -544,7 +798,7 @@ public final class Impegno {
 
     void inizio() {
       lines.add("");
-      lines.add("=== R" + round + " " + player.getName() + " - Impegno (step R2b, AGISCE) ===");
+      lines.add("=== R" + round + " " + player.getName() + " - Impegno (step R2c, AGISCE) ===");
       final JsonObject turn = turno(st, round, player.getName());
       perditeInViaggio(turn);
       // rule 2.6 on the own territories with own land units, the capital and the factories
@@ -556,24 +810,106 @@ public final class Impegno {
               && CampagnaOmbra.CASO_C.equals(cases.get(capital).get("caso").getAsString());
       final int puC = puCasoC(cases);
       final int puTurn = player.getResources().getQuantity(Constants.PUS);
-      final int puOp = puOperazione(puTurn, puC, cfg.quotaPu());
       turn.addProperty("pu_turno", puTurn);
       turn.addProperty("pu_caso_c", puC);
       turn.addProperty("capitale_caso_c", capitalC);
-      // the units in case a/b at the start of the turn (routing, point 4)
-      final JsonArray rear = new JsonArray();
-      for (final var e : cases.entrySet()) {
-        final String caso = e.getValue().get("caso").getAsString();
-        if (CampagnaOmbra.CASO_C.equals(caso)) {
-          continue;
+      // step R2c: no unit already on the map is routed any more (B1)
+      ns.remove("retrovie");
+      ns.remove("retrovie_round");
+      final JsonArray attacks = new JsonArray();
+      final List<String> forced = new ArrayList<>();
+      final JsonObject order = new JsonObject();
+      order.addProperty("round", round);
+      int puOp = 0;
+      if (r2c.campagnaTerra(player.getName())) {
+        puOp = campagna(capitalC, puC, puTurn, turn, attacks, forced, order);
+      } else {
+        if (ns.has("obiettivo")) {
+          chiudi(
+              SENZA_CAMPAGNA, data.getMap().getTerritoryOrNull(ns.get("obiettivo").getAsString()));
         }
-        e.getKey().getMatches(terraPropria()).forEach(u -> rear.add(u.getId().toString()));
+        lines.add(
+            "  Nessuna campagna via terra per "
+                + player.getName()
+                + " (step R2c: solo "
+                + String.join(", ", r2c.nazioniCampagnaTerra())
+                + ")");
+        turn.addProperty("obiettivo", "");
+        for (final String k : List.of("tappa", "raduno", "base", "fase", "sospeso")) {
+          ns.remove(k);
+        }
       }
-      ns.add("retrovie", rear);
-      ns.addProperty("retrovie_round", round);
+      // C, D: the permanent programs
+      int puProg = 0;
+      if (Programmi.USA.equals(player.getName()) || Programmi.UK.equals(player.getName())) {
+        final Programmi.Turno p = programmi();
+        final int garrison = presidioPorto(cases, p.porto());
+        ns.addProperty("presidio_porto", garrison);
+        final int pu =
+            Programmi.USA.equals(player.getName())
+                ? puOperazione(puTurn, puC, r2c.quotaProgrammaUsa())
+                : puOperazione(puTurn, puC + puOp, r2c.quotaForzaSbarcoUk());
+        final Map<String, Integer> mix = p.acquisti(pu, garrison, turn);
+        if (!mix.isEmpty() && p.porto() != null) {
+          order.add("tipi_programma", mappa(mix));
+          order.addProperty("fabbrica_programma", p.porto().getName());
+          final Map<String, Integer> costs = costiAcquisto(data, player);
+          for (final var e : mix.entrySet()) {
+            puProg += costs.getOrDefault(e.getKey(), 0) * e.getValue();
+          }
+        }
+        forced.addAll(p.forzatiMedioOriente(attacks));
+      }
+      turn.add("attacchi", attacks);
+      clear(props, KEY_FORZATI + player.getName());
+      if (!forced.isEmpty()) {
+        props.set(KEY_FORZATI + player.getName(), round + "|" + String.join(";", forced));
+      }
+      clear(props, KEY_ORDINE + player.getName());
+      if ((order.has("tipi") || order.has("tipi_programma")) && puTurn > 0) {
+        order.addProperty("pu_programma", puProg);
+        order.addProperty("quota_minima", Math.min(100, 100.0 * (puOp + puProg) / puTurn));
+        if (!order.has("obiettivo")) {
+          order.addProperty("obiettivo", "programma");
+        }
+        props.set(KEY_ORDINE + player.getName(), order.toString());
+      }
+      salvaETermina(turn);
+    }
+
+    private Programmi.Turno programmi() {
+      return new Programmi.Turno(proData, calc, player, alliance, c, lines);
+    }
+
+    /** The minimal garrison (units) of case c in the program's port, 0 if not in case c. */
+    private static int presidioPorto(
+        final Map<Territory, JsonObject> cases, @Nullable final Territory port) {
+      if (port == null || !cases.containsKey(port)) {
+        return 0;
+      }
+      final JsonObject x = cases.get(port);
+      return CampagnaOmbra.CASO_C.equals(x.get("caso").getAsString())
+          ? x.get("unita").getAsInt()
+          : 0;
+    }
+
+    /**
+     * The land campaign of the turn (R2b with the two phases of R2c). Returns the PUs of its orders
+     * (0 without a target, suspended or without a factory).
+     */
+    private int campagna(
+        final boolean capitalC,
+        final int puC,
+        final int puTurn,
+        final JsonObject turn,
+        final JsonArray attacks,
+        final List<String> forced,
+        final JsonObject order) {
+      final int puOp = puOperazione(puTurn, puC, cfg.quotaPu());
       // 2: inertia of the current target
       final List<Territory> fronts = c.fronti();
       String suspended = "";
+      boolean chosenNow = false;
       Optional<CampagnaOmbra.Calcolo.Obiettivo> route = Optional.empty();
       if (ns.has("obiettivo")) {
         final Territory target =
@@ -595,7 +931,6 @@ public final class Impegno {
           suspended =
               ROTTA_ASSENTE + " (durata " + (round - since) + " < " + cfg.durataMinima() + ")";
         } else if (capitalC) {
-          // the target stays (inertia); the garrison of the capital comes first in the PUs
           lines.add(
               "  Capitale in caso c, durata "
                   + (round - since)
@@ -610,6 +945,17 @@ public final class Impegno {
           lines.add("  Nessun obiettivo: capitale propria in caso c (regola 2.6)");
         } else {
           route = scegliObiettivo(puTurn, puC);
+          chosenNow = route.isPresent();
+        }
+      }
+      // B4: a nation that keeps only feasible targets (the Russians) plays as Hard without one
+      if (suspended.isEmpty()
+          && !chosenNow
+          && route.isPresent()
+          && r2c.nazioniSoloFattibili().contains(player.getName())) {
+        final JsonObject m = c.valutaImpegno(route.get(), cfg.margineScelta(), puOp, "m1");
+        if (!m.get("fattibile").getAsBoolean()) {
+          suspended = COME_HARD + " (non fattibile a margine " + cfg.margineScelta() + ")";
         }
       }
       turn.addProperty("obiettivo", ns.has("obiettivo") ? ns.get("obiettivo").getAsString() : "");
@@ -619,10 +965,10 @@ public final class Impegno {
       }
       ns.addProperty("sospeso", suspended);
       if (route.isEmpty() || !suspended.isEmpty() || !ns.has("obiettivo")) {
-        ns.remove("tappa");
-        ns.remove("raduno");
-        salvaETermina(turn);
-        return;
+        for (final String k : List.of("tappa", "raduno", "base", "fase")) {
+          ns.remove(k);
+        }
+        return 0;
       }
       final CampagnaOmbra.Calcolo.Obiettivo o = route.get();
       final Territory stage = prossimaTappa(o);
@@ -631,21 +977,147 @@ public final class Impegno {
       ns.addProperty("raduno", gather.getName());
       turn.addProperty("tappa", stage.getName());
       turn.addProperty("raduno", gather.getName());
+      // A: the phase from the calculator on the next stage with the real forces
+      final JsonArray here = valutaAttacchi(o, stage);
+      double stageWin = 0;
+      for (final JsonElement e : here) {
+        if (e.getAsJsonObject().get("territorio").getAsString().equals(stage.getName())) {
+          stageWin = e.getAsJsonObject().get("vittoria_pct").getAsDouble();
+        }
+      }
+      final String phase = fase(stageWin, r2c.sogliaEsecuzione());
+      ns.addProperty("fase", phase);
+      turn.addProperty("fase", phase);
+      for (final JsonElement e : here) {
+        final JsonObject x = e.getAsJsonObject();
+        final boolean force =
+            ESECUZIONE.equals(phase)
+                && forza(x.get("vittoria_pct").getAsDouble(), cfg.sogliaForzato());
+        x.addProperty("forzato", force);
+        x.addProperty("fase", phase);
+        if (force) {
+          forced.add(x.get("territorio").getAsString());
+        }
+        attacks.add(x);
+        lines.add(
+            String.format(
+                Locale.ROOT,
+                "  Attacco su %s con tutte le unita' in portata (%d TUV): vittoria %.1f%%,"
+                    + " perdite P80 %.0f TUV -> %s",
+                x.get("territorio").getAsString(),
+                x.get("attaccanti_tuv").getAsLong(),
+                x.get("vittoria_pct").getAsDouble(),
+                x.get("perdite_p80_tuv").getAsDouble(),
+                force
+                    ? "FORZATO (>= " + Math.round(cfg.sogliaForzato()) + "%)"
+                    : PREPARAZIONE.equals(phase)
+                        ? "PREPARAZIONE: nessun attacco forzato, decide Hard"
+                        : "sotto soglia: decide Hard"));
+      }
+      // A: in preparation the units bought gather in a safe base on the route
+      String baseText = "-";
+      if (PREPARAZIONE.equals(phase)) {
+        final Optional<Territory> base = baseSicura(o, stage, fabbricaVicina(stage));
+        if (base.isPresent()) {
+          ns.addProperty("base", base.get().getName());
+          turn.addProperty("base", base.get().getName());
+          baseText = base.get().getName();
+        } else {
+          ns.remove("base");
+          baseText = "nessuna sicura (le unita' comprate restano dove piazzate)";
+        }
+      } else {
+        ns.remove("base");
+      }
       lines.add(
           String.format(
               Locale.ROOT,
-              "  Obiettivo %s (dal R%d, %s); rotta %s; prossima tappa %s, raduno %s",
+              "  Obiettivo %s (dal R%d, %s); rotta %s; prossima tappa %s (vittoria %.1f%%) -> FASE"
+                  + " %s; %s",
               o.bersaglio().getName(),
               ns.get("dal_round").getAsInt(),
               ns.has("motivo_scelta") ? ns.get("motivo_scelta").getAsString() : "-",
               String.join(" > ", o.percorso().stream().map(Territory::getName).toList()),
               stage.getName(),
-              gather.getName()));
-      // 5: forced attacks on the next stage and the target
-      attacchiForzati(o, stage, turn);
+              stageWin,
+              phase,
+              ESECUZIONE.equals(phase)
+                  ? "raduno " + gather.getName() + " e attacco forzato"
+                  : "base sicura " + baseText + ", nessun attacco forzato"));
       // 3: purchase orders
-      ordineAcquisto(o, stage, gather, puTurn, puC, puOp, turn);
-      salvaETermina(turn);
+      return ordineAcquisto(o, stage, gather, puTurn, puC, puOp, turn, order);
+    }
+
+    /** 3: the own factory nearest by land to {@code stage} (ties by name), if any. */
+    @Nullable
+    private Territory fabbricaVicina(final Territory stage) {
+      Territory factory = null;
+      int best = Integer.MAX_VALUE;
+      for (final Territory t : data.getMap().getTerritories()) {
+        if (t.isWater()
+            || !t.isOwnedBy(player)
+            || !t.anyUnitsMatch(Matches.unitCanProduceUnits())) {
+          continue;
+        }
+        final int d = data.getMap().getDistance(t, stage, Matches.territoryIsLand());
+        if (d >= 0 && (d < best || (d == best && t.getName().compareTo(factory.getName()) < 0))) {
+          best = d;
+          factory = t;
+        }
+      }
+      return factory;
+    }
+
+    /**
+     * A: the own territory on the route nearest to the stage where the realistic counterattack
+     * against the allied units there wins at most {@code soglia_base_sicura}.
+     */
+    private Optional<Territory> baseSicura(
+        final CampagnaOmbra.Calcolo.Obiettivo o,
+        final Territory stage,
+        @Nullable final Territory factory) {
+      final List<Territory> line = new ArrayList<>();
+      // the friendly land from the factory where the units are bought to the route's start
+      if (factory != null && !factory.equals(o.partenza())) {
+        line.add(factory);
+        data.getMap()
+            .getRoute(
+                factory,
+                o.partenza(),
+                x -> !x.isWater() && Matches.isTerritoryAllied(player).test(x))
+            .ifPresent(
+                r -> r.getSteps().stream().filter(x -> !line.contains(x)).forEach(line::add));
+      }
+      if (!line.contains(o.partenza())) {
+        line.add(o.partenza());
+      }
+      for (final Territory t : o.percorso()) {
+        if (t.equals(stage)) {
+          break;
+        }
+        line.add(t);
+      }
+      for (int i = line.size() - 1; i >= 0; i--) {
+        final Territory t = line.get(i);
+        if (t.isWater() || !t.isOwnedBy(player)) {
+          continue;
+        }
+        final List<Unit> counter = c.contrattacco(t);
+        if (counter.isEmpty()) {
+          return Optional.of(t);
+        }
+        final List<Unit> defenders = t.getMatches(Matches.isUnitAllied(player));
+        if (defenders.isEmpty()) {
+          continue;
+        }
+        final double enemyWin =
+            calc.calculateBattleResults(proData, t, counter, defenders, List.of())
+                .getWinPercentage();
+        if (enemyWin <= r2c.sogliaBaseSicura()) {
+          return Optional.of(t);
+        }
+      }
+      return Optional.empty();
     }
 
     private void salvaETermina(final JsonObject turn) {
@@ -754,7 +1226,11 @@ public final class Impegno {
       for (final var e : cases.entrySet()) {
         final Territory t = e.getKey();
         final boolean key =
-            t.equals(proData.getMyCapital()) || t.anyUnitsMatch(Matches.unitCanProduceUnits());
+            t.equals(proData.getMyCapital())
+                || t.anyUnitsMatch(Matches.unitCanProduceUnits())
+                || r2c.presidiPrioritari()
+                    .getOrDefault(player.getName(), List.of())
+                    .contains(t.getName());
         if (key && CampagnaOmbra.CASO_C.equals(e.getValue().get("caso").getAsString())) {
           critical.add(t);
         }
@@ -819,6 +1295,12 @@ public final class Impegno {
       final List<String> text = new ArrayList<>();
       for (final CampagnaOmbra.Calcolo.Obiettivo o : all) {
         final Territory t = o.bersaglio();
+        // B4: the United Kingdom only in Africa and the Middle East
+        if (Programmi.UK.equals(player.getName())
+            && !r2c.territoriUkCampagna().contains(t.getName())) {
+          text.add(t.getName() + " (Regno Unito: solo Africa e Medio Oriente)");
+          continue;
+        }
         if (!data.getRelationshipTracker().isAtWar(player, t.getOwner())) {
           text.add(t.getName() + " (non in guerra con " + t.getOwner().getName() + ")");
           continue;
@@ -847,9 +1329,15 @@ public final class Impegno {
               + cfg.margineScelta()
               + ", M1): "
               + (text.isEmpty() ? "nessuno" : String.join("; ", text)));
-      final Optional<Candidato> chosen = scegli(candidates);
+      final boolean onlyFeasible = r2c.nazioniSoloFattibili().contains(player.getName());
+      final Optional<Candidato> chosen =
+          onlyFeasible ? scegliFattibile(candidates) : scegli(candidates);
       if (chosen.isEmpty()) {
-        lines.add("  Nessun obiettivo scelto");
+        lines.add(
+            "  Nessun obiettivo scelto"
+                + (onlyFeasible && !candidates.isEmpty()
+                    ? ": nessuno fattibile a margine " + cfg.margineScelta() + ", " + COME_HARD
+                    : ""));
         return Optional.empty();
       }
       final Candidato x = chosen.get();
@@ -886,16 +1374,18 @@ public final class Impegno {
       return i <= 0 ? o.partenza() : o.percorso().get(i - 1);
     }
 
-    /** 5: the next stage and the target, with every unit in range and the real defenders. */
-    private void attacchiForzati(
-        final CampagnaOmbra.Calcolo.Obiettivo o, final Territory stage, final JsonObject turn) {
+    /**
+     * The next stage and the target with every unit in range (Hard's attack options) and the real
+     * defenders: win% and P80 of the losses (not yet forced: the phase decides).
+     */
+    private JsonArray valutaAttacchi(
+        final CampagnaOmbra.Calcolo.Obiettivo o, final Territory stage) {
       final List<Territory> targets = new ArrayList<>(List.of(stage));
       if (!o.bersaglio().equals(stage)) {
         targets.add(o.bersaglio());
       }
       final ProTerritoryManager tm = new ProTerritoryManager(calc, proData);
       tm.populateAttackOptions();
-      final List<String> forced = new ArrayList<>();
       final JsonArray out = new JsonArray();
       for (final Territory t : targets) {
         if (!data.getRelationshipTracker().isAtWar(player, t.getOwner())) {
@@ -927,87 +1417,60 @@ public final class Impegno {
               calc.calculateBattleResults(proData, t, attackers, defenders, pt.getMaxBombardUnits())
                   .getWinPercentage();
         }
-        final boolean force = forza(win, cfg.sogliaForzato());
         final JsonObject x = new JsonObject();
         x.addProperty("territorio", t.getName());
         x.addProperty("obiettivo", t.equals(o.bersaglio()));
         x.addProperty("vittoria_pct", Math.round(win * 10) / 10.0);
         x.addProperty("perdite_p80_tuv", Math.round(p80 * 10) / 10.0);
         x.addProperty("attaccanti_tuv", Math.round(c.tuv(attackers)));
-        x.addProperty("forzato", force);
         out.add(x);
-        lines.add(
-            String.format(
-                Locale.ROOT,
-                "  Attacco su %s con tutte le unita' in portata (%.0f TUV): vittoria %.1f%%,"
-                    + " perdite P80 %.0f TUV -> %s",
-                t.getName(),
-                c.tuv(attackers),
-                win,
-                p80,
-                force
-                    ? "FORZATO (>= " + Math.round(cfg.sogliaForzato()) + "%)"
-                    : "sotto soglia: decide Hard, l'operazione accumula"));
-        if (force) {
-          forced.add(t.getName());
-        }
       }
-      turn.add("attacchi", out);
-      clear(props, KEY_FORZATI + player.getName());
-      if (!forced.isEmpty()) {
-        props.set(KEY_FORZATI + player.getName(), round + "|" + String.join(";", forced));
-      }
+      return out;
     }
 
-    /** 3: the orders of the turn (types by distance, nearest own factory to the next stage). */
-    private void ordineAcquisto(
+    /**
+     * 3: the campaign's orders of the turn (types by distance, nearest own factory to the next
+     * stage) written in {@code order}; returns their PUs.
+     */
+    private int ordineAcquisto(
         final CampagnaOmbra.Calcolo.Obiettivo o,
         final Territory stage,
         final Territory gather,
         final int puTurn,
         final int puC,
         final int puOp,
-        final JsonObject turn) {
+        final JsonObject turn,
+        final JsonObject order) {
       turn.addProperty("pu_op", puOp);
-      Territory factory = null;
-      int best = Integer.MAX_VALUE;
-      for (final Territory t : data.getMap().getTerritories()) {
-        if (t.isWater()
-            || !t.isOwnedBy(player)
-            || !t.anyUnitsMatch(Matches.unitCanProduceUnits())) {
-          continue;
-        }
-        final int d = data.getMap().getDistance(t, stage, Matches.territoryIsLand());
-        if (d >= 0 && (d < best || (d == best && t.getName().compareTo(factory.getName()) < 0))) {
-          best = d;
-          factory = t;
-        }
-      }
+      final Territory factory = fabbricaVicina(stage);
+      final int best =
+          factory == null
+              ? -1
+              : data.getMap().getDistance(factory, stage, Matches.territoryIsLand());
       if (factory == null || puOp <= 0 || puTurn <= 0) {
         lines.add(
             "  Acquisti: "
                 + (factory == null ? "nessuna fabbrica propria collegata via terra" : "0 PU")
                 + " -> tutto a Hard");
         turn.addProperty("pu_op", 0);
-        return;
+        return 0;
       }
       final List<String> types = tipi(best, cfg);
       final Map<String, Integer> costs = costiAcquisto(data, player);
       final Map<String, Integer> mix = composizione(puOp, types, costs);
       if (mix.isEmpty()) {
         turn.addProperty("pu_op", 0);
-        return;
+        return 0;
       }
-      final JsonObject order = new JsonObject();
-      order.addProperty("round", round);
+      int spent = 0;
+      for (final var e : mix.entrySet()) {
+        spent += costs.getOrDefault(e.getKey(), 0) * e.getValue();
+      }
       order.addProperty("obiettivo", o.bersaglio().getName());
       order.addProperty("fabbrica", factory.getName());
       order.addProperty("raduno", gather.getName());
       order.addProperty("pu_op", puOp);
-      order.addProperty("quota_minima", Math.min(100, 100.0 * puOp / puTurn));
       order.add("tipi", mappa(mix));
-      clear(props, KEY_ORDINE + player.getName());
-      props.set(KEY_ORDINE + player.getName(), order.toString());
       turn.addProperty("fabbrica", factory.getName());
       turn.addProperty("distanza_fabbrica", best);
       turn.add("ordine", mappa(mix));
@@ -1015,7 +1478,7 @@ public final class Impegno {
           String.format(
               Locale.ROOT,
               "  Acquisti: PU del turno %d, presidio caso c di capitale/fabbriche %d -> all'operazione"
-                  + " %d (%.0f%%): %s nella fabbrica %s (a %d dalla tappa: %s); il resto a Hard",
+                  + " %d (%.0f%%): %s nella fabbrica %s (a %d dalla tappa: %s)",
               puTurn,
               puC,
               puOp,
@@ -1024,6 +1487,7 @@ public final class Impegno {
               factory.getName(),
               best,
               best <= cfg.distanzaVicina() ? "vicina" : "lontana"));
+      return spent;
     }
 
     // ---------------------------------------------------------------------- non combat
@@ -1033,13 +1497,35 @@ public final class Impegno {
       final JsonObject turn = turno(st, round, player.getName());
       esiti(turn);
       final Set<Unit> held = new LinkedHashSet<>();
-      if (!ns.has("obiettivo") || !ns.get("sospeso").getAsString().isEmpty()) {
-        salvaNc(turn);
-        return held;
+      if (r2c.campagnaTerra(player.getName())
+          && ns.has("obiettivo")
+          && (!ns.has("sospeso") || ns.get("sospeso").getAsString().isEmpty())) {
+        held.addAll(campagnaNc(turn));
       }
+      if (Programmi.USA.equals(player.getName())) {
+        held.addAll(
+            programmi()
+                .spola(
+                    delegate,
+                    ns.has("presidio_porto") ? ns.get("presidio_porto").getAsInt() : 0,
+                    turn));
+      } else if (Programmi.UK.equals(player.getName())) {
+        final Set<String> keep = new HashSet<>();
+        if (proData.getMyCapital() != null) {
+          keep.add(proData.getMyCapital().getName());
+        }
+        keep.addAll(r2c.presidiPrioritari().getOrDefault(player.getName(), List.of()));
+        held.addAll(programmi().medioOriente(delegate, keep, turn));
+      }
+      salvaNc(turn);
+      return held;
+    }
+
+    /** The campaign's non-combat move: cover of the stages taken, the units bought gather. */
+    private Set<Unit> campagnaNc(final JsonObject turn) {
+      final Set<Unit> held = new LinkedHashSet<>();
       final Territory target = data.getMap().getTerritoryOrNull(ns.get("obiettivo").getAsString());
       if (target == null || target.isOwnedBy(player)) {
-        salvaNc(turn);
         return held;
       }
       // the stage and gathering territory of the purchase stay for the whole turn; a new route only
@@ -1057,7 +1543,6 @@ public final class Impegno {
         final Optional<CampagnaOmbra.Calcolo.Obiettivo> route = c.obiettivoPer(target, c.fronti());
         if (route.isEmpty()) {
           lines.add("  Instradamento: nessuna rotta ora");
-          salvaNc(turn);
           return held;
         }
         stage = prossimaTappa(route.get());
@@ -1069,13 +1554,21 @@ public final class Impegno {
       }
       // 6: the cover of the stages taken
       held.addAll(copertura(turn));
-      // 4: the operation's units toward the gathering territory
-      final Set<String> ids = new HashSet<>(obj(ns, "unita").keySet());
-      if (ns.has("retrovie")
-          && ns.has("retrovie_round")
-          && ns.get("retrovie_round").getAsInt() == round) {
-        ns.getAsJsonArray("retrovie").forEach(e -> ids.add(e.getAsString()));
+      // A: execution -> the gathering territory; preparation -> the safe base
+      final boolean execution = ns.has("fase") && ESECUZIONE.equals(ns.get("fase").getAsString());
+      final Territory dest =
+          execution
+              ? gather
+              : ns.has("base")
+                  ? data.getMap().getTerritoryOrNull(ns.get("base").getAsString())
+                  : null;
+      if (dest == null || !Matches.isTerritoryAllied(player).test(dest)) {
+        lines.add(
+            "  Instradamento: PREPARAZIONE senza base sicura, le unita' comprate restano ferme");
+        return held;
       }
+      // B1: only the units bought for the operation (followed by id)
+      final Set<String> ids = new HashSet<>(obj(ns, "unita").keySet());
       final List<Unit> units = new ArrayList<>();
       final Map<Unit, Territory> where = new HashMap<>();
       for (final Territory t : data.getMap().getTerritories()) {
@@ -1096,7 +1589,7 @@ public final class Impegno {
       final Map<String, Integer> moves = new LinkedHashMap<>();
       for (final Unit u : units) {
         final Territory from = where.get(u);
-        if (from.equals(gather)) {
+        if (from.equals(dest)) {
           held.add(u);
           there++;
           continue;
@@ -1104,7 +1597,7 @@ public final class Impegno {
         if (!Matches.unitHasMovementLeft().test(u)) {
           continue;
         }
-        final Optional<Territory> to = passo(u, from, gather);
+        final Optional<Territory> to = passo(u, from, dest);
         if (to.isEmpty()) {
           refused++;
           continue;
@@ -1112,23 +1605,20 @@ public final class Impegno {
         held.add(u);
         moved++;
         moves.merge(from.getName() + " -> " + to.get().getName(), 1, Integer::sum);
-        if (!ns.has("unita") || !obj(ns, "unita").has(u.getId().toString())) {
-          // a rear unit routed now becomes an operation's unit (followed for the losses)
-          obj(ns, "unita").addProperty(u.getId().toString(), u.getType().getName());
-        }
       }
-      potaSeguite(obj(ns, "unita"), cfg.maxSeguite());
       turn.addProperty("instradate", moved);
       turn.addProperty("gia_al_raduno", there);
       turn.addProperty("senza_passo_sicuro", refused);
+      turn.addProperty("destinazione", dest.getName());
       lines.add(
-          "  Instradamento verso il raduno "
-              + gather.getName()
+          "  "
+              + (execution ? "ESECUZIONE: raduno in " : "PREPARAZIONE: accumulo nella base sicura ")
+              + dest.getName()
               + " (tappa "
               + stage.getName()
-              + "): "
+              + "), solo unita' comprate per l'operazione: "
               + moved
-              + " unita' mosse"
+              + " mosse"
               + (moves.isEmpty()
                   ? ""
                   : " ("
@@ -1140,10 +1630,9 @@ public final class Impegno {
                       + ")")
               + ", "
               + there
-              + " gia' al raduno, "
+              + " gia' li', "
               + refused
               + " senza passo sicuro (restano a Hard)");
-      salvaNc(turn);
       return held;
     }
 
@@ -1158,6 +1647,41 @@ public final class Impegno {
 
     /** After the battles: the forced attacks' outcome, stages and target taken. */
     private void esiti(final JsonObject turn) {
+      final JsonArray reviews = REVISIONI.remove(player.getName() + "|" + round);
+      if (reviews != null) {
+        turn.add("revisioni", reviews);
+        for (final JsonElement e : reviews) {
+          final JsonObject r = e.getAsJsonObject();
+          lines.add(
+              "  Attacco forzato su "
+                  + r.get("territorio").getAsString()
+                  + " rivisto dopo le mosse di Hard: "
+                  + r.get("revisione").getAsString().toUpperCase(Locale.ROOT)
+                  + (r.has("vittoria_mandate_pct")
+                      ? " (vittoria con le unita' mandate "
+                          + r.get("vittoria_mandate_pct").getAsDouble()
+                          + "%"
+                          + (r.has("aggiunte") && r.get("aggiunte").getAsInt() > 0
+                              ? ", +"
+                                  + r.get("aggiunte").getAsInt()
+                                  + " unita' -> "
+                                  + r.get("vittoria_finale_pct").getAsDouble()
+                                  + "%"
+                              : "")
+                          + ")"
+                      : ""));
+          if (turn.has("attacchi")) {
+            for (final JsonElement a : turn.getAsJsonArray("attacchi")) {
+              if (a.getAsJsonObject()
+                  .get("territorio")
+                  .getAsString()
+                  .equals(r.get("territorio").getAsString())) {
+                a.getAsJsonObject().add("revisione", r.get("revisione"));
+              }
+            }
+          }
+        }
+      }
       if (turn.has("attacchi")) {
         for (final JsonElement e : turn.getAsJsonArray("attacchi")) {
           final JsonObject x = e.getAsJsonObject();
