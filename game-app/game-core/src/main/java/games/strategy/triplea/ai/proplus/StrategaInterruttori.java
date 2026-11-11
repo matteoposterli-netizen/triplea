@@ -20,13 +20,16 @@ import java.util.Optional;
  *       off = no hold/reinforcement candidate and no hold/reinforcement outside the list. The hold
  *       AFTER a conquest is not concerned;
  *   <li>{@link #OMBRA} (default on) off: no shadow campaign planner ({@link CampagnaOmbra}, never
- *       an effect on the game anyway).
+ *       an effect on the game anyway);
+ *   <li>{@link #IMPEGNO} (step R2b, default from {@code impegno.acceso_di_default} of the data
+ *       file: OFF) on: the first campaign that acts ({@link Impegno}).
  * </ul>
  */
 public enum StrategaInterruttori {
   LISTE("liste", true),
   TENUTE("tenute", false),
-  OMBRA("ombra", true);
+  OMBRA("ombra", true),
+  IMPEGNO("impegno", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -45,6 +48,9 @@ public enum StrategaInterruttori {
 
   /** The default of the switch (no property). */
   public boolean predefinito() {
+    if (this == IMPEGNO) {
+      return Impegno.Config.get().accesoDiDefault();
+    }
     return predefinito;
   }
 
@@ -62,7 +68,7 @@ public enum StrategaInterruttori {
     if (lista(props, KEY + alliance).contains(id)) {
       return false;
     }
-    return predefinito;
+    return predefinito();
   }
 
   /** The ids turned off for {@code alliance}. */
@@ -105,7 +111,7 @@ public enum StrategaInterruttori {
                                 new IllegalArgumentException(
                                     "Interruttore dello Stratega sconosciuto: "
                                         + x
-                                        + " (liste, tenute, ombra)"))
+                                        + " (liste, tenute, ombra, impegno)"))
                         .id())
             .distinct()
             .toList();

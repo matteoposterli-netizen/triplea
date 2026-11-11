@@ -732,8 +732,8 @@ public final class OperazioniCongiunte {
     if (!stratega()) {
       return tenuta(t, m, defenders);
     }
-    final StimaUnica.Impegno imp = StimaUnica.impegno(
-            data, def.alleanza(), t, StimaUnica.TipoBersaglio.of(def.id()));
+    final StimaUnica.Impegno imp =
+        StimaUnica.impegno(data, def.alleanza(), t, StimaUnica.TipoBersaglio.of(def.id()));
     final List<Unit> part = StimaUnica.parte(this, t, m, imp.frazione());
     if (part.isEmpty()) {
       return 100;
@@ -2199,7 +2199,11 @@ public final class OperazioniCongiunte {
     final JsonObject e = event(step.replace(' ', '_') + "_senza_guerra");
     e.addProperty("eseguita", false);
     final String why =
-        step + ": " + player.getName() + " non e' ancora in guerra con " + target.getOwner().getName();
+        step
+            + ": "
+            + player.getName()
+            + " non e' ancora in guerra con "
+            + target.getOwner().getName();
     e.addProperty("motivo", why);
     note(e, "Operazione " + def.nome() + ": " + why);
     postpone(why, Stato.ESECUZIONE);
@@ -2963,14 +2967,19 @@ public final class OperazioniCongiunte {
    * (top priority), down to the closing threshold, and keeps it even if "not worth it".
    */
   public static boolean forzaBersaglio(final ProData proData, final Territory t) {
-    return forzante(proData, t).isPresent();
+    // step R2b: the commitment's forced stage / target (switch "impegno", off by default)
+    return forzante(proData, t).isPresent() || Impegno.forzato(proData, t);
   }
 
   /** Step R1 (A1): an operation forces a target of this nation this round. */
   public static boolean forzaUnBersaglio(final ProData proData) {
+    if (Impegno.forzaQualcosa(proData)) {
+      return true;
+    }
     for (final Definizione d : OperazioneCongiunta.tutte(proData.getData(), proData.getPlayer())) {
       for (final String name : List.of(d.bersaglio(), d.bersaglioFinale())) {
-        final Territory t = name.isEmpty() ? null : proData.getData().getMap().getTerritoryOrNull(name);
+        final Territory t =
+            name.isEmpty() ? null : proData.getData().getMap().getTerritoryOrNull(name);
         if (t != null && forzaBersaglio(proData, t, Optional.of(d))) {
           return true;
         }
@@ -3004,6 +3013,21 @@ public final class OperazioniCongiunte {
     final Registro reg = Registro.leggi(data.getProperties(), def.get().id());
     return reg.intOf(prefix + "tappa2_forzata_round", 0) == data.getSequence().getRound()
         && !reg.stato().isFinale();
+  }
+
+  /**
+   * The minimum win% of a forced target: the closing threshold of the operation forcing {@code t},
+   * else (step R2b, the commitment) the absolute guard rail of 30%.
+   */
+  public static double sogliaForzata(final ProData proData, final Territory t) {
+    final Optional<Definizione> d = forzante(proData, t);
+    if (d.isPresent()) {
+      return d.get().sogliaChiusura();
+    }
+    if (Impegno.forzato(proData, t)) {
+      return Impegno.sogliaMinimaForzata();
+    }
+    return sogliaForzata(proData);
   }
 
   /** The closing threshold of the operation forcing {@code t} ({@link #forzaBersaglio}). */
@@ -3911,7 +3935,9 @@ public final class OperazioniCongiunte {
     for (final GamePlayer e : data.getPlayerList().getPlayers()) {
       if (e.isNull()
           || e.equals(player)
-          || !(stratega() ? nemicoDellOperazione(e) : data.getRelationshipTracker().isAtWar(player, e))
+          || !(stratega()
+              ? nemicoDellOperazione(e)
+              : data.getRelationshipTracker().isAtWar(player, e))
           || e.getProductionFrontier() == null) {
         continue;
       }
@@ -4521,10 +4547,7 @@ public final class OperazioniCongiunte {
    * @param record the saved record (estimates, outcome later), null with the LLM off
    */
   record Scelta(
-      DecisioneOperazione decisione,
-      boolean llm,
-      @Nullable JsonObject record,
-      boolean paracadute) {
+      DecisioneOperazione decisione, boolean llm, @Nullable JsonObject record, boolean paracadute) {
     Scelta(final DecisioneOperazione decisione, final boolean llm, final JsonObject record) {
       this(decisione, llm, record, false);
     }
@@ -5139,8 +5162,8 @@ public final class OperazioniCongiunte {
    * enemy win% within {@code soglia_sicurezza_raduno} of the data file.
    */
   private boolean sicuro(final Territory t, final ProTerritory max, final List<Unit> defenders) {
-    final StimaUnica.Impegno imp = StimaUnica.impegno(
-            data, def.alleanza(), t, StimaUnica.TipoBersaglio.of(def.id()));
+    final StimaUnica.Impegno imp =
+        StimaUnica.impegno(data, def.alleanza(), t, StimaUnica.TipoBersaglio.of(def.id()));
     final List<Unit> part =
         StimaUnica.parte(
             this,

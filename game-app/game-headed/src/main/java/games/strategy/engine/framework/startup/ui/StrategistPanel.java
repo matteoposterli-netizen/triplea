@@ -61,6 +61,9 @@ final class StrategistPanel {
   /** Step STRATEGA LLM: cap in USD per game of the "Pro+ Stratega LLM" player (user profile). */
   @Getter private final JSpinner usdCap;
 
+  /** Step R2b: the commitment ("Impegno") of the "Pro+ Stratega LLM" player (user profile). */
+  @Getter private final javax.swing.JCheckBox impegno = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -136,6 +139,11 @@ final class StrategistPanel {
             "<html>$ per partita del giocatore \"Pro+ Stratega LLM (Europe 1940)\" (Claude Sonnet,"
                 + " chiave Anthropic); raggiunto il tetto gioca come Hard</html>"));
     panel.add(row("Tetto Stratega LLM:", usdRow));
+    impegno.setSelected(profile.impegno());
+    impegno.setText(
+        "<html>campagna via terra che AGISCE (step R2b, sperimentale): un obiettivo per nazione,"
+            + " 70% dei PU, instradamento, attacchi forzati; vale per le partite nuove</html>");
+    panel.add(row("Impegno:", impegno));
     panel.add(
         row(
             "",
@@ -155,6 +163,7 @@ final class StrategistPanel {
     profile.setFornitore(selected());
     llmMode.ifPresent(profile::setModalitaPredefinita);
     profile.setTettoPartitaUsd(((Number) usdCap.getValue()).doubleValue());
+    profile.setImpegno(impegno.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

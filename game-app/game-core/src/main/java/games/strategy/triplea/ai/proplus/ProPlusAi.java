@@ -102,6 +102,11 @@ public class ProPlusAi extends ProAi {
           // step R2a: the shadow campaign planner (diary only, never an effect on the game)
           initializeData();
           CampagnaOmbra.calcola(getProData(), getCalc(), player);
+          // step R2b: the first campaign that acts (switch "impegno", off by default)
+          if (Impegno.attivo(data, player)) {
+            initializeData();
+            Impegno.inizioTurno(getProData(), getCalc(), player);
+          }
           if (!keep.isEmpty()) {
             tuning.holdCombatForPurchase(data, player, keep);
           }
@@ -132,6 +137,9 @@ public class ProPlusAi extends ProAi {
       playAmphibiousOperations(moveDel, data, player);
     }
     playJointOperation(nonCombat, moveDel, data, player);
+    if (nonCombat) {
+      playCommitment(moveDel, data, player);
+    }
     super.move(nonCombat, moveDel, data, player);
     saveCheck(data, player);
   }
@@ -199,13 +207,15 @@ public class ProPlusAi extends ProAi {
                           data.getProperties(),
                           a,
                           Stratega.BLOCCO_RIPIANIFICA,
-                          player.getName() + (forced ? ": bersaglio forzato" : ": unita' trattenute")));
+                          player.getName()
+                              + (forced ? ": bersaglio forzato" : ": unita' trattenute")));
           final List<String> lines = new java.util.ArrayList<>(result.righe());
           lines.add(
               "Stratega: piano d'attacco di Hard ricalcolato dopo le operazioni ("
                   + (forced ? "bersaglio forzato" : "unita' trattenute non escluse all'acquisto")
                   + ")");
-          result = new OperazioniCongiunte.Esito(result.tenute(), List.copyOf(lines), result.eventi());
+          result =
+              new OperazioniCongiunte.Esito(result.tenute(), List.copyOf(lines), result.eventi());
         }
       } else {
         tuning.holdCombat(data, player, result.tenute());
@@ -213,6 +223,31 @@ public class ProPlusAi extends ProAi {
       report(data, result);
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "Joint operation failed: " + e);
+    }
+  }
+
+  /**
+   * Step R2b: the commitment's non-combat move (cover of the stages taken, routing toward the
+   * gathering territory) before Hard's; Hard leaves those units where they are. Never in the combat
+   * move: there Hard keeps every unit. Nothing with the switch off.
+   */
+  private void playCommitment(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (!Impegno.attivo(data, player)
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      attendiCalcolatore(data, player);
+      final java.util.Set<games.strategy.engine.data.Unit> held =
+          Impegno.nonCombattimento(getProData(), getCalc(), moveDel, player);
+      if (!held.isEmpty()) {
+        tuning.holdForOperation(data, player, held);
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "Commitment non-combat move failed: " + e);
     }
   }
 
@@ -486,7 +521,14 @@ public class ProPlusAi extends ProAi {
       final GameState data,
       final GamePlayer player) {
     logPhase(data, player, placeForBid ? "bid place" : "place");
+    // step R2b: the units placed for the commitment are followed by id (nothing with the switch
+    // off)
+    final java.util.Set<String> before =
+        placeForBid ? java.util.Set.of() : Impegno.primaDelPiazzamento(data, player);
     super.place(placeForBid, placeDelegate, data, player);
+    if (!placeForBid) {
+      Impegno.dopoIlPiazzamento(data, player, before);
+    }
     saveCheck(data, player);
   }
 

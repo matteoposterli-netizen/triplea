@@ -142,6 +142,7 @@ final class RiepilogoGenerale {
     ConfrontoConferma.write(md, games, alliances, vcRounds);
     ConfrontoDiagnosi.write(md, games, alliances, vcRounds);
     ConfrontoOmbra.write(md, games, alliances);
+    ConfrontoImpegno.write(md, games, alliances, vcRounds);
     ConfrontoVarianza.write(md, games, alliances, vcRounds);
     ConfrontoProva.write(md, games, alliances, vcRounds);
     ConfrontoSmoke.write(md, games, alliances);

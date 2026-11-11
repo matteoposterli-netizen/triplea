@@ -102,6 +102,21 @@ public final class ProfiloStratega {
     values.setProperty(KEY_BUDGET_STRATEGA, String.format(java.util.Locale.ROOT, "%.2f", usd));
   }
 
+  private static final String KEY_IMPEGNO = "impegno";
+
+  /**
+   * Step R2b: the user turned on the commitment ("Impegno") of the "Pro+ Stratega LLM" player for
+   * the games of this PC (both alliances). Off unless set.
+   */
+  public boolean impegno() {
+    return "si".equalsIgnoreCase(values.getProperty(KEY_IMPEGNO, "").strip())
+        || "true".equalsIgnoreCase(values.getProperty(KEY_IMPEGNO, "").strip());
+  }
+
+  public void setImpegno(final boolean on) {
+    values.setProperty(KEY_IMPEGNO, on ? "si" : "no");
+  }
+
   /** The key saved for {@code f}. */
   public Optional<String> chiaveSalvata(final Fornitore f) {
     final String k = values.getProperty(KEY_PREFIX + f.id(), "").strip();

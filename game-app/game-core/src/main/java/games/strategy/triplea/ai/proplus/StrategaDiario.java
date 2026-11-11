@@ -199,8 +199,7 @@ final class StrategaDiario {
           "round_senza_llm", pf.has("round_senza_llm") ? pf.get("round_senza_llm").getAsInt() : 0);
       // step R1: retries of the strategic call (A7) and rounds with an empty menu of candidates
       for (final String key :
-          List.of(
-              "tentativi_falliti", "round_decisi_al_secondo_tentativo", "round_menu_vuoto")) {
+          List.of("tentativi_falliti", "round_decisi_al_secondo_tentativo", "round_menu_vuoto")) {
         x.addProperty(key, pf.has(key) ? pf.get(key).getAsInt() : 0);
       }
       x.add(
@@ -211,6 +210,10 @@ final class StrategaDiario {
       x.add("difesa", Difesa.registro(props, a).getAsJsonArray("turni"));
       // step R2a: the shadow campaigns (counters of the checks, feasible candidates)
       x.add("ombra", CampagnaOmbra.riepilogo(props, a));
+      // step R2b: the commitment (targets, turns, forced attacks, losses on the way)
+      if (props.get(Impegno.KEY_STATO + a) != null) {
+        x.add("impegno", Impegno.riepilogo(props, a));
+      }
       o.add(a, x);
     }
     o.add("uso", Stratega.usoTotale(props));

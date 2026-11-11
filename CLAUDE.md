@@ -187,6 +187,12 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   difesi, in `ProPurchaseAi` e `ProNonCombatMoveAi`), record `ai/pro/ProStrategyBudget` + hook diario
   `ProDecisionRecorder.strategyBudget`; tolti `ProTuning.defensePlan` e `ProDefensePlan`. `Difesa` solo IN OMBRA (diario).
   Vedi "Difesa di Hard e budget dinamico (step C2-bis)".
+- Step R2b IMPEGNO: `ai/proplus/Impegno` (prima campagna che AGISCE, interruttore `impegno` di `StrategaInterruttori`, default
+  dal file dati `stratega-llm.json` `impegno.acceso_di_default` = spento), agganci in `ProPlusAi` (acquisto, non combattimento,
+  piazzamento), `ProPlusTuning.purchaseOrders`/`strategyCapPercent`, `OperazioniCongiunte.forzaBersaglio`/`forzaUnBersaglio`/
+  `sogliaForzata(proData, t)`; metodi nuovi in `CampagnaOmbra.Calcolo` (`fronti`, `obiettivoPer`, `valutaImpegno`); casella
+  "Impegno" nel pannello Stratega (`StrategistPanel`, profilo `ProfiloStratega.impegno`, letto da `Stratega.registra`). Vedi
+  "Impegno (step R2b)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -443,6 +449,12 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   Opzione nuova del runner `--stratega-acceso Axis=tenute` (riaccende un interruttore spento di default; etichetta "[con tenute]").
   **Dallo step R2a-bis** `[ombra]` = 2 configurazioni SENZA chiave (costo API 0), 20 partite: b1 `Asse-Stratega-senza-chiave-vs-Hard`,
   b2 `Hard-vs-Alleati-Stratega-senza-chiave` (lo Stratega senza chiave gioca come Hard: l'ombra misura Hard).
+- **Modalita' "impegno" (step R2b)**: `[impegno]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒ `modalita:
+  impegno`. Semi 1101-1110, 12 round, Equilibrato, mescolata, `max-parallel` 20, 3 configurazioni = 30 partite SENZA chiave (costo API
+  0): a `Hard-vs-Hard`, c1 `Asse-Stratega-impegno-vs-Hard` (`--stratega-acceso Axis=impegno`), c2 `Hard-vs-Alleati-Stratega-impegno`
+  (`--stratega-acceso Allies=impegno`). Campo nuovo della matrice `acceso` ⇒ `--stratega-acceso` (prima il workflow non lo passava).
+  Etichetta "Stratega LLM [senza chiave] [con impegno]". Sezione **"Impegno (step R2b)"** (`ConfrontoImpegno`, da
+  `stratega_llm.<alleanza>.impegno`).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2119,6 +2131,60 @@ invariate. Valori nuovi in `stratega-llm.json` (`guadagno_minimo_tenuta_punti`, 
 - Test: `CampagnaOmbraTest` +4 (percentili ordinati sulle stesse forze e cache; i tre modelli, la quota osservata e la scelta
   del modello; le classi della Misura 2 su una posizione costruita; un territorio preso diventa una punta) + controllo del
   calcolatore nell'ombra accesa = spenta; `AutoplayTest.shadowMeasuresOfStepR2aBisAreSummarized`.
+
+### Impegno (step R2b)
+
+Prima campagna che AGISCE, solo per la voce "Pro+ Stratega LLM" e solo con l'interruttore `impegno` acceso (default nel file dati
+`stratega-llm.json` `impegno.acceso_di_default` = **false**: spento = comportamento di prima; si accende con la proprieta' `Pro+
+stratega llm acceso: <alleanza>` = `impegno` (autoplay `--stratega-acceso Axis=impegno`) o con la casella "Impegno" del pannello
+Stratega, salvata nel profilo utente e copiata nella partita da `Stratega.registra`). Una nazione (tutte quelle dello Stratega tranne
+la Francia), via terra, un obiettivo alla volta; niente tandem, niente sbarchi, tenute spente, nessuna chiamata LLM. Valori in
+`stratega-llm.json` `impegno`, ognuno `{"valore", "origine": "scelto"}`: quota PU 70, soglia d'attacco 70, durata minima 3 round,
+margine di scelta 80, distanza "vicina" 2, tipi vicino infantry/artillery, lontano mech_infantry/armour. NON tarati.
+- **1 Obiettivo** (`Impegno.inizioTurno`, acquisto della nazione, tabellone reale): candidati = `CampagnaOmbra.Calcolo.obiettivi` (VC
+  o capitali nemiche raggiungibili via terra entro 6 tappe, le 4 piu' vicine) con il proprietario GIA' in guerra con la nazione;
+  per ognuno il flusso v2 col modello M1 (`valutaImpegno`, difensori = presenti) al margine 80. Regola (`Impegno.scegli`): i
+  fattibili, quello con meno tappe; se nessuno, lo scarto piu' piccolo (scarto "non stimabile" dopo quelli stimati); parita': indice
+  di valore piu' alto, poi nome. Nessun obiettivo nuovo con la capitale propria in caso c.
+- **2 Inerzia** (`Impegno.motivoFine`, nessuna stima tra gli ingressi): chiude solo "preso" (della nazione), "non piu' del nemico"
+  (proprietario non piu' in guerra / di un'altra alleanza), "rotta assente" e "capitale in caso c" — le ultime due solo dopo 3 round;
+  prima: rotta assente = operazione SOSPESA nel turno (niente acquisti/instradamento/forzature), capitale in caso c = si continua con
+  il presidio della capitale tolto dai PU. Preso ⇒ al turno dopo si sceglie il successivo.
+- **3 Acquisti**: PU_op = floor(70% x (PU del turno − costo del presidio minimo 2.6 caso c MANCANTE in capitale e fabbriche proprie;
+  le unita' di terra proprie gia' li' contano prima)) (`puOperazione`). Fabbrica = propria piu' vicina via terra alla prossima tappa;
+  distanza <= 2 ⇒ fanteria/artiglieria, altrimenti fanteria meccanizzata/carri, alternati finche' entrano nei PU (`composizione`).
+  Ordini obbligati (`ProPurchaseOrders`, proprieta' `Pro+ stratega impegno ordine: <nazione>`) con `minimumShare` = 100 x PU_op /
+  PU: `strategyCapPercent` torna vuoto in quel turno ⇒ percorso `purchaseDefendersWithinPlanShare` di ProPurchaseAi (capitale e
+  fabbriche a rischio difese senza limite, il resto della difesa entro il 30%), poi gli ordini, poi Hard col resto. Al piazzamento
+  (`dopoIlPiazzamento`) le unita' nuove dei tipi ordinati (prima le piu' vicine alla fabbrica) sono seguite per id.
+- **4 Instradamento** (`nonCombattimento`, SOLO non combattimento, prima di quello di Hard): unita' di terra seguite + quelle che a
+  inizio turno erano in territori di caso a/b (regola 2.6 su tutti i territori propri con unita' di terra), che hanno ancora
+  movimento (Hard non le ha usate in battaglia) ⇒ un passo verso il raduno (territorio amico prima della prossima tappa sulla rotta;
+  tappa e raduno fissati all'acquisto, ricalcolati solo se la tappa e' stata presa nel combattimento), SOLO su terra amica, verso il
+  territorio amico piu' vicino al raduno dove il contrattacco realistico (`CampagnaOmbra.Calcolo.contrattacco`, quota d'impegno A3 +
+  acquisti) col calcolatore di Hard vince <= `soglia_sicurezza_raduno` (40, la stessa dei raduni delle operazioni). Unita' mosse e
+  gia' al raduno restano ferme nel non combattimento di Hard (`holdForOperation`). Nel combattimento NIENTE e' trattenuto.
+- **5 Attacchi forzati** (all'acquisto, prima che Hard pianifichi): prossima tappa e obiettivo (proprietario in guerra), attaccanti
+  = TUTTE le unita' in portata secondo le opzioni d'attacco di Hard (`populateAttackOptions`: max + anfibie), difensori reali;
+  vittoria e P80 delle perdite dal calcolatore (`CampagnaOmbraMisure.simula`, 100 simulazioni). >= 70% (`forza`) ⇒ proprieta' `Pro+
+  stratega impegno forzati: <nazione>` = "round|T1;T2" ⇒ `OperazioniCongiunte.forzaBersaglio` vero (stesso meccanismo delle
+  offensive: priorita' +1000, tenuto anche se "non conviene"), soglia minima di Hard = 30% (`Direttive.SOGLIA_MINIMA_ASSOLUTA`).
+  Sotto soglia decide Hard. Esito nel non combattimento: vinto / non preso / non attaccato, perdite reali (registri di battaglia)
+  contro il P80. Limite visto in prova: la forzatura NON scavalca la "postura difensiva" di Hard (capitale minacciata, motivo
+  `defensive_stance`) e Hard puo' attaccare con meno unita' di quelle contate (basta il 30%).
+- **6 Copertura**: sulle tappe prese (registro `tappe_prese`) ancora proprie e in caso c, restano ferme fino al presidio minimo 2.6
+  di fanterie/artiglierie presenti; niente altro.
+- **7 Opportunismo**: nessuna unita' trattenuta o riservata nel combattimento (test). Approssimazione: la priorita' +1000 di un
+  bersaglio forzato puo' togliere unita' ad altri attacchi di Hard nello stesso turno (non misurato in controfattuale).
+- **Diario**: blocco "=== R<n> <nazione> - Impegno (step R2b, AGISCE) ===" in `stratega.txt` (candidati, scelta/cambio col motivo,
+  rotta, tappa, raduno, attacchi con vittoria/P80/FORZATO, acquisti, esiti, copertura, instradate, comprate) + record `impegno` in
+  `stratega.jsonl`. Stato per alleanza `Pro+ stratega impegno: <alleanza>`: `nazioni` (obiettivo, dal_round, tappa, raduno, unita'
+  seguite per id, max 200), `storia` (obiettivi chiusi: durata, motivo, round di presa), `turni` (PU turno/caso c/op/spesi, ordine,
+  fabbrica, attacchi, instradate, perse in viaggio), `perse_viaggio` (unita' seguite vive a fine turno e sparite al turno dopo).
+  `stratega_llm.<alleanza>.impegno` nel riepilogo (senza id).
+- Test: `ImpegnoTest` (8: obiettivo NON annullato quando la stima scende; 70% dei PU dopo il presidio della capitale; l'unita' non
+  usata in battaglia si avvicina al raduno; nel combattimento Hard ha le stesse unita' con interruttore acceso e spento; forzato a 70
+  e non a 69; spento = Hard; regola di scelta; valori del file), `AutoplayTest.theCommitmentOfStepR2bIsSummarized`.
 
 ## Come configurare lo stratega
 
@@ -4382,3 +4448,27 @@ valore), autoplay `Riepilogo` (`ombra_dettagli`), `ConfrontoOmbra` (`writeBis`),
   retrovie" e' quindi trascurabile: Hard non lascia unita' ferme dietro.
 - **Caso b persi** (piu' frequenti): Asse Greece 7 (ripresi 1), Rostov 6 (4), Libya/Tobruk 5 (0); Alleati Smolensk 16 (ripresi 14),
   Belarus 14 (6), Rostov 14 (5), Bryansk 12 (10), Karelia 10 (2), Archangel 9 (1); unita' di Hard alla caduta 0,1-1,5.
+
+### Step R2b IMPEGNO — prima campagna che AGISCE (2026-11-11)
+
+Vedi "Impegno (step R2b)" e la modalita' `[impegno]`. Motivo (run 42976494562 e 42994455013): le offensive dello Stratega venivano
+annullate quando la stima ricalcolata scendeva (6 su 8) e la fattibilita' a piu' round non regge (al round stimato fattibile 19% Asse
+/ 3% Alleati); reggono le previsioni a 1 round (M1) e il calcolatore sulle forze reali del turno ⇒ un impegno di DIREZIONE che dura,
+senza date ne' annullamenti per stima. File: nuovi `ai/proplus/Impegno`, test `ImpegnoTest`, autoplay `ConfrontoImpegno`; modificati
+`StrategaInterruttori` (`IMPEGNO`, default dal file dati), `CampagnaOmbra` (solo metodi nuovi: `fronti`, `obiettivoPer`,
+`valutaImpegno`), `ProPlusAi` (acquisto, `playCommitment` nel non combattimento, piazzamento), `ProPlusTuning` (ordini dell'impegno,
+tetto vuoto nel turno con ordini), `OperazioniCongiunte` (`forzaBersaglio`, `forzaUnBersaglio`, `sogliaForzata(proData, t)`),
+`StrategaDiario` (`impegno` nel riepilogo), `Stratega.registra` + `ProfiloStratega.impegno` + `StrategistPanel` (casella "Impegno"),
+`stratega-llm.json` (`impegno`), autoplay `RiepilogoGenerale`, `AutoplayTest` (+1), workflow `[impegno]` (+ campo `acceso` della
+matrice). Hard e le altre voci invariate; `avvia.bat` e `aggiorna.ps1` NON toccati.
+- Scelte fatte da solo (documentate): "durata minima 3 round negli altri casi" = rotta assente e capitale in caso c chiudono l'obiettivo
+  solo dopo 3 round (prima: sospensione nel turno / si continua col presidio della capitale tolto dai PU); "quanto serve a capitale e
+  fabbriche in caso c" = costo del presidio minimo 2.6 MANCANTE (le unita' proprie presenti contano prima); "perso" per
+  l'instradamento = vittoria del contrattacco realistico oltre `soglia_sicurezza_raduno` 40 (la soglia gia' usata per i raduni);
+  vittoria e P80 dell'attacco forzato dal calcolatore con 100 simulazioni; unita' "dell'operazione" = comprate (per id) + quelle in
+  caso a/b a inizio turno + quelle instradate (seguite per id da li' in poi); perdite "in viaggio" = unita' seguite vive a fine turno
+  e sparite all'inizio del turno dopo (cioe' nei turni nemici).
+- Prove locali (seme 1101/1102, senza chiave): Asse 3 round 57 s (obiettivi France R1 presa, Egypt R2 presa dall'Italia, poi Russia;
+  attacchi forzati vinti su France, Alexandria, Egypt, Baltic States), Alleati 4 round 70 s (Russia su Poland; Stati Uniti e Regno
+  Unito senza obiettivo: capitale in caso c o nessun candidato via terra). Visti: Hard scarta un bersaglio forzato per `defensive_stance`
+  (la forzatura non scavalca la postura difensiva di Hard); Hard puo' attaccare un forzato con meno unita' di quelle contate (soglia 30%).

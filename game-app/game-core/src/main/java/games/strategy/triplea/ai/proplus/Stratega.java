@@ -120,6 +120,16 @@ public final class Stratega {
               .tettoPartitaUsd(StrategaConfig.get().budgetDefaultUsd());
       setBudget(props, cap);
     }
+    // step R2b: the commitment turned on in the user's profile (Pro+ settings, "Impegno"), once
+    // per game and alliance, unless the game turned it off explicitly
+    final String impegno = StrategaInterruttori.IMPEGNO.id();
+    if (!StrategaInterruttori.accesi(props, alliance.get()).contains(impegno)
+        && !StrategaInterruttori.spenti(props, alliance.get()).contains(impegno)
+        && games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega.carica().impegno()) {
+      final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
+      on.add(impegno);
+      StrategaInterruttori.accendi(props, alliance.get(), String.join(",", on));
+    }
   }
 
   /** The nations of {@code alliance} played by the strategist (turn order not guaranteed). */

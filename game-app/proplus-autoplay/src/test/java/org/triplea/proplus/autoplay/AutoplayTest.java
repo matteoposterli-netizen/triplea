@@ -973,6 +973,73 @@ class AutoplayTest {
   }
 
   @Test
+  void theCommitmentOfStepR2bIsSummarized() {
+    final String rounds =
+        """
+        "alleanze":{"Axis":["Germans"],"Allies":["Russians"]},
+        "round":[{"round":1,"completo":true,
+          "vc":{"Axis":{"numero":%d,"citta":["Germany","Southern Italy"]},
+                "Allies":{"numero":5,"citta":["Russia","Volgograd","Novgorod","Egypt","France"]}},
+          "nazioni":{"Germans":{"reddito":30,"tuv":200},"Russians":{"reddito":40,"tuv":150}}},
+         {"round":2,"completo":true,
+          "vc":{"Axis":{"numero":%d,"citta":["Germany","Southern Italy"%s]},
+                "Allies":{"numero":4,"citta":["Russia","Volgograd","Novgorod","Egypt"%s]}},
+          "nazioni":{"Germans":{"reddito":%d,"tuv":210},"Russians":{"reddito":38,"tuv":140}}}]
+        """;
+    final JsonObject hard =
+        JsonParser.parseString(
+                "{\"stato\":\"completata\",\"durata_s\":100,"
+                    + "\"parametri\":{\"tipi\":{\"Axis\":\"hard\",\"Allies\":\"hard\"}},"
+                    + String.format(rounds, 2, 2, "", ",\"France\"", 30)
+                    + "}")
+            .getAsJsonObject();
+    final JsonObject committed =
+        JsonParser.parseString(
+                "{\"stato\":\"completata\",\"durata_s\":130,"
+                    + "\"parametri\":{\"tipi\":{\"Axis\":\"stratega\",\"Allies\":\"hard\"},"
+                    + "\"chiave_llm\":false,\"stratega_acceso\":{\"Axis\":\"impegno\"}},"
+                    + String.format(rounds, 2, 3, ",\"France\"", "", 35)
+                    + ",\"stratega_llm\":{\"Axis\":{\"impegno\":{"
+                    + "\"storia\":[{\"nazione\":\"Germans\",\"obiettivo\":\"France\","
+                    + "\"dal_round\":1,\"al_round\":3,\"durata\":2,\"motivo_fine\":\"preso\","
+                    + "\"preso_round\":2}],"
+                    + "\"nazioni\":{\"Germans\":{\"obiettivo\":\"Russia\",\"dal_round\":3}},"
+                    + "\"turni\":[{\"round\":1,\"nazione\":\"Germans\",\"pu_turno\":30,"
+                    + "\"pu_op\":21,\"pu_op_spesi\":21,\"instradate\":4,"
+                    + "\"attacchi\":[{\"territorio\":\"France\",\"forzato\":true,"
+                    + "\"vittoria_pct\":90,\"perdite_p80_tuv\":20,\"esito\":\"vinto\","
+                    + "\"perdite_reali_tuv\":12}]},"
+                    + "{\"round\":2,\"nazione\":\"Germans\",\"pu_turno\":40,\"pu_op\":28,"
+                    + "\"pu_op_spesi\":28,\"perse_viaggio\":2,\"perse_viaggio_tuv\":7}],"
+                    + "\"perse_viaggio\":[]}}}}")
+            .getAsJsonObject();
+    final StringBuilder md = new StringBuilder();
+
+    ConfrontoImpegno.write(
+        md,
+        List.of(new RiepilogoGenerale.Game("a", hard), new RiepilogoGenerale.Game("c1", committed)),
+        List.of("Axis", "Allies"),
+        List.of(1, 2));
+
+    final String text = md.toString();
+    assertThat(text).contains("## Impegno (step R2b)");
+    assertThat(text).contains("| Hard / Hard | 1 | 2.00 ± 0.0 | - | 2.00 ± 0.0 | - |");
+    assertThat(text).contains("| 3.00 ± 0.0 | +1.00 - |");
+    assertThat(text).contains("Stratega LLM [senza chiave] [con impegno] / Hard | 1 | 2.00");
+    assertThat(text).contains("| 35.00 / 38.00 |").contains("| 130 s | +30% |");
+    // Paris passes to the Axis in round 2 only with the commitment
+    assertThat(text).contains("| Hard / Hard | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 |");
+    assertThat(text).contains("| 0/1 | 1/1, R2.00 | 0/1 | 0/1 |");
+    assertThat(text)
+        .contains("| Germans | France 1, Russia 1 | 2.00 (1) | preso 1 | France R2 | 1 |");
+    assertThat(text).contains("PU spesi per l'operazione: 49 su 70 PU dei turni (70.0%");
+    assertThat(text).contains("Attacchi forzati: 1 (1.0 per partita): vinti 1, non presi 0");
+    assertThat(text).contains("1 su 1 sotto o uguali al P80; media reale 12.0 TUV, media P80 20.0");
+    assertThat(text).contains("| R1 | 21.00 | 4.00 | 0.00 | 0.00 |");
+    assertThat(text).contains("| R2 | 28.00 | 0.00 | 2.00 | 7.00 |");
+  }
+
+  @Test
   void shadowMeasuresOfStepR2aBisAreSummarized() {
     final JsonObject game =
         JsonParser.parseString(

@@ -228,7 +228,7 @@ public final class ProPlusTuning implements ProTuning {
     // step PROVA DI VALORE: the target of an approved second step, down to the closing threshold
     if (OperazioniCongiunte.forzaBersaglio(proData, target)) {
       return operationAnswer(
-          Math.min(attackMinWinPercentage, OperazioniCongiunte.sogliaForzata(proData)));
+          Math.min(attackMinWinPercentage, OperazioniCongiunte.sogliaForzata(proData, target)));
     }
     if (!on(proData, Ablazione.Componente.SOGLIE_RISCHIO)) {
       return attackMinWinPercentage;
@@ -310,6 +310,12 @@ public final class ProPlusTuning implements ProTuning {
   public Optional<ProPurchaseOrders> purchaseOrders(final ProData proData) {
     // step PROVA DI VALORE: the joint operation's reserves (only with its switch on)
     final Optional<ProPurchaseOrders> reserves = OperazioniCongiunte.ordiniAcquisto(proData);
+    // step R2b: the commitment's orders (switch "impegno"), with the operations' reserves if any
+    final Optional<ProPurchaseOrders> commitment = Impegno.ordini(proData);
+    if (commitment.isPresent()) {
+      return operationAnswer(
+          reserves.map(r -> withReserves(commitment.get(), r)).or(() -> commitment));
+    }
     if (reserves.isPresent()) {
       return operationAnswer(reserves);
     }
@@ -323,6 +329,20 @@ public final class ProPlusTuning implements ProTuning {
                     .filter(l -> !l.mix().isEmpty() || !l.obbligati().isEmpty())
                     .map(l -> ordersWithOperations(proData, plan, l))
                     .map(o -> plan.isDifensiva() ? withoutPlanShare(o) : o));
+  }
+
+  /** Step R2b: the commitment's orders with the operations' mandatory reserves added. */
+  private static ProPurchaseOrders withReserves(
+      final ProPurchaseOrders commitment, final ProPurchaseOrders reserves) {
+    final List<ProPurchaseOrders.Mandatory> mandatory = new ArrayList<>(commitment.mandatory());
+    mandatory.addAll(reserves.mandatory());
+    return new ProPurchaseOrders(
+        commitment.label() + " + " + reserves.label(),
+        commitment.mix(),
+        List.copyOf(mandatory),
+        commitment.preferredPlacement(),
+        commitment.stagingTerritories(),
+        Math.max(commitment.minimumShare(), reserves.minimumShare()));
   }
 
   /**
@@ -516,6 +536,11 @@ public final class ProPlusTuning implements ProTuning {
     final GamePlayer player = proData.getPlayer();
     if (player == null || !Stratega.gioca(proData.getData(), player)) {
       return java.util.OptionalDouble.empty();
+    }
+    // step R2b: with the commitment's orders the share of the orders reserves the PUs (only the
+    // capital and the factories at risk are defended without a limit)
+    if (Impegno.ordini(proData).isPresent()) {
+      return operationAnswer(java.util.OptionalDouble.empty());
     }
     return ProPlusSettings.allianceOf(proData.getData(), player)
         .map(

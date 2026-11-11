@@ -524,6 +524,78 @@ public final class CampagnaOmbra {
       return out.subList(0, Math.min(cfg.maxObiettivi(), out.size()));
     }
 
+    /**
+     * Step R2b: the own territories with own land units (the fronts of 2.1), and the best land
+     * route from one of them to {@code t} within the horizon (the same rule as {@link #obiettivi}).
+     */
+    List<Territory> fronti() {
+      final List<Territory> fronts = new ArrayList<>();
+      for (final Territory t : map.getTerritories()) {
+        if (!t.isWater()
+            && Matches.isTerritoryAllied(player).test(t)
+            && t.anyUnitsMatch(
+                Matches.unitIsOwnedBy(player)
+                    .and(Matches.unitIsLand())
+                    .and(Matches.unitIsNotInfrastructure()))) {
+          fronts.add(t);
+        }
+      }
+      return fronts;
+    }
+
+    /** Step R2b: see {@link #fronti}. */
+    Optional<Obiettivo> obiettivoPer(final Territory t, final List<Territory> fronts) {
+      Obiettivo best = null;
+      for (final Territory f : fronts) {
+        final int d = distanza(f, t);
+        if (d < 1 || d > cfg.orizzonteRound()) {
+          continue;
+        }
+        if (best == null
+            || d < best.percorso().size()
+            || (d == best.percorso().size() && tuvProprio(f) > tuvProprio(best.partenza()))) {
+          final Optional<Route> r = map.getRoute(f, t, passable);
+          if (r.isPresent() && r.get().numberOfSteps() == d) {
+            best = new Obiettivo(t, f, List.copyOf(r.get().getSteps()));
+          }
+        }
+      }
+      return Optional.ofNullable(best);
+    }
+
+    /**
+     * Step R2b: the campaign of {@code o} at {@code margin} with the flow v2 and the defenders of
+     * model {@code model} (the same computation as the shadow's {@code margini_v2}).
+     */
+    JsonObject valutaImpegno(
+        final Obiettivo o, final int margin, final double perRound, final String model) {
+      final String before = modello;
+      modello = model;
+      try {
+        final List<Integer> rounds = new ArrayList<>();
+        int stageRound = round;
+        for (final Territory s : o.percorso()) {
+          int r = stageRound;
+          if (nemico(s.getOwner())
+              && !data.getRelationshipTracker().isAtWar(player, s.getOwner())) {
+            final int warRound = roundGuerra(s.getOwner());
+            r = warRound < 0 ? Integer.MAX_VALUE / 2 : Math.max(r, warRound);
+          }
+          rounds.add(r);
+          stageRound = r + 1;
+        }
+        final int deadline = rounds.isEmpty() ? round : rounds.get(rounds.size() - 1);
+        final List<Unit> mine = unitaCampagna();
+        final Map<Unit, Territory> where = new HashMap<>();
+        for (final Territory t : map.getTerritories()) {
+          t.getUnitCollection().stream().filter(mine::contains).forEach(u -> where.put(u, t));
+        }
+        return flussoV2(o, rounds, mine, where, margin, perRound, deadline);
+      } finally {
+        modello = before;
+      }
+    }
+
     // -------------------------------------------------------------------- 2.2-2.5, 2.7
 
     JsonObject campagna(
