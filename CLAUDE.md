@@ -4591,3 +4591,28 @@ altre voci invariate (golden Hard, nudo = Hard, Stratega senza chiave = Hard, di
   forzati "ESEGUITO" alla revisione, PREPARAZIONE con base sicura Northern Italy, un "NON ATTACCATO DA HARD"); seme 1103 Alleati 7
   round 178 s contro Hard vs Hard 178 s: Russia "gioca come Hard" (nessun obiettivo fattibile), USA trasporti fermi vuoti a R7 5 contro
   16, 2+8 unita' portate nel Regno Unito a R5-R6, Persia presa, Iraq non attaccato (vittoria 10%).
+
+#### Autoplay in CI (run 43058974168, commit c31ce23, tutto verde, 60 partite [impegno] senza chiave, semi 1101-1120)
+60/60 completate, 0 fallite, costo API 0. Durata media: a Hard vs Hard 341 s, c1 357 s (**+5%**), c2 344 s (**+1%**): entro +50%.
+
+| VC Asse | R4 | R8 | R12 | Δ R12 da (a) [IC 95% Welch] | Reddito R12 Asse / Alleati | TUV R12 Asse / Alleati |
+|---|---|---|---|---|---|---|
+| a Hard / Hard | 4,65 | 5,60 | 5,15 ± 1,7 | - | 57,0 / 109,2 | 875 / 1583 |
+| c1 Asse Stratega + impegno | 5,00 (+0,35 [−0,07; 0,77]) | 5,60 (0,00) | 5,60 ± 1,8 | +0,45 [−0,66; 1,56] include lo 0 | 62,9 / 104,0 | 949 / 1498 |
+| c2 Alleati Stratega + impegno | 4,60 (−0,05) | 5,45 (−0,15) | 6,00 ± 1,3 | +0,85 [−0,11; 1,81] include lo 0 (peggio per gli Alleati) | 69,8 / 96,3 | 985 / 1452 |
+
+- Citta' passate di mano (a / c1 / c2, su 20, round mediano): Mosca 6 R9,5 / 9 R9 / 9 R10; Stalingrado 13 R8 / 14 R8 / 15 R7;
+  Leningrado 19 R5 / 20 R5 / 20 R5; Egitto 12 R3,5 / 19 R1 / 13 R3; Parigi 20 R1 ovunque; Berlino mai; Roma 3 R8 / 2 R9,5 / 0.
+- Fasi (c1): Germans 39 turni in PREPARAZIONE, 129 in ESECUZIONE, 43 obiettivi presi; Italians 53 / 81, 32 presi, 3 sospesi. Attacchi
+  forzati c1 228: rivisti "eseguito" 170, "completato" 0, "rinunciato" 4, non attaccati da Hard 21, vinti 181. (c2): British 6/20,
+  Egitto ripreso 12 volte; Russians 22 PREPARAZIONE, 7 ESECUZIONE, **16 turni sospesi "gioca come Hard"**, 3 presi.
+- Russia (TUV / reddito): R4 351/24 (a), 339/25 (c1), 348/24 (c2); R8 301/15, 260/13, 293/12; R12 247/14, 192/13, **158/10**: con
+  l'impegno degli Alleati la Russia a R12 ha comunque meno esercito di Hard vs Hard (Mosca 9/20 contro 6/20).
+- USA (c2 contro a, medie per partita): trasporti fermi vuoti a fine movimento R8 12,6 contro 14,5, R12 18,2 contro 24,5; unita'
+  portate nel Regno Unito per round 0,8-7,2 da R5 (a: 0-2,4 da R7); sbarcate in Europa occidentale simili; primo sbarco USA in Europa
+  occidentale R7 contro R8 (20/20); prima testa di ponte tenuta 2 round R7 contro R6,5. Programma USA: 285 PU spesi su 694 PU dei
+  turni (41%), per partita 25,8 fanterie, 11,5 artiglierie, 7,2 carri, 11,1 cacciatorpediniere, **4,5 trasporti** (gli altri ~22 li
+  compra Hard con il resto dei PU: la regola del carico bilanciato vincola solo i PU del programma). Spola: 52 unita' caricate, 35
+  scaricate nel Regno Unito, 29 rientri di trasporti vuoti per partita.
+- Regno Unito: trasporti fermi vuoti come Hard (R12 10,0 contro 10,5); programma 147 PU su 461 (32%, presidi di Londra/Egitto prima);
+  Persia presa in 20/20 partite, Northwest Persia 15/20; Iraq forzato 18 volte (16 vinti, 2 non attaccati da Hard).
