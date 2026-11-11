@@ -235,6 +235,8 @@ public final class AutoplayRunner {
         if (AutoplayOptions.STRATEGA.equals(options.tipo(alliance))) {
           games.strategy.triplea.ai.proplus.StrategaInterruttori.set(
               data.getProperties(), alliance, options.strategaSpento(alliance));
+          games.strategy.triplea.ai.proplus.StrategaInterruttori.accendi(
+              data.getProperties(), alliance, options.strategaAcceso(alliance));
         }
       }
       // step C2: the cap of the PUs to the strategy (default: the data file)

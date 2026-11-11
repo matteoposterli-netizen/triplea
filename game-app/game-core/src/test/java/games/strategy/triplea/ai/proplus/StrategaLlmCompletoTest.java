@@ -256,14 +256,17 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
   void theSwitchesOfStepR0TurnOffTheListsAndTheHolds() {
     registerAxis();
     final var props = data.getProperties();
-    // default: both on
+    // defaults (step R2a): lists and shadow on, holds OFF
     assertThat(StrategaInterruttori.LISTE.acceso(props, "Axis")).isTrue();
-    assertThat(StrategaInterruttori.TENUTE.acceso(props, "Axis")).isTrue();
-    final List<Candidato> withHolds = generator("Germans", 2).calcola();
-    // "tenute" off: no hold/reinforcement candidate, none outside the list
-    StrategaInterruttori.set(props, "Axis", "tenute");
+    assertThat(StrategaInterruttori.OMBRA.acceso(props, "Axis")).isTrue();
     assertThat(StrategaInterruttori.TENUTE.acceso(props, "Axis")).isFalse();
-    assertThat(StrategaInterruttori.TENUTE.acceso(props, "Allies")).isTrue();
+    StrategaInterruttori.accendi(props, "Axis", "tenute");
+    assertThat(StrategaInterruttori.TENUTE.acceso(props, "Axis")).isTrue();
+    assertThat(StrategaInterruttori.TENUTE.acceso(props, "Allies")).isFalse();
+    final List<Candidato> withHolds = generator("Germans", 2).calcola();
+    // "tenute" off (the default): no hold/reinforcement candidate, none outside the list
+    StrategaInterruttori.accendi(props, "Axis", "");
+    assertThat(StrategaInterruttori.TENUTE.acceso(props, "Axis")).isFalse();
     final List<Candidato> noHolds = generator("Germans", 2).calcola();
     assertThat(noHolds).allMatch(c -> c.tipo().conquista());
     assertThat(noHolds.stream().map(Candidato::bersaglio).toList())
@@ -278,9 +281,10 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
             .getAsJsonObject();
     assertThat(StrategaFuoriLista.valida(data, "Axis", Stratega.nazioni(props, "Axis"), hold))
         .hasValueSatisfying(w -> assertThat(w).contains("tenute"));
-    StrategaInterruttori.set(props, "Axis", "");
+    StrategaInterruttori.accendi(props, "Axis", "tenute");
     assertThat(StrategaFuoriLista.valida(data, "Axis", Stratega.nazioni(props, "Axis"), hold))
         .isEmpty();
+    StrategaInterruttori.accendi(props, "Axis", "");
     // "liste" off: the LLM's lists are not given to Hard's defense
     final JsonObject answer = new JsonObject();
     final JsonArray must = new JsonArray();
@@ -412,6 +416,7 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
   @Test
   void aHoldIsNotProposedWhenHardHoldsAloneOrGainsLittle() {
     registerAxis();
+    StrategaInterruttori.accendi(data.getProperties(), "Axis", "tenute");
     for (final Candidato c : generator("Germans", 2).calcola()) {
       if (!c.tipo().conquista()) {
         assertThat(c.json().get("tenuta_hard_da_solo_pct").getAsDouble())

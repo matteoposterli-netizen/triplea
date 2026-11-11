@@ -938,6 +938,40 @@ class AutoplayTest {
         .isEqualTo("Stratega LLM / Hard");
   }
 
+  @Test
+  void shadowCampaignsOfStepR2aAreSummarized() {
+    final JsonObject game =
+        JsonParser.parseString(
+                """
+                {"stato":"completata","parametri":{"tipi":{"Axis":"stratega","Allies":"hard"}},
+                 "round":[{"round":1,"completo":true},{"round":2,"completo":true}],
+                 "stratega_llm":{"Axis":{"ombra":{
+                   "round_con_blocco":[1,2],
+                   "fattibili":[
+                    {"round":1,"nazione":"Germans","obiettivo":"France","margine":60,
+                     "fattibile":true,"round_stimato":1,"quota_pu_pct":0},
+                    {"round":1,"nazione":"Germans","obiettivo":"France","margine":80,
+                     "fattibile":false,"round_stimato":-1,"quota_pu_pct":40}],
+                   "statistiche":{"difensori_1":[[4,20],[6,10]],"reddito_1":[[2,40]],
+                    "battaglie_60":{"n":4,"sotto_il_previsto":3},
+                    "caso_c":{"n":2,"attaccati":1,"persi":0,"presidio_previsto":4,
+                     "unita_lasciate_da_hard":6}}}}}}
+                """)
+            .getAsJsonObject();
+    final StringBuilder md = new StringBuilder();
+
+    ConfrontoOmbra.write(
+        md, List.of(new RiepilogoGenerale.Game("1-x", game)), List.of("Axis", "Allies"));
+
+    final String text = md.toString();
+    assertThat(text).contains("## Campagne in ombra").contains("Asse 2/2 round (100%)");
+    assertThat(text).contains("| Asse | 60 | R1 | 1 / 1 | France 1 | 1.0 | 0.0% |");
+    assertThat(text).contains("| Asse | 80 | R1 | 0 / 1 | - | - | - |");
+    assertThat(text).contains("| Asse | difensori (TUV) | +1 | 2 | 5.0 | 40.0% |");
+    assertThat(text).contains("| Asse | 60 | 4 | 3 (75%) |");
+    assertThat(text).contains("| Asse | c | 2 | 1 (50%) | 0 (0%) | 2.0 | 3.0 |");
+  }
+
   private static final String SAMPLE =
       """
       {"nome":"A / 1","stato":"completata","durata_s":75,"round_giocati":1,

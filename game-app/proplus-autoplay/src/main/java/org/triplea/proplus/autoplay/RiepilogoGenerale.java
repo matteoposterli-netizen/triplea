@@ -141,6 +141,7 @@ final class RiepilogoGenerale {
     ConfrontoAblazione.write(md, games, alliances, vcRounds);
     ConfrontoConferma.write(md, games, alliances, vcRounds);
     ConfrontoDiagnosi.write(md, games, alliances, vcRounds);
+    ConfrontoOmbra.write(md, games, alliances);
     ConfrontoVarianza.write(md, games, alliances, vcRounds);
     ConfrontoProva.write(md, games, alliances, vcRounds);
     ConfrontoSmoke.write(md, games, alliances);
@@ -292,6 +293,12 @@ final class RiepilogoGenerale {
       for (final String off :
           p.getAsJsonObject("stratega_spento").get(alliance).getAsString().split(",")) {
         label.append(" [senza ").append(off).append(']');
+      }
+    }
+    if (p.has("stratega_acceso") && p.getAsJsonObject("stratega_acceso").has(alliance)) {
+      for (final String on :
+          p.getAsJsonObject("stratega_acceso").get(alliance).getAsString().split(",")) {
+        label.append(" [con ").append(on).append(']');
       }
     }
     return label.toString();

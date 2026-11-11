@@ -33,7 +33,8 @@ import javax.annotation.Nullable;
  * --tetto-strategia P  step C2: cap (percent) of the PUs the "Pro+ Stratega LLM" gives to the
  *                      strategy after its computed defense (default: the data file, 70)
  * --stratega-spento A=S+S,..  step R0: switches of the "Pro+ Stratega LLM" turned off per
- *                      alliance (liste, tenute; see StrategaInterruttori), default all on
+ *                      alliance (liste, tenute, ombra; see StrategaInterruttori)
+ * --stratega-acceso A=S+S,..  step R2a: switches turned on (eg tenute, off by default)
  * --stratega-regole S  step R1: "si" = the strategist answers with the rule-based baseline
  *                      (StrategaRegole, no network, cost 0) instead of the LLM
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
@@ -55,6 +56,7 @@ record AutoplayOptions(
     double budgetOperazioni,
     @Nullable Double tettoStrategia,
     Map<String, String> strategaSpenti,
+    Map<String, String> strategaAccesi,
     boolean strategaRegole,
     long seme,
     Path output,
@@ -98,6 +100,7 @@ record AutoplayOptions(
                     games.strategy.triplea.ai.proplus.DecisoreOperazione.BUDGET_DEFAULT))),
         cap(values.get("tetto-strategia")),
         strategistSwitches(values.get("stratega-spento")),
+        strategistSwitches(values.get("stratega-acceso")),
         "si".equalsIgnoreCase(values.getOrDefault("stratega-regole", "no")),
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
@@ -121,12 +124,17 @@ record AutoplayOptions(
                                     + alliance
                                     + ": "
                                     + id
-                                    + " (liste, tenute)"))
+                                    + " (liste, tenute, ombra)"))
                     .id());
           }
           return String.join(",", ids);
         });
     return map;
+  }
+
+  /** Switches of the strategist turned on for {@code alliance}, comma separated ("" = none). */
+  String strategaAcceso(final String alliance) {
+    return strategaAccesi.getOrDefault(alliance, "");
   }
 
   /** Switches of the strategist turned off for {@code alliance}, comma separated ("" = none). */

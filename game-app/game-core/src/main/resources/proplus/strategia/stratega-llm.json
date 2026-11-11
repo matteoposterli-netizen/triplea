@@ -59,6 +59,23 @@
     "fattore_reddito": 2,
     "victory_city_per_round": 5
   },
+  "campagna_ombra": {
+    "nota": "Step R2a: pianificatore di campagna IN OMBRA (solo diario, nessun effetto sul gioco). Campagne terrestri di UNA nazione con i propri aerei verso una VC o capitale nemica raggiungibile via terra entro orizzonte_round round (le altre: 'non valutato: sbarco'). Percorso a tappe per territori conquistabili, un round per tappa; arrivo delle unita' = distanza / movimento (aerei: distanza / (movimento - 1)). Punta come flusso: forza del round prima - perdite attese - distaccamenti + arrivi; deve prendere la tappa e reggere il contrattacco del turno nemico dopo. NESSUN DADO: le forze sono ProBattleUtils.estimateStrength (il calcolatore di battaglie non espone la distribuzione e non viene usato). APPROSSIMAZIONE dei margini: il percentile sfavorevole (margini_percentile) e' la forza nemica (difensori attesi, contrattacco) e le perdite attese moltiplicate per fattori_percentile del margine; presa ok se la differenza di forza (formula di estimateStrengthDifference: 50 = pari) >= soglia_presa, tenuta ok se quella del contrattacco <= 100 - soglia_tenuta; forza necessaria = forza attuale x forza richiesta / forza attuale (forza ~ lineare nel TUV); perdite attese = TUV della punta x forza nemica / (forza propria + forza nemica) x fattore. Difensori attesi = presenti + quota (impegno della conquista, A3) delle unita' di terra nemiche confinanti + fanterie che i nemici possono comprare nelle fabbriche entro 2 (quota_acquisti_nemici dei loro PU per round). Fattibile = scarto colmabile entro la scadenza con quota_pu_strategia % dei PU dopo la difesa di Hard dell'ultimo turno registrato. Regola 2.6: forza_piccola_tuv = TUV di terra nemico in portata sotto cui la minaccia e' 'piccola'; presidio minimo di fanteria/artiglieria al margine marginale_presidio, al massimo max_presidio unita'; perdita attesa senza presidio = 2 x produzione x round_per_riprendere (+ indice di valore se il territorio conta); costo del presidio = TUV del presidio / TUV della punta x presa dell'obiettivo x indice di valore della campagna. Limiti di calcolo: max_obiettivi_per_nazione, max_territori_retrovia, max_previsioni. Valori ragionevoli scelti a mano, NON tarati.",
+    "orizzonte_round": 6,
+    "max_obiettivi_per_nazione": 4,
+    "margini_percentile": [60, 70, 80],
+    "fattori_percentile": {"60": 1.1, "70": 1.25, "80": 1.45},
+    "soglia_presa": 55,
+    "soglia_tenuta": 55,
+    "forza_piccola_tuv": 10,
+    "quota_acquisti_nemici": 0.5,
+    "quota_pu_strategia": 70,
+    "max_presidio": 12,
+    "round_per_riprendere": 1,
+    "margine_presidio": 70,
+    "max_territori_retrovia": 10,
+    "max_previsioni": 40
+  },
   "difesa": {
     "nota": "Step C2-bis: la difesa la fa Hard (con le liste irrinunciabili/sacrificabili dell'LLM); questo calcolo resta solo IN OMBRA nel diario (nessuna decisione). Limiti separati: max_unita_per_territorio rinforzi + max_unita_per_territorio acquisti nella fabbrica del territorio; fabbriche vicine proprie (unita' che arrivano in una mossa: difendono dal turno nemico dopo, tenuta_turno_dopo). Step C2 (piano originale): A inizio turno di ogni nazione dello Stratega: territori propri (e capitali/fabbriche dell'alleanza dove la nazione puo' portare rinforzi) minacciati dai nemici che muovono prima del suo prossimo turno, tutti insieme (stima d'attacco di Hard, unita' in portata + acquisti nemici); contrattacco = la stessa stima unica delle operazioni (StimaUnica: MASSIMO su capitali e fabbriche chiave, REALISTICO altrove con lo storico del nemico, minimo prudente 0,5 con storico scarso). Valore = valore_bersaglio_PU del territorio (stessa scala del valore d'alleanza, H = tenuta_round_default) + TUV delle fabbriche + valore delle operazioni in corso che dipendono dal territorio. Costo = PU degli acquisti difensivi + (1 - tenuta) x TUV delle unita' mandate o comprate. Unita' minime per arrivare a soglia_tenuta: prima rinforzi che arrivano nel non combattimento (rinforziPossibili, come le tenute), poi acquisti nella fabbrica del territorio (le unita' piazzate non si muovono prima del turno nemico). Difendi se irrinunciabile (capitale, lista dell'LLM) o valore >= costo; sacrifica se sacrificabile (lista dell'LLM) o costo > valore o indifendibile (tenuta massima <= soglia_ritirata). PU alla strategia = min(PU - PU_difesa, tetto_strategia_pct% dei PU); il resto a Hard. Valori ragionevoli scelti a mano, NON tarati.",
     "soglia_tenuta": 70,

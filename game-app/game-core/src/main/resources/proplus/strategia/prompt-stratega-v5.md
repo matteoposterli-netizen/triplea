@@ -28,9 +28,8 @@ Senza operazioni l'alleanza gioca esattamente come Hard: avvia un'operazione sol
 - **sbarco**: sbarco congiunto dalla zona di raduno: chi apre sbarca per primo, chi chiude completa nello stesso
   round; testa di ponte tenuta, poi (facoltativo) le stesse tappe su un bersaglio successivo confinante
   (`bersaglio_successivo`, tra `bersagli_successivi_possibili`).
-- **tenuta**: presidio di un territorio proprio/alleato realmente minacciato: presidio bloccato e rinforzi finche'
-  la tenuta stimata dal motore e' sotto il 70%, per `durata_tenuta` round.
-- **rinforzo**: una nazione manda unita'/aerei in un territorio di un alleato realmente minacciato e lo tiene.
+- **tenuta** e **rinforzo** di territori propri/alleati: spenti (la difesa la fa Hard); non proporli fuori lista.
+  Compaiono nel menu solo se il motore li riaccende: in quel caso valgono come gli altri candidati.
 - Durante il turno di ogni nazione con un ruolo, un ufficiale delle operazioni decide procedi/rinvia/tieni/ritira
   con i numeri del momento: tu fissi il portafoglio, lui il momento.
 

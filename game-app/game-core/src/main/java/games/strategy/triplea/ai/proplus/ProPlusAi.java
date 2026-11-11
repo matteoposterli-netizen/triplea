@@ -99,6 +99,9 @@ public class ProPlusAi extends ProAi {
           } catch (final RuntimeException e) {
             ProLogger.warn(LOG_PREFIX + "Shadow defense plan failed: " + e);
           }
+          // step R2a: the shadow campaign planner (diary only, never an effect on the game)
+          initializeData();
+          CampagnaOmbra.calcola(getProData(), getCalc(), player);
           if (!keep.isEmpty()) {
             tuning.holdCombatForPurchase(data, player, keep);
           }

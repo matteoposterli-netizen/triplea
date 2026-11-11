@@ -436,6 +436,11 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   (linea di base a regole `--stratega-regole si`, nessuna chiave, costo 0). Chiave solo a c e f, tetto 15 $ sulle 20 partite LLM (0,75 $
   a partita). Etichetta "Stratega LLM [regole]"; la sezione "Diagnosi Stratega (R0)" confronta anche g con c e mostra i contatori
   dello Stratega (round decisi/senza LLM, tentativi falliti, menu vuoto, unita' contate non mosse, piani di Hard ricalcolati).
+- **Modalita' "ombra" (step R2a)**: `[ombra]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒ `modalita: ombra`.
+  Semi 1101-1110 (come R0/R1), 12 round, Equilibrato, mescolata, `max-parallel` 20, 3 configurazioni = 30 partite: a `Hard-vs-Hard`,
+  c `Asse-Stratega-LLM-vs-Hard`, f `Hard-vs-Alleati-Stratega-LLM` (tenute spente = il nuovo default, ombra accesa). Chiave solo a c e f,
+  tetto 15 $ sulle 20 partite LLM. Sezione **"Campagne in ombra"** (`ConfrontoOmbra`, da `stratega_llm.<alleanza>.ombra`).
+  Opzione nuova del runner `--stratega-acceso Axis=tenute` (riaccende un interruttore spento di default; etichetta "[con tenute]").
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2030,6 +2035,44 @@ invariate. Valori nuovi in `stratega-llm.json` (`guadagno_minimo_tenuta_punti`, 
 - **Linea di base a regole** (`StrategaRegole`, `-Dproplus.stratega.regole=true`, autoplay `--stratega-regole si`): annulla le operazioni
   con successo stimato < 30%, continua le altre, avvia i candidati con valore d'alleanza positivo piu' alto fino al massimo; liste vuote;
   ai punti di decisione l'azione del motore. Nessuna rete, costo 0.
+
+### Tenute spente e campagne in ombra (step R2a)
+
+- **Tenute spente di default** (solo voce Stratega LLM): `StrategaInterruttori` ha un default per interruttore (`liste` acceso,
+  `tenute` SPENTO, `ombra` acceso); proprieta' `Pro+ stratega llm spento: <alleanza>` e `Pro+ stratega llm acceso: <alleanza>`
+  (autoplay `--stratega-spento`, `--stratega-acceso`). Niente candidati tenuta/rinforzo ne' fuori lista; la fase di tenuta DOPO una
+  conquista non cambia. Prompt strategico v5: le istruzioni sulle tenute sostituite da una riga ("spenti, non proporli fuori lista").
+- **Pianificatore di campagna IN OMBRA** (`ai/proplus/CampagnaOmbra`, chiamato in `ProPlusAi.purchase` dopo `Difesa.calcola` per le
+  nazioni dello Stratega tranne la Francia, e a fine turno da `ProPlusStrategaAi.place`): solo diario, nessun effetto sul gioco
+  (nessun acquisto, nessuna unita' trattenuta, nessuna chiamata LLM, nessun campo nel contratto, nessun dado: solo
+  `ProBattleUtils.estimateStrength` e una stima d'attacco nemica di Hard per la regola 2.6). Valori in `stratega-llm.json`
+  `campagna_ombra` (con la nota sulle approssimazioni), NON tarati.
+  - 2.1 obiettivi: VC e capitali nemiche raggiungibili via terra (territori conquistabili: terra, non impassabili, di un'alleanza)
+    entro `orizzonte_round` 6 tappe, al massimo 4 per nazione (le piu' vicine); le altre con una costa "non valutato: sbarco";
+    etichetta con i piani della dottrina che le hanno come obiettivo o tappa.
+  - 2.2 percorso a tappe (`GameMap.getRoute`), un round per tappa; guerra non ancora in corso: "possibile ora: la dichiara il tiro
+    casuale di Hard (ProPoliticsAi:153-160)" (non cambiato), oppure il round della dichiarazione del piano, altrimenti "non possibile".
+  - 2.3 arrivo = distanza / movimento (terra per territori conquistabili; aerei distanza / (movimento − 1)).
+  - 2.4-2.5 punta come flusso per i margini 60/70/80: arrivi del round, battaglia con i difensori attesi (presenti + quota impegno
+    A3 delle unita' di terra nemiche confinanti + fanterie comprabili nelle fabbriche nemiche entro 2), perdite attese, superstiti
+    che reggono il contrattacco (terra entro 2, aerei entro movimento/2, stessa quota + acquisti); forza necessaria e scarto alla
+    prima tappa che blocca; la campagna si ferma li'. Approssimazione dichiarata: forza nemica e perdite x `fattori_percentile`.
+  - 2.6 retrovie e percorso (al massimo 10 territori propri per valore): a) nessuna unita' di terra nemica (sbarchi compresi) puo'
+    arrivarci ⇒ 0; b) forza piccola (<= `forza_piccola_tuv`) ⇒ 0, oppure 1 fanteria se carri nemici possono fare blitz verso un
+    territorio che conta; minaccia reale su un territorio che non conta ⇒ 0 (si accetta di perderlo); c) minaccia reale su un
+    territorio che conta (VC/capitale, fabbrica propria, sul percorso, obiettivo nazionale) ⇒ presidio minimo di fanteria e
+    artiglieria al margine 70, mai carri ne' aerei; "RILASCIATO" quando torna a)/b). Nel diario perdita attesa senza presidio e costo
+    del presidio.
+  - 2.7 acquisti per round (tipo e fabbrica per tempo d'arrivo, punto di ammassamento) e fattibilita' (scarto colmabile entro la
+    scadenza con il 70% dei PU dopo la difesa di Hard dell'ultimo turno registrato).
+  - 2.8 verifica a +1/+2/+3 round: difensori previsti contro reali (obiettivo e tappe), reddito e forza propria, perdita della prima
+    tappa per margine contro la battaglia reale, regola 2.6 (attaccato/perso nel turno nemico dopo, unita' lasciate da Hard).
+  - 2.9 uscite: `campagna-ombra-R<N>-<alleanza>.json` nel diario, blocco "Campagne IN OMBRA (nessun effetto sul gioco)" in
+    `stratega.txt`, stato compatto `Pro+ stratega ombra: <alleanza>` (< 20 KB), `stratega_llm.<alleanza>.ombra` nel riepilogo,
+    sezione "Campagne in ombra" del riepilogo generale.
+- Test: `CampagnaOmbraTest` (ombra accesa = ombra spenta per le risposte del tuning e le proprieta' della partita; stato salvato e
+  ricaricato; i tre casi della 2.6 e il rilascio), `NudoHardTest.axisStrategaWithoutKeyAnswersAsHardWithTheShadowOn` (turno intero),
+  `AutoplayTest.shadowCampaignsOfStepR2aAreSummarized`.
 
 ## Come configurare lo stratega
 
@@ -4206,3 +4249,19 @@ invariate; `avvia.bat` e `aggiorna.ps1` NON toccati.
   mosse, piani di Hard ricalcolati 3 (c) / 8 (f) / 24 (g), 0 pause per paracadute (l'LLM ha sempre risposto).
 - **La linea a regole non e' distinguibile dall'LLM** (−0,4 VC, include lo 0): con questi candidati l'LLM non aggiunge valore
   misurabile rispetto a una regola semplice; entrambi restano sotto Hard di ~1-1,6 VC.
+
+### Step R2a-OMBRA — tenute spente di default + pianificatore di campagna in ombra (2026-11-11)
+
+Vedi "Tenute spente e campagne in ombra (step R2a)" e la modalita' `[ombra]`. File: nuovi `ai/proplus/CampagnaOmbra`, test
+`CampagnaOmbraTest`, autoplay `ConfrontoOmbra`; modificati `StrategaInterruttori` (default per interruttore, `accendi`, `OMBRA`),
+`ProPlusAi` (chiamata all'acquisto), `ProPlusStrategaAi` (fine turno), `Stratega.diarioTurnoOmbra`, `StrategaDiario` (`ombra` nel
+riepilogo), `stratega-llm.json` (`campagna_ombra`), `prompt-stratega-v5.md` (tenute), autoplay `AutoplayOptions`
+(`--stratega-acceso`), `AutoplayRunner`, `Riepilogo` (`stratega_acceso`), `RiepilogoGenerale`, `ConfrontoDiagnosi` ("[con x]"),
+workflow `[ombra]`; test `NudoHardTest` (+1: Stratega senza chiave con l'ombra accesa), `StrategaLlmCompletoTest` (default delle
+tenute), `AutoplayTest` (+1). Hard e le altre voci invariate; `avvia.bat` e `aggiorna.ps1` NON toccati.
+- Test locali: `:game-core:test --tests 'games.strategy.triplea.ai.*'` + `:ai:test` + `:proplus-autoplay:test` **589, 0 falliti**
+  (golden Hard, `NudoHardTest` 3 compreso "Stratega senza chiave", `DiaryNeutralityTest`). Nel turno "Stratega senza chiave" le sole
+  risposte diverse da Hard sono il tetto della strategia (inerte senza operazioni) e la capitale sempre tra gli irrinunciabili
+  (comportamento del C2-bis, gia' misurato in R0 come risposte "operazione": b − a −0,2 VC).
+- Prove locali (Stratega simulato, 3 round): Asse 83 s, Alleati 63 s (R1 locale 89 s): nessun rallentamento misurabile; stato
+  dell'ombra 6,9 KB per alleanza; blocco in ogni turno; rilascio del presidio visto (Novgorod R1 caso c → R2 caso a).

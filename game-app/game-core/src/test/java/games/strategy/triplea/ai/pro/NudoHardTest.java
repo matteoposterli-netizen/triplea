@@ -101,6 +101,44 @@ class NudoHardTest extends AbstractClientSettingTestCase {
   }
 
   /**
+   * Steps R0/R2a: the "Pro+ Stratega LLM" without a key (no LLM call: no operation, no list) plays
+   * as Hard through a whole turn, with the shadow campaign planner on. The only answers different
+   * from Hard's are the two the strategist's budget gives (measured in R0 as "operation" answers):
+   * the cap of the strategy PUs (inert without operations) and the nation's capital always in the
+   * defense lists.
+   */
+  @Test
+  void axisStrategaWithoutKeyAnswersAsHardWithTheShadowOn() {
+    final GamePlayer germans = data.getPlayerList().getPlayerId("Germans");
+    games.strategy.triplea.ai.proplus.Stratega.registra(data, germans);
+    games.strategy.triplea.ai.proplus.Stratega.registra(
+        data, data.getPlayerList().getPlayerId("Italians"));
+    data.getSequence().setRoundAndStep(1, "Purchase", germans);
+    final ProPlusTuning plus = new ProPlusTuning();
+    final ProData shadow = new ProData(false, plus);
+    plus.attach(shadow);
+    final SeededBattleCalculator calculator = new SeededBattleCalculator(SEED);
+    shadow.initializeSimulation(new TestAi("Germans", shadow, calculator), data, germans);
+    calculator.setGameData(data).join();
+    assertThat(
+            games.strategy.triplea.ai.proplus.CampagnaOmbra.calcola(
+                shadow,
+                new games.strategy.triplea.ai.pro.util.ProOddsCalculator(calculator),
+                germans))
+        .as("the shadow ran")
+        .isPresent();
+    final Check stratega = turn(germans);
+    assertThat(stratega.calls()).isGreaterThan(1000);
+    assertThat(stratega.decisions()).contains("attack ").contains("buy ");
+    assertThat(stratega.mismatches())
+        .allMatch(
+            m ->
+                m.startsWith("strategyCapPercent: ")
+                    || (m.startsWith("defenseLists: ") && m.contains("mustHold=[Germany]")
+                        && m.contains("expendable=[]")));
+  }
+
+  /**
    * @param decisions what the turn did (attacks, purchases, moves)
    * @param mismatches the tuning answers different from Hard's (method: Pro+ vs Hard)
    * @param calls tuning questions asked

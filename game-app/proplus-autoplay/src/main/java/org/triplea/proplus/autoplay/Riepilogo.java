@@ -452,6 +452,15 @@ final class Riepilogo {
     if (switches.size() > 0) {
       p.add("stratega_spento", switches);
     }
+    final JsonObject on = new JsonObject();
+    for (final String a : monitor.alliances().keySet()) {
+      if (AutoplayOptions.STRATEGA.equals(o.tipo(a)) && !o.strategaAcceso(a).isEmpty()) {
+        on.addProperty(a, o.strategaAcceso(a));
+      }
+    }
+    if (on.size() > 0) {
+      p.add("stratega_acceso", on);
+    }
     if (strategist) {
       p.addProperty("chiave_llm", llmKeyPresent());
       if (o.strategaRegole()) {

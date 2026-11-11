@@ -209,6 +209,8 @@ final class StrategaDiario {
       x.add("blocchi", Stratega.blocchi(props, a));
       // step C2: the computed defense of every nation's turn (with the outcome of the turn after)
       x.add("difesa", Difesa.registro(props, a).getAsJsonArray("turni"));
+      // step R2a: the shadow campaigns (counters of the checks, feasible candidates)
+      x.add("ombra", CampagnaOmbra.riepilogo(props, a));
       o.add(a, x);
     }
     o.add("uso", Stratega.usoTotale(props));

@@ -86,7 +86,7 @@ final class ConfrontoDiagnosi {
     strategist.forEach(
         (config, side) -> {
           differences(md, config, byConfig.get(config), reference, ref, side, last);
-          if ((config.contains("[senza ") || config.contains("[regole]"))
+          if ((config.contains("[senza ") || config.contains("[con ") || config.contains("[regole]"))
               && !config.contains(SENZA_CHIAVE)) {
             final String full = full(config);
             if (byConfig.containsKey(full) && side.equals(strategist.get(full))) {
@@ -194,7 +194,7 @@ final class ConfrontoDiagnosi {
 
   /** The configuration with every switch on and the key ("Pro+ Stratega LLM / Hard"). */
   static String full(final String config) {
-    return config.replaceAll(" \\[(senza [a-z]+|regole)\\]", "");
+    return config.replaceAll(" \\[(senza [a-z]+|con [a-z]+|regole)\\]", "");
   }
 
   private static void row(

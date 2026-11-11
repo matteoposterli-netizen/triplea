@@ -1487,6 +1487,15 @@ public final class Stratega {
     return out;
   }
 
+  /** Step R2a: the shadow campaigns block in stratega.txt (always written, as the strategist's). */
+  static void diarioTurnoOmbra(final GameState data, final List<String> lines) {
+    final JsonObject rec = new JsonObject();
+    rec.addProperty("tipo", "campagne_ombra");
+    rec.addProperty("round", data.getSequence().getRound());
+    games.strategy.triplea.ai.proplus.diario.DiaryRecorder.stratega(
+        data, lines, rec, data instanceof GameData gd ? StrategaDiario.riepilogo(gd) : null);
+  }
+
   static void diarioTurno(final GameData data, final List<String> lines) {
     if (!lines.isEmpty()) {
       DiaryRecorder.jointOperation(data, lines, List.of());
