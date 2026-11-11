@@ -4754,3 +4754,32 @@ Nord Africa, teatro), `Riepilogo` (`impegno_decisioni`), `ConfrontoImpegno` (tit
   di Gibilterra); Regno Unito: Tobruk R1 → Libya R2-R6 (presa al R6), poi France dalla testa di ponte (R7); USA: Algeria (presa al R7); Asse
   senza territori in Nord Africa a fine R7; tetto attivo per gli USA in 5 turni su 7 (0 trasporti comprati in quei turni; R4 e R6 senza tetto
   Hard ne ha comprati 4 e 6).
+
+#### Autoplay in CI (run 43088872425, commit 1ec2ead, tutto verde, 60 partite [impegno] senza chiave, semi 1121-1140)
+60/60 completate, 0 fallite, costo API 0. Durata media: a Hard vs Hard 362 s, c1 366 s (**+1%**), c2 313 s (**−14%**): entro +50%.
+
+| VC Asse | R4 | R8 | R12 | Δ R12 da (a) [IC 95% Welch] | Reddito R12 Asse / Alleati | TUV R12 Asse / Alleati |
+|---|---|---|---|---|---|---|
+| a Hard / Hard | 4,60 | 5,55 | 5,35 ± 1,3 | - | 57,0 / 106,5 | 912 / 1571 |
+| c1 Asse Stratega + impegno (R2c) | 5,20 (+0,60 [0,24; 0,96] esclude lo 0) | 5,80 (+0,25) | 5,25 ± 1,8 | −0,10 [−1,10; 0,90] include lo 0 | 59,1 / 106,8 | 933 / 1518 |
+| c2 Alleati Stratega + R3a | 4,70 (+0,10) | 5,60 (+0,05) | 5,55 ± 1,4 | +0,20 [−0,65; 1,05] include lo 0 (peggio per gli Alleati) | 63,4 / 101,7 | 997 / 1601 |
+
+- Citta' (a / c1 / c2, su 20): Mosca 5 / 7 / 6; Stalingrado 16 / 16 / 16; Leningrado 20 ovunque; Egitto 13 R3 / 20 R1 / 10 R3; Parigi 20 R1;
+  Berlino mai; **Roma 6 R9 / 1 / 0**. Germania c2 a R12 reddito 49,5 / TUV 759 contro 43,5 / 676 in (a): con R3a la Germania sta meglio.
+- **Teatro** (c2, 240 round): NORD 220, SUD 20; aperti NORD 94, SUD 75 (spesso entrambi chiusi: NESSUNO_APERTO 105); cambi 6 (UNICO_APERTO 4,
+  PUNTEGGIO_MAGGIORE 2); bloccati da ONDATA_IN_MARE 25, INERZIA 1.
+- **Sbarchi coordinati USA**: 26 (NORD 19 in 13/20 partite, primo R9 mediano, 12,8 unita' per ondata, presi 19/19, tenuti 1 round 13, 2 round 7,
+  perdite reali 0 / P80 1; SUD 7 in 4/20, presi 5, tenuti 2 round 5). Rinforzi britannici arrivati 14 volte (67 unita'), sbarchi UK da soli 4,
+  completamenti 0. Attese (NORD): MANCA_TENUTA 100, NESSUN_BERSAGLIO 59 (prima della guerra), NESSUN_CARICO 41; (SUD) NESSUN_CARICO 8.
+  Calibrazione: vittoria stimata 80-100% ⇒ presi 28/30 (93%); tenuta stimata 60-80% ⇒ tenuti 7/10, 80-100% ⇒ 15/15.
+- **Unita' di terra a R12** (a / c2): USA base 0,1 / 9,7, patria 16,4 / 12,4, mare 0,7 / 7,2, Europa occidentale 9,2 / 5,3, Mediterraneo e Nord
+  Africa 18,9 / 5,4; Regno Unito base 9,4 / 9,9, Europa occidentale **14,1 / 2,2**, Mediterraneo 7,6 / 5,1, altrove 18,6 / 30,1. La forza
+  trattenuta alla base (USA + UK 7 a R1, 18,5 a R12) e i soli sbarchi coordinati mettono MENO truppe in Europa e nel Mediterraneo degli sbarchi
+  "a gocce" di Hard (il Regno Unito non sbarca piu' con Hard dalla patria).
+- **Nord Africa**: territori dell'Asse a fine R4/R8/R12 (a) 5,2 / 2,1 / 0,3, (c2) 4,1 / 0,1 / 0,1; Asse a zero 17/20 R9 (a) contro 20/20 **R7**
+  (c2); reddito italiano R12 13,6 / 13,9 (nessun effetto sul reddito). Regno Unito: 50 obiettivi in Africa (Tobruk 19, Libya 16, Tunisia 10),
+  47 presi; USA: Algeria 1.
+- **Trasporti** (a / c2): USA R12 26,0 (24,7 fermi vuoti) / 13,6 (8,9); UK 11,6 (11,0) / 5,9 (5,5). Tetto attivo 8,9 turni a partita per
+  nazione, **0 trasporti comprati da Hard col tetto**.
+- **Russia**: 0 obiettivi, 0 ordini, 0 forzature (= Hard); Mosca 6/20 contro 5/20.
+- **Registro**: 2.980 decisioni in 20 partite + 870 esiti; tutti i 12 tipi presenti.
