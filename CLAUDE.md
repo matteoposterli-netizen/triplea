@@ -4265,3 +4265,31 @@ tenute), `AutoplayTest` (+1). Hard e le altre voci invariate; `avvia.bat` e `agg
   (comportamento del C2-bis, gia' misurato in R0 come risposte "operazione": b − a −0,2 VC).
 - Prove locali (Stratega simulato, 3 round): Asse 83 s, Alleati 63 s (R1 locale 89 s): nessun rallentamento misurabile; stato
   dell'ombra 6,9 KB per alleanza; blocco in ogni turno; rilascio del presidio visto (Novgorod R1 caso c → R2 caso a).
+
+#### Autoplay in CI (run 42976494562, commit f9b7eae, tutto verde, 30 partite [ombra] semi 1101-1110)
+30/30 completate, 0 eccezioni, 0 errori dell'ombra, costo LLM **3,28 $** (tetto 15). Durata media: Hard vs Hard 286 s, c 452 s (R1
+488, −7%), f 428 s (R1 410, +4%): entro +30%. Blocco dell'ombra in **120/120** round per alleanza.
+
+| VC R12 del lato | R2a (tenute spente) | Hard vs Hard (stessa run) | Δ da Hard [IC 95% Welch] | R1 (stessi semi) | Δ da R1 [IC 95%] |
+|---|---|---|---|---|---|
+| Asse Stratega (c) | 5,70 ± 1,34 | 6,10 | −0,40 [−1,55; 0,75] include lo 0 | 4,40 | **+1,30 [0,20; 2,40] esclude lo 0** |
+| Alleati Stratega (f) | 4,90 ± 1,29 | 4,90 | 0,00 [−1,13; 1,13] | 4,40 | +0,50 [−0,49; 1,49] |
+
+- **Parte 1 conferma R0**: con le tenute spente lo Stratega torna alla pari con Hard su entrambi i lati (la stima dice "non
+  distinguibile", ~±1,1 VC con 10 semi), e l'Asse migliora rispetto a R1 oltre il rumore.
+- **Ombra, candidati fattibili** (somma R1-R12 su 10 partite; valutati: Asse 643, Alleati 823): Asse 138 / 133 / 98 ai margini
+  60 / 70 / 80, Alleati 109 / 92 / 88. Obiettivi piu' frequenti: Asse France R1 (10/10 a 60 e 70), poi Novgorod, Volgograd, Egypt;
+  Alleati Germany, Poland, Egypt, France (nessuno al R1). Quota PU richiesta media 0-60%. Non monotono in qualche round (es. Alleati
+  R6: 23 fattibili a 80 contro 20 a 70): la campagna si ferma alla prima tappa che blocca e lo scarto "colmabile con acquisti" cambia
+  con la tappa, quindi i margini non sono annidati (difetto noto dell'approssimazione).
+- **Previsioni**: difensori a +1/+2/+3 round mediana dell'errore Asse 33 / 51 / 70 TUV, Alleati 85 / 124 / 155 TUV (210-410% del
+  reale); **sovrastimati nel 89-96% dei casi** (rinforzi confinanti e acquisti nemici contati che non arrivano). Reddito: mediana 2-6
+  PU (7-21%); forza propria 21-47 TUV (7-15%).
+- **Perdite delle battaglie reali** (prima tappa prevista, Asse 210, Alleati 187): reale <= prevista nel **98-100%** a tutti i margini
+  (attese ~60/70/80%): le perdite previste sono molto pessimiste e i tre margini non si distinguono.
+- **Regola 2.6** (territori classificati / attaccati / persi nel turno nemico dopo; presidio previsto / unita' lasciate da Hard, medie):
+  Asse a 714 / 1% / 0% / 0 / 2,5; b 804 / 13% / 10% / 0,1 / 3,4; c 137 / 22% / 14% / 7,0 / 6,9. Alleati a 472 / 0% / 0% / 0 / 1,4; b 535 /
+  37% / 33% / 0,1 / 2,5; c 195 / 34% / 27% / 9,7 / 12,9. Il caso a) e' affidabile (quasi mai attaccato); nei casi b) gli Alleati perdono
+  1 territorio su 3 (retrovie accettate); nel caso c) Hard lascia in media quanto il presidio previsto (Asse) o di piu' (Alleati).
+- Le liste dell'errore nei riepiloghi sono potate a 200 voci per chiave e alleanza (le tabelle contano fino a 1.957 confronti; i file
+  `campagna-ombra-*.json` li hanno tutti: 2.167 per gli Alleati a +1).

@@ -70,3 +70,9 @@ il menu era vuoto in tutti i round: offensive scartate per raccolta oltre l'oriz
 3. Capire perche' le offensive non arrivano mai a esecuzione (5/5 annullate in c R1) prima di nuovi candidati.
 
 Costo API della notte: 7,99 + 4,90 = **12,89 $** (tetto 45). Nessuna chiave in codice, log o file.
+
+## Seguito: step R2a-OMBRA (2026-11-11)
+Tenute spente di default (decisione di Matteo dopo R0/R1) + pianificatore di campagna in ombra. Run 42976494562 (f9b7eae), stessi semi:
+Asse Stratega 5,70 contro Hard 6,10 (−0,40 [−1,55; 0,75]), contro R1 +1,30 [0,20; 2,40]; Alleati 4,90 contro 4,90 (0,00), contro R1
++0,50 [−0,49; 1,49]. Ombra: difensori futuri sovrastimati nel ~90% dei casi, perdite previste pessimiste (reale <= prevista 98-100% a
+ogni margine), regola 2.6 caso a) affidabile. Dettagli in CLAUDE.md, step R2a-OMBRA.
