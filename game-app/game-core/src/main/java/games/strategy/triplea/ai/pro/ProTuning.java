@@ -340,6 +340,23 @@ public interface ProTuning {
       final ProPurchaseOrders.Result result) {}
 
   /**
+   * Whether the purchase may buy sea transports (Pro+, step R3a: not while an idle empty usable
+   * transport exists, for the USA and the United Kingdom of the strategist with the commitment on).
+   * Always by default: Hard and Hard Beta buy as always.
+   */
+  default boolean buysSeaTransports(final ProData proData) {
+    return true;
+  }
+
+  /**
+   * Units the combat move never loads on a transport for an amphibious assault (Pro+, step R3a:
+   * the landing force held in preparation). None by default.
+   */
+  default Set<Unit> amphibiousHeldUnits(final ProData proData) {
+    return Set.of();
+  }
+
+  /**
    * Called by the combat move after Hard chose its attacks and units, before the moves are made
    * (Pro+, step R2c: a forced attack is checked again with the units really sent, and completed
    * with units not committed to other battles or given up). Nothing by default.

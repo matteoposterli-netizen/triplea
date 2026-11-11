@@ -292,7 +292,17 @@ public final class Programmi {
 
     @Nullable
     Territory base() {
-      return usa() ? data.getMap().getTerritoryOrNull(cfg.baseAvanzataUsa()) : null;
+      if (!usa()) {
+        return null;
+      }
+      // step R3a: the base follows the alliance's theater (or a bridgehead held)
+      if (SbarcoCoordinato.attivo(data, player)) {
+        final Optional<String> b = SbarcoCoordinato.baseCorrente(data, alliance);
+        if (b.isPresent()) {
+          return data.getMap().getTerritoryOrNull(b.get());
+        }
+      }
+      return data.getMap().getTerritoryOrNull(cfg.baseAvanzataUsa());
     }
 
     /** The USA can unload at the forward base (allied to its owner: not before the war). */
@@ -307,9 +317,17 @@ public final class Programmi {
 
     /** The shuttle's sea zones: the port's, the route to the nearest base zone, the base's. */
     List<Territory> zoneSpola() {
-      final Set<Territory> out = new LinkedHashSet<>(zone(porto()));
       if (usa() && puoScaricare()) {
-        final List<Territory> baseZones = zone(base());
+        return zoneSpolaVerso(base());
+      }
+      return List.copyOf(new LinkedHashSet<>(zone(porto())));
+    }
+
+    /** Step R3a: the shuttle's sea zones toward {@code base} (port, shortest route, base). */
+    List<Territory> zoneSpolaVerso(@Nullable final Territory base) {
+      final Set<Territory> out = new LinkedHashSet<>(zone(porto()));
+      if (base != null) {
+        final List<Territory> baseZones = zone(base);
         out.addAll(baseZones);
         Route best = null;
         for (final Territory from : zone(porto())) {
@@ -351,7 +369,7 @@ public final class Programmi {
       return null;
     }
 
-    private int distanzaMare(final Territory from, final Collection<Territory> to) {
+    int distanzaMare(final Territory from, final Collection<Territory> to) {
       int best = Integer.MAX_VALUE;
       for (final Territory t : to) {
         final int d = from.equals(t) ? 0 : data.getMap().getDistance(from, t, mare());
@@ -360,6 +378,25 @@ public final class Programmi {
         }
       }
       return best;
+    }
+
+    /**
+     * Idle empty usable transports: within 2 zones of the port's zones and not transporting (the
+     * balanced load's definition; step R3a's cap on Hard's transports).
+     */
+    int fermiVuoti() {
+      final List<Territory> portZones = zone(porto());
+      if (portZones.isEmpty()) {
+        return 0;
+      }
+      int idle = 0;
+      for (final Unit tr : trasporti()) {
+        final Territory z = dove(tr);
+        if (z != null && distanzaMare(z, portZones) <= 2 && !tr.isTransporting()) {
+          idle++;
+        }
+      }
+      return idle;
     }
 
     /** The own land units waiting at the port (transportable), minus the garrison of case c. */

@@ -1024,7 +1024,9 @@ class AutoplayTest {
         List.of(1, 2));
 
     final String text = md.toString();
-    assertThat(text).contains("## Impegno (step R2b, R2c)");
+    assertThat(text).contains("## Impegno (step R2b, R2c, R3a)");
+    // no register of step R3a in these games: no R3a subsection
+    assertThat(text).doesNotContain("### R3a");
     // step R2c: phases, forced attacks reviewed, Russia, income and army per alliance
     assertThat(text).contains("### Step R2c: preparazione e programmi");
     assertThat(text)
@@ -1046,6 +1048,120 @@ class AutoplayTest {
     assertThat(text).contains("1 su 1 sotto o uguali al P80; media reale 12.0 TUV, media P80 20.0");
     assertThat(text).contains("| R1 | 21.00 | 4.00 | 0.00 | 0.00 |");
     assertThat(text).contains("| R2 | 28.00 | 0.00 | 2.00 | 7.00 |");
+  }
+
+  @Test
+  void theCoordinatedLandingOfStepR3aIsSummarized() {
+    final String rounds =
+        """
+        "alleanze":{"Axis":["Germans","Italians"],"Allies":["Americans","British"]},
+        "round":[{"round":1,"completo":true,"nord_africa_asse":["Libya","Tobruk"],
+          "vc":{"Axis":{"numero":%d,"citta":["Germany","Southern Italy"]},
+                "Allies":{"numero":5,"citta":["Egypt","France"]}},
+          "nazioni":{"Germans":{"reddito":30,"tuv":200},"Italians":{"reddito":10,"tuv":80},
+            "Americans":{"reddito":40,"tuv":150,"trasporti":3,"trasporti_inattivi":1,
+              "regioni":{"base":4,"patria":10,"mare":2}},
+            "British":{"reddito":28,"tuv":120,"trasporti":2,"trasporti_inattivi":0,
+              "regioni":{"base":12,"mediterraneo_nord_africa":5}}}},
+         {"round":2,"completo":true,"nord_africa_asse":[%s],
+          "vc":{"Axis":{"numero":%d,"citta":["Germany","Southern Italy"]},
+                "Allies":{"numero":5,"citta":["Egypt","France"]}},
+          "nazioni":{"Germans":{"reddito":31,"tuv":210},"Italians":{"reddito":%d,"tuv":70},
+            "Americans":{"reddito":40,"tuv":160,"trasporti":4,"trasporti_inattivi":0,
+              "regioni":{"base":0,"patria":8,"europa_occidentale":6}},
+            "British":{"reddito":28,"tuv":110,"trasporti":2,"trasporti_inattivi":1,
+              "regioni":{"base":10,"europa_occidentale":3}}}}]
+        """;
+    final JsonObject hard =
+        JsonParser.parseString(
+                "{\"stato\":\"completata\",\"durata_s\":100,"
+                    + "\"parametri\":{\"tipi\":{\"Axis\":\"hard\",\"Allies\":\"hard\"}},"
+                    + String.format(rounds, 3, "\"Libya\"", 3, 10)
+                    + "}")
+            .getAsJsonObject();
+    final String register =
+        """
+        ,"impegno_decisioni":[
+         {"id":"R1-Americans-teatro-1","riga":"decisione","round":1,"nazione":"Americans",
+          "tipo":"teatro","alternative":[{"teatro":"NORD","aperto":true},
+            {"teatro":"SUD","aperto":false}],"scelta":"NORD",
+          "motivo":{"codice":"PRIMA_SCELTA","frase":"x"},"parametri":{}},
+         {"id":"R1-Americans-via_libera_o_attesa-2","riga":"decisione","round":1,
+          "nazione":"Americans","tipo":"via_libera_o_attesa","alternative":[],"scelta":"attesa",
+          "motivo":{"codice":"MANCA_TENUTA","frase":"x"},
+          "parametri":{"manca":"Normandy Bordeaux: tenuta 30%"}},
+         {"id":"R1-Americans-unita_trattenute-3","riga":"decisione","round":1,
+          "nazione":"Americans","tipo":"unita_trattenute","alternative":[],"scelta":"4",
+          "motivo":{"codice":"PREPARAZIONE","frase":"x"},"parametri":{}},
+         {"id":"R1-Americans-tetto_trasporti-4","riga":"decisione","round":1,
+          "nazione":"Americans","tipo":"tetto_trasporti","alternative":[],
+          "scelta":"Hard non compra trasporti",
+          "motivo":{"codice":"TRASPORTO_FERMO_VUOTO","frase":"x"},"parametri":{}},
+         {"id":"R1-Americans-tetto_trasporti-4","riga":"esito","round":1,"nazione":"Americans",
+          "tipo":"tetto_trasporti","esito":{"trasporti_comprati":0,"tetto_attivo":true}},
+         {"id":"R2-Americans-teatro-5","riga":"decisione","round":2,"nazione":"Americans",
+          "tipo":"teatro","alternative":[{"teatro":"NORD","aperto":true},
+            {"teatro":"SUD","aperto":true}],"scelta":"NORD",
+          "motivo":{"codice":"INVARIATO","frase":"x"},"parametri":{}},
+         {"id":"R2-Americans-via_libera_o_attesa-6","riga":"decisione","round":2,
+          "nazione":"Americans","tipo":"via_libera_o_attesa","alternative":[],
+          "scelta":"via libera su Normandy Bordeaux",
+          "motivo":{"codice":"VIA_LIBERA","frase":"x"},"parametri":{"manca":""}},
+         {"id":"R2-Americans-sbarco-7","riga":"decisione","round":2,"nazione":"Americans",
+          "tipo":"sbarco","alternative":[{"territorio":"Normandy Bordeaux","unita_sbarcate":6}],
+          "scelta":"Normandy Bordeaux","motivo":{"codice":"ESEGUITO","frase":"x"},
+          "parametri":{}},
+         {"id":"R2-Americans-sbarco-7","riga":"esito","round":2,"nazione":"Americans",
+          "tipo":"sbarco","esito":{"preso":true,"perdite_reali_tuv":6,"perdite_p80_tuv":9,
+            "vittoria_stimata_pct":85,"tenuta_stimata_pct":70,"unita_sbarcate":6}},
+         {"id":"R2-British-rinforzo_testa_di_ponte-8","riga":"decisione","round":2,
+          "nazione":"British","tipo":"rinforzo_testa_di_ponte",
+          "alternative":[{"territorio":"Normandy Bordeaux","rinforzi_disponibili":4}],
+          "scelta":"rinforzo di Normandy Bordeaux","motivo":{"codice":"RINFORZO","frase":"x"},
+          "parametri":{}},
+         {"id":"R2-British-rinforzo_testa_di_ponte-8","riga":"esito","round":2,
+          "nazione":"British","tipo":"rinforzo_testa_di_ponte",
+          "esito":{"rinforzi_arrivati":4,"tenuto_a_fine_turno":true}},
+         {"id":"R2-Americans-sbarco-7","riga":"esito","round":3,"nazione":"Americans",
+          "tipo":"sbarco","esito":{"tenuto":true,"round_dopo":1,"tenuta_stimata":70}}]
+        """;
+    final JsonObject committed =
+        JsonParser.parseString(
+                "{\"stato\":\"completata\",\"durata_s\":120,"
+                    + "\"parametri\":{\"tipi\":{\"Axis\":\"hard\",\"Allies\":\"stratega\"},"
+                    + "\"chiave_llm\":false,\"stratega_acceso\":{\"Allies\":\"impegno\"}},"
+                    + String.format(rounds, 3, "", 2, 6)
+                    + register
+                    + "}")
+            .getAsJsonObject();
+    final StringBuilder md = new StringBuilder();
+
+    ConfrontoImpegno.write(
+        md,
+        List.of(new RiepilogoGenerale.Game("a", hard), new RiepilogoGenerale.Game("c2", committed)),
+        List.of("Axis", "Allies"),
+        List.of(1, 2));
+
+    final String text = md.toString();
+    assertThat(text).contains("### R3a: sbarco coordinato e teatri");
+    final String c2 = "Hard / Stratega LLM [senza chiave] [con impegno]";
+    // VC with the difference from (a)
+    assertThat(text).contains("| " + c2 + " | 1 | 3.00 ± 0.0 | +0.00 - | 2.00 ± 0.0 | -1.00 - |");
+    // the theater: rounds, open, changes and reasons
+    assertThat(text).contains("| " + c2 + " | 1 | 2 | 0 | 2 | 1 | 0 | INVARIATO 1, PRIMA_SCELTA 1 |");
+    // the landing in the NORTH: taken, held after 1 round, British reinforcement
+    assertThat(text).contains("| " + c2 + " | NORD | 1 | 1/1 | R2.0 | 6.0 | 1 | 1 | 0 | 6 / 9 | 1, 4 | 0 / 0 |");
+    assertThat(text).contains("| " + c2 + " | NORD | 1 | MANCA_TENUTA 1 | R1 Normandy Bordeaux: tenuta 30% |");
+    // regions, North Africa, transports and the cap, the units held
+    assertThat(text).contains("| " + c2 + " | Americans | R6 |");
+    assertThat(text).contains("| Hard / Hard | 2.0 | 1.0 | 10.0 | 10.0 | 0/1 |");
+    assertThat(text).contains("| " + c2 + " | 2.0 | 0.0 | 10.0 | 6.0 | 1/1, R2.0 |");
+    assertThat(text).contains("| " + c2 + " | Americans | 3.0 (1.0) | 4.0 (0.0) | 1.0 | 0 | 4.0 |");
+    assertThat(text).contains("| " + c2 + " | 4.0 | 0.0 |");
+    // the register: counts per type and reason, calibration
+    assertThat(text).contains("| sbarco | 1 | ESEGUITO 1 |");
+    assertThat(text).contains("| 80-100% | 1 | 1 (100%) | 0 | - |");
+    assertThat(text).contains("| 60-80% | 0 | - | 1 | 1 (100%) |");
   }
 
   @Test

@@ -730,6 +730,7 @@ public final class Impegno {
       ns.add("vive_fine_turno", alive);
       salva(props, alliance.get(), st);
       diario(data, lines, null);
+      SbarcoCoordinato.dopoIlPiazzamento(data, player, before);
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Impegno, piazzamento: " + e);
     }
@@ -757,6 +758,10 @@ public final class Impegno {
       }
     }
     o.add("nazioni", now);
+    // step R3a: theater, base, bridgeheads (the decisions are in the register)
+    if (props.get(SbarcoCoordinato.KEY_STATO + alliance) != null) {
+      o.add("r3a", SbarcoCoordinato.riepilogo(props, alliance));
+    }
     return o;
   }
 
@@ -821,7 +826,7 @@ public final class Impegno {
       final JsonObject order = new JsonObject();
       order.addProperty("round", round);
       int puOp = 0;
-      if (r2c.campagnaTerra(player.getName())) {
+      if (campagnaTerra()) {
         puOp = campagna(capitalC, puC, puTurn, turn, attacks, forced, order);
       } else {
         if (ns.has("obiettivo")) {
@@ -831,8 +836,10 @@ public final class Impegno {
         lines.add(
             "  Nessuna campagna via terra per "
                 + player.getName()
-                + " (step R2c: solo "
-                + String.join(", ", r2c.nazioniCampagnaTerra())
+                + (SbarcoCoordinato.attivo(data, player)
+                    ? " (step R3a: solo "
+                        + String.join(", ", SbarcoCoordinato.Config.get().nazioniCampagnaTerra())
+                    : " (step R2c: solo " + String.join(", ", r2c.nazioniCampagnaTerra()))
                 + ")");
         turn.addProperty("obiettivo", "");
         for (final String k : List.of("tappa", "raduno", "base", "fase", "sospeso")) {
@@ -850,6 +857,8 @@ public final class Impegno {
                 ? puOperazione(puTurn, puC, r2c.quotaProgrammaUsa())
                 : puOperazione(puTurn, puC + puOp, r2c.quotaForzaSbarcoUk());
         final Map<String, Integer> mix = p.acquisti(pu, garrison, turn);
+        SbarcoCoordinato.registraProgramma(
+            data, player, turn.has("programma") ? turn.getAsJsonObject("programma") : null);
         if (!mix.isEmpty() && p.porto() != null) {
           order.add("tipi_programma", mappa(mix));
           order.addProperty("fabbrica_programma", p.porto().getName());
@@ -860,6 +869,8 @@ public final class Impegno {
         }
         forced.addAll(p.forzatiMedioOriente(attacks));
       }
+      // step R3a: theater, preparation, green light, the United Kingdom's action, transport cap
+      SbarcoCoordinato.inizio(proData, calc, player, c, lines);
       turn.add("attacchi", attacks);
       clear(props, KEY_FORZATI + player.getName());
       if (!forced.isEmpty()) {
@@ -875,6 +886,13 @@ public final class Impegno {
         props.set(KEY_ORDINE + player.getName(), order.toString());
       }
       salvaETermina(turn);
+    }
+
+    /** The nation may have a land campaign (R2c B4; with step R3a its own list: no Russia). */
+    private boolean campagnaTerra() {
+      return SbarcoCoordinato.attivo(data, player)
+          ? SbarcoCoordinato.Config.get().nazioniCampagnaTerra().contains(player.getName())
+          : r2c.campagnaTerra(player.getName());
     }
 
     private Programmi.Turno programmi() {
@@ -1288,7 +1306,21 @@ public final class Impegno {
     /** 1: the rule over CampagnaOmbra's land candidates (owner at war), model M1. */
     private Optional<CampagnaOmbra.Calcolo.Obiettivo> scegliObiettivo(
         final int puTurn, final int puC) {
-      final List<CampagnaOmbra.Calcolo.Obiettivo> all = c.obiettivi(new ArrayList<>());
+      // step R3a: the USA and the United Kingdom only toward R3a's targets (bridgehead, North
+      // Africa); the United Kingdom's Egypt stays R2c's
+      final Optional<Map<Territory, String>> r3a =
+          SbarcoCoordinato.bersagliCampagna(data, player, c);
+      final List<CampagnaOmbra.Calcolo.Obiettivo> all;
+      if (r3a.isPresent()) {
+        all = new ArrayList<>();
+        final List<Territory> fronts = c.fronti();
+        for (final Territory t : r3a.get().keySet()) {
+          c.obiettivoPer(t, fronts).ifPresent(all::add);
+        }
+      } else {
+        all = c.obiettivi(new ArrayList<>());
+      }
+      final JsonArray alternatives = new JsonArray();
       final List<Candidato> candidates = new ArrayList<>();
       final Map<String, CampagnaOmbra.Calcolo.Obiettivo> byName = new HashMap<>();
       final double perRound = puOperazione(puTurn, puC, cfg.quotaPu());
@@ -1296,7 +1328,8 @@ public final class Impegno {
       for (final CampagnaOmbra.Calcolo.Obiettivo o : all) {
         final Territory t = o.bersaglio();
         // B4: the United Kingdom only in Africa and the Middle East
-        if (Programmi.UK.equals(player.getName())
+        if (r3a.isEmpty()
+            && Programmi.UK.equals(player.getName())
             && !r2c.territoriUkCampagna().contains(t.getName())) {
           text.add(t.getName() + " (Regno Unito: solo Africa e Medio Oriente)");
           continue;
@@ -1315,6 +1348,13 @@ public final class Impegno {
                 CampagnaOmbra.Calcolo.valoreIndice(t));
         candidates.add(x);
         byName.put(t.getName(), o);
+        final JsonObject a = new JsonObject();
+        a.addProperty("territorio", t.getName());
+        a.addProperty("tappe", x.tappe());
+        a.addProperty("fattibile", x.fattibile());
+        a.addProperty("scarto_tuv", x.scarto());
+        a.addProperty("valore", x.valore());
+        alternatives.add(a);
         text.add(
             String.format(
                 Locale.ROOT,
@@ -1352,6 +1392,12 @@ public final class Impegno {
       ns.addProperty("motivo_scelta", why);
       ns.add("tappe_prese", new JsonArray());
       lines.add("  NUOVO obiettivo " + x.territorio() + ": " + why);
+      if (r3a.isPresent()) {
+        final String kind =
+            r3a.get().getOrDefault(byName.get(x.territorio()).bersaglio(), "campagna_africa");
+        ns.addProperty("tipo_r3a", kind);
+        SbarcoCoordinato.registraCampagna(data, player, kind, alternatives, x.territorio(), why);
+      }
       final JsonObject turn = turno(st, round, player.getName());
       turn.addProperty("nuovo_obiettivo", true);
       return Optional.of(byName.get(x.territorio()));
@@ -1455,6 +1501,18 @@ public final class Impegno {
         turn.addProperty("pu_op", 0);
         return 0;
       }
+      // step R3a: a campaign in North Africa buys only from an own factory nearby
+      if (SbarcoCoordinato.attivo(data, player)
+          && SbarcoCoordinato.Config.get().nordAfrica().contains(o.bersaglio().getName())
+          && best > SbarcoCoordinato.Config.get().distanzaFabbricaAfrica()) {
+        lines.add(
+            "  Acquisti: nessuna fabbrica propria entro "
+                + SbarcoCoordinato.Config.get().distanzaFabbricaAfrica()
+                + " dalla tappa (Nord Africa, R3a) -> tutto a Hard, campagna con le unita' gia' in"
+                + " zona");
+        turn.addProperty("pu_op", 0);
+        return 0;
+      }
       final List<String> types = tipi(best, cfg);
       final Map<String, Integer> costs = costiAcquisto(data, player);
       final Map<String, Integer> mix = composizione(puOp, types, costs);
@@ -1497,7 +1555,7 @@ public final class Impegno {
       final JsonObject turn = turno(st, round, player.getName());
       esiti(turn);
       final Set<Unit> held = new LinkedHashSet<>();
-      if (r2c.campagnaTerra(player.getName())
+      if (campagnaTerra()
           && ns.has("obiettivo")
           && (!ns.has("sospeso") || ns.get("sospeso").getAsString().isEmpty())) {
         held.addAll(campagnaNc(turn));
@@ -1509,6 +1567,9 @@ public final class Impegno {
                     delegate,
                     ns.has("presidio_porto") ? ns.get("presidio_porto").getAsInt() : 0,
                     turn));
+        SbarcoCoordinato.registraSpola(
+            data, player, turn.has("spola") ? turn.getAsJsonObject("spola") : null);
+        held.addAll(SbarcoCoordinato.nonCombattimento(proData, calc, delegate, player, c, lines));
       } else if (Programmi.UK.equals(player.getName())) {
         final Set<String> keep = new HashSet<>();
         if (proData.getMyCapital() != null) {
@@ -1516,6 +1577,7 @@ public final class Impegno {
         }
         keep.addAll(r2c.presidiPrioritari().getOrDefault(player.getName(), List.of()));
         held.addAll(programmi().medioOriente(delegate, keep, turn));
+        held.addAll(SbarcoCoordinato.nonCombattimento(proData, calc, delegate, player, c, lines));
       }
       salvaNc(turn);
       return held;
@@ -1983,6 +2045,11 @@ public final class Impegno {
       out.putIfAbsent(type.getName(), rule.getCosts().getInt(pus));
     }
     return out;
+  }
+
+  /** Step R3a: lines of the combat move in the strategist's diary. */
+  static void diarioRighe(final GameState data, final List<String> lines) {
+    diario(data, lines, null);
   }
 
   private static void diario(

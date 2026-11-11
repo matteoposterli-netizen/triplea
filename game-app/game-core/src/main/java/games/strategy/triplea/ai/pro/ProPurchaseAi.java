@@ -430,7 +430,11 @@ class ProPurchaseAi {
     resourceTracker = new ProResourceTracker(player);
     territoryManager = new ProTerritoryManager(calc, proData);
     isBid = false;
-    final ProPurchaseOptionMap purchaseOptions = proData.getPurchaseOptions();
+    // Pro+ step R3a: a variant may leave the sea transports out (always bought by Hard)
+    final ProPurchaseOptionMap purchaseOptions =
+        proData.getTuning().buysSeaTransports(proData)
+            ? proData.getPurchaseOptions()
+            : proData.getPurchaseOptions().withoutSeaTransports();
 
     ProLogger.info("Starting purchase phase with resources: " + resourceTracker);
     if (!player.getUnits().isEmpty()) {

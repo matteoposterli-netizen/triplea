@@ -151,6 +151,39 @@ public class ProPurchaseOptionMap {
     logOptions(specialOptions, "Special Options: ");
   }
 
+  /**
+   * Pro+ (step R3a): a copy without the sea transports, for a variant of the AI that caps them
+   * ({@code ProTuning.buysSeaTransports}). Never used by Hard or Hard Beta.
+   */
+  public ProPurchaseOptionMap withoutSeaTransports() {
+    return new ProPurchaseOptionMap(this);
+  }
+
+  private ProPurchaseOptionMap(final ProPurchaseOptionMap o) {
+    landFodderOptions = noTransports(o.landFodderOptions);
+    landAttackOptions = noTransports(o.landAttackOptions);
+    landDefenseOptions = noTransports(o.landDefenseOptions);
+    landZeroMoveOptions = noTransports(o.landZeroMoveOptions);
+    airOptions = noTransports(o.airOptions);
+    seaDefenseOptions = noTransports(o.seaDefenseOptions);
+    seaTransportOptions = new ArrayList<>();
+    seaCarrierOptions = noTransports(o.seaCarrierOptions);
+    seaSubOptions = noTransports(o.seaSubOptions);
+    aaOptions = noTransports(o.aaOptions);
+    factoryOptions = noTransports(o.factoryOptions);
+    specialOptions = noTransports(o.specialOptions);
+  }
+
+  private static List<ProPurchaseOption> noTransports(final List<ProPurchaseOption> options) {
+    final List<ProPurchaseOption> out = new ArrayList<>();
+    for (final ProPurchaseOption ppo : options) {
+      if (!(ppo.isTransport() && Matches.unitTypeIsSea().test(ppo.getUnitType()))) {
+        out.add(ppo);
+      }
+    }
+    return out;
+  }
+
   private boolean canUnitTypeSuicide(final UnitType unitType, final GamePlayer player) {
     return (unitType.getUnitAttachment().getIsSuicideOnAttack()
             && unitType.getUnitAttachment().getMovement(player) > 0)

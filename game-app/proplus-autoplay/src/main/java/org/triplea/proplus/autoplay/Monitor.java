@@ -693,6 +693,14 @@ final class Monitor {
             "tuv_trasporti_persi",
             lostTransportsTuv.getOrDefault(round, Map.of()).getOrDefault(name, 0));
         n.addProperty("tuv_sbarchi", landingTuv.getOrDefault(name, 0));
+        // step R3a: where the US and British land units are (base of the theater, home, sea, ...)
+        if ("Americans".equals(name) || "British".equals(name)) {
+          final JsonObject reg = new JsonObject();
+          games.strategy.triplea.ai.proplus.SbarcoCoordinato.regioni(
+                  data, p, r3aBase())
+              .forEach(reg::addProperty);
+          n.add("regioni", reg);
+        }
         // step 3d-2: delay tools of the round
         final Map<String, Integer> delay =
             delayCounts.getOrDefault(round, Map.of()).getOrDefault(name, Map.of());
@@ -721,6 +729,8 @@ final class Monitor {
       }
     }
     json.add("unita_sbarcate", landed);
+    json.add("nord_africa_asse", northAfricaOfTheAxis());
+    r3aTheater().ifPresent(t -> json.addProperty("teatro_r3a", t));
     if (complete) {
       rounds.put(round, json);
       partialRound = null;
@@ -728,6 +738,29 @@ final class Monitor {
       partialRound = json;
     }
     battles.put(round, roundBattles);
+  }
+
+  /** Step R3a: the shuttle's base of the Allies (theater or bridgehead), United Kingdom if none. */
+  private String r3aBase() {
+    return games.strategy.triplea.ai.proplus.SbarcoCoordinato.baseCorrente(data, "Allies")
+        .orElse("United Kingdom");
+  }
+
+  private java.util.Optional<String> r3aTheater() {
+    return games.strategy.triplea.ai.proplus.SbarcoCoordinato.teatroCorrente(data, "Allies");
+  }
+
+  /** Step R3a: the territories of North Africa (the Italian objective's list) the Axis owns. */
+  private JsonArray northAfricaOfTheAxis() {
+    final JsonArray out = new JsonArray();
+    for (final String name :
+        games.strategy.triplea.ai.proplus.SbarcoCoordinato.Config.get().nordAfrica()) {
+      final Territory t = data.getMap().getTerritoryOrNull(name);
+      if (t != null && "Axis".equals(allianceOf(t.getOwner().getName()))) {
+        out.add(name);
+      }
+    }
+    return out;
   }
 
   private Map<String, Integer> tuvByNation() {

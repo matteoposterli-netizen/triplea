@@ -227,6 +227,39 @@
           "origine": "dalla mappa: Neutral_True, relazione Strict_Neutral: non attaccabili senza dichiarare guerra ai neutrali veri; attaccarne uno rende gli altri (Turchia, Spagna, Svezia...) amici dell'Asse: sconveniente"
         }
       }
+    },
+    "r3a": {
+      "nota": "Step R3a SBARCO COORDINATO E TEATRI (dietro lo stesso interruttore impegno, spento di default; solo le nazioni di nazioni_r3a, l'Asse resta R2c). 1 TEATRO: scelta d'alleanza a inizio round nel turno USA tra NORD e SUD; aperto = zone di mare della spola verso la base con contrattacco realistico <= soglia_mare_aperto; uno solo aperto = quello; entrambi = punteggio tenuta d'alleanza stimata x valore del bersaglio migliore (forze alla base o in arrivo entro il turno dopo); inerzia round_minimi_tra_cambi, mai con un'ondata in mare. 2 SBARCO COORDINATO: PREPARAZIONE = la forza da sbarco (unita' di terra USA e britanniche alla base) e' tolta agli attacchi di Hard e resta alla base; VIA LIBERA nel turno USA quando vittoria >= soglia_via_libera col carico dei trasporti in posizione E contrattacco realistico dell'Asse <= soglia_tenuta_alleanza contro superstiti USA attesi + rinforzi britannici del turno del Regno Unito: sbarco con tutto il carico. Regno Unito: rinforza la testa di ponte; completa solo con vittoria >= soglia_completa_uk; da solo solo se tiene da solo. Testa di ponte tenuta e zone sicure = nuova base della spola; campagne via terra verso campagne_testa_di_ponte. 3 NORD AFRICA a tenaglia (Regno Unito dopo l'Egitto verso ovest; USA solo col teatro SUD dal Marocco verso est). 4 TETTO ai trasporti di Hard per USA e Regno Unito (stessa definizione di trasporto fermo e vuoto del carico bilanciato). 5 Russia senza campagne. Valori SCELTI o presi dalla mappa, nessuno tarato.",
+      "nazioni_r3a": {"valore": ["Americans", "British", "Russians"], "origine": "scelto: le nazioni alleate dello Stratega (la Francia non gioca l'impegno); l'Asse resta R2c"},
+      "nazioni_campagna_terra": {"valore": ["Germans", "Italians", "British", "Americans"], "origine": "richiesta dello step R3a: Russia senza campagne (gioca come Hard); USA e Regno Unito solo dai bersagli di R3a (testa di ponte, Nord Africa, Egitto)"},
+      "teatri": {
+        "valore": {
+          "NORD": {"basi": ["United Kingdom"], "bersagli": ["Norway", "Denmark", "Holland Belgium", "Normandy Bordeaux", "Western Germany", "Germany"]},
+          "SUD": {"basi": ["Morocco", "Gibraltar"], "bersagli": ["Morocco", "Algeria", "Tunisia", "Libya", "Tobruk", "Sardinia", "Sicily", "Southern Italy", "Northern Italy", "Southern France"]}
+        },
+        "origine": "dalla mappa (ww2eur40_2nd_edition.xml): territori costieri di proprieta' iniziale tedesca, italiana o francese (la Francia cade al R1) vicini a una zona entro 2 zone (un movimento di trasporto) dalle zone della base (United Kingdom: 109, 110; Gibraltar e Morocco: 91, 92). Scelto: esclusi French Guiana e French West Africa (fuori teatro), Holland Belgium e Normandy Bordeaux solo nel NORD, Morocco solo nel SUD; Paris (France) non e' costiera. A ogni turno contano solo quelli di un nemico in guerra. Base SUD: Morocco se dell'alleanza, altrimenti Gibraltar (Morocco confina via terra con l'Algeria: serve alla campagna USA verso est)"
+      },
+      "teatro_iniziale": {"valore": "NORD", "origine": "scelto: la base di R2c (United Kingdom)"},
+      "soglia_mare_aperto": {"valore": 40, "origine": "richiesta dello step R3a (= soglia_mare_sicuro di R2c)"},
+      "round_minimi_tra_cambi": {"valore": 3, "origine": "richiesta dello step R3a"},
+      "soglia_via_libera": {"valore": 70, "origine": "richiesta dello step R3a: vittoria del calcolatore col carico dei trasporti in posizione"},
+      "soglia_tenuta_alleanza": {"valore": 40, "origine": "richiesta dello step R3a: il contrattacco realistico dell'Asse vince <= 40% contro superstiti USA attesi + rinforzi britannici"},
+      "soglia_completa_uk": {"valore": 70, "origine": "richiesta dello step R3a"},
+      "obiettivi_nazionali_tolti": {
+        "valore": {"Morocco": 5, "Algeria": 5, "Tunisia": 5, "Libya": 5, "Tobruk": 5, "Alexandria": 5, "Southern France": 5},
+        "origine": "dalla mappa: objectiveAttachment_Italians_3_North_Africa (5 PU, tutti i territori nordafricani elencati dell'Asse) e Italians_2_Roman_Empire (5 PU, Southern France); nessun obiettivo tedesco dipende dai territori dei teatri. Valore del bersaglio = produzione + 10 VC + 10 capitale (indice di R2b) + questi PU"
+      },
+      "campagne_testa_di_ponte": {"valore": ["France", "Germany", "Southern Italy"], "origine": "richiesta dello step R3a: Parigi, Berlino, Roma (Roma = Southern Italy)"},
+      "nord_africa": {"valore": ["Morocco", "Algeria", "Tunisia", "Libya", "Tobruk", "Alexandria"], "origine": "dalla mappa: i territori dell'obiettivo nazionale italiano Nord Africa (Egitto escluso: e' la campagna R2c del Regno Unito)"},
+      "distanza_fabbrica_africa": {"valore": 3, "origine": "scelto: acquisti per la campagna in Nord Africa solo da una fabbrica propria entro 3 territori via terra dalla tappa; il Regno Unito non ne ha (United Kingdom isola, Quebec in America, Union of South Africa lontana): nessun acquisto"},
+      "regioni": {
+        "valore": {
+          "patria": {"Americans": ["Eastern United States", "Central United States", "Western United States"], "British": ["United Kingdom", "Scotland"]},
+          "europa_occidentale": ["Normandy Bordeaux", "France", "Southern France", "Holland Belgium", "Western Germany", "Germany", "Denmark", "Norway", "Northern Italy"],
+          "mediterraneo_nord_africa": ["Morocco", "Algeria", "Tunisia", "Libya", "Tobruk", "Alexandria", "Egypt", "Gibraltar", "Sardinia", "Sicily", "Southern Italy", "Greece", "Albania", "Crete", "Cyprus", "Malta", "Trans-Jordan", "Syria"]
+        },
+        "origine": "scelto per le tabelle (dove sono le unita' di terra USA e britanniche): ordine base del teatro, patria, mare, europa_occidentale, mediterraneo_nord_africa, altrove"
+      }
     }
   },
   "difesa": {

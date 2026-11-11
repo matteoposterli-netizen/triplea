@@ -106,6 +106,8 @@ public class ProPlusAi extends ProAi {
           if (Impegno.attivo(data, player)) {
             initializeData();
             Impegno.inizioTurno(getProData(), getCalc(), player);
+            // step R3a: the landing force in preparation and the wave stay out of Hard's plan
+            keep.addAll(SbarcoCoordinato.trattenute(data, player));
           }
           if (!keep.isEmpty()) {
             tuning.holdCombatForPurchase(data, player, keep);
@@ -139,6 +141,8 @@ public class ProPlusAi extends ProAi {
     playJointOperation(nonCombat, moveDel, data, player);
     if (nonCombat) {
       playCommitment(moveDel, data, player);
+    } else {
+      playCoordinatedLanding(moveDel, data, player);
     }
     super.move(nonCombat, moveDel, data, player);
     saveCheck(data, player);
@@ -248,6 +252,40 @@ public class ProPlusAi extends ProAi {
       }
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "Commitment non-combat move failed: " + e);
+    }
+  }
+
+  /**
+   * Step R3a: the coordinated landing decided at the purchase lands with all its load before Hard's
+   * combat move; Hard leaves those units and the ones held in preparation, and plans again on the
+   * real board. Nothing with the switch off.
+   */
+  private void playCoordinatedLanding(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (!SbarcoCoordinato.attivo(data, player)
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      attendiCalcolatore(data, player);
+      final java.util.Set<games.strategy.engine.data.Unit> moved =
+          SbarcoCoordinato.combattimento(getProData(), getCalc(), moveDel, player);
+      if (moved.isEmpty()) {
+        return;
+      }
+      initializeData();
+      final java.util.Set<games.strategy.engine.data.Unit> keep =
+          new java.util.LinkedHashSet<>(tuning.combatHeldUnits(getProData()));
+      keep.removeIf(u -> !u.isOwnedBy(player) || !data.getUnits().getUnits().contains(u));
+      keep.addAll(moved);
+      tuning.holdCombat(data, player, keep);
+      if (hasStoredCombatMove()) {
+        forgetStoredCombatMove();
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "Coordinated landing failed: " + e);
     }
   }
 

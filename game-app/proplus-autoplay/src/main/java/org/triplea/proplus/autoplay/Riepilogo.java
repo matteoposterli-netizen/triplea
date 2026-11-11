@@ -114,6 +114,8 @@ final class Riepilogo {
     json.add("stratega", strategist(diary));
     // step R2a-bis: the complete rows of the shadow's checks (diary files)
     json.add("ombra_dettagli", OmbraDettagli.leggi(diary));
+    // step R3a: the register of the commitment's decisions (diary file)
+    json.add("impegno_decisioni", RegistroLettura.leggi(diary));
     return json;
   }
 

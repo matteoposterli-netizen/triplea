@@ -340,6 +340,21 @@ public final class ProPlusTuning implements ProTuning {
     Impegno.acquistato(proData, orders, result);
   }
 
+  /** Step R3a: no transport for Hard while an idle empty usable one exists (USA, UK). */
+  @Override
+  public boolean buysSeaTransports(final ProData proData) {
+    return !SbarcoCoordinato.tetto(proData);
+  }
+
+  /** Step R3a: the units held out of Hard's combat are never loaded for an assault either. */
+  @Override
+  public java.util.Set<Unit> amphibiousHeldUnits(final ProData proData) {
+    final GamePlayer player = proData.getPlayer();
+    return player != null && SbarcoCoordinato.attivo(proData.getData(), player)
+        ? combatHeldUnits(proData)
+        : java.util.Set.of();
+  }
+
   /** Step R2c (B2): a forced attack checked with the units Hard really sends. */
   @Override
   public void reviewAttacks(

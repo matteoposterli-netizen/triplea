@@ -2727,6 +2727,9 @@ public class ProCombatMoveAi {
             // Find units that haven't attacked and can be transported
             final Set<Unit> alreadyAttackedWithUnits =
                 ProTransportUtils.getMovedUnits(alreadyMovedUnits, attackMap);
+            // Pro+ (step R3a): units held out of amphibious assaults are never loaded (none for
+            // Hard)
+            alreadyAttackedWithUnits.addAll(proData.getTuning().amphibiousHeldUnits(proData));
             for (final ProTransport proTransportData : transportMapList) {
               if (proTransportData.getTransport().equals(transport)) {
 

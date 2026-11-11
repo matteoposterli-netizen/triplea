@@ -74,7 +74,7 @@ final class ConfrontoImpegno {
     md.append(
 """
 
-## Impegno (step R2b, R2c)
+## Impegno (step R2b, R2c, R3a)
 
 """);
     md.append(
@@ -177,6 +177,8 @@ final class ConfrontoImpegno {
     // 3-5 per configuration with the commitment
     committed.forEach((config, side) -> perConfig(md, config, side, byConfig.get(config)));
     writeR2c(md, configs, byConfig, committed, alliances, vcRounds);
+    // step R3a: coordinated landing and theaters
+    ConfrontoR3a.write(md, configs, byConfig, reference, vcRounds);
   }
 
   // ===================================================================== step R2c tables

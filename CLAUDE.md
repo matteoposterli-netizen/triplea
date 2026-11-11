@@ -196,6 +196,10 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
 - Step R2c PREPARAZIONE E PROGRAMMI: `ai/proplus/Programmi` (config `impegno.r2c`, carico bilanciato, spola USA, Medio Oriente),
   `Impegno` (fasi, base sicura, B1-B4), hook `ProTuning.purchaseOrdersBought` e `ProTuning.reviewAttacks` (default vuoti; chiamati in
   `ProPurchaseAi` e `ProCombatMoveAi`). Vedi "Preparazione e programmi (step R2c)".
+- Step R3a SBARCO COORDINATO E TEATRI: `ai/proplus/SbarcoCoordinato` (teatro, preparazione, via libera, sbarco, Regno Unito, testa di
+  ponte, tetto ai trasporti), `ai/proplus/RegistroDecisioni` (`impegno-decisioni.jsonl`), hook `ProTuning.buysSeaTransports` e
+  `ProTuning.amphibiousHeldUnits` (default = Hard; in `ProPurchaseAi` e `ProCombatMoveAi`), `ProPurchaseOptionMap.withoutSeaTransports`,
+  `ProPlusAi.playCoordinatedLanding`; autoplay `RegistroLettura`, `ConfrontoR3a`. Vedi "Sbarco coordinato e teatri (step R3a)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -459,6 +463,8 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   Etichetta "Stratega LLM [senza chiave] [con impegno]". Sezione **"Impegno (step R2b)"** (`ConfrontoImpegno`, da
   `stratega_llm.<alleanza>.impegno`).
   **Dallo step R2c** semi 1101-1120 (60 partite, sempre senza chiave) e sezione "Impegno (step R2b, R2c)" con la sottosezione "Step R2c".
+  **Dallo step R3a** semi 1121-1140 (60 partite, senza chiave), sezione "Impegno (step R2b, R2c, R3a)" con la sottosezione "R3a: sbarco
+  coordinato e teatri" (`ConfrontoR3a`, dal registro `impegno_decisioni` e dai campi `regioni`/`nord_africa_asse` di `Monitor`).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2257,6 +2263,112 @@ invariato; l'assalto anfibio lo decide Hard. Valori in `stratega-llm.json` `impe
   attacco forzato; attacco forzato rinunciato con le unita' di Hard insufficienti e intatto a interruttore spento; Russia senza obiettivo
   fattibile = Hard; carico bilanciato; trasporto USA carico verso il Regno Unito e vuoto di ritorno, posizione costruita su Global 1940),
   tolto il test R2b dell'instradamento delle retrovie; `AutoplayTest.theCommitmentOfStepR2bIsSummarized` esteso.
+
+### Sbarco coordinato e teatri (step R3a)
+
+Dietro lo stesso interruttore `impegno` (spento di default = comportamento di prima), solo per le nazioni di `impegno.r3a.nazioni_r3a`
+(Americans, British, Russians: gli Alleati dello Stratega). **L'Asse resta R2c** (nessuna riga di codice dell'Asse cambia; tandem
+Italia-Germania, livello LLM e tenute non toccati). Valori in `stratega-llm.json` `impegno.r3a`, ognuno `{"valore", "origine"}` ("scelto",
+"richiesta dello step R3a" o "dalla mappa"), letti da `SbarcoCoordinato.Config`; nessuno tarato. Classi nuove `ai/proplus/SbarcoCoordinato`
+(teatro, preparazione, via libera, sbarco, Regno Unito, testa di ponte, tetto) e `ai/proplus/RegistroDecisioni` (registro); hook nuovi in
+`ProTuning` (default = Hard): `buysSeaTransports` (chiamato in `ProPurchaseAi.purchase`: `false` ⇒ `ProPurchaseOptionMap.withoutSeaTransports()`,
+copia senza trasporti) e `amphibiousHeldUnits` (in `ProCombatMoveAi`, aggiunte alle unita' gia' usate quando Hard sceglie chi caricare per
+un assalto anfibio); `ProPlusAi`: trattenute R3a unite a quelle dell'acquisto (`holdCombatForPurchase`) e `playCoordinatedLanding` nel
+combattimento prima di Hard (poi `holdCombat` delle unita' mosse e `forgetStoredCombatMove`).
+- **1 Teatro** (`Turno.teatro`, acquisto USA = inizio round per l'alleanza; il Regno Unito usa il teatro corrente): NORD (base United Kingdom)
+  e SUD (base Morocco se dell'alleanza, altrimenti Gibraltar). Bersagli dalla mappa (zone entro 2 dalle zone della base, territori costieri
+  di proprieta' iniziale tedesca/italiana/francese, vedi `teatri`), a ogni turno solo quelli di un nemico. Aperto = base dell'alleanza E
+  zona peggiore della spola verso la base (`Programmi.Turno.zoneSpolaVerso`: zone del porto USA, rotta piu' corta, zone della base) con
+  contrattacco realistico (`Programmi.Turno.vittoriaNemicaMare`, navi alleate della zona + la scorta USA nelle zone del porto) <= 40.
+  Uno aperto = quello; entrambi = punteggio (tenuta d'alleanza stimata del bersaglio migliore x valore; forze = unita' di terra USA e UK
+  alla base + carico USA entro 2 zone dalla base; tenuta = 100 − vittoria del contrattacco realistico `CampagnaOmbra.Calcolo.contrattacco`
+  contro i superstiti medi della battaglia; valore = produzione + 10 VC + 10 capitale + PU degli obiettivi nazionali tolti, dalla mappa);
+  nessuno = resta. Inerzia `sceltaTeatro`: cambio solo dopo 3 round dall'ultimo e mai con un trasporto USA carico fuori dalle zone del
+  porto (ondata in mare). La base segue il teatro; `Programmi.Turno.base()` legge la base di R3a (`SbarcoCoordinato.baseCorrente`).
+- **2 Sbarco coordinato**. PREPARAZIONE (`preparazione`): le unita' di terra della nazione alla base sono trattenute dal combattimento di
+  Hard (anche dal carico anfibio) e tenute ferme nel non combattimento (difendono la base); non se la base confina con terra nemica (testa
+  di ponte, Marocco accanto a un'Algeria dell'Asse: li' le usa la campagna via terra). VIA LIBERA (`viaLiberaUsa`, acquisto USA, forze
+  reali): per ogni bersaglio del teatro il carico in posizione (`piano`: trasporti USA carichi che raggiungono una zona di sbarco libera
+  da nemici entro il movimento, rotta senza nemici + trasporti vuoti nelle zone della base caricati con le unita' USA alla base, le piu'
+  forti prima, meno il presidio caso c se la base e' il porto); vittoria e superstiti medi dal calcolatore di Hard, P80 dal calcolatore
+  vero (100 simulazioni); rinforzi britannici (`rinforziUk`: trasporti britannici nelle zone della base che arrivano alla zona del
+  bersaglio, riempiti con le unita' britanniche alla base meno il presidio di Londra dell'ultimo turno UK); via libera = vittoria >= 70 E
+  contrattacco realistico <= 40 contro superstiti USA + rinforzi (`viaLibera`); tra i bersagli col via libera quello di valore piu' alto.
+  SBARCO (`combattimento`, combattimento USA prima di Hard): carico, rotta, scarico di TUTTO il carico in un colpo; le unita' mosse escono
+  dal piano di Hard. REGNO UNITO (`azioneUk`, acquisto UK): ondata USA eseguita e bersaglio preso ⇒ RINFORZO nel non combattimento (truppe
+  alla base sui trasporti britannici verso la testa di ponte); ondata eseguita e bersaglio non preso ⇒ COMPLETAMENTO nel combattimento solo
+  con vittoria >= 70; nessuna ondata ⇒ sbarco da solo solo con vittoria >= 70 e tenuta da solo (contrattacco <= 40 contro i soli superstiti
+  britannici). DOPO (`aggiornaBase`, acquisto USA): la testa di ponte piu' recente del teatro, dell'alleanza e con le zone della spola sicure
+  (<= 40) diventa la base; base persa ⇒ base del teatro.
+- **Campagne** (`Impegno.scegliObiettivo` con `SbarcoCoordinato.bersagliCampagna`, stesso meccanismo a fasi di R2c): Regno Unito prima
+  l'Egitto (R2c), poi i territori dell'Asse in Nord Africa (`nord_africa`, anche non VC) e, con una testa di ponte tenuta, France, Germany,
+  Southern Italy; USA: con una testa di ponte tenuta France, Germany, Southern Italy; Nord Africa solo col teatro SUD e base Morocco o
+  Gibraltar. Acquisti per il Nord Africa solo da una fabbrica propria entro `distanza_fabbrica_africa` 3 via terra (il Regno Unito non ne ha:
+  verificato sulla mappa, fabbriche britanniche United Kingdom, Quebec, Union of South Africa); le campagne dalla testa di ponte non hanno
+  fabbriche collegate via terra (nessun acquisto, solo attacchi forzati >= 70 con le unita' in portata).
+- **4 Tetto ai trasporti** (`tetto`): con un trasporto fermo e vuoto entro 2 zone dalle zone del porto (`Programmi.Turno.fermiVuoti`, la
+  definizione del carico bilanciato) la proprieta' `Pro+ stratega r3a tetto: <nazione>` = round ⇒ `buysSeaTransports` falso ⇒ nessun
+  trasporto nelle opzioni d'acquisto del turno (anche per gli ordini del programma, che non ne comprerebbero comunque).
+- **5 Russia**: non e' in `nazioni_campagna_terra` di R3a ⇒ nessun obiettivo, nessun ordine, nessuna forzatura: gioca come Hard.
+- **Registro** (`RegistroDecisioni`, file `impegno-decisioni.jsonl` nella cartella della partita del diario + memoria per i test): righe
+  `decisione` (id `R<round>-<nazione>-<tipo>-<n>`, round, nazione, tipo in `TIPI`, `alternative` con i numeri, `scelta`, `motivo`
+  {codice in `MOTIVI`, frase}, `parametri`) e righe `esito` con lo stesso id: sbarco (preso, perdite reali e P80, vittoria e tenuta stimate),
+  tenuta dopo 1 e 2 round (controllata all'acquisto USA dei round dopo), unita' perse in mare (trasporti dell'ondata; trasporti e carico della
+  spola a fine turno), rinforzi arrivati, comprate da Hard col tetto, obiettivo della campagna preso (entro 6 round). Tipi: teatro,
+  bersaglio_sbarco, via_libera_o_attesa (con `parametri.manca`), sbarco, rinforzo_testa_di_ponte, cambio_base, acquisto_programma,
+  tetto_trasporti, spola, campagna_africa, campagna_testa_di_ponte (aggiunto), unita_trattenute.
+- Stato per alleanza `Pro+ stratega r3a: <alleanza>` (teatro, teatro_dal, base, base_origine, round_teatro, cambi, ondata, azione_uk,
+  teste_di_ponte, pendenti, trattenute, tetto_aperto, seq); `stratega_llm.<alleanza>.impegno.r3a` nel riepilogo (teatro, base, round per
+  teatro, cambi, teste di ponte).
+- Autoplay: `Monitor` per round `nazioni.<Americans|British>.regioni` (unita' di terra per regione: base della spola di R3a o United Kingdom,
+  patria, mare, europa_occidentale, mediterraneo_nord_africa, altrove; liste in `impegno.r3a.regioni`), `nord_africa_asse`, `teatro_r3a`;
+  `RegistroLettura` ⇒ `riepilogo.json` `impegno_decisioni` (righe complete del registro); `ConfrontoR3a` scrive la sottosezione "R3a: sbarco
+  coordinato e teatri" della sezione "Impegno". Modalita' `[impegno]`: semi 1121-1140.
+- Test: `SbarcoCoordinatoTest` (11: valori del file; interruttore spento = niente; teatro unico aperto scelto e base che segue il teatro;
+  nessun cambio prima di 3 round ne' con ondata in mare (regola + tabellone); via libera a 70 e non a 69; via libera negata senza tenuta
+  d'alleanza e concessa coi rinforzi britannici (tabellone costruito su Normandy); sbarco con tutto il carico in un colpo; Hard non usa la
+  forza trattenuta (opzioni d'attacco e carico anfibio) e la tiene ferma nel non combattimento; tetto ai trasporti ed esito; Russia = Hard;
+  ogni decisione ha la riga nel registro e l'esito quando verificabile), `AutoplayTest.theCoordinatedLandingOfStepR3aIsSummarized`.
+
+### Scelte di R3a (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Bersagli dei teatri** dalla mappa (script sulle connessioni dell'XML): zone entro 2 (un movimento di trasporto) dalle zone della base,
+   territori costieri di proprieta' iniziale dell'Asse o francese (la Francia cade al R1). Esclusi French Guiana e French West Africa (fuori
+   teatro); Holland Belgium e Normandy solo NORD, Morocco solo SUD. Scartato: calcolarli a ogni turno (cambierebbero col tabellone).
+2. **Base SUD**: Morocco se dell'alleanza, altrimenti Gibraltar (Morocco confina con l'Algeria: serve alla campagna USA verso est).
+   Scartato: Gibraltar prima (isolata via terra).
+3. **Teatro aperto** richiede anche una base dell'alleanza; i difensori della zona sono le navi alleate li' + la scorta USA delle zone del
+   porto (come la scorta del carico bilanciato). Scartato: zona senza difensori (sempre chiusa con un solo aereo nemico in portata).
+4. **Punteggio**: tenuta = contrattacco realistico contro i superstiti MEDI della battaglia di tutte le forze alla base o in arrivo; valore
+   = indice di R2b (produzione + 10 VC + 10 capitale) + PU degli obiettivi nazionali italiani tolti (Nord Africa 5, Southern France 5).
+   Scartato: pesare anche la vittoria (il prompt dice tenuta x valore).
+5. **Scelta del teatro solo nel turno USA**; prima del primo turno USA il Regno Unito usa `teatro_iniziale` NORD.
+6. **Forza trattenuta** = TUTTE le unita' di terra della nazione alla base (non solo quelle del programma: R2c non segue per id gli acquisti
+   del programma); NON trattenute se la base confina con terra nemica (lo sbarco da li' e' via terra: le usa la campagna). Scartato: seguire
+   per id le unita' della spola (le unita' britanniche in patria non sono distinguibili).
+7. **Carico anfibio di Hard**: verificato nel codice che `ProCombatMoveAi` sceglie le truppe da caricare da `getUnitsToTransportFromTerritories`
+   ignorando le unita' trattenute (il "trattenere" di R2c/operazioni toglie solo le opzioni d'attacco): hook nuovo `amphibiousHeldUnits`, attivo
+   SOLO per le nazioni R3a (per l'Asse e per le operazioni LLM nulla cambia). Scartato: correggerlo per tutti (cambierebbe l'Asse).
+8. **Carico in posizione**: solo trasporti carichi che arrivano a una zona di sbarco SENZA nemici per una rotta senza nemici (nessuna battaglia
+   navale prima dello sbarco) + trasporti vuoti nelle zone della base; niente scorta mossa con l'ondata. Scartato: forzare il passaggio
+   (battaglie navali non stimate dal via libera).
+9. **Stime del via libera**: vittoria e superstiti medi dal calcolatore di Hard (`ProOddsCalculator`), P80 dal calcolatore vero; rinforzi UK
+   = trasporti britannici gia' nelle zone della base nel turno USA (quelli che possono partire nel turno UK) riempiti con le truppe alla base
+   meno il presidio di Londra dell'ultimo turno UK. Tra i bersagli col via libera: valore piu' alto, poi vittoria.
+10. **Regno Unito**: completa solo un'ondata USA eseguita che non ha preso (solo vittoria >= 70, come da prompt); sbarco da solo solo se
+    nel round non c'e' stata un'ondata USA; il rinforzo nel non combattimento usa la stessa routine di carico (`piano`) e non ha soglia.
+11. **Testa di ponte → base**: la piu' recente del teatro corrente, tenuta, con la zona peggiore della spola verso di lei <= 40 (stesso
+    controllo del teatro aperto). Scartato: diventare base appena presa (il prompt chiede "tenuta").
+12. **Campagne**: una per nazione (meccanismo di Impegno); Regno Unito Egitto prima, poi Nord Africa e campagne dalla testa di ponte nella
+    stessa scelta (regola di R2b); nessun acquisto senza fabbrica entro 3 via terra (il Regno Unito non ne ha in zona).
+13. **Tetto**: vale anche per gli ordini del programma (stessa lista d'acquisto; il carico bilanciato non ne comprerebbe con un trasporto
+    fermo e vuoto). "Cosa voleva comprare Hard" NON misurato: servirebbe un secondo acquisto simulato senza tetto (costo, e rischio di
+    effetti sul generatore casuale): registrati i fermi vuoti e cosa ha comprato Hard nel turno (esito).
+14. **Esiti**: tenuta controllata all'acquisto USA del round dopo (dopo i turni di Italia, Germania e Russia) e di due round dopo; perse in
+    mare = id dei trasporti dell'ondata (e di trasporti e carico della spola) assenti all'acquisto USA dopo.
+15. **Registro**: tipo in piu' `campagna_testa_di_ponte` (le campagne da una testa di ponte non sono "Africa"); `acquisto_programma` e
+    `spola` registrano le decisioni R2c dei programmi (gia' esistenti) per i conteggi.
+16. **Regioni delle tabelle**: liste scelte (`impegno.r3a.regioni`); la "base" senza R3a (Hard vs Hard) e' United Kingdom.
 
 ## Come configurare lo stratega
 
@@ -4616,3 +4728,29 @@ altre voci invariate (golden Hard, nudo = Hard, Stratega senza chiave = Hard, di
   scaricate nel Regno Unito, 29 rientri di trasporti vuoti per partita.
 - Regno Unito: trasporti fermi vuoti come Hard (R12 10,0 contro 10,5); programma 147 PU su 461 (32%, presidi di Londra/Egitto prima);
   Persia presa in 20/20 partite, Northwest Persia 15/20; Iraq forzato 18 volte (16 vinti, 2 non attaccati da Hard).
+
+### Step R3a SBARCO COORDINATO E TEATRI — teatri, sbarco coordinato, Nord Africa a tenaglia, tetto ai trasporti, Russia = Hard (2026-11-11)
+
+Vedi "Sbarco coordinato e teatri (step R3a)" e "Scelte di R3a". Motivo (run 43058974168): il programma USA porta ~40 unita' a partita nel
+Regno Unito ma l'esercito USA resta parcheggiato (Berlino mai, Roma 0/20), Hard sbarca a gocce e compra ~22 trasporti (18 fermi a R12),
+nessuna pressione sul Mediterraneo, nessun obiettivo dopo l'Egitto, campagne russe inutili (3 obiettivi in 20 partite). File: nuovi
+`ai/proplus/SbarcoCoordinato`, `ai/proplus/RegistroDecisioni`, test `SbarcoCoordinatoTest`, autoplay `RegistroLettura`, `ConfrontoR3a`;
+modificati `Impegno` (campagne R3a, Russia senza campagne, chiamate a R3a, registro dei programmi e della spola, `diarioRighe`, `r3a` nel
+riepilogo), `Programmi` (base dal teatro, `zoneSpolaVerso`, `fermiVuoti`, `distanzaMare` di pacchetto), `ProPlusAi` (trattenute
+all'acquisto, `playCoordinatedLanding`), `ProPlusTuning` (`buysSeaTransports`, `amphibiousHeldUnits`), `ProTuning` (+2 hook di default =
+Hard), `ProPurchaseAi` (+1 riga: opzioni senza trasporti se l'hook lo chiede), `ProCombatMoveAi` (+1 riga: unita' escluse dal carico
+anfibio dell'hook), `ProPurchaseOptionMap` (`withoutSeaTransports`), `stratega-llm.json` (`impegno.r3a`), autoplay `Monitor` (regioni,
+Nord Africa, teatro), `Riepilogo` (`impegno_decisioni`), `ConfrontoImpegno` (titolo + chiamata), `AutoplayTest` (+1 e titolo), workflow
+`[impegno]` (semi 1121-1140). Hard e le altre voci invariate; l'Asse non cambia (R3a solo per Americans, British, Russians); `avvia.bat` e
+`aggiorna.ps1` NON toccati.
+- Test locali (JDK 25, mirror Google solo in sandbox): `:game-core:test --tests 'games.strategy.triplea.ai.*'` **574, 0 falliti** (golden
+  Hard `HardPriorityGoldenTest`/`HardNeutralityGoldenTest`, `NudoHardTest` compreso "Stratega senza chiave = Hard", `DiaryNeutralityTest`
+  diario on/off, `CampagnaOmbraTest` ombra accesa = spenta, `ImpegnoTest` 14, `SbarcoCoordinatoTest` 11), `:ai:test` 13, `:proplus-autoplay:test`
+  31: 0 falliti.
+- Prova locale (Europa 1940, Hard vs Alleati Stratega senza chiave con impegno, seme 1121, 7 round, 250 s, 0 eccezioni, 116 righe di
+  registro): teatro NORD chiuso dal R1 (zona peggiore 70-100%: aerei tedeschi in portata delle zone 109/110 contro la sola scorta USA),
+  SUD aperto al R4 ⇒ cambio a SUD, base Gibraltar (Morocco era dell'Asse); via libera e sbarco USA su Tunisia R5 (2 unita', vittoria 100%,
+  tenuta 89,9%, presa e tenuta 2 round) e Morocco R6 (8 unita', presa, tenuta); rinforzi britannici 0 (nessun trasporto britannico nelle zone
+  di Gibilterra); Regno Unito: Tobruk R1 → Libya R2-R6 (presa al R6), poi France dalla testa di ponte (R7); USA: Algeria (presa al R7); Asse
+  senza territori in Nord Africa a fine R7; tetto attivo per gli USA in 5 turni su 7 (0 trasporti comprati in quei turni; R4 e R6 senza tetto
+  Hard ne ha comprati 4 e 6).
