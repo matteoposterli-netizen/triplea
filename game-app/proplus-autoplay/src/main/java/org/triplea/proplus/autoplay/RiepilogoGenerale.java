@@ -137,6 +137,8 @@ final class RiepilogoGenerale {
         .append(String.join(" / ", alliances.stream().map(Riepilogo::allianceLabel).toList()))
         .append(" (PU = somma della cassa delle nazioni a fine round).\n");
 
+    // step PARTITA COMPLETA: games played until the victory (only when there are some)
+    ConfrontoCompleta.write(md, games, alliances);
     ConfrontoHard.write(md, games, alliances, vcRounds);
     ConfrontoAblazione.write(md, games, alliances, vcRounds);
     ConfrontoConferma.write(md, games, alliances, vcRounds);

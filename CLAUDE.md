@@ -465,6 +465,21 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   **Dallo step R2c** semi 1101-1120 (60 partite, sempre senza chiave) e sezione "Impegno (step R2b, R2c)" con la sottosezione "Step R2c".
   **Dallo step R3a** semi 1121-1140 (60 partite, senza chiave), sezione "Impegno (step R2b, R2c, R3a)" con la sottosezione "R3a: sbarco
   coordinato e teatri" (`ConfrontoR3a`, dal registro `impegno_decisioni` e dai campi `regioni`/`nord_africa_asse` di `Monitor`).
+- **Modalita' "completa" (step PARTITA COMPLETA)**: `[completa]` nel messaggio del commit di testa (precedenza su tutte le altre) ⇒
+  `modalita: completa`. Hard vs Hard **fino alla vittoria**, semi 1101-1103 (3 partite), senza chiave (costo API 0), tetti di sicurezza
+  `--round 60` e `--minuti 120`, job `play` con `timeout-minutes` 135 (solo in questa modalita'; 30 nelle altre; limite dei runner
+  ospitati 6 h per job). Opzione del runner `--fino-a-vittoria si`: a ogni fine round l'autoplay valuta le condizioni dei **trigger di
+  vittoria della mappa** (`Vittoria`, con il bridge fittizio del pannello obiettivi) e ferma la partita quando restano vere per un round
+  intero (vere a fine round N e N+1 ⇒ vittoria al round N+1, `Vittoria.ROUNDS_HELD` = 1). **Il motore da solo non chiude mai questa
+  mappa**: `TriggerAttachment.triggerVictory` usa il testo `victory` del trigger come chiave di `notifications.properties` e la chiave
+  non c'e' (il file della mappa ha solo 3 messaggi di guerra; l'autoplay inoltre non carica le risorse della mappa) ⇒ `signalGameOver`
+  non viene mai chiamato (vale anche nel client di Matteo). Al tetto senza vincitore: stato "stallo: tetto di N round/minuti senza
+  vincitore", `esito.stallo` = true, uscita 0 (non errore). `riepilogo.json`: `parametri.fino_a_vittoria`, `vittoria` (round in cui la
+  condizione era vera per alleanza, vincitore, round), `esito.round_vittoria`; `tempi.per_round_s` (secondi di tutti i passi del round,
+  scritto in tutte le modalita'). Sezione **"Partite complete (fino alla vittoria)"** (`ConfrontoCompleta`, solo con
+  `fino_a_vittoria`): per partita esito, round della vittoria, round giocati, durata, s/round per fasce R1-R12, R13-R24, R25-R36, R37+;
+  per partita VC e reddito / TUV per nazione ogni 4 round e capitali cadute/liberate col round; stima della CI per 60 partite complete
+  (20 in parallelo). Senza `--fino-a-vittoria` il runner si comporta come prima.
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -4783,3 +4798,28 @@ Nord Africa, teatro), `Riepilogo` (`impegno_decisioni`), `ConfrontoImpegno` (tit
   nazione, **0 trasporti comprati da Hard col tetto**.
 - **Russia**: 0 obiettivi, 0 ordini, 0 forzature (= Hard); Mosca 6/20 contro 5/20.
 - **Registro**: 2.780 decisioni in 20 partite + 870 esiti; tutti i 12 tipi presenti.
+
+### Step PARTITA COMPLETA - PROVA — quanto dura una partita giocata fino alla vittoria (2026-11-11)
+
+Solo misura: nessun cambio al codice di gioco, a Hard, allo Stratega o all'impegno. Motivo: in oltre 200 partite a 12 round nessuna
+vittoria (si misurava sempre una partita a meta').
+- **Scoperta**: su WW2 Europe 1940 2nd Edition **il motore non dichiara mai la vittoria**. I trigger `triggerAttachmentAxisVictory1` /
+  `triggerAttachmentAlliedVictory1` hanno come `victory` il testo del messaggio; `TriggerAttachment.triggerVictory` lo cerca come chiave in
+  `notifications.properties` della mappa, che non lo contiene (3 sole righe, dichiarazioni di guerra) ⇒ `getMessage` = null ⇒ niente
+  `signalGameOver`. Vale anche nel client (non solo nell'autoplay, che in piu' non carica le risorse della mappa). Inoltre l'XML controlla
+  la condizione a un solo fine round (TODO "For a complete round of play"), mentre le note della mappa chiedono di tenerla un round intero.
+- Modifica (solo modulo `proplus-autoplay` e workflow): opzione `--fino-a-vittoria si`; classe `Vittoria` che, quando parte il passo di
+  fine round (round N, tutte le nazioni hanno giocato), valuta le condizioni degli stessi trigger della mappa (stesso metodo del motore,
+  `collectTestsForAllTriggers` con `ObjectiveDummyDelegateBridge`) e dichiara vincitrice l'alleanza la cui condizione e' vera a fine N-1 e
+  a fine N ("round intero", per entrambe le alleanze come dicono le note della mappa); stallo al tetto (round o minuti) = uscita 0.
+  `Tempi.per_round_s`; sezione `ConfrontoCompleta`; modalita' `[completa]` del workflow (vedi "Autoplay in CI"). Senza l'opzione il runner
+  e' identico a prima (test `withoutTheOptionTheGameGoesOnToTheLastRoundAsBefore`).
+- Test: `PartitaCompletaTest` (4, partite Hard vs Hard vere sulla mini-mappa `src/test/resources/minimap-vittoria.xml` = `minimap.xml` dei
+  fixture con alleanze Axis/Allies, Total Victory spenta e un trigger di vittoria alleata vero dal round 3 senza messaggio nelle
+  notifiche): la partita si ferma al **round 4** (condizione vera a fine R3 e R4), stallo con `--round 3`, comportamento normale senza
+  l'opzione, sezione del riepilogo generale. Verifica a parte (test temporaneo non committato) sull'XML reale: condizioni false
+  all'inizio, Asse vera con 8 VC alla Germania, Alleati veri con Berlino e Roma ai Britannici (con Berlino e Roma ai **Russi** a inizio
+  partita e' falsa: la condizione e' "alleata della Francia" e la Russia non lo e' ancora; a partita avanzata si'). Partita reale locale
+  (Hard vs Hard, seme 1101, `--round 2 --fino-a-vittoria si`): stallo al tetto, uscita 0, 31 + 20 s per round.
+- `:proplus-autoplay:test` 35 (31 + 4), 0 falliti; `pmdMain`/`pmdTest` verdi; `spotlessCheck` del modulo segnala solo i 9 file preesistenti
+  gia' noti (non toccati). Durata dei 4 test nuovi ~95 s.

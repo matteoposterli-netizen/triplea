@@ -19,10 +19,14 @@ final class Tempi {
   /** Nation → round → milliseconds of that nation's steps in the round. */
   private final Map<String, Map<Integer, Long>> perTurn = new LinkedHashMap<>();
 
+  /** Step PARTITA COMPLETA: round → milliseconds of all its steps (any nation, end of round). */
+  private final Map<Integer, Long> perRound = new TreeMap<>();
+
   private long slowestStepMs;
   private String slowestStep = "";
 
   synchronized void step(final String nation, final int round, final String step, final long ms) {
+    perRound.merge(round, ms, Long::sum);
     if (nation == null || nation.isEmpty()) {
       return;
     }
@@ -52,6 +56,9 @@ final class Tempi {
           nations.add(nation, n);
         });
     json.add("per_nazione", nations);
+    final JsonObject rounds = new JsonObject();
+    perRound.forEach((r, ms) -> rounds.addProperty(String.valueOf(r), round1(ms / 1000.0)));
+    json.add("per_round_s", rounds);
     final JsonObject slowest = new JsonObject();
     slowest.addProperty("passo", slowestStep);
     slowest.addProperty("s", round1(slowestStepMs / 1000.0));

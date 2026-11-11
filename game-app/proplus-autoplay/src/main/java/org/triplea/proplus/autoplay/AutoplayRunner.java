@@ -58,6 +58,9 @@ public final class AutoplayRunner {
 
   private volatile boolean finished;
 
+  /** Step PARTITA COMPLETA: the map's victory checked at every end of round (--fino-a-vittoria). */
+  @javax.annotation.Nullable private Vittoria vittoria;
+
   private AutoplayRunner(final AutoplayOptions options) {
     this.options = options;
   }
@@ -83,6 +86,11 @@ public final class AutoplayRunner {
     System.exit(code);
   }
 
+  /** One game with these command line options (step PARTITA COMPLETA: used by the tests). */
+  static int playGame(final String[] args) throws Exception {
+    return new AutoplayRunner(AutoplayOptions.parse(args)).play();
+  }
+
   private int play() throws Exception {
     final Path output = options.output().toAbsolutePath();
     Files.createDirectories(output);
@@ -90,6 +98,7 @@ public final class AutoplayRunner {
     final GameData data = GameParser.parse(options.mappa(), false).orElseThrow();
     final Monitor monitor = new Monitor(data);
     configure(data, monitor);
+    vittoria = options.finoAVittoria() ? new Vittoria(data, monitor::allianceOf) : null;
 
     final Set<Player> players = new LinkedHashSet<>();
     final boolean allHard =
@@ -136,19 +145,29 @@ public final class AutoplayRunner {
 
     final long limit = options.minuti() * 60_000L;
     String status = "completata";
+    boolean roundCap = false;
     int code = 0;
     int round = monitor.currentRound();
     log.info("AUTOPLAY {} - round {}", Riepilogo.name(options), round);
     try {
       while (!game.isGameOver() && monitor.currentRound() <= options.round()) {
         if (System.currentTimeMillis() - start > limit) {
-          status = "parziale: superato il limite di " + options.minuti() + " minuti";
+          status =
+              vittoria != null
+                  ? "stallo: tetto di " + options.minuti() + " minuti senza vincitore"
+                  : "parziale: superato il limite di " + options.minuti() + " minuti";
           break;
         }
         monitor.beforeStep();
         final var step = game.getData().getSequence().getStep();
         final String stepNation = step.getPlayerId() == null ? "" : step.getPlayerId().getName();
         final int stepRound = game.getData().getSequence().getRound();
+        // step PARTITA COMPLETA: the map's victory tested where the engine tests it, when the
+        // end-of-round step starts (every nation has played round N, the sequence is still at N)
+        final boolean won =
+            vittoria != null
+                && step.getDelegate() instanceof games.strategy.triplea.delegate.EndRoundDelegate
+                && vittoria.endOfRound(stepRound);
         final long stepStart = System.nanoTime();
         game.runNextStep();
         tempi.step(
@@ -159,13 +178,31 @@ public final class AutoplayRunner {
           log.info("AUTOPLAY round {} after {} s", round, seconds());
           write(gameName, monitor, "in corso", false, false);
         }
+        if (won) {
+          log.info(
+              "AUTOPLAY vittoria {} al round {} dopo {} s",
+              vittoria.winner().orElse("?"),
+              stepRound,
+              seconds());
+          break;
+        }
+      }
+      if (vittoria != null
+          && vittoria.winner().isEmpty()
+          && status.equals("completata")
+          && !game.isGameOver()) {
+        status = "stallo: tetto di " + options.round() + " round senza vincitore";
+        roundCap = true;
       }
     } catch (final RuntimeException e) {
       log.error("Errore durante la partita", e);
       status = "errore: " + e;
       code = 1;
     }
-    if (!status.equals("completata") || monitor.currentRound() <= options.round()) {
+    final boolean victory = vittoria != null && vittoria.winner().isPresent();
+    if (!victory
+        && !roundCap
+        && (!status.equals("completata") || monitor.currentRound() <= options.round())) {
       monitor.snapshotPartialRound();
     }
     finished = true;
@@ -277,7 +314,12 @@ public final class AutoplayRunner {
       final boolean gameOver) {
     try {
       final Path output = options.output().toAbsolutePath();
-      final Optional<String> winner = last ? monitor.winner() : Optional.empty();
+      final Optional<String> winner =
+          !last
+              ? Optional.empty()
+              : vittoria != null && vittoria.winner().isPresent()
+                  ? vittoria.winner()
+                  : monitor.winner();
       final JsonObject json =
           Riepilogo.build(
               options,
@@ -289,9 +331,34 @@ public final class AutoplayRunner {
               gameOver,
               Riepilogo.diaryFolder(output.resolve(DIARY_FOLDER)).orElse(null));
       json.add("tempi", tempi.toJson());
+      if (vittoria != null) {
+        completa(json, status, last);
+      }
       Riepilogo.write(output, json);
     } catch (final IOException | RuntimeException e) {
       log.error("Riepilogo non scritto", e);
+    }
+  }
+
+  /**
+   * Step PARTITA COMPLETA: the map's victory checks, the round of the victory, and "stallo" (not an
+   * error) for a game that reached a cap without a winner.
+   */
+  private void completa(final JsonObject json, final String status, final boolean last) {
+    json.getAsJsonObject("parametri").addProperty("fino_a_vittoria", true);
+    json.add("vittoria", vittoria.toJson());
+    final JsonObject outcome = json.getAsJsonObject("esito");
+    if (vittoria.winner().isPresent()) {
+      outcome.addProperty("round_vittoria", vittoria.winningRound());
+      outcome.addProperty(
+          "testo",
+          "vittoria "
+              + Riepilogo.allianceLabel(vittoria.winner().get())
+              + " al round "
+              + vittoria.winningRound());
+    } else if (last && status.startsWith("stallo")) {
+      outcome.addProperty("stallo", true);
+      outcome.addProperty("testo", status);
     }
   }
 

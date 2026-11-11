@@ -37,6 +37,8 @@ on:
       # matrix interleaved by seed, rules only
       # "prova2" (commit with [prova2]): the same 4 configurations with the "take and hold" variant
       # of the operations (step PROVA2), 35 new seeds (301-335), interleaved, rules only
+      # "completa" (commit with [completa], step PARTITA COMPLETA): Hard vs Hard played until an
+      # alliance wins (--fino-a-vittoria), caps 60 rounds and 120 minutes, seeds 1101-1103
       modalita:
         type: string
         default: "normale"
@@ -55,7 +57,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (Hard vs Hard fino alla vittoria, tetti 60 round e 120 minuti, semi 1101-1103, costo API 0)"
         default: "normale"
 permissions:
   contents: write
@@ -147,6 +149,18 @@ jobs:
                          for seed in (1, 2, 3, 4)]
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
+              raise SystemExit(0)
+          if os.environ["MODALITA"] == "completa":
+              # step PARTITA COMPLETA: how long a game lasts when played until the victory (map
+              # triggers, held for a complete round); Hard vs Hard, NO key (API cost 0), caps 60
+              # rounds and 120 minutes per game (a game at a cap = "stallo", not an error)
+              include = [{"id": f"a-Hard-vs-Hard-completa-seme{seed}",
+                          "nome": f"Hard vs Hard fino alla vittoria (seme {seed})",
+                          "tipo": "Axis=hard,Allies=hard", "piano": "", "seme": seed,
+                          "decisore": "", "completa": "si"}
+                         for seed in (1101, 1102, 1103)]
+              print("matrix=" + json.dumps({"include": include}))
+              print("round=60")
               raise SystemExit(0)
           if os.environ["MODALITA"] == "impegno":
               # step R2b: the first campaign that ACTS (switch "impegno"); step R2c: preparation and
@@ -472,7 +486,8 @@ jobs:
   play:
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # [completa]: games up to 120 minutes (+ set-up); the hosted runners allow 6 hours per job
+    timeout-minutes: ${{ inputs.modalita == 'completa' && 135 || 30 }}
     strategy:
       fail-fast: false
       # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
@@ -503,7 +518,8 @@ jobs:
                 --tipo "${{ matrix.tipo }}"
                 --rischio "Axis=Equilibrato,Allies=Equilibrato"
                 --seme "${{ matrix.seme }}"
-                --output "$out" --nome "${{ matrix.nome }}" --minuti 25)
+                --output "$out" --nome "${{ matrix.nome }}"
+                --minuti "${{ matrix.completa == 'si' && '120' || '25' }}")
           if [ -n "${{ matrix.piano }}" ]; then args+=(--piano "${{ matrix.piano }}"); fi
           if [ -n "${{ matrix.decisore }}" ]; then args+=(--decisore "${{ matrix.decisore }}"); fi
           if [ -n "${{ matrix.ablazione }}" ]; then args+=(--ablazione "${{ matrix.ablazione }}"); fi
@@ -514,6 +530,7 @@ jobs:
           if [ -n "${{ matrix.spento }}" ]; then args+=(--stratega-spento "${{ matrix.spento }}"); fi
           if [ -n "${{ matrix.regole }}" ]; then args+=(--stratega-regole "${{ matrix.regole }}"); fi
           if [ -n "${{ matrix.acceso }}" ]; then args+=(--stratega-acceso "${{ matrix.acceso }}"); fi
+          if [ -n "${{ matrix.completa }}" ]; then args+=(--fino-a-vittoria "${{ matrix.completa }}"); fi
           start=$(date +%s)
           autoplay-kit/runner/bin/proplus-autoplay "${args[@]}" 2>&1 | tee "$out/partita.log" \
             | { grep --line-buffered -E "AUTOPLAY|ERROR" || true; }
@@ -569,7 +586,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.loads(os.environ['MATRIX'])['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria (semi 1101-1103)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           cat autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
           # LLM strategist: offline quality test on 30 strategic states of these games (skipped,

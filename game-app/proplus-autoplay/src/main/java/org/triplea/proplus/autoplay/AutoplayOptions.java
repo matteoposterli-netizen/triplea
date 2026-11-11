@@ -41,6 +41,10 @@ import javax.annotation.Nullable;
  * --output DIR         output folder (default autoplay-output)
  * --minuti N           wall-clock limit; the game stops and the summary is partial (default 55)
  * --nome TEXT          name of the game in the summaries (default: from the other parameters)
+ * --fino-a-vittoria S  step PARTITA COMPLETA: "si" = the game goes on until an alliance wins by the
+ *                      map's victory triggers (held for a complete round, see Vittoria); --round
+ *                      and --minuti are then the safety caps and a game that reaches one without a
+ *                      winner is a "stallo" (default no: the behaviour of the other modes)
  * </pre>
  */
 record AutoplayOptions(
@@ -61,7 +65,8 @@ record AutoplayOptions(
     long seme,
     Path output,
     int minuti,
-    @Nullable String nome) {
+    @Nullable String nome,
+    boolean finoAVittoria) {
 
   static final String PROPLUS = "proplus";
   static final String HARD = "hard";
@@ -105,7 +110,8 @@ record AutoplayOptions(
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
         Integer.parseInt(values.getOrDefault("minuti", "55")),
-        values.get("nome"));
+        values.get("nome"),
+        "si".equalsIgnoreCase(values.getOrDefault("fino-a-vittoria", "no")));
   }
 
   /** "Axis=liste+tenute": every id must be a switch of the strategist (step R0). */
