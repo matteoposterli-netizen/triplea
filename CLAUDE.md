@@ -4358,3 +4358,27 @@ valore), autoplay `Riepilogo` (`ombra_dettagli`), `ConfrontoOmbra` (`writeBis`),
 - Prova locale (Asse Stratega senza chiave vs Hard, seme 1101, 3 round): 74 s con l'ombra, 86 s con l'ombra spenta (rumore: nessun
   rallentamento misurabile); 56 chiamate al calcolatore in 3 round; 0 eccezioni. Hard sposta davvero unita' dal fronte ovest alla
   Germania (classe "mossa nel turno"), verificato con il territorio di partenza nelle righe.
+
+#### Autoplay in CI (run 42994455013, commit 733d975, tutto verde, 20 partite [ombra] senza chiave, semi 1101-1110)
+20/20 completate, 0 eccezioni, 0 errori del calcolatore, costo API 0. Durata media b1 (Asse Stratega senza chiave) **309 s**, b2
+(Alleati) **382 s**: contro la run 42976494562 −32% / −11% rispetto a c/f (LLM), +8% / +34% rispetto a Hard vs Hard (286 s): entro
++50%. Chiamate al calcolatore 155 (Asse) e 173 (Alleati) a partita, tutte con le perdite lette per simulazione dalla lista.
+- **1.2 difensori** (mediana con segno / assoluta, TUV): Asse +1/+2/+3 M0 28/30, 45/48, 63/65; **M1 0/7, 3/9, 3/9**; M2 2/9,
+  6/15, 14/28,5. Alleati M0 88/88, 126/127, 160/160; **M1 0/15, 0/18, 0/20**; M2 0/15, 3/21, 5/30. M1 (persistenza) e' il migliore
+  in 46 righe su 48 per tipo e guerra; M0 sovrastima ovunque (capitali e fabbriche alleate +120-220 TUV). Quota M2 osservata
+  ≈ −0,05 (limitata a 0): i difensori NON crescono dopo la previsione; M2 resta peggiore di M1 solo per la quota iniziale 0,5
+  delle prime verifiche e per i casi "guerra non ancora in corso".
+- **1.3 contrattacco** (tenuta stimata ⇒ tenuti davvero): Asse 0-20% 348 territori ⇒ 59%, 20-40% ⇒ 74%, 40-60% ⇒ 100%, 60-80% ⇒
+  95%, 80-100% ⇒ 99%; Alleati 0-20% 344 ⇒ 38%, poi 92-100%. La fascia 0-20% e' quasi tutta di territori presi e lasciati vuoti
+  (tenuta stimata 0); sopra il 20% la stima e' pessimista. Forza impegnata / massima in portata (attaccati): Asse capitale 63%, VC
+  79%, fabbrica 71%, altro 33%; Alleati 13% / 51% / 42% / 31%.
+- **1.4 perdite** reali sotto P60/P70/P80 del calcolatore: Asse 60% / 75% / 81% (95 battaglie), Alleati 61% / 74% / 80% (145):
+  **calibrati** (R2a con i fattori: 98-100%).
+- **1.5 fattibili** (somma R1-R12): Asse v2 314 / 309 / 300 su 636 contro M0 135 / 106 / 72; Alleati v2 267 / 258 / 259 su 831 contro
+  M0 135 / 118 / 83. Modello usato M1 in 556/636 e 742/831 (M2 solo nei primi round, prima di 10 verifiche).
+- **Misura 2** (unita'-turno / TUV per round della nazione): "ferma davvero" quasi nulla: Germania a 0,1/0,4, b 0,1/0,5; Italia ~0;
+  Alleati ≤ 0,1. Nelle retrovie Hard lascia soprattutto unita' **mosse nel turno** (Germania b 10,3/38,5, Russia b 11,0/41,0),
+  appena piazzate (Germania a 3,8/14,0) e antiaeree; "bloccate" Germania b 4,3/15,9 (isole, Finlandia). Il guadagno di "liberare le
+  retrovie" e' quindi trascurabile: Hard non lascia unita' ferme dietro.
+- **Caso b persi** (piu' frequenti): Asse Greece 7 (ripresi 1), Rostov 6 (4), Libya/Tobruk 5 (0); Alleati Smolensk 16 (ripresi 14),
+  Belarus 14 (6), Rostov 14 (5), Bryansk 12 (10), Karelia 10 (2), Archangel 9 (1); unita' di Hard alla caduta 0,1-1,5.
