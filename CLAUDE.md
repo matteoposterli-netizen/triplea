@@ -4782,4 +4782,4 @@ Nord Africa, teatro), `Riepilogo` (`impegno_decisioni`), `ConfrontoImpegno` (tit
 - **Trasporti** (a / c2): USA R12 26,0 (24,7 fermi vuoti) / 13,6 (8,9); UK 11,6 (11,0) / 5,9 (5,5). Tetto attivo 8,9 turni a partita per
   nazione, **0 trasporti comprati da Hard col tetto**.
 - **Russia**: 0 obiettivi, 0 ordini, 0 forzature (= Hard); Mosca 6/20 contro 5/20.
-- **Registro**: 2.980 decisioni in 20 partite + 870 esiti; tutti i 12 tipi presenti.
+- **Registro**: 2.780 decisioni in 20 partite + 870 esiti; tutti i 12 tipi presenti.
