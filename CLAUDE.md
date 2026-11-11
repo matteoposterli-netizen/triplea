@@ -4823,3 +4823,21 @@ vittoria (si misurava sempre una partita a meta').
   (Hard vs Hard, seme 1101, `--round 2 --fino-a-vittoria si`): stallo al tetto, uscita 0, 31 + 20 s per round.
 - `:proplus-autoplay:test` 35 (31 + 4), 0 falliti; `pmdMain`/`pmdTest` verdi; `spotlessCheck` del modulo segnala solo i 9 file preesistenti
   gia' noti (non toccati). Durata dei 4 test nuovi ~95 s.
+
+#### Autoplay in CI (run 43099617725, commit 3a07e37, verde al 2° tentativo, 3 partite [completa] Hard vs Hard, semi 1101-1103, costo API 0)
+Tentativo 1: build, test, release, 1101 e 1102 verdi; il job di 1103 non ha mai avuto un runner (nessuno step, annullato dopo 15 min
+in coda) ⇒ "Re-run failed jobs" (tentativo 2, nessun push): 1103 verde, `autoplay-latest` ripubblicata con le 3 partite. 0 ERROR nei log.
+
+| Seme | Esito | Round | Durata | s/round R1-R12 | R13-R24 | Condizione vera a fine round |
+|---|---|---|---|---|---|---|
+| 1101 | vittoria Alleati | 21 | 8 min 34 s | 28 | 19 | Alleati 20, 21 |
+| 1102 | vittoria Asse | 16 | 4 min 48 s | 18 | 19 | Asse 12, 15, 16 |
+| 1103 | vittoria Alleati | 22 | 11 min 06 s | 35 | 24 | Alleati 21, 22 |
+
+- Nessuno stallo, nessuna partita oltre il round 22: i tetti 60 round / 120 minuti sono molto larghi. I round dopo il 12 sono piu' veloci
+  (meno unita' dell'Asse). Media 8 min 09 s, massima 11 min 06 s.
+- 1102: l'Asse aveva 8 VC a fine R12 (Mosca caduta al R8), li perde al R13 e li riprende: con la lettura dell'XML (un solo fine round)
+  avrebbe vinto al R12 ⇒ alcune delle partite "nessuna entro 12 round" delle run precedenti erano vittorie non riconoscibili dal motore.
+- 1101/1103: Alleati a 11 VC su 11; Roma cade al R20 (1101, Americans) e R17 (1103, British), Berlino al R18 (British) e R21 (Russians);
+  Parigi passa di mano piu' volte tra R13 e R20.
+- Stima CI per 60 partite complete (20 in parallelo, 3 ondate, +2 min di preparazione per job): 30-39 min, ~10 h di minuti runner.
