@@ -76,7 +76,7 @@ nemici a inizio turno).
     programma(md, configs, byConfig);
   }
 
-  private static int ordine(final String config, final String reference) {
+  static int ordine(final String config, final String reference) {
     if (config.equals(reference)) {
       return 0;
     }
@@ -105,7 +105,7 @@ nemici a inizio turno).
 
   // ============================================================================== outcomes
 
-  private static void esiti(
+  static void esiti(
       final StringBuilder md,
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig,
@@ -158,7 +158,7 @@ Vittorie con l'intervallo al 95% di Wilson; p = test esatto di Fisher a due code
     }
   }
 
-  private static String roundText(final List<JsonObject> list, final String winner) {
+  static String roundText(final List<JsonObject> list, final String winner) {
     final List<Double> rounds = new ArrayList<>();
     for (final JsonObject j : list) {
       final JsonObject o = j.getAsJsonObject("esito");
@@ -262,7 +262,7 @@ Vittorie con l'intervallo al 95% di Wilson; p = test esatto di Fisher a due code
     return out;
   }
 
-  private static void sbarchi(
+  static void sbarchi(
       final StringBuilder md,
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig) {
@@ -298,7 +298,7 @@ Unita' alleate (USA + Regno Unito) sbarcate a partita, media sulle partite, per 
     }
   }
 
-  private static double valore(
+  static double valore(
       final Map<String, Double> m, final String fonte, final String period, final String reg) {
     final double total = m.getOrDefault("totale|" + period + "|" + reg, 0.0);
     final double prog = m.getOrDefault("programma|" + period + "|" + reg, 0.0);
@@ -311,7 +311,7 @@ Unita' alleate (USA + Regno Unito) sbarcate a partita, media sulle partite, per 
 
   // ============================================================================ transports
 
-  private static void trasporti(
+  static void trasporti(
       final StringBuilder md,
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig) {
@@ -362,7 +362,7 @@ Unita' alleate (USA + Regno Unito) sbarcate a partita, media sulle partite, per 
 
   // ============================================================================ land units
 
-  private static void terra(
+  static void terra(
       final StringBuilder md,
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig) {
@@ -398,7 +398,7 @@ Unita' di terra per regione (media; EO = Europa occidentale, IT = Italia e isole
 
   // ============================================================================= Gibraltar
 
-  private static void gibilterra(
+  static void gibilterra(
       final StringBuilder md,
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig) {
@@ -451,7 +451,7 @@ Unita' di terra per regione (media; EO = Europa occidentale, IT = Italia e isole
     }
   }
 
-  private static double snodoDal(final JsonObject j) {
+  static double snodoDal(final JsonObject j) {
     for (final JsonObject d : decisioni(j, "rotta_usa")) {
       if ("Gibraltar".equals(d.get("scelta").getAsString())) {
         return d.get("round").getAsInt();
@@ -462,7 +462,7 @@ Unita' di terra per regione (media; EO = Europa occidentale, IT = Italia e isole
 
   // ===================================================================== Russia and cities
 
-  private static void russiaCitta(
+  static void russiaCitta(
       final StringBuilder md,
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig) {
@@ -503,7 +503,7 @@ Caduta (passaggio all'altra alleanza) e liberazione (ritorno), partite / partite
     }
   }
 
-  private static String cambio(final List<JsonObject> list, final String city, final int nth) {
+  static String cambio(final List<JsonObject> list, final String city, final int nth) {
     final List<Double> rounds = new ArrayList<>();
     for (final JsonObject j : list) {
       final int r = cambioRound(j, city, nth);
@@ -544,7 +544,7 @@ Caduta (passaggio all'altra alleanza) e liberazione (ritorno), partite / partite
 
   // ============================================================================== Italy
 
-  private static void italia(
+  static void italia(
       final StringBuilder md,
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig) {
@@ -592,7 +592,7 @@ Caduta (passaggio all'altra alleanza) e liberazione (ritorno), partite / partite
     }
   }
 
-  private static double bonusItalia(final JsonObject j, final int r) {
+  static double bonusItalia(final JsonObject j, final int r) {
     final JsonObject round = round(j, r);
     if (round == null
         || !round.has("r4")
@@ -611,7 +611,7 @@ Caduta (passaggio all'altra alleanza) e liberazione (ritorno), partite / partite
     return s;
   }
 
-  private static double sudafrica(final JsonObject j) {
+  static double sudafrica(final JsonObject j) {
     if (ConfrontoR3a.registro(j).isEmpty()) {
       return Double.NaN;
     }
@@ -627,7 +627,7 @@ Caduta (passaggio all'altra alleanza) e liberazione (ritorno), partite / partite
     return s;
   }
 
-  private static double b5Falsa(final JsonObject j) {
+  static double b5Falsa(final JsonObject j) {
     for (final JsonObject d : decisioni(j, "africa_sudafrica")) {
       if ("CONDIZIONE_FALSA".equals(codice(d))) {
         return d.get("round").getAsInt();
@@ -638,7 +638,7 @@ Caduta (passaggio all'altra alleanza) e liberazione (ritorno), partite / partite
 
   // ============================================================================= program
 
-  private static void programma(
+  static void programma(
       final StringBuilder md,
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig) {
@@ -692,7 +692,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     }
   }
 
-  private static String quota(final List<JsonObject> list, final String nation) {
+  static String quota(final List<JsonObject> list, final String nation) {
     double ordered = 0;
     double turn = 0;
     for (final JsonObject j : list) {
@@ -713,7 +713,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
 
   // ============================================================================= helpers
 
-  private static List<JsonObject> decisioni(final JsonObject j, final String tipo) {
+  static List<JsonObject> decisioni(final JsonObject j, final String tipo) {
     final List<JsonObject> out = new ArrayList<>();
     for (final JsonElement e : ConfrontoR3a.registro(j)) {
       final JsonObject d = e.getAsJsonObject();
@@ -725,17 +725,17 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return out;
   }
 
-  private static JsonObject alt0(final JsonObject d) {
+  static JsonObject alt0(final JsonObject d) {
     final JsonArray a = d.getAsJsonArray("alternative");
     return a == null || a.isEmpty() || !a.get(0).isJsonObject() ? null : a.get(0).getAsJsonObject();
   }
 
-  private static String codice(final JsonObject d) {
+  static String codice(final JsonObject d) {
     return d.has("motivo") ? d.getAsJsonObject("motivo").get("codice").getAsString() : "";
   }
 
   /** Decisions of {@code tipo} (of {@code nation} if not null) with {@code code}; NaN without. */
-  private static double conta(
+  static double conta(
       final JsonObject j, final String tipo, final String nation, final String code) {
     if (ConfrontoR3a.registro(j).isEmpty()) {
       return Double.NaN;
@@ -746,7 +746,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
         .count();
   }
 
-  private static double sommaAlt(
+  static double sommaAlt(
       final JsonObject j, final String tipo, final String nation, final String key) {
     if (ConfrontoR3a.registro(j).isEmpty()) {
       return Double.NaN;
@@ -762,7 +762,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
   }
 
   /** Outcome rows of {@code tipo} with a true boolean {@code key}. */
-  private static double esiti(final JsonObject j, final String tipo, final String key) {
+  static double esiti(final JsonObject j, final String tipo, final String key) {
     if (ConfrontoR3a.registro(j).isEmpty()) {
       return Double.NaN;
     }
@@ -779,11 +779,11 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return n;
   }
 
-  private static JsonArray rounds(final JsonObject j) {
+  static JsonArray rounds(final JsonObject j) {
     return j.has("round") ? j.getAsJsonArray("round") : new JsonArray();
   }
 
-  private static JsonObject round(final JsonObject j, final int r) {
+  static JsonObject round(final JsonObject j, final int r) {
     for (final JsonElement e : rounds(j)) {
       if (e.getAsJsonObject().get("round").getAsInt() == r) {
         return e.getAsJsonObject();
@@ -792,8 +792,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return null;
   }
 
-  private static double nazione(
-      final JsonObject j, final int r, final String nation, final String key) {
+  static double nazione(final JsonObject j, final int r, final String nation, final String key) {
     final JsonObject round = round(j, r);
     if (round == null
         || !round.has("nazioni")
@@ -804,7 +803,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return round.getAsJsonObject("nazioni").getAsJsonObject(nation).get(key).getAsDouble();
   }
 
-  private static double sommaNazione(final JsonObject j, final String nation, final String key) {
+  static double sommaNazione(final JsonObject j, final String nation, final String key) {
     double s = 0;
     for (final JsonElement e : rounds(j)) {
       final JsonObject n = e.getAsJsonObject().getAsJsonObject("nazioni");
@@ -815,7 +814,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return s;
   }
 
-  private static double r4(final JsonObject j, final int r, final String key, final String sub) {
+  static double r4(final JsonObject j, final int r, final String key, final String sub) {
     final JsonObject round = round(j, r);
     if (round == null || !round.has("r4") || !round.getAsJsonObject("r4").has(key)) {
       return Double.NaN;
@@ -827,8 +826,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return v.getAsJsonObject().has(sub) ? v.getAsJsonObject().get(sub).getAsDouble() : Double.NaN;
   }
 
-  private static double regioneR5(
-      final JsonObject j, final int r, final String nation, final String key) {
+  static double regioneR5(final JsonObject j, final int r, final String nation, final String key) {
     final JsonObject round = round(j, r);
     if (round == null || !round.has("r5")) {
       return Double.NaN;
@@ -841,7 +839,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return n.has(key) ? n.get(key).getAsDouble() : 0;
   }
 
-  private static String proprietario(final JsonObject j, final int r, final String city) {
+  static String proprietario(final JsonObject j, final int r, final String city) {
     final JsonObject round = round(j, r);
     if (round == null || !round.has("r4")) {
       return null;
@@ -850,7 +848,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return owners.has(city) ? owners.get(city).getAsString() : null;
   }
 
-  private static String alleanza(final JsonObject j, final String nation) {
+  static String alleanza(final JsonObject j, final String nation) {
     if (j.has("alleanze")) {
       for (final var e : j.getAsJsonObject("alleanze").entrySet()) {
         for (final JsonElement m : e.getValue().getAsJsonArray()) {
@@ -863,8 +861,7 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return nation;
   }
 
-  private static List<Double> values(
-      final List<JsonObject> list, final ToDoubleFunction<JsonObject> f) {
+  static List<Double> values(final List<JsonObject> list, final ToDoubleFunction<JsonObject> f) {
     final List<Double> out = new ArrayList<>();
     for (final JsonObject j : list) {
       final double v = f.applyAsDouble(j);
@@ -875,15 +872,15 @@ Programma: quota dei PU del turno ordinata dal programma (somma ordini / somma P
     return out;
   }
 
-  private static double mean(final List<Double> v) {
+  static double mean(final List<Double> v) {
     return v.stream().mapToDouble(d -> d).average().orElse(Double.NaN);
   }
 
-  private static String num1(final double x) {
+  static String num1(final double x) {
     return Double.isNaN(x) ? "-" : String.format(Locale.ROOT, "%.1f", x).replace('.', ',');
   }
 
-  private static String num0(final double x) {
+  static String num0(final double x) {
     return Double.isNaN(x) ? "-" : String.format(Locale.ROOT, "%.0f", x);
   }
 }

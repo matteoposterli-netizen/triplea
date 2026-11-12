@@ -867,6 +867,14 @@ public final class ProPlusTuning implements ProTuning {
 
   @Override
   public OptionalDouble capitalGuardThreshold(final ProData proData) {
+    // step R6 (A): in the building rounds 100% of the US PUs go to the squadron, no capital or
+    // factory defended first (no enemy reaches a win above 100%)
+    if (proData.getPlayer() != null
+        && SquadraGibilterra.attivo(proData.getData(), proData.getPlayer())
+        && SquadraGibilterra.costruzione(
+            proData.getData().getSequence().getRound(), SquadraGibilterra.Config.get())) {
+      return OptionalDouble.of(100);
+    }
     if (!on(proData, Ablazione.Componente.GUARNIGIONE_CAPITALE)) {
       return OptionalDouble.empty();
     }

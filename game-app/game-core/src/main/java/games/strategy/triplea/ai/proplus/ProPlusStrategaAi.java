@@ -44,6 +44,7 @@ public class ProPlusStrategaAi extends ProPlusAi {
       final IPurchaseDelegate purchaseDelegate,
       final GameData data,
       final GamePlayer player) {
+    attendiCopie();
     if (!purchaseForBid) {
       try {
         initializeData();

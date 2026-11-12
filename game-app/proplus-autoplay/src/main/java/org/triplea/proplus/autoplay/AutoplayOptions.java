@@ -35,6 +35,8 @@ import javax.annotation.Nullable;
  * --stratega-spento A=S+S,..  step R0: switches of the "Pro+ Stratega LLM" turned off per
  *                      alliance (liste, tenute, ombra; see StrategaInterruttori)
  * --stratega-acceso A=S+S,..  step R2a: switches turned on (eg tenute, off by default)
+ * --quota-operazione A=P,..  step R6 (D): share (percent) of the PUs of the commitment's
+ *                      operation per alliance (default: the data file, 70)
  * --stratega-regole S  step R1: "si" = the strategist answers with the rule-based baseline
  *                      (StrategaRegole, no network, cost 0) instead of the LLM
  * --seme N             seed of the game dice (default 1; the AI's own simulations stay random)
@@ -61,6 +63,7 @@ record AutoplayOptions(
     @Nullable Double tettoStrategia,
     Map<String, String> strategaSpenti,
     Map<String, String> strategaAccesi,
+    Map<String, Double> quoteOperazione,
     boolean strategaRegole,
     long seme,
     Path output,
@@ -106,6 +109,7 @@ record AutoplayOptions(
         cap(values.get("tetto-strategia")),
         strategistSwitches(values.get("stratega-spento")),
         strategistSwitches(values.get("stratega-acceso")),
+        shares(values.get("quota-operazione")),
         "si".equalsIgnoreCase(values.getOrDefault("stratega-regole", "no")),
         Long.parseLong(values.getOrDefault("seme", "1")),
         Path.of(values.getOrDefault("output", "autoplay-output")),
@@ -146,6 +150,19 @@ record AutoplayOptions(
   /** Switches of the strategist turned off for {@code alliance}, comma separated ("" = none). */
   String strategaSpento(final String alliance) {
     return strategaSpenti.getOrDefault(alliance, "");
+  }
+
+  /** Step R6 (D): "Axis=80": the operation's share per alliance, each 0-100. */
+  static Map<String, Double> shares(@Nullable final String text) {
+    final Map<String, Double> out = new LinkedHashMap<>();
+    pairs(text).forEach((alliance, v) -> out.put(alliance, cap(v)));
+    return out;
+  }
+
+  /** Step R6 (D): the operation's share of {@code alliance}, null = the data file's. */
+  @Nullable
+  Double quotaOperazione(final String alliance) {
+    return quoteOperazione.get(alliance);
   }
 
   /** "--tetto-strategia 70": a percent 0-100, or null (the data file's value). */

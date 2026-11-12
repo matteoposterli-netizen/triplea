@@ -282,6 +282,12 @@ public final class Programmi {
     /** Step R5 (B2): no transport for the program (the port's zone is not defended). */
     boolean vietaTrasporti;
 
+    /**
+     * Step R6 (C1): the realistic attack counts every enemy in range (Hard's own count), not only
+     * the real enemies of step 3c.
+     */
+    boolean tuttiINemici;
+
     Turno(
         final ProData proData,
         final ProOddsCalculator calc,
@@ -630,7 +636,11 @@ public final class Programmi {
             all.add(t);
           }
         }
-        enemy.populateEnemyAttackOptions(List.of(), all);
+        if (tuttiINemici) {
+          enemy.populateEnemyAttackOptionsOfEveryEnemy(List.of(), all);
+        } else {
+          enemy.populateEnemyAttackOptions(List.of(), all);
+        }
       }
       final ProTerritory max = enemy.getEnemyAttackOptions().getMax(z);
       if (max == null || max.getMaxUnits().isEmpty()) {
@@ -682,8 +692,13 @@ public final class Programmi {
       }
       final List<Territory> portZones = zone(port);
       final Territory base = base();
-      final boolean unload = puoScaricare();
-      final List<Territory> baseZones = unload ? zone(base) : List.of();
+      // step R6: before the squadron's arrival nothing sails (it leaves as one group); after it
+      // the loaded transports sail to Gibraltar's zones and unload only on an allied Gibraltar
+      final boolean r6 = usa() && SquadraGibilterra.attivo(data, player);
+      final boolean r6There = r6 && SquadraGibilterra.arrivata(data, player);
+      final boolean unload = puoScaricare() && (!r6 || r6There);
+      final boolean sail = unload || (r6There && base != null);
+      final List<Territory> baseZones = sail ? zone(base) : List.of();
       final List<Territory> shuttle = zoneSpola();
       int loadedNow = 0;
       int sailed = 0;
@@ -709,7 +724,7 @@ public final class Programmi {
           continue;
         }
         if ((r5()
-                ? navigaR5(new ArrayList<>(List.of(tr)), z, portZones, held, false)
+                ? navigaR5(new ArrayList<>(List.of(tr)), z, portZones, held, r6)
                 : naviga(new ArrayList<>(List.of(tr)), z, portZones, held))
             .isPresent()) {
           back++;
@@ -737,7 +752,8 @@ public final class Programmi {
                     .and(Matches.unitIsOwnedBy(player)))) {
           atPort++;
           emptyAtPort += tr.isTransporting() ? 0 : 1;
-          if (!tr.getUnloaded().isEmpty()) {
+          if (!tr.getUnloaded().isEmpty()
+              || (r6 && !AlleatiR5.trasportoDelProgramma(data, player).test(tr))) {
             continue;
           }
           int room = TransportTracker.getAvailableCapacity(tr);
@@ -773,7 +789,7 @@ public final class Programmi {
       for (final var e : loadedByZone.entrySet()) {
         final Territory z = e.getKey();
         final List<Unit> group = e.getValue();
-        if (!unload) {
+        if (!sail) {
           if (portZones.contains(z)) {
             group.forEach(tr -> held.add(tr));
             group.forEach(tr -> held.addAll(tr.getTransporting()));
@@ -782,7 +798,11 @@ public final class Programmi {
           continue;
         }
         if (baseZones.contains(z)) {
-          brought += scarica(group, z, base, held);
+          if (unload) {
+            brought += scarica(group, z, base, held);
+          } else {
+            held.addAll(conCarico(group)); // step R6: aboard at Gibraltar's zone
+          }
           continue;
         }
         if (!shuttle.contains(z) && distanzaMare(z, portZones) > 2) {
@@ -792,7 +812,7 @@ public final class Programmi {
             r5() ? navigaR5(group, z, baseZones, held, true) : naviga(group, z, baseZones, held);
         if (to.isPresent()) {
           sailed += group.size();
-          if (baseZones.contains(to.get())) {
+          if (baseZones.contains(to.get()) && unload) {
             brought += scarica(group, to.get(), base, held);
           }
         }
@@ -813,15 +833,23 @@ public final class Programmi {
                       + (italia() ? "Italia" : "USA")
                       + " (%s): caricate %d unita' a %s, %d trasporti carichi in rotta, %d unita'"
                       + " scaricate a %s, %d trasporti vuoti in rientro%s",
-                  unload
-                      ? "in guerra, scarico a "
-                          + (italia() && base != null ? base.getName() : cfg.baseAvanzataUsa())
-                      : "prima della guerra: niente scarico nel Regno Unito, carichi pronti sulla costa est",
+                  r6
+                      ? (sail
+                          ? "squadra arrivata, verso "
+                              + (base == null ? "-" : base.getName())
+                              + (unload
+                                  ? " con scarico"
+                                  : " senza scarico (Gibilterra non alleata)")
+                          : "squadra non ancora arrivata: carichi fermi al porto")
+                      : unload
+                          ? "in guerra, scarico a "
+                              + (italia() && base != null ? base.getName() : cfg.baseAvanzataUsa())
+                          : "prima della guerra: niente scarico nel Regno Unito, carichi pronti sulla costa est",
                   loadedNow,
                   port.getName(),
                   sailed,
                   brought,
-                  italia() && base != null ? base.getName() : cfg.baseAvanzataUsa(),
+                  (italia() || r6) && base != null ? base.getName() : cfg.baseAvanzataUsa(),
                   back,
                   waitingLoaded > 0
                       ? ", " + waitingLoaded + " trasporti carichi fermi al porto"
@@ -963,7 +991,9 @@ public final class Programmi {
                       .and(AlleatiR5.naveDaGuerra())
                       .and(Matches.unitIsCarrier().negate())
                       .and(Matches.unitHasMovementLeft())
-                      .and(u -> !held.contains(u))));
+                      .and(u -> !held.contains(u))
+                      // step R6: the squadron stays at its base, never a shuttle's escort
+                      .and(u -> !SquadraGibilterra.inSquadra(data, player, u))));
       escorts.sort(Comparator.comparing(u -> u.getId().toString()));
       if (best == null || (scorta && escorts.size() < r5.minNaviNelGruppo())) {
         if (scorta) {

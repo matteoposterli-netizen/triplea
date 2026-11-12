@@ -56,6 +56,7 @@ public class ProPlusAi extends ProAi {
       final IPurchaseDelegate purchaseDelegate,
       final GameData data,
       final GamePlayer player) {
+    attendiCopie();
     logPhase(data, player, purchaseForBid ? "bid purchase" : "purchase");
     final boolean plan = Ablazione.attivo(data, player, Ablazione.Componente.PIANO);
     if (!purchaseForBid && plan) {
@@ -142,6 +143,7 @@ public class ProPlusAi extends ProAi {
       final IMoveDelegate moveDel,
       final GameData data,
       final GamePlayer player) {
+    attendiCopie();
     logPhase(data, player, nonCombat ? "non-combat move" : "combat move");
     if (nonCombat) {
       playAmphibiousOperations(moveDel, data, player);
@@ -298,6 +300,50 @@ public class ProPlusAi extends ProAi {
   }
 
   /**
+   * Step R6 (0): the battle calculator copies the game in the background ({@code setGameData});
+   * Pro+ writes its state in the game properties without the game's lock, so a copy running at the
+   * same time broke ("Error while trying to set GameData": ConcurrentModificationException, a
+   * corrupted copy) and a worker failing on a corrupted copy left the others running, so the next
+   * estimate found one busy ("Can't calculate while operation is still running!"). Pro+ therefore
+   * waits for every copy it starts: nothing of the calculator runs while its code runs. Only a
+   * wait, the same calculator: no decision changes.
+   */
+  @Override
+  protected void prepareData(final GameData data) {
+    final java.util.Optional<games.strategy.triplea.odds.calculator.IBattleCalculator> bc =
+        CampagnaOmbraMisure.calcolatore(getCalc());
+    if (bc.isEmpty()) {
+      super.prepareData(data);
+      return;
+    }
+    attendi(bc.get().setGameData(data));
+  }
+
+  /** Step R6 (0): waits for a copy of the calculator (at most {@link #ATTESA_S} seconds). */
+  static void attendi(final java.util.concurrent.Future<?> copy) {
+    try {
+      copy.get(ATTESA_S, java.util.concurrent.TimeUnit.SECONDS);
+    } catch (final InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } catch (final java.util.concurrent.ExecutionException
+        | java.util.concurrent.TimeoutException e) {
+      ProLogger.warn(LOG_PREFIX + "Calculator copy not awaited: " + e);
+    }
+  }
+
+  /**
+   * Step R6 (0): at the start of every phase, waits until the background work of the calculator (a
+   * copy started by another AI of the game, workers still running after a failed estimate) is over,
+   * before Pro+ writes the game properties.
+   */
+  static void attendiCopie() {
+    java.util.concurrent.ForkJoinPool.commonPool()
+        .awaitQuiescence(ATTESA_S, java.util.concurrent.TimeUnit.SECONDS);
+  }
+
+  static final long ATTESA_S = 120;
+
+  /**
    * Step STRATEGA LLM: waits until the battle calculator has copied the game data set by {@link
    * #prepareData} (it copies it in the background), so that writing game properties right after
    * does not race with the copy. One tiny battle of 1 unit against 1 unit.
@@ -342,7 +388,8 @@ public class ProPlusAi extends ProAi {
         getCalc()
             .calculateBattleResults(getProData(), where, List.of(mine), List.of(enemy), List.of());
       } catch (final RuntimeException e) {
-        // only a wait
+        // only a wait; step R6 (0): a failed estimate may leave workers running
+        attendiCopie();
       }
     }
   }
@@ -566,6 +613,7 @@ public class ProPlusAi extends ProAi {
       final IAbstractPlaceDelegate placeDelegate,
       final GameState data,
       final GamePlayer player) {
+    attendiCopie();
     logPhase(data, player, placeForBid ? "bid place" : "place");
     // step R2b: the units placed for the commitment are followed by id (nothing with the switch
     // off)

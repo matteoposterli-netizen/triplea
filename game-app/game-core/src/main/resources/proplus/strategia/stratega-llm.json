@@ -920,6 +920,134 @@
         },
         "origine": "scelto per le tabelle della run"
       }
+    },
+    "r6": {
+      "nota": "Step R6 SQUADRA DI GIBILTERRA. Interruttore squadra_gibilterra (spento di default = comportamento di oggi), sopra impegno; vale SOLO per gli USA e sostituisce per loro R3a, alleati_r4 e alleati_r5; Regno Unito, Russia e Francia giocano come Hard. Round 1-4: 100% dei PU degli USA alla squadra (nessun presidio della capitale), ordine d'acquisto fisso, navi iniziali contate; partenza in un solo gruppo nel primo turno in guerra con la squadra completa, comunque al round di arrivo; battaglia per il mare di Gibilterra >= 70 con tutta la squadra, sotto soglia attesa nella zona accanto; presa di Gibilterra >= 70; dal round 5 80% dei PU (dopo il presidio caso c) a sostegno della squadra (vittoria nemica <= 40) e spola a coppie complete; sbarchi dallo snodo come R5 (A5) con il sostegno di navi e aerei della squadra, nessuna condizione di tenuta. Valori dalla mappa, richiesti dallo step o scelti; nessuno tarato.",
+      "squadra_gibilterra_acceso_di_default": {
+        "valore": false,
+        "origine": "richiesta dello step R6: spento = comportamento di oggi"
+      },
+      "round_costruzione": {
+        "valore": 4,
+        "origine": "richiesta dello step R6: costruzione nei round 1-4"
+      },
+      "round_arrivo": {
+        "valore": 5,
+        "origine": "richiesta dello step R6: arrivo a Gibilterra al round 5"
+      },
+      "quota_costruzione": {
+        "valore": 100,
+        "origine": "richiesta dello step R6: 100% dei PU degli USA nei round 1-4, senza presidio della capitale"
+      },
+      "quota_pressione": {
+        "valore": 80,
+        "origine": "richiesta dello step R6: 80% dei PU dal round 5, dopo il presidio della capitale solo con minaccia reale (caso c)"
+      },
+      "zona_base": {
+        "valore": "91 Sea Zone",
+        "origine": "scelto: delle due zone di Gibraltar (91, 92) quella sul lato atlantico, a 3 zone dalla 101 del porto (la 92 e' a 4)"
+      },
+      "obiettivo": {
+        "valore": {
+          "transport": 4,
+          "destroyer": 1,
+          "carrier": 1,
+          "fighter": 2,
+          "cruiser": 1,
+          "submarine": 1,
+          "battleship": 1
+        },
+        "origine": "richiesta dello step R6 (A2); fighter = gli aerei della portaerei (carrierCapacity 2)"
+      },
+      "ordine_acquisto": {
+        "valore": [
+          "transport",
+          "destroyer",
+          "carrier",
+          "cruiser",
+          "submarine",
+          "battleship"
+        ],
+        "origine": "richiesta dello step R6 (A3): trasporti con il carico, cacciatorpediniere, portaerei con aerei, incrociatore, sottomarino, corazzata; oltre l'obiettivo altri trasporti pieni"
+      },
+      "carico_trasporto": {
+        "valore": [
+          "infantry",
+          "artillery"
+        ],
+        "origine": "scelto: fanteria (2 posti, 3 PU) + artiglieria (3 posti, 4 PU) = 5 posti = un trasporto pieno a 7 PU (con i carri 9 PU)"
+      },
+      "tipo_aereo": {
+        "valore": "fighter",
+        "origine": "scelto: caccia (10 PU, difesa 4) per la portaerei invece del bombardiere tattico (11 PU, difesa 3)"
+      },
+      "soglia_battaglia_gibilterra": {
+        "valore": 70,
+        "origine": "richiesta dello step R6 (B2)"
+      },
+      "soglia_presa_gibilterra": {
+        "valore": 70,
+        "origine": "richiesta dello step R6 (B3)"
+      },
+      "soglia_sbarco": {
+        "valore": 70,
+        "origine": "richiesta dello step R6 (C3)"
+      },
+      "soglia_sostegno": {
+        "valore": 40,
+        "origine": "richiesta dello step R6 (C1): vittoria nemica <= 40 contro la squadra"
+      },
+      "tipi_sostegno": {
+        "valore": [
+          "destroyer",
+          "cruiser",
+          "fighter",
+          "battleship"
+        ],
+        "origine": "scelto: navi e aerei provati uno alla volta, si compra quello che abbassa di piu' la vittoria nemica per PU; caccia solo nei posti liberi delle portaerei della squadra"
+      },
+      "max_sostegno_per_turno": {
+        "valore": 4,
+        "origine": "scelto (come max_scorta_per_turno di R5)"
+      },
+      "tipo_scorta_spola": {
+        "valore": "destroyer",
+        "origine": "scelto: la nave da guerra piu' economica senza limiti (il sottomarino non difende dagli aerei)"
+      },
+      "mappa": {
+        "valore": {
+          "costi": {
+            "infantry": 3,
+            "artillery": 4,
+            "armour": 6,
+            "mech_infantry": 4,
+            "fighter": 10,
+            "tactical_bomber": 11,
+            "transport": 7,
+            "submarine": 6,
+            "destroyer": 8,
+            "cruiser": 12,
+            "carrier": 16,
+            "battleship": 20
+          },
+          "capienza_trasporto": 5,
+          "posti_fanteria": 2,
+          "posti_artiglieria_carri_meccanizzata": 3,
+          "aerei_per_portaerei": 2,
+          "navi_usa_iniziali_atlantico": {
+            "101 Sea Zone": {
+              "cruiser": 1,
+              "transport": 1
+            }
+          },
+          "fabbriche_usa": "Eastern United States e Central United States (factory_major, 10 unita' a turno ciascuna), entrambe sulla zona 101",
+          "porto": "Eastern United States (harbour: +1 movimento alle navi che partono dalla 101)",
+          "rotta_porto_gibilterra": "101 -> 102 -> 103 -> 91 (3 zone): un solo turno con il bonus del porto; 92 a 4 zone. Prima della guerra le zone 103 e 106 sono vietate (movementRestrictionTerritories), quindi la squadra parte solo in guerra",
+          "guerra_usa": "al piu' tardi dopo il piazzamento USA del round 3 (triggerAttachment_Americans_War_Japanese), prima se attaccati",
+          "bombardamento": "corazzata e incrociatore (canBombard) bombardano uno sbarco dalla zona in cui si trovano nel combattimento; gli aerei della squadra attaccano se possono tornare sulla portaerei (movimento 4)"
+        },
+        "origine": "dalla mappa (ww2eur40_2nd_edition.xml, verificato con uno script sull'XML): informazione, il codice legge costi e capienze dalla partita"
+      }
     }
   },
   "difesa": {

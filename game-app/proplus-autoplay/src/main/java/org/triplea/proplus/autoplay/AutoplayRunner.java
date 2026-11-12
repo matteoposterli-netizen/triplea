@@ -274,6 +274,9 @@ public final class AutoplayRunner {
               data.getProperties(), alliance, options.strategaSpento(alliance));
           games.strategy.triplea.ai.proplus.StrategaInterruttori.accendi(
               data.getProperties(), alliance, options.strategaAcceso(alliance));
+          // step R6 (D): the operation's share of the alliance (default: the data file)
+          games.strategy.triplea.ai.proplus.Impegno.setQuota(
+              data.getProperties(), alliance, options.quotaOperazione(alliance));
         }
       }
       // step C2: the cap of the PUs to the strategy (default: the data file)

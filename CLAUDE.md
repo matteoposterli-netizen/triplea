@@ -208,6 +208,12 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
 - Step R5 ALLEATI RIFATTI: `ai/proplus/AlleatiR5` (config `impegno.r5`, interruttore `alleati_r5`), agganci in `SbarcoCoordinato`,
   `Programmi`, `Impegno`, `SnodoAlleati`, `Reddito`, `RegistroDecisioni`, `StrategaInterruttori.ALLEATI_R5`; autoplay `ConfrontoR5`,
   `Monitor` (+`r5`). Vedi "Alleati rifatti (step R5)" e "Scelte di R5".
+- Step R6 SQUADRA DI GIBILTERRA: `ai/proplus/SquadraGibilterra` (config `impegno.r6`, interruttore `squadra_gibilterra`), agganci in
+  `AlleatiR5` (attivo anche con R6 per gli USA, `inizio` delega, `snodo` col sostegno), `SbarcoCoordinato.Turno` (`supportoR6`, stima con
+  aerei e bombardamento, battaglia e movimento della squadra), `Programmi.spola` (niente vele prima dell'arrivo, scorte fuori squadra,
+  vuoti con scorta), `Impegno` (PU 100%/80%, `quotaOperazione` + `KEY_QUOTA` = punto D, esclusione di UK/Russia/Francia), `ProPlusTuning`
+  (`capitalGuardThreshold` 100 nei round di costruzione), `RegistroDecisioni`; `ProPlusAi.prepareData`/`attendiCopie` (punto 0);
+  autoplay `ConfrontoR6`, `--quota-operazione`. Vedi "Squadra di Gibilterra (step R6)" e "Scelte di R6".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -496,6 +502,10 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   **Dallo step R5** `[completa]` = 4 configurazioni x 40 semi 1181-1220 = 160 partite senza chiave: a `Hard-vs-Hard`, e1
   `Hard-vs-Alleati-R5` (`Allies=impegno+alleati_r5`), e2 `Asse-impegno-assedio-vs-Hard` (`Axis=impegno+assedio`), e3
   `Asse-assedio-vs-Alleati-R5` (entrambe le alleanze Stratega senza chiave); sottosezione "R5" (`ConfrontoR5`).
+  **Dallo step R6** `[completa]` = 5 configurazioni x 40 semi 1221-1260 = 200 partite senza chiave: a `Hard-vs-Hard`, f1
+  `Hard-vs-Alleati-squadra` (`Allies=impegno+squadra_gibilterra`), e2 `Asse-impegno-assedio-vs-Hard` (quota 70), f3
+  `Asse-assedio-vs-Alleati-squadra`, g `Asse-assedio-quota80-vs-Hard` (campo `quota` della matrice ⇒ `--quota-operazione Axis=80`);
+  sottosezione "R6" (`ConfrontoR6`).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2641,6 +2651,101 @@ stimato, tetto ai trasporti (USA mai; Regno Unito solo B2), trattenute di unita'
 15. **Perdite in mare**: dai controlli gia' esistenti (trasporti della spola a fine turno e dell'ondata) con una riga `perdite_in_mare`.
 16. **Tabelle**: "Hard" = sbarchi del monitor meno quelli del programma (il monitor conta solo territori nemici a inizio turno, il
     programma anche il Marocco alleato: per questo il minimo e' 0).
+
+### Squadra di Gibilterra (step R6)
+
+Interruttore nuovo `squadra_gibilterra` di `StrategaInterruttori` (default dal file dati `impegno.r6.squadra_gibilterra_acceso_di_default`
+= **false**: spento = comportamento di prima), sopra `impegno` (autoplay `--stratega-acceso Allies=impegno+squadra_gibilterra`, etichetta
+"[con squadra_gibilterra]"). Acceso vale SOLO per gli USA e sostituisce per loro R3a, `alleati_r4` e `alleati_r5`; Regno Unito, Russia e
+Francia **giocano come Hard** (`SquadraGibilterra.esclusa` dentro `Impegno.attivo`). Per gli USA usa i meccanismi di R5 (`AlleatiR5.attivo`
+vero per gli USA con R6: programma per id, battaglia A3, presa A4, snodo A5, sbarchi A6) con acquisti, trattenute e movimento propri.
+Valori in `stratega-llm.json` `impegno.r6` (`SquadraGibilterra.Config`, ognuno `{"valore","origine"}`: "dalla mappa", "richiesta dello step
+R6", "scelto"; nessuno tarato) con il blocco informativo `mappa` (costi, capienze, navi iniziali, rotta). Stato nella proprieta' di R3a
+(`Pro+ stratega r3a: Allies`, oggetto `r6`: `fase` costruzione/in_viaggio/attesa/arrivata, `squadra` id → tipo, `iniziali`, `piano`,
+`acquisto_turno`, `scorte_spola`, `partenza_round`, `arrivo_round`, PU).
+- **Regole della mappa verificate** (script sull'XML `ww2eur40_2nd_edition.xml`): costi fanteria 3, artiglieria 4, carro 6, meccanizzata 4,
+  caccia 10, tattico 11, trasporto 7, sottomarino 6, cacciatorpediniere 8, incrociatore 12, portaerei 16, corazzata 20; trasporto 5 posti
+  (fanteria 2, artiglieria/carro/meccanizzata 3); portaerei 2 aerei; navi USA iniziali in Atlantico: zona 101 1 incrociatore + 1 trasporto;
+  fabbriche Eastern e Central United States major (10 unita'), entrambe sulla 101; harbour di Eastern US: +1 movimento alle navi (trasporto,
+  sottomarino, cacciatorpediniere, incrociatore, portaerei, corazzata); rotta 101 → 102 → 103 → 91 = 3 zone (un turno col bonus), 92 a 4;
+  prima della guerra 103/106 vietate (la squadra parte solo in guerra; guerra al piu' tardi dopo il piazzamento USA del R3); corazzata e
+  incrociatore `canBombard`. Bombardamento nel motore: ogni nave `canBombard` del giocatore nella zona da cui parte lo sbarco (senza
+  battaglia navale li') bombarda (`BattleDelegate.addBombardmentSources`).
+- **A Costruzione (R1-4)**: PU = 100% del turno (`SquadraGibilterra.pu`, nessun presidio: `capitalGuardThreshold` = 100 per gli USA ⇒ Hard
+  non difende capitale e fabbriche prima della squadra; `presidio_porto` 0). Ordine (`costruisci`): carichi dei trasporti posseduti, trasporti
+  ciascuno col carico (fanteria + artiglieria), cacciatorpediniere, portaerei e poi i suoi caccia, incrociatore, sottomarino, corazzata;
+  una voce che non entra nei PU rimasti si salta (una successiva piu' economica puo' entrare); obiettivo raggiunto ⇒ altri trasporti pieni.
+  Limite di unita' = capacita' della fabbrica del porto. Navi iniziali delle zone del porto adottate al primo acquisto (squadra +
+  `programma_ids`). Le unita' comprate dal programma nei round di costruzione (navi e aerei) entrano nella squadra (`dopoIlPiazzamento`).
+- **A4/C4 Trattenute**: squadra (aerei compresi) + unita' del programma non sbarcate, nel combattimento (acquisto) e nel non combattimento.
+- **B1 Partenza** (`partenza` all'acquisto, `muovi` nel non combattimento): parte se in guerra con Germania o Italia E (completa O round >=
+  `round_arrivo` − turni di viaggio + 1); turni = distanza / movimento della nave piu' lenta col bonus del porto. Un gruppo per zona (navi +
+  carico) per la rotta piu' corta senza nemici, quanto permette il movimento; gli aerei seguono la portaerei. Registro `squadra_partenza`
+  (composizione) e `squadra_arrivo` (navi nella zona base `91 Sea Zone` e nessuna nave da guerra nemica).
+- **B2 Battaglia**: zona base con navi da guerra nemiche ⇒ vittoria di navi da guerra + aerei della squadra che arrivano (portata col bonus
+  del porto se non ancora mossi) >= 70 ⇒ battaglia nel combattimento (ricalcolata sul tabellone reale; i trasporti seguono nel non
+  combattimento se il mare e' liberato), altrimenti attesa nella zona confinante libera piu' vicina (`ATTESA_ZONA_ACCANTO`), rivalutata il
+  round dopo. Dopo l'arrivo le battaglie per 91/92 sono quelle di R5 (A3).
+- **B3 Presa**: Gibilterra dell'Asse e zona base libera ⇒ sbarco di R5 (A4) >= 70 col sostegno della squadra. **Corretto un difetto di R5**:
+  il codice `PRESA` non era nell'elenco dei motivi ⇒ ogni sbarco per prendere Gibilterra lanciava un'eccezione e annullava il turno R5 degli
+  USA (con `alleati_r5` acceso lo sbarco A4 non e' MAI avvenuto nelle run di R5).
+- **B4 Base**: arrivata, la squadra resta in 91 (`raduna`: navi da guerra e trasporti vuoti della squadra rientrano, gli aerei tornano sulla
+  portaerei); la spola scarica a Gibilterra se alleata, altrimenti i trasporti restano carichi nelle zone di Gibilterra.
+- **C1 Sostegno** (round >= 5, `pressione`): PU = 80% di (PU − presidio caso c); vittoria nemica realistica sulla squadra nella sua zona
+  (`Programmi.Turno.vittoriaNemicaMare` con navi e aerei della squadra); finche' > 40 si aggiunge un'unita' alla volta tra `tipi_sostegno`
+  quella che abbassa di piu' per PU (caccia solo nei posti liberi delle portaerei), max 4 per turno; entrano nella squadra.
+- **C2 Spola** (`spola`): truppe in attesa >= posti ⇒ coppie complete (trasporto + fanteria + artiglieria), posti > truppe ⇒ truppe; una
+  scorta (cacciatorpediniere, `scorte_spola`, mai della squadra) quando si comprano trasporti o ce ne sono al porto e al turno dopo non
+  restera' una scorta al porto. Gruppi carichi e vuoti viaggiano solo con una nave da guerra non della squadra (`navigaR5` con scorta anche al
+  ritorno). Prima dell'arrivo nessun trasporto salpa: si caricano solo i trasporti del programma al porto.
+- **C3 Sbarchi**: lo snodo di R5 (A5) dalla base Gibilterra; l'ondata principale ("resto") e la presa contano gli aerei della squadra che
+  possono attaccare e tornare sulla portaerei (2 x distanza <= movimento) e le navi `canBombard` che raggiungono la zona di scarico (al
+  massimo una per unita' di terra se la mappa lo limita); eseguito: dopo lo scarico le navi vanno nella zona e gli aerei attaccano.
+- **0 Calcolatore** (`ProPlusAi`): `prepareData` attende la copia del calcolatore (`setGameData(...).get`, max 120 s); a inizio di
+  acquisto/movimento/piazzamento `attendiCopie` attende la fine del lavoro in background del pool comune (copie avviate da altre AI, worker
+  rimasti dopo una stima fallita). Vale per tutte le voci Pro+ (solo attese: nessuna decisione cambia).
+- **D Quota dell'Asse**: proprieta' `Pro+ stratega impegno quota: <alleanza>` (`Impegno.setQuota`, autoplay `--quota-operazione Axis=80`,
+  etichetta " [quota 80]"); assente = `quota_pu_operazione` del file (70). Sostituisce `cfg.quotaPu()` nei 5 usi di `Impegno`.
+- **Registro**: tipi nuovi `squadra_costruzione`, `squadra_partenza`, `squadra_arrivo`, `acquisto_pressione` (piu' `battaglia_gibilterra`,
+  `presa_gibilterra`, `snodo_usa`, `sbarco`, `perdite_in_mare` gia' esistenti); motivi nuovi PRESA, COSTRUZIONE, OBIETTIVO_COMPLETO,
+  PARTENZA_COMPLETA, PARTENZA_ROUND, ARRIVO, ATTESA_ZONA_ACCANTO, SOSTEGNO, SPOLA_COPPIE, SPOLA_TRUPPE.
+- **Autoplay**: `ConfrontoR6` scrive la sottosezione **"R6"** di "Partite complete" (esiti con Fisher f1/a, f3/e2, g/e2; squadra per partita e
+  distribuzione dell'arrivo; Gibilterra; ondate del programma; sbarchi per periodo/regione, terra, Russia e citta', trasporti e perdite di R5;
+  quota PU dal R5); le tabelle dell'assedio di g sono in "Per configurazione (step R4)" accanto a e2. `[completa]` = 5 configurazioni x semi
+  1221-1260 (a, f1, e2, f3, g), campo `quota` nella matrice.
+- Test: `SquadraGibilterraTest` (12, Global 1940 con fabbrica major al porto), `ConfrontoR6Test` (4).
+
+### Scelte di R6 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **R6 dentro la macchina di R5** (programma per id, snodo, ondate, battaglie, presa) invece di un modulo separato: meno codice nuovo e le
+   stesse stime; scartato: riscrivere sbarchi e battaglie.
+2. **Gli altri Alleati come Hard** = l'impegno spento per loro (lo Stratega senza chiave gioca come Hard); scartato: lasciarli su R3a.
+3. **Zona base 91** (lato atlantico, 3 zone dal porto); 92 resta controllata dalle battaglie di R5. Scartato: base 92 (4 zone, due turni).
+4. **Carico** fanteria + artiglieria (7 PU per 5 posti); scartato carri (9 PU).
+5. **Aerei della portaerei** = caccia (difesa 4, 10 PU); scartato il tattico.
+6. **Navi iniziali** = navi USA nelle zone del porto al primo acquisto (101: incrociatore e trasporto); il caccia iniziale di Eastern US NON e'
+   contato (lo step parla di navi).
+7. **Voce che non entra nei PU**: si salta alla successiva, il resto (meno di una voce) va a Hard; scartato: risparmiare i PU (Hard li
+   spenderebbe comunque nel suo acquisto).
+8. **Senza presidio** nei round 1-4 realizzato con la soglia di guardia della capitale a 100 per gli USA (vale anche per la guardia della
+   capitale nel non combattimento di Hard); scartato: lasciare la difesa urgente di Hard (in prova Central United States "a rischio 100%" si
+   prendeva 12 PU su 35 al R1).
+9. **Partenza anticipata** = solo se il viaggio dura piu' di un turno (col bonus del porto dura 1 ⇒ si parte a R5, o prima se completa e in
+   guerra). La squadra completa e in guerra a R4 parte a R4 e arriva a R4 (lettura letterale di B1).
+10. **Battaglia della squadra**: attaccanti = navi da guerra e aerei della squadra che arrivano (trasporti esclusi, seguono nel non
+    combattimento); difensori = tutte le unita' nemiche della zona; scramble dell'Asse non stimato (come R5).
+11. **Zona d'attesa**: la confinante con la base senza nemici piu' vicina alla squadra.
+12. **Sostegno**: un'unita' alla volta con il calo maggiore della vittoria nemica per PU, max 4 per turno ("scelto"); le unita' comprate
+    arrivano dopo (stima, come la scorta di R5).
+13. **Scorta della spola**: cacciatorpediniere separati dalla squadra (la squadra resta a Gibilterra); se ne compra uno quando servira' al
+    turno dopo. In prova la regola "una scorta se non ce n'e' entro 2 zone dal porto" bloccava la spola a round alterni (la scorta restava a
+    Gibilterra): corretta prima del push.
+14. **Ritorno dei vuoti con scorta** (C2 "e ritorno"): senza scorta i vuoti restano fermi; con unita' del programma in attesa a Gibilterra
+    restano allo snodo (regola di R4) per lo sbarco.
+15. **Sostegno agli sbarchi solo per l'ondata principale e la presa** (non per l'ondata africana delle unita' veloci): le stesse navi non
+    possono stare in due zone.
+16. **PRESA aggiunto ai motivi**: corregge anche R5 (alleati_r5), che non e' una voce di default; segnalato.
+17. **Punto 0 per tutte le voci Pro+**: le attese non cambiano le decisioni; Hard (`ProAi`) non e' toccata.
 
 ## Come configurare lo stratega
 
@@ -5199,3 +5304,28 @@ Stessi semi della prima run (il seme fissa solo i dadi: le partite sono diverse)
   occidentale R16 75 (a 59). Quota PU del programma USA 38%, UK 11%; attese dello snodo 19 a partita (manca carico 465).
 - Verdetto (due tentativi, regola dello step): **alleati_r5 peggiora gli Alleati contro Hard** (unione p 0,0005) e non cambia nulla
   contro l'Asse con assedio. Resta spento di default.
+
+### Step R6 SQUADRA DI GIBILTERRA — punto 0 (calcolatore), squadra USA, quota dell'Asse per configurazione (2026-11-12)
+
+Vedi "Squadra di Gibilterra (step R6)" e "Scelte di R6". Motivo (80 partite di R5, run del commit ef05652): USA a Gibilterra con 2 unita'
+a R5, un cacciatorpediniere ogni due round, carico bilanciato bloccato a round alterni, battaglia del mare valutata 35 volte e combattuta 1;
+71 unita' sbarcate in Europa occidentale a partita contro 131 di Hard, Alleati 34% contro 63%.
+- **Punto 0, causa trovata** (log delle partite R5 scaricati dalla release `autoplay-latest`): lo stato di Pro+ e' scritto nelle proprieta'
+  della partita (`GameProperties.set`: una `HashMap` e la lista `ordering`, senza il lock della partita) mentre il calcolatore copia la
+  partita in background (`ConcurrentBattleCalculator.setGameData`, asincrono, avviato da ogni `prepareData`) ⇒
+  `ConcurrentModificationException` in `ArrayList.writeObject` o copia corrotta (`OptionalDataException`, `NoSuchElementException` alla
+  lettura). Con una copia corrotta un worker fallisce, lo stream parallelo restituisce l'eccezione con gli altri worker ancora in corsa, il
+  mutex si libera e la stima successiva trova un worker occupato ⇒ "Can't calculate while operation is still running!" (la partita e3 seme
+  1181 della seconda run R5). L'attesa di 739d86a copriva solo alcuni punti. Correzione in `ProPlusAi` (nessuna classe di Hard toccata).
+- File nuovi: `ai/proplus/SquadraGibilterra`, test `SquadraGibilterraTest` (12); autoplay `ConfrontoR6` + `ConfrontoR6Test` (4). Modificati:
+  `ProPlusAi`, `ProPlusStrategaAi` (punto 0), `Impegno` (quota D, R6 negli acquisti e nel piazzamento, esclusione degli altri Alleati),
+  `AlleatiR5` (R6, metodi resi visibili nel pacchetto, sostegno), `SbarcoCoordinato`, `Programmi`, `ProPlusTuning`, `RegistroDecisioni`
+  (tipi, motivi, PRESA), `StrategaInterruttori`, `stratega-llm.json` (`impegno.r6`); autoplay `AutoplayOptions`, `AutoplayRunner`,
+  `Riepilogo`, `RiepilogoGenerale` (etichetta quota), `ConfrontoCompleta`, `ConfrontoR5` (metodi visibili nel pacchetto), workflow
+  `[completa]` (5 configurazioni x semi 1221-1260).
+- Prove locali (Europa 1940, senza chiave): f1 seme 1221 12 round: costruzione R1-R4 (35, 35, 35, 60 PU; al R1 prima della correzione
+  della soglia di guardia Hard prendeva 12 PU per Central United States), squadra completa e in guerra al R4 ⇒ partenza e arrivo al R4,
+  sbarchi dallo snodo su Southern France (8 unita', R5) e Normandy Bordeaux (8 e 10), spola con scarico a Gibilterra. Visti e corretti
+  prima del push: `PRESA` fuori elenco (vedi sopra), scorta della spola rimasta a Gibilterra (blocco a round alterni), trasporti vuoti
+  della squadra fermi accanto al bersaglio, attaccanti della battaglia senza il bonus del porto all'acquisto.
+

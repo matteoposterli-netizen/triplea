@@ -230,9 +230,12 @@ public final class AlleatiR5 {
         || !SbarcoCoordinato.attivo(data, player)) {
       return false;
     }
+    // step R6: the Gibraltar squadron uses R5's machinery for the USA (program by id, battle,
+    // taking Gibraltar, the hub's landings) with its own purchase, holds and moves
     return ProPlusSettings.allianceOf(data, player)
-        .map(a -> StrategaInterruttori.ALLEATI_R5.acceso(data.getProperties(), a))
-        .orElse(false);
+            .map(a -> StrategaInterruttori.ALLEATI_R5.acceso(data.getProperties(), a))
+            .orElse(false)
+        || SquadraGibilterra.attivo(data, player);
   }
 
   /** The program's units of {@code player} by id (R4's {@code programma_ids}). */
@@ -697,6 +700,11 @@ public final class AlleatiR5 {
    * units still not gone are held out of Hard's combat.
    */
   static void inizio(final SbarcoCoordinato.Turno t) {
+    if (SquadraGibilterra.attivo(t.data, t.player)) {
+      // step R6: the Gibraltar squadron replaces R5's turn of the USA
+      SquadraGibilterra.inizio(t);
+      return;
+    }
     t.lines.add("  --- R5 alleati rifatti (" + t.player.getName() + ") ---");
     t.controlli();
     final List<Unit> wave = new ArrayList<>();
@@ -825,7 +833,7 @@ public final class AlleatiR5 {
   }
 
   /** A3 at the purchase: the battle in the zone with the US warships in range (>= 70%). */
-  private static void battagliaPrevista(final SbarcoCoordinato.Turno t, final Territory z) {
+  static void battagliaPrevista(final SbarcoCoordinato.Turno t, final Territory z) {
     final Config cfg = Config.get();
     final List<Unit> ships = naviInPortata(t.data, t.player, z);
     final double win = vittoriaBattaglia(t.proData, t.calc, z, ships, t.player);
@@ -878,7 +886,7 @@ public final class AlleatiR5 {
   }
 
   /** A4: the landing on Gibraltar from the United Kingdom (program's units, >= 70%). */
-  private static boolean presaGibilterra(final SbarcoCoordinato.Turno t, final Territory g) {
+  static boolean presaGibilterra(final SbarcoCoordinato.Turno t, final Territory g) {
     final Config cfg = Config.get();
     t.filtro = t.delProgramma();
     final SbarcoCoordinato.Turno.Piano plan = t.piano(g, t.player, t.presidioBase());
@@ -951,6 +959,10 @@ public final class AlleatiR5 {
     w.addProperty("presidio_base", t.presidioBase());
     w.addProperty("eseguito", false);
     w.addProperty("r5", true);
+    // step R6 (C3): the squadron's ships and planes support this wave
+    if (t.supportoR6) {
+      w.addProperty("supporto_r6", true);
+    }
     return w;
   }
 
@@ -1025,7 +1037,7 @@ public final class AlleatiR5 {
    * highest-value target of the French coasts, Sardinia, Sicily, Southern Italy with win >= 70. No
    * hold condition; nothing at 70% = the units gather and what is missing is registered.
    */
-  private static List<Unit> snodo(final SbarcoCoordinato.Turno t) {
+  static List<Unit> snodo(final SbarcoCoordinato.Turno t) {
     final Config cfg = Config.get();
     t.st.remove("ondata");
     t.st.remove("ondata_africa");
@@ -1052,13 +1064,20 @@ public final class AlleatiR5 {
     }
     final Set<Unit> fastCargo =
         fastWave == null ? Set.of() : new HashSet<>(fastWave.piano().carico());
-    final Opzione restWave =
-        migliore(
-            t,
-            nemiciInGuerra(t, cfg.bersagliResto()),
-            prog.and(u -> !fastCargo.contains(u)).and(africa ? fast.negate() : u -> true),
-            alt,
-            "RESTO");
+    // step R6 (C3): the squadron supports the main wave (the rest)
+    t.supportoR6 = SquadraGibilterra.attivo(t.data, t.player);
+    final Opzione restWave;
+    try {
+      restWave =
+          migliore(
+              t,
+              nemiciInGuerra(t, cfg.bersagliResto()),
+              prog.and(u -> !fastCargo.contains(u)).and(africa ? fast.negate() : u -> true),
+              alt,
+              "RESTO");
+    } finally {
+      t.supportoR6 = false;
+    }
     t.trasportiUsati.clear();
     final Optional<String> choice =
         sceltaSnodo(fastWave != null, restWave == null ? null : restWave.t().getName(), cfg);
@@ -1122,6 +1141,7 @@ public final class AlleatiR5 {
     t.lines.add("  R5 snodo USA: " + choice.orElse("ACCUMULO") + " (" + why + ")");
     final List<Unit> out = new ArrayList<>();
     if (restWave != null) {
+      t.supportoR6 = SquadraGibilterra.attivo(t.data, t.player);
       t.st.add(
           "ondata",
           onda(
@@ -1132,6 +1152,7 @@ public final class AlleatiR5 {
               africa ? "lenti" : "programma",
               id,
               choice.orElse("")));
+      t.supportoR6 = false;
       out.addAll(restWave.piano().tutte());
     }
     if (fastWave != null) {

@@ -82,6 +82,12 @@ public final class Impegno {
   public static final String KEY_FORZATI = "Pro+ stratega impegno forzati: ";
   public static final String KEY_ORDINE = "Pro+ stratega impegno ordine: ";
 
+  /**
+   * Step R6 (D): the operation's share of the PUs for one alliance (game property, set by the
+   * autoplay's {@code --quota-operazione}); absent = {@code quota_pu_operazione} of the data file.
+   */
+  public static final String KEY_QUOTA = "Pro+ stratega impegno quota: ";
+
   static final String PRESO = "preso";
   static final String NON_NEMICO = "non piu' del nemico";
   static final String ROTTA_ASSENTE = "rotta assente";
@@ -161,6 +167,36 @@ public final class Impegno {
   // ============================================================================ pure rules
 
   /** 3: PUs of the operation = share of (turn's PUs - garrison of capital/factories in case c). */
+  /** Step R6 (D): the operation's share (percent) of {@code player}'s alliance. */
+  static double quotaOperazione(final GameState data, final GamePlayer player) {
+    final Optional<String> alliance = ProPlusSettings.allianceOf(data, player);
+    if (alliance.isPresent()
+        && data.getProperties().get(KEY_QUOTA + alliance.get()) instanceof String s
+        && !s.isBlank()) {
+      try {
+        final double v = Double.parseDouble(s.strip());
+        if (v >= 0 && v <= 100) {
+          return v;
+        }
+      } catch (final NumberFormatException e) {
+        // the data file's value
+      }
+    }
+    return Config.get().quotaPu();
+  }
+
+  /** Step R6 (D): sets the operation's share of {@code alliance} (null = the data file's). */
+  public static void setQuota(
+      final GameProperties props, final String alliance, @Nullable final Double percent) {
+    props.set(KEY_QUOTA + alliance, (Serializable) null);
+    if (percent != null) {
+      if (percent < 0 || percent > 100) {
+        throw new IllegalArgumentException("Quota dell'operazione non valida: " + percent);
+      }
+      props.set(KEY_QUOTA + alliance, String.valueOf(percent));
+    }
+  }
+
   static int puOperazione(final int puTurno, final int puCasoC, final double quota) {
     return (int) Math.floor(Math.max(0, puTurno - puCasoC) * quota / 100.0);
   }
@@ -293,7 +329,9 @@ public final class Impegno {
     final Optional<String> alliance = ProPlusSettings.allianceOf(data, player);
     return alliance.isPresent()
         && StrategaInterruttori.IMPEGNO.acceso(data.getProperties(), alliance.get())
-        && !StrategaConfig.get().nazioniSenzaRuoli().contains(player.getName());
+        && !StrategaConfig.get().nazioniSenzaRuoli().contains(player.getName())
+        // step R6: with the Gibraltar squadron only the USA play the commitment
+        && !SquadraGibilterra.esclusa(data, player, alliance.get());
   }
 
   /**
@@ -728,7 +766,19 @@ public final class Impegno {
                         m.forEach((type, n) -> south.merge(type, n, Integer::sum));
                       }
                     });
+            final Set<String> already = new HashSet<>(obj(ns, "programma_ids").keySet());
             segui(obj(ns, "programma_ids"), program, fresh, Set.of());
+            // step R6: the program's units bought now join the squadron (or are its escorts)
+            final JsonObject now = obj(ns, "programma_ids");
+            SquadraGibilterra.dopoIlPiazzamento(
+                data,
+                player,
+                fresh.stream()
+                    .filter(
+                        u ->
+                            now.has(u.getId().toString())
+                                && !already.contains(u.getId().toString()))
+                    .toList());
             final Territory sa =
                 data.getMap().getTerritoryOrNull(ConfigR4.get().fabbricaSudafrica());
             segui(obj(ns, "sudafrica_ids"), south, fresh, sa == null ? Set.of() : Set.of(sa));
@@ -897,7 +947,12 @@ public final class Impegno {
       if (Assedio.germania(data, player)) {
         final Map<String, Integer> bombers =
             Assedio.bombardieriDaComprare(
-                proData, calc, player, c, puOperazione(puTurn, puC, cfg.quotaPu()), lines);
+                proData,
+                calc,
+                player,
+                c,
+                puOperazione(puTurn, puC, quotaOperazione(data, player)),
+                lines);
         if (!bombers.isEmpty()) {
           final Map<String, Integer> costs = costiAcquisto(data, player);
           for (final var e : bombers.entrySet()) {
@@ -937,7 +992,12 @@ public final class Impegno {
       int puProg = 0;
       if (Programmi.USA.equals(player.getName()) || Programmi.UK.equals(player.getName())) {
         final Programmi.Turno p = programmi();
-        final int garrison = presidioPorto(cases, p.porto());
+        // step R6: the Gibraltar squadron of the USA (no capital garrison in the building rounds)
+        final boolean r6 = SquadraGibilterra.attivo(data, player);
+        final int garrison =
+            r6 && SquadraGibilterra.costruzione(round, SquadraGibilterra.Config.get())
+                ? 0
+                : presidioPorto(cases, p.porto());
         ns.addProperty("presidio_porto", garrison);
         // step R4 (B4): the United Kingdom's PUs: London, Africa (South Africa), landing force
         final boolean r5 = AlleatiR5.attivo(data, player);
@@ -956,14 +1016,18 @@ public final class Impegno {
         final double usaShare = r5 ? AlleatiR5.Config.get().quota() : r2c.quotaProgrammaUsa();
         final double ukShare = r5 ? AlleatiR5.Config.get().quota() : r2c.quotaForzaSbarcoUk();
         final int pu =
-            Programmi.USA.equals(player.getName())
-                ? puOperazione(puTurn, puC, usaShare)
-                : puOperazione(puTurn, puC + puOp + puAfrica, ukShare);
+            r6
+                ? SquadraGibilterra.pu(data, puTurn, puC)
+                : Programmi.USA.equals(player.getName())
+                    ? puOperazione(puTurn, puC, usaShare)
+                    : puOperazione(puTurn, puC + puOp + puAfrica, ukShare);
         // step R5 (A1, B1-B2): escorts for A3, the defended port's zone of the United Kingdom
         final Map<String, Integer> mix =
-            r5
-                ? AlleatiR5.acquistiProgramma(proData, calc, p, pu, garrison, turn)
-                : p.acquisti(pu, garrison, turn);
+            r6
+                ? SquadraGibilterra.acquisti(proData, calc, p, pu, puTurn, puC, turn, ns)
+                : r5
+                    ? AlleatiR5.acquistiProgramma(proData, calc, p, pu, garrison, turn)
+                    : p.acquisti(pu, garrison, turn);
         SbarcoCoordinato.registraProgramma(
             data, player, turn.has("programma") ? turn.getAsJsonObject("programma") : null);
         if (!mix.isEmpty() && p.porto() != null) {
@@ -985,7 +1049,7 @@ public final class Impegno {
             Assedio.acquistiItalia(
                 data,
                 player,
-                Math.max(0, puOperazione(puTurn, puC, cfg.quotaPu()) - puOp),
+                Math.max(0, puOperazione(puTurn, puC, quotaOperazione(data, player)) - puOp),
                 p,
                 garrison,
                 turn,
@@ -1060,7 +1124,8 @@ public final class Impegno {
         final JsonArray attacks,
         final List<String> forced,
         final JsonObject order) {
-      final int puOp = Math.max(0, puOperazione(puTurn, puC, cfg.quotaPu()) - riservaR4);
+      final int puOp =
+          Math.max(0, puOperazione(puTurn, puC, quotaOperazione(data, player)) - riservaR4);
       // 2: inertia of the current target
       final List<Territory> fronts = c.fronti();
       String suspended = "";
@@ -1475,7 +1540,7 @@ public final class Impegno {
       final JsonArray alternatives = new JsonArray();
       final List<Candidato> candidates = new ArrayList<>();
       final Map<String, CampagnaOmbra.Calcolo.Obiettivo> byName = new HashMap<>();
-      final double perRound = puOperazione(puTurn, puC, cfg.quotaPu());
+      final double perRound = puOperazione(puTurn, puC, quotaOperazione(data, player));
       final List<String> text = new ArrayList<>();
       for (final CampagnaOmbra.Calcolo.Obiettivo o : all) {
         final Territory t = o.bersaglio();
@@ -1738,7 +1803,7 @@ public final class Impegno {
               puTurn,
               puC,
               puOp,
-              cfg.quotaPu(),
+              quotaOperazione(data, player),
               testo(mix),
               factory.getName(),
               best,

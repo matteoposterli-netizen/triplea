@@ -701,6 +701,9 @@ public final class SbarcoCoordinato {
     /** Step R5: the United Kingdom lands from its home port (null = the alliance's base). */
     @Nullable Territory baseFissa;
 
+    /** Step R6 (C3): the estimates count the squadron's ships and planes that can support. */
+    boolean supportoR6;
+
     /** Step R5: the land units unloaded by {@link #esegui} (they leave the program). */
     final List<Unit> partite = new ArrayList<>();
 
@@ -1519,8 +1522,17 @@ public final class SbarcoCoordinato {
         win = plan.carico().isEmpty() ? 0 : 100;
         survivors = new ArrayList<>(plan.carico());
       } else {
+        // step R6 (C3): the squadron's planes attack and its ships bombard with the landing
+        final List<Unit> attackers = new ArrayList<>(plan.carico());
+        List<Unit> bombard = List.of();
+        if (supportoR6 && usa() && SquadraGibilterra.attivo(data, player)) {
+          SquadraGibilterra.aereiSupporto(this, t).stream()
+              .filter(u -> !attackers.contains(u))
+              .forEach(attackers::add);
+          bombard = SquadraGibilterra.naviSupporto(this, plan);
+        }
         final ProBattleResult r =
-            calc.calculateBattleResults(proData, t, plan.carico(), defenders, List.of());
+            calc.calculateBattleResults(proData, t, attackers, defenders, bombard);
         win = r.getWinPercentage();
         survivors = new ArrayList<>(r.getAverageAttackersRemaining());
         if (c.calcolatore.isPresent()) {
@@ -2290,6 +2302,10 @@ public final class SbarcoCoordinato {
       if (r5()) {
         try {
           if (usa()) {
+            // step R6 (B2): the squadron's battle for Gibraltar's sea on its way
+            if (SquadraGibilterra.attivo(data, player)) {
+              moved.addAll(SquadraGibilterra.combattimento(this, delegate));
+            }
             // step R5 (A3): the naval battle of Gibraltar first
             moved.addAll(AlleatiR5.battaglia(this, delegate));
           }
@@ -2336,6 +2352,13 @@ public final class SbarcoCoordinato {
       final Piano piano = piano(t, player, garrison);
       filtro = null;
       final int landed = esegui(piano, t, moved);
+      // step R6 (C3): the squadron's support moves with the main wave
+      if (landed > 0
+          && plan.has("supporto_r6")
+          && plan.get("supporto_r6").getAsBoolean()
+          && SquadraGibilterra.attivo(data, player)) {
+        moved.addAll(SquadraGibilterra.eseguiSupporto(this, piano, t));
+      }
       plan.addProperty("eseguito", landed > 0);
       plan.addProperty("unita_sbarcate", landed);
       plan.addProperty("trasporti_usati", piano.viaggi().size());
@@ -2438,6 +2461,10 @@ public final class SbarcoCoordinato {
       this.moveDel = delegate;
       final Set<Unit> held = new LinkedHashSet<>();
       if (usa()) {
+        // step R6: the squadron's moves and holds (before R5's outcomes)
+        if (SquadraGibilterra.attivo(data, player)) {
+          held.addAll(SquadraGibilterra.nonCombattimento(this, delegate));
+        }
         if (r5()) {
           AlleatiR5.esitoBattaglia(this);
         }

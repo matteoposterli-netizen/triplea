@@ -465,6 +465,16 @@ final class Riepilogo {
     if (on.size() > 0) {
       p.add("stratega_acceso", on);
     }
+    // step R6 (D): the operation's share per alliance when not the data file's
+    final JsonObject shares = new JsonObject();
+    for (final String a : monitor.alliances().keySet()) {
+      if (AutoplayOptions.STRATEGA.equals(o.tipo(a)) && o.quotaOperazione(a) != null) {
+        shares.addProperty(a, o.quotaOperazione(a));
+      }
+    }
+    if (shares.size() > 0) {
+      p.add("quota_operazione", shares);
+    }
     if (strategist) {
       p.addProperty("chiave_llm", llmKeyPresent());
       if (o.strategaRegole()) {

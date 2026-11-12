@@ -60,7 +60,12 @@ public final class RegistroDecisioni {
           "presa_gibilterra",
           "logoramento_uk",
           "trasporti_mare_difeso",
-          "perdite_in_mare");
+          "perdite_in_mare",
+          // step R6
+          "squadra_costruzione",
+          "squadra_partenza",
+          "squadra_arrivo",
+          "acquisto_pressione");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
@@ -141,7 +146,18 @@ public final class RegistroDecisioni {
           "CONDIZIONE_VERA",
           "CONDIZIONE_FALSA",
           "SOLO_PROGRAMMA",
-          "CONTROLLO");
+          "CONTROLLO",
+          // step R6 (PRESA: the code of R5's A4 was missing, the landing to take Gibraltar threw)
+          "PRESA",
+          "COSTRUZIONE",
+          "OBIETTIVO_COMPLETO",
+          "PARTENZA_COMPLETA",
+          "PARTENZA_ROUND",
+          "ARRIVO",
+          "ATTESA_ZONA_ACCANTO",
+          "SOSTEGNO",
+          "SPOLA_COPPIE",
+          "SPOLA_TRUPPE");
 
   private static final int MAX_MEMORIA = 5000;
   private static final Map<GameState, List<JsonObject>> MEMORIA =

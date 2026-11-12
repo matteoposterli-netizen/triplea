@@ -304,6 +304,13 @@ final class RiepilogoGenerale {
         label.append(" [con ").append(on).append(']');
       }
     }
+    // step R6 (D): " [quota 80]" when the operation's share is not the data file's
+    if (p.has("quota_operazione") && p.getAsJsonObject("quota_operazione").has(alliance)) {
+      label
+          .append(" [quota ")
+          .append(Math.round(p.getAsJsonObject("quota_operazione").get(alliance).getAsDouble()))
+          .append(']');
+    }
     return label.toString();
   }
 
