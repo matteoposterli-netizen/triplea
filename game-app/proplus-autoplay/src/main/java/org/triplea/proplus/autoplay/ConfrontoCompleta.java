@@ -117,10 +117,19 @@ final class ConfrontoCompleta {
       md.append("\n(tabelle R5 non scritte: ").append(e).append(")\n");
     }
     // step R6: the subsection "R6"
-    try {
-      ConfrontoR6.write(md, games, alliances);
-    } catch (final RuntimeException e) {
-      md.append("\n(tabelle R6 non scritte: ").append(e).append(")\n");
+    // step R6b: the subsection "R6b" (with R6's rows next to them) instead of "R6"
+    if (ConfrontoR6b.applicabile(games)) {
+      try {
+        ConfrontoR6b.write(md, games, alliances);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle R6b non scritte: ").append(e).append(")\n");
+      }
+    } else {
+      try {
+        ConfrontoR6.write(md, games, alliances);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle R6 non scritte: ").append(e).append(")\n");
+      }
     }
     // one section per game only for small runs (200 games would be unreadable)
     for (final Game g : complete.size() <= MAX_DETAIL ? complete : List.<Game>of()) {

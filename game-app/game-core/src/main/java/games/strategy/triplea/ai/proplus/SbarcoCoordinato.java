@@ -704,6 +704,12 @@ public final class SbarcoCoordinato {
     /** Step R6 (C3): the estimates count the squadron's ships and planes that can support. */
     boolean supportoR6;
 
+    /** Step R6b (A3): {@link #piano} unloads only from this zone (null = the nearest free one). */
+    @Nullable Territory zonaScarico;
+
+    /** Step R6b (B1): ids of the squadron's ships escorting a wave of this turn. */
+    final Set<String> scorteUsate = new HashSet<>();
+
     /** Step R5: the land units unloaded by {@link #esegui} (they leave the program). */
     final List<Unit> partite = new ArrayList<>();
 
@@ -1385,6 +1391,7 @@ public final class SbarcoCoordinato {
       final List<Territory> unload =
           data.getMap().getNeighbors(t, Matches.territoryIsWater()).stream()
               .filter(z -> !z.anyUnitsMatch(Matches.enemyUnit(nation)))
+              .filter(z -> zonaScarico == null || zonaScarico.equals(z))
               .sorted(Comparator.comparing(Territory::getName))
               .toList();
       final List<Viaggio> trips = new ArrayList<>();
@@ -2028,6 +2035,15 @@ public final class SbarcoCoordinato {
       return w;
     }
 
+    /** Step R6b (A3): the unload zone fixed at the purchase for the wave {@code w} (or null). */
+    @Nullable
+    private Territory zonaScaricoR6b(final JsonObject w) {
+      if (!w.has("zona_scarico") || !TrasportiProtetti.attivo(data, player)) {
+        return null;
+      }
+      return data.getMap().getTerritoryOrNull(w.get("zona_scarico").getAsString());
+    }
+
     /** The units a wave loads (step R4), from its filter; null = any (R3a). */
     @Nullable
     private Predicate<Unit> filtroOndata(final JsonObject w) {
@@ -2056,9 +2072,22 @@ public final class SbarcoCoordinato {
         return moved;
       }
       filtro = filtroOndata(w);
-      final Piano plan = piano(t, player, garrison);
-      filtro = null;
-      final int landed = esegui(plan, t, moved);
+      zonaScarico = zonaScaricoR6b(w);
+      final Piano plan;
+      try {
+        plan = piano(t, player, garrison);
+      } finally {
+        filtro = null;
+        zonaScarico = null;
+      }
+      // step R6b (A1): the transports' zone checked again on the real board
+      final boolean safe =
+          !TrasportiProtetti.attivo(data, player)
+              || TrasportiProtetti.primaDelloSbarco(this, w, plan, List.of());
+      final int landed = safe ? esegui(plan, t, moved) : 0;
+      if (landed > 0 && TrasportiProtetti.attivo(data, player)) {
+        moved.addAll(TrasportiProtetti.dopoLoSbarco(this, w, plan, moveDel));
+      }
       w.addProperty("eseguito", landed > 0);
       w.addProperty("unita_sbarcate", landed);
       final String id = RegistroDecisioni.nuovoId(st, round, player.getName(), "sbarco");
@@ -2349,9 +2378,29 @@ public final class SbarcoCoordinato {
         moved.addAll(ondataAfrica(garrison));
       }
       filtro = filtroOndata(plan);
-      final Piano piano = piano(t, player, garrison);
-      filtro = null;
-      final int landed = esegui(piano, t, moved);
+      zonaScarico = zonaScaricoR6b(plan);
+      final Piano piano;
+      try {
+        piano = piano(t, player, garrison);
+      } finally {
+        filtro = null;
+        zonaScarico = null;
+      }
+      // step R6b (A1): the transports' zone checked again on the real board
+      final boolean safe =
+          !usa()
+              || !TrasportiProtetti.attivo(data, player)
+              || TrasportiProtetti.primaDelloSbarco(
+                  this,
+                  plan,
+                  piano,
+                  plan.has("supporto_r6") && plan.get("supporto_r6").getAsBoolean()
+                      ? SquadraGibilterra.naviSupporto(this, piano)
+                      : List.of());
+      final int landed = safe ? esegui(piano, t, moved) : 0;
+      if (landed > 0 && usa() && TrasportiProtetti.attivo(data, player)) {
+        moved.addAll(TrasportiProtetti.dopoLoSbarco(this, plan, piano, moveDel));
+      }
       // step R6 (C3): the squadron's support moves with the main wave
       if (landed > 0
           && plan.has("supporto_r6")

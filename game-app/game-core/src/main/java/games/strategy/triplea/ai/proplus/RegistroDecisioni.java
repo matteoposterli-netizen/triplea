@@ -65,7 +65,12 @@ public final class RegistroDecisioni {
           "squadra_costruzione",
           "squadra_partenza",
           "squadra_arrivo",
-          "acquisto_pressione");
+          "acquisto_pressione",
+          // step R6b
+          "trasporti_sicurezza",
+          "scorta_ondata",
+          "rientro_trasporti",
+          "attacco_subito");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
@@ -157,7 +162,16 @@ public final class RegistroDecisioni {
           "ATTESA_ZONA_ACCANTO",
           "SOSTEGNO",
           "SPOLA_COPPIE",
-          "SPOLA_TRUPPE");
+          "SPOLA_TRUPPE",
+          // step R6b
+          "SICURA",
+          "SCORTATA",
+          "ZONA_CAMBIATA",
+          "RINUNCIA",
+          "FERMO",
+          "RIENTRO",
+          "RIENTRO_PARZIALE",
+          "ATTACCO");
 
   private static final int MAX_MEMORIA = 5000;
   private static final Map<GameState, List<JsonObject>> MEMORIA =
@@ -243,6 +257,29 @@ public final class RegistroDecisioni {
               });
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Registro delle decisioni: " + e);
+    }
+  }
+
+  /**
+   * Step R6b: a row written from outside the AI (the autoplay's monitor: {@code attacco_subito}, an
+   * enemy attack on US ships seen around the enemy's battle step). Never throws.
+   */
+  public static void scriviEsterna(
+      final GameState data,
+      final String id,
+      final int round,
+      final String nation,
+      final String tipo,
+      final JsonArray alternative,
+      final String scelta,
+      final String codice,
+      final String frase) {
+    try {
+      scrivi(
+          data,
+          decisione(id, round, nation, tipo, alternative, scelta, codice, frase, new JsonObject()));
+    } catch (final RuntimeException e) {
+      ProLogger.warn("[Pro+] Registro, riga esterna: " + e);
     }
   }
 

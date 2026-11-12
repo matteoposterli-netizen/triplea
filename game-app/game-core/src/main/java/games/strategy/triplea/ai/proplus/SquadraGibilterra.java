@@ -326,6 +326,25 @@ public final class SquadraGibilterra {
       final Map<String, Integer> postiTipo,
       final int capienza,
       final Config cfg) {
+    return spola(pu, units, units, posti, attesa, scorta, costi, postiTipo, capienza, cfg);
+  }
+
+  /**
+   * C2 with step R6b's second factory (C3): {@code units} places in all, at most {@code maxNavi} of
+   * them for ships (the port's places: the escort and the transports).
+   */
+  static Map<String, Integer> spola(
+      final int pu,
+      final int units,
+      final int maxNavi,
+      final int posti,
+      final int attesa,
+      final boolean scorta,
+      final Map<String, Integer> costi,
+      final Map<String, Integer> postiTipo,
+      final int capienza,
+      final Config cfg) {
+    final int[] ships = {0};
     final Map<String, Integer> mix = new LinkedHashMap<>();
     final int[] left = {pu, units};
     if (scorta
@@ -333,6 +352,7 @@ public final class SquadraGibilterra {
         && left[0] >= costi.get(cfg.tipoScortaSpola())
         && left[1] >= 1) {
       compra(mix, cfg.tipoScortaSpola(), 1, costi, left);
+      ships[0]++;
     }
     final int loadCost = cfg.carico().stream().mapToInt(t -> costi.getOrDefault(t, 0)).sum();
     final int transportCost = costi.getOrDefault("transport", 0);
@@ -360,8 +380,10 @@ public final class SquadraGibilterra {
         }
       }
       if (transportCost > 0
+          && ships[0] < maxNavi
           && left[0] >= transportCost + loadCost
           && left[1] >= 1 + cfg.carico().size()) {
+        ships[0]++;
         compra(mix, "transport", 1, costi, left);
         cfg.carico().forEach(t -> compra(mix, t, 1, costi, left));
         seats += capienza;
@@ -647,6 +669,7 @@ public final class SquadraGibilterra {
       a.addProperty("pu_spesi", c.spesi());
       a.addProperty("posti_vuoti", Math.max(0, free - waiting));
       a.addProperty("capacita_fabbrica", places);
+      statoSquadra(data, player, a, squadron);
       alt.add(a);
       registra(
           data,
@@ -702,6 +725,24 @@ public final class SquadraGibilterra {
     prog.addProperty("pu_ordine", Impegno.costo(data, player, mix));
     SbarcoCoordinato.salva(data.getProperties(), alliance, st);
     return mix;
+  }
+
+  /**
+   * Step R6b (tables): the squadron at the start of the US turn (ships and planes by type, cargo
+   * excluded) and the US warships in the base zone.
+   */
+  private static void statoSquadra(
+      final GameState data,
+      final GamePlayer player,
+      final JsonObject a,
+      final List<Unit> squadron) {
+    a.add("squadra_ora", mappa(conteggio(squadron)));
+    final Territory base = data.getMap().getTerritoryOrNull(Config.get().zonaBase());
+    a.addProperty(
+        "navi_usa_in_91",
+        base == null
+            ? 0
+            : base.getMatches(Matches.unitIsOwnedBy(player).and(AlleatiR5.naveDaGuerra())).size());
   }
 
   private static void addPu(final JsonObject r6, final String key, final int n) {
@@ -809,25 +850,43 @@ public final class SquadraGibilterra {
         }
       }
     }
+    // step R6b (C1): the troops waiting counted as units and as seats, at the port and at the
+    // second factory (C3); they are the troops placed last turn, loaded in this turn's non-combat
     int waiting = 0;
+    int waitingUnits = 0;
+    final Territory second = TrasportiProtetti.secondaFabbrica(p);
+    final List<Territory> lands = new ArrayList<>();
     if (port != null) {
+      lands.add(port);
+    }
+    if (second != null) {
+      lands.add(second);
+    }
+    for (final Territory land : lands) {
       for (final Unit u :
-          port.getMatches(
+          land.getMatches(
               Matches.unitIsOwnedBy(player)
                   .and(Matches.unitIsLand())
                   .and(u -> program.contains(u.getId().toString())))) {
         waiting += u.getUnitAttachment().getTransportCost();
+        waitingUnits++;
       }
     }
+    final int extraPlaces = second == null ? 0 : Assedio.capacita(second);
     final int rest = Math.max(0, pu - supportCost);
     // C2: an escort for the transports bought now when none will be left at the port next turn
     // (the group at the port this turn sails with one of them)
-    final int escortsNextTurn = escortsAtPort - (transportsAtPort > 0 ? 1 : 0);
-    final boolean escortNear = escortsNextTurn > 0;
+    // step R6b (C2): an escort only when the arrival zone (91, held by the squadron) is not safe
+    final Territory arrival =
+        data.getMap().getTerritoryOrNull(TrasportiProtetti.Config.get().zonaRientro());
+    final boolean needEscort = TrasportiProtetti.serveScortaSpola(p, arrival);
+    final boolean escortNear = !needEscort;
+    final int portPlaces = Math.max(0, places - supportUnits);
     Map<String, Integer> shuttle =
         spola(
             rest,
-            Math.max(0, places - supportUnits),
+            portPlaces + extraPlaces,
+            portPlaces,
             free,
             waiting,
             false,
@@ -835,11 +894,12 @@ public final class SquadraGibilterra {
             seats,
             capacity,
             cfg);
-    if (!escortNear && (shuttle.containsKey("transport") || transportsAtPort > 0)) {
+    if (needEscort && (shuttle.containsKey("transport") || transportsAtPort > 0)) {
       shuttle =
           spola(
               rest,
-              Math.max(0, places - supportUnits),
+              portPlaces + extraPlaces,
+              portPlaces,
               free,
               waiting,
               true,
@@ -867,12 +927,16 @@ public final class SquadraGibilterra {
     a.addProperty("pu_sostegno", supportCost);
     a.addProperty("posti_liberi", free);
     a.addProperty("trasporti_fermi_vuoti", idleTransports);
-    a.addProperty("truppe_in_attesa", waiting);
+    a.addProperty("truppe_in_attesa", waitingUnits);
+    a.addProperty("posti_truppe_in_attesa", waiting);
+    a.addProperty("posti_seconda_fabbrica", extraPlaces);
+    a.addProperty("scorta_spola_necessaria", needEscort);
     a.addProperty("scorte_al_porto", escortsAtPort);
     a.addProperty("trasporti_al_porto", transportsAtPort);
     a.addProperty("scorta_spola_vicina", escortNear);
     a.add("spola", mappa(shuttle));
     a.addProperty("pu_spola", shuttleCost);
+    statoSquadra(data, player, a, squadron);
     alt.add(a);
     final String code =
         !support.isEmpty()
@@ -893,7 +957,7 @@ public final class SquadraGibilterra {
         String.format(
             Locale.ROOT,
             "round %d: %d PU (%.0f%% dopo il presidio caso c di %d): sostegno %s (%d PU, vittoria"
-                + " nemica %.1f%% -> %.1f%%), spola %s (%d PU; posti %d, truppe in attesa %d)",
+                + " nemica %.1f%% -> %.1f%%), spola %s (%d PU; posti %d, truppe in attesa %d unita' = %d posti)",
             round,
             pu,
             cfg.quotaPressione(),
@@ -905,6 +969,7 @@ public final class SquadraGibilterra {
             shuttle,
             shuttleCost,
             free,
+            waitingUnits,
             waiting),
         par);
     p.lines.add(
@@ -1214,7 +1279,7 @@ public final class SquadraGibilterra {
   }
 
   /** A route of {@code units} from {@code from} to {@code to} within their movement. */
-  private static Optional<Route> rotta(
+  static Optional<Route> rotta(
       final SbarcoCoordinato.Turno t,
       final Territory from,
       final Territory to,
@@ -1742,28 +1807,11 @@ public final class SquadraGibilterra {
       final JsonObject r6,
       final Territory base,
       final IMoveDelegate moveDel) {
-    int back = 0;
-    for (final Unit u : squadra(t.data, r6)) {
-      // the empty transports of the squadron come back too (after a landing they would stay
-      // idle next to the target); the loaded ones belong to the hub's waves
-      if ((Matches.unitIsSeaTransportButNotCombatSeaTransport().test(u)
-              && (u.isTransporting() || !u.getUnloaded().isEmpty()))
-          || Matches.unitIsAir().test(u)
-          || !Matches.unitHasMovementLeft().test(u)) {
-        continue;
-      }
-      final Territory at = t.luogoDi(u);
-      if (at == null || at.equals(base)) {
-        continue;
-      }
-      final Optional<Route> r = rotta(t, at, base, List.of(u));
-      if (r.isPresent()
-          && moveDel.performMove(new MoveDescription(List.of(u), r.get())).isEmpty()) {
-        back++;
-      }
-    }
+    // step R6b (B2-B3): escorts stay with their transports; groups come back stopping only in safe
+    // zones; empty transports with nothing to load at Gibraltar go back to the port
+    final int back = TrasportiProtetti.raduna(t, base, moveDel).size();
     if (back > 0) {
-      t.lines.add("  R6 squadra radunata in " + base.getName() + ": " + back + " navi rientrate");
+      t.lines.add("  R6b rientro verso " + base.getName() + ": " + back + " unita' mosse");
     }
     aereiAllaPortaerei(t, r6, base, moveDel);
   }

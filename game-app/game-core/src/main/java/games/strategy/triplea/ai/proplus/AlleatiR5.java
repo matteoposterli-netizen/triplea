@@ -931,6 +931,20 @@ public final class AlleatiR5 {
     if (!go) {
       return false;
     }
+    if (TrasportiProtetti.attivo(t.data, t.player)) {
+      // step R6b (A3): the transports protected, else no landing
+      t.scorteUsate.clear();
+      final Optional<TrasportiProtetti.Protezione> pr =
+          TrasportiProtetti.proteggi(t, g, plan, s, t.delProgramma(), "PRESA");
+      if (pr.isEmpty()) {
+        return false;
+      }
+      final JsonObject w =
+          onda(t, g, pr.get().stima(), pr.get().piano(), "programma", id, "GIBILTERRA");
+      TrasportiProtetti.salvaInOnda(w, pr.get());
+      t.st.add("ondata", w);
+      return true;
+    }
     t.st.add("ondata", onda(t, g, s, plan, "programma", id, "GIBILTERRA"));
     return true;
   }
@@ -971,7 +985,8 @@ public final class AlleatiR5 {
       Territory t,
       SbarcoCoordinato.Turno.Piano piano,
       SbarcoCoordinato.Turno.Stima stima,
-      double valore) {}
+      double valore,
+      @Nullable TrasportiProtetti.Protezione protezione) {}
 
   @Nullable
   private static Opzione migliore(
@@ -981,7 +996,7 @@ public final class AlleatiR5 {
       final JsonArray alt,
       final String label) {
     final Config cfg = Config.get();
-    Opzione best = null;
+    final List<Opzione> candidates = new ArrayList<>();
     for (final Territory x : targets) {
       t.filtro = units;
       final SbarcoCoordinato.Turno.Piano plan = t.piano(x, t.player, t.presidioBase());
@@ -1006,14 +1021,59 @@ public final class AlleatiR5 {
       a.addProperty("tenuta_stimata_pct_info", round1(100 - s.contrattaccoSolo()));
       a.addProperty("esito", go ? "SBARCO" : "MANCA_VITTORIA");
       alt.add(a);
-      if (go
-          && (best == null
-              || value > best.valore()
-              || (value == best.valore() && s.vittoria() > best.stima().vittoria()))) {
-        best = new Opzione(x, plan, s, value);
+      if (go) {
+        candidates.add(new Opzione(x, plan, s, value, null));
       }
     }
-    return best;
+    // the highest value first, then the win
+    candidates.sort(
+        Comparator.comparingDouble((Opzione o) -> -o.valore())
+            .thenComparingDouble(o -> -o.stima().vittoria()));
+    if (!TrasportiProtetti.attivo(t.data, t.player)) {
+      return candidates.isEmpty() ? null : candidates.get(0);
+    }
+    // step R6b (A3): the transports protected, else the next target by value
+    return primoProtetto(
+            candidates,
+            o -> {
+              final Optional<TrasportiProtetti.Protezione> pr =
+                  TrasportiProtetti.proteggi(t, o.t(), o.piano(), o.stima(), units, label);
+              for (final var e : alt) {
+                final JsonObject a = e.getAsJsonObject();
+                if (label.equals(a.has("gruppo") ? a.get("gruppo").getAsString() : "")
+                    && o.t().getName().equals(a.get("territorio").getAsString())) {
+                  a.addProperty(
+                      "trasporti",
+                      pr.map(TrasportiProtetti.Protezione::esito)
+                          .orElse(TrasportiProtetti.RINUNCIA));
+                }
+              }
+              return pr;
+            })
+        .map(
+            e ->
+                new Opzione(
+                    e.getKey().t(),
+                    e.getValue().piano(),
+                    e.getValue().stima(),
+                    e.getKey().valore(),
+                    e.getValue()))
+        .orElse(null);
+  }
+
+  /**
+   * Step R6b (A3): the first of {@code ordered} (highest value first) whose transports can be
+   * protected, with its protection; the ones given up before it are skipped.
+   */
+  static <T, P> Optional<Map.Entry<T, P>> primoProtetto(
+      final List<T> ordered, final java.util.function.Function<T, Optional<P>> protect) {
+    for (final T o : ordered) {
+      final Optional<P> p = protect.apply(o);
+      if (p.isPresent()) {
+        return Optional.of(Map.entry(o, p.get()));
+      }
+    }
+    return Optional.empty();
   }
 
   private static List<Territory> nemiciInGuerra(
@@ -1048,6 +1108,7 @@ public final class AlleatiR5 {
     final boolean africa = africaAperta(axisAfrica, !bonus.isEmpty());
     final JsonArray alt = new JsonArray();
     t.trasportiUsati.clear();
+    t.scorteUsate.clear();
     Opzione fastWave = null;
     if (africa) {
       final List<Territory> fastTargets = new ArrayList<>();
@@ -1060,6 +1121,10 @@ public final class AlleatiR5 {
       fastWave = migliore(t, fastTargets, prog.and(fast), alt, "VELOCI_AFRICA");
       if (fastWave != null) {
         fastWave.piano().viaggi().forEach(v -> t.trasportiUsati.add(v.trasporto()));
+        // step R6b (B1): the same ships cannot escort two waves
+        if (fastWave.protezione() != null) {
+          fastWave.protezione().scorta().forEach(u -> t.scorteUsate.add(u.getId().toString()));
+        }
       }
     }
     final Set<Unit> fastCargo =
@@ -1105,6 +1170,18 @@ public final class AlleatiR5 {
                   + ")";
         }
       }
+      // step R6b: a target given up for its exposed transports says so
+      final List<String> exposed = new ArrayList<>();
+      for (final var e : alt) {
+        final JsonObject a = e.getAsJsonObject();
+        if (a.has("trasporti")
+            && TrasportiProtetti.RINUNCIA.equals(a.get("trasporti").getAsString())) {
+          exposed.add(a.get("territorio").getAsString());
+        }
+      }
+      if (!exposed.isEmpty()) {
+        missing = "trasporti esposti dopo lo sbarco (rinuncia: " + String.join(", ", exposed) + ")";
+      }
       if (missing.isEmpty()) {
         missing =
             alt.isEmpty()
@@ -1142,8 +1219,7 @@ public final class AlleatiR5 {
     final List<Unit> out = new ArrayList<>();
     if (restWave != null) {
       t.supportoR6 = SquadraGibilterra.attivo(t.data, t.player);
-      t.st.add(
-          "ondata",
+      final JsonObject w =
           onda(
               t,
               restWave.t(),
@@ -1151,21 +1227,22 @@ public final class AlleatiR5 {
               restWave.piano(),
               africa ? "lenti" : "programma",
               id,
-              choice.orElse("")));
+              choice.orElse(""));
+      if (restWave.protezione() != null) {
+        TrasportiProtetti.salvaInOnda(w, restWave.protezione());
+      }
+      t.st.add("ondata", w);
       t.supportoR6 = false;
       out.addAll(restWave.piano().tutte());
     }
     if (fastWave != null) {
-      t.st.add(
-          restWave == null ? "ondata" : "ondata_africa",
+      final JsonObject w =
           onda(
-              t,
-              fastWave.t(),
-              fastWave.stima(),
-              fastWave.piano(),
-              "veloci",
-              id,
-              choice.orElse("")));
+              t, fastWave.t(), fastWave.stima(), fastWave.piano(), "veloci", id, choice.orElse(""));
+      if (fastWave.protezione() != null) {
+        TrasportiProtetti.salvaInOnda(w, fastWave.protezione());
+      }
+      t.st.add(restWave == null ? "ondata" : "ondata_africa", w);
       out.addAll(fastWave.piano().tutte());
     }
     return out;

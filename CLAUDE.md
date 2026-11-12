@@ -214,6 +214,12 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   vuoti con scorta), `Impegno` (PU 100%/80%, `quotaOperazione` + `KEY_QUOTA` = punto D, esclusione di UK/Russia/Francia), `ProPlusTuning`
   (`capitalGuardThreshold` 100 nei round di costruzione), `RegistroDecisioni`; `ProPlusAi.prepareData`/`attendiCopie` (punto 0);
   autoplay `ConfrontoR6`, `--quota-operazione`. Vedi "Squadra di Gibilterra (step R6)" e "Scelte di R6".
+- Step R6b TRASPORTI PROTETTI: `ai/proplus/TrasportiProtetti` (config `impegno.r6b`, stesso interruttore `squadra_gibilterra`), agganci in
+  `AlleatiR5` (`migliore`, `primoProtetto`, snodo e presa), `SbarcoCoordinato.Turno` (`zonaScarico`, `scorteUsate`, esecuzione delle
+  ondate), `SquadraGibilterra` (`raduna`, `pressione`, `spola` con `maxNavi`), `Programmi.Turno` (`attaccoRealistico`, spola R6b),
+  `Impegno` (seconda fabbrica negli ordini), `RegistroDecisioni` (tipi, motivi, `scriviEsterna`), `Stratega.registra` + `ProfiloStratega` +
+  `StrategistPanel` (caselle "Assedio" e "Squadra di Gibilterra"); autoplay `Monitor` (`attacco_subito`), `ConfrontoR6b` +
+  `r6-riferimento.json`. Vedi "Trasporti protetti (step R6b)" e "Scelte di R6b".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -2746,6 +2752,92 @@ R6", "scelto"; nessuno tarato) con il blocco informativo `mappa` (costi, capienz
     possono stare in due zone.
 16. **PRESA aggiunto ai motivi**: corregge anche R5 (alleati_r5), che non e' una voce di default; segnalato.
 17. **Punto 0 per tutte le voci Pro+**: le attese non cambiano le decisioni; Hard (`ProAi`) non e' toccata.
+
+### Trasporti protetti (step R6b)
+
+Corregge il programma USA di `squadra_gibilterra` (stesso interruttore, spento di default = comportamento di prima; acceso vale solo per
+gli USA, Regno Unito, Russia e Francia giocano come Hard; codice dell'Asse, livello LLM e tenute invariati). Classe nuova
+`ai/proplus/TrasportiProtetti` (config `impegno.r6b` di `stratega-llm.json`: `soglia_trasporti` 40, `round_pericolo` 3, `zona_rientro`
+91, `seconda_fabbrica` Central United States, `max_scorta_spola_per_turno` 1; nessun valore tarato). Agganci: `AlleatiR5.migliore`
+(bersagli in ordine di valore, `primoProtetto`), `AlleatiR5.snodo`/`presaGibilterra` (protezione salvata nell'ondata), `SbarcoCoordinato.Turno`
+(`zonaScarico` usata da `piano`, `scorteUsate`, ricontrollo e scorta nell'esecuzione delle due ondate), `SquadraGibilterra.raduna`
+(sostituita da `TrasportiProtetti.raduna`), `SquadraGibilterra.pressione` (scorta della spola solo se serve, seconda fabbrica, conto delle
+truppe), `Programmi.Turno` (`attaccoRealistico` che restituisce anche gli attaccanti, spola R6b: niente rientro dei vuoti nella spola, carico
+anche dalla seconda fabbrica, partenza in gruppo con `TrasportiProtetti.naviga`), `Impegno` (ordine `tipi_programma_extra` +
+`fabbrica_programma_extra` = categorie "programma <tipo> seconda fabbrica" con fabbrica propria).
+- **A1 regola unica** (`TrasportiProtetti.valuta`): difensori a fine turno = unita' navali alleate della zona (meno quelle che partono) +
+  navi in arrivo (il carico non conta) + aerei alleati sulle portaerei della zona e quelli che possono fare scramble verso di lei
+  (`AlleatiR5.aereiInDifesa`); attacco = TUTTE le unita' nemiche che raggiungono la zona (`Programmi.Turno.attaccoPieno`: opzioni
+  d'attacco di Hard di tutti i nemici, SENZA la quota A3 del contrattacco realistico di R5) col calcolatore di Hard; sicura con vittoria
+  nemica <= 40, <= 20 se nella zona
+  unita' USA hanno perso TUV in difesa negli ultimi 3 round (memoria del pericolo delle soste sicure, `pericolo`). Vale per ondate,
+  spola e rientri; le truppe a terra restano sacrificabili.
+- **A3/B1 ondate** (`proteggi`, all'acquisto USA nello snodo e nella presa di Gibilterra): per il bersaglio di valore piu' alto con
+  vittoria >= 70 prima la zona di scarico del piano, poi le altre zone confinanti senza nemici (in ordine di nome); in ogni zona il piano
+  rifatto con quella sola zona (`zonaScarico`), la vittoria dello sbarco rifatta se il carico cambia (sotto 70 la zona salta), i trasporti
+  con le navi che bombardano da li', poi la scorta minima: una nave da guerra della squadra alla volta (portaerei escluse; navi che
+  raggiungono la zona nel turno, non gia' scorta di un'altra ondata ne' di vuoti in rientro), quella che abbassa di piu' la vittoria nemica
+  (un candidato per tipo). Esiti SICURA / SCORTATA / ZONA_CAMBIATA; nessuna zona sicura = RINUNCIA e si passa al bersaglio successivo per
+  valore (`AlleatiR5.primoProtetto`). Nel combattimento (`primaDelloSbarco`) la zona e' ricontrollata sul tabellone reale (non sicura =
+  ondata annullata, RINUNCIA); dopo lo scarico (`dopoLoSbarco`) la scorta va nella zona e resta li' con i trasporti (voce `r6b.scorte`
+  nello stato di R3a).
+- **B2-B3 rientro** (`raduna`, non combattimento USA con la squadra arrivata, al posto del raduno di R6): le scorte del turno restano;
+  altrove, per zona, navi da guerra della squadra + trasporti vuoti del programma + scorte della spola partono insieme verso la 91 e si
+  fermano nella zona piu' lontana raggiungibile dove A1 vale (nessuna = fermi); le zone con trasporti carichi del programma non sono
+  toccate (le navi restano col carico); nelle zone di Gibilterra (91, 92) i vuoti restano se a Gibilterra aspettano truppe del programma
+  (le carica l'ondata del turno dopo), altrimenti tornano al porto con soste sicure.
+- **C1 truppe ferme al porto, causa**: nei 40 log f1 di R6 le truppe del programma non restano al porto (dopo il carico del turno 0,8 in
+  media; "caricate" = "pronte" quasi sempre). Gli 11-15 del registro erano il campo `truppe_in_attesa` di `acquisto_pressione`: contato in
+  POSTI (fanteria 2, artiglieria 3: 3+3 unita' = 15) e all'acquisto, cioe' PRIMA del carico dello stesso turno (sono le truppe piazzate al
+  turno prima); i 2-3 trasporti vuoti erano quelli comprati con loro. Unita' di Hard escluse gia' in R6 (filtro per id). Corretto il conto:
+  `truppe_in_attesa` in unita', `posti_truppe_in_attesa` in posti, nel registro `spola` `truppe_rimaste_al_porto` e
+  `trasporti_vuoti_programma_al_porto` DOPO il carico. Il blocco vero della spola in R6 era altrove: 650 "gruppo fermo in 91" (vuoti
+  senza scorta fuori squadra) e 82 "gruppo fermo in 101" in 40 partite.
+- **C2 spola**: i trasporti carichi del programma di una zona partono tutti insieme con le navi da guerra del programma di quella zona
+  (anche quelle della squadra rimaste al porto) verso la 91 (`naviga`, soste solo sicure); scorta comprata (1 cacciatorpediniere) solo se
+  la 91 non e' sicura per un trasporto con la squadra che c'e' (`serveScortaSpola`).
+- **C3 PU in coppie fino all'80%**: il limite era il posto (10 unita' al porto: 3 coppie + scorta); le truppe che non entrano al porto vanno
+  nella seconda fabbrica (Central United States, confinante con la 101) e caricano da li' (`spola` con `maxNavi` = posti del porto).
+- **C4**: i rinforzi di R4 (corazzata, caccia, trasporti carichi) partono a R5 con la spola in un solo gruppo (navi della squadra al porto
+  nel gruppo dei carichi); gli aerei raggiungono la portaerei come in R6.
+- **D pannello**: caselle "Assedio" e "Squadra di Gibilterra" nel pannello Stratega (`StrategistPanel`), salvate nel profilo
+  (`ProfiloStratega.assedio`/`squadraGibilterra`); `Stratega.registra` accende `impegno`+`assedio` per l'Asse e `impegno`+`squadra_gibilterra`
+  per gli Alleati (salvo spenti esplicitamente nella partita).
+- **Registro**: tipi nuovi `trasporti_sicurezza` (ondata, ricontrollo, partenza della spola: zona, difensori e attacco realistico per
+  tipo, vittoria nemica, soglia, esito), `scorta_ondata` (navi andate e rimaste nella 91), `rientro_trasporti` (RIENTRO, RIENTRO_PARZIALE,
+  FERMO), `attacco_subito` (scritto dal `Monitor` dell'autoplay intorno al passo di battaglia del nemico: zona, attaccanti, difensori,
+  perdite dei due lati per tipo, trasporti USA persi carichi/vuoti, carico perso; `RegistroDecisioni.scriviEsterna`; nelle partite di
+  Matteo senza autoplay NON c'e'). Nelle righe `squadra_costruzione`/`acquisto_pressione` anche `squadra_ora` e `navi_usa_in_91`.
+- **Autoplay**: `ConfrontoR6b` scrive la sottosezione **"R6b"** di "Partite complete" al posto di "R6" quando il registro ha righe
+  `trasporti_sicurezza`; sotto ogni configurazione la riga "(R6)" letta da `proplus-autoplay/src/main/resources/r6-riferimento.json`,
+  calcolato con lo stesso codice sulle 200 partite di R6 (proprieta' di sistema `r6b.esporta=<file>` per rigenerarlo con `confronto`).
+  `[completa]` = stesse 5 configurazioni, semi 1261-1300.
+- Test: `TrasportiProtettiTest` (11, Global 1940).
+
+### Scelte di R6b (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Attacco pieno, non la quota A3**: prima versione con il contrattacco realistico di R5 (quota A3); nella prova locale f1 seme 1261 lo
+   sbarco su Sardinia (zona 95) era stimato al 8,2% di vittoria nemica (contati 1 bombardiere + 1 caccia) e l'Italia ha attaccato con
+   bombardiere, 2 caccia e sottomarino affondando corazzata, incrociatore e 3 trasporti. Corretto prima del push: tutte le unita' in
+   portata (`attaccoPieno`). Nella seconda prova (14 round) 0 trasporti del programma persi fino al R13, 2 rinunce, 1 zona cambiata.
+   Scartato: tenere la quota (stima ottimista proprio dove i trasporti venivano affondati).
+2. **Memoria del pericolo** riusata dalle soste sicure (3 round, soglia dimezzata a 20) solo per le perdite USA in difesa nella zona;
+   scartato: perdite di qualsiasi alleato.
+3. **Portaerei mai scorta** (i suoi caccia devono atterrarci dopo il sostegno allo sbarco); scorta = cacciatorpediniere, incrociatori,
+   corazzate, sottomarini della squadra. Un candidato per tipo a ogni passo (la stima e' cara).
+4. **Zone alternative** in ordine di nome dopo quella del piano, anche con scorta (A3 punto 2 letto come "zona sicura, se serve con la
+   scorta"); la vittoria dello sbarco ricalcolata se il carico cambia.
+5. **Rinuncia a un bersaglio** = ordine per valore (poi vittoria) tra quelli >= 70; nessun bersaglio protetto = accumulo come in R5.
+6. **Ricontrollo nel combattimento** con la scorta salvata: l'ondata e' annullata se nel frattempo la zona non e' piu' sicura.
+7. **B2 letterale**: una nave che scorta vuoti non ancora rientrati non puo' scortare una nuova ondata (meno navi disponibili, ma
+   trasporti mai soli).
+8. **Vuoti nella 92** con truppe a Gibilterra restano (caricano dallo snodo); senza truppe tornano al porto come quelli della 91.
+9. **Seconda fabbrica** per le sole truppe (le navi restano nella fabbrica del porto: un trasporto messo nella 89 dalla fabbrica di Central
+   United States non sarebbe nelle zone del porto). Scartato: comprare meno coppie (la quota resterebbe sotto l'80%).
+10. **attacco_subito dal monitor dell'autoplay**: il gioco non ha un aggancio durante i turni nemici che dia gli attaccanti per tipo e le
+    perdite (i registri di battaglia hanno solo i TUV); scartato: modificare il motore o l'AI dell'Asse (vietato).
+11. **Riga "(R6)" delle tabelle** da un file di riferimento calcolato offline con lo stesso codice sulle partite di R6 (gli stessi numeri
+    del riepilogo R6 dove la misura esisteva; "-" dove R6 non aveva il dato, es. attacchi subiti, rientri, composizione a R4/R5).
 
 ## Come configurare lo stratega
 
@@ -5356,3 +5448,20 @@ concluse: 198 con un vincitore, 2 stalli al tetto di 60 round (Hard vs Hard, sem
 - **Costo**: trasporti USA persi 22,8 a partita (Hard 8,9), del programma 27,4 trasporti e 28,7 unita' perse in mare; spola 864 PU a
   partita, sostegno quasi mai (vittoria nemica sulla squadra < 1%). Il guadagno di sbarchi e' pagato dalle perdite della spola.
 - Quota dell'Asse 80 contro 70: +5 vittorie (non distinguibile, p 0,34), reddito finale Asse 69 contro 60.
+
+### Step R6b TRASPORTI PROTETTI — regola unica per i trasporti, scorta delle ondate, rientro, spola, pannello (2026-11-12)
+
+Vedi "Trasporti protetti (step R6b)" e "Scelte di R6b". Motivo (80 partite di R6, run 43264777394): 30,5 trasporti del programma persi a
+partita, quasi tutti vuoti nelle zone di sbarco del Mediterraneo; squadra ferma nella 91; vuoti mai rientrati (650 "gruppo fermo in 91"
+in 40 partite f1); quota PU dal R5 al 60%.
+- File nuovi: `ai/proplus/TrasportiProtetti`, test `TrasportiProtettiTest` (11); autoplay `ConfrontoR6b` + risorsa `r6-riferimento.json`.
+  Modificati: `AlleatiR5`, `SbarcoCoordinato`, `SquadraGibilterra`, `Programmi`, `Impegno`, `RegistroDecisioni`, `Stratega`,
+  `ProfiloStratega`, `stratega-llm.json` (`impegno.r6b`), `StrategistPanel` (game-headed); autoplay `Monitor` (`attacco_subito`),
+  `ConfrontoCompleta`; workflow `[completa]` (semi 1261-1300).
+- Test locali: game-core 3252 (1 saltato, 1 fallito: `ContentDownloaderIntegrationTest`, scarica da internet, bloccato dal proxy della
+  sandbox, non toccato), `:ai:test` 13, `:game-headed:test` 94, `:proplus-autoplay:test` 46: verdi (golden Hard, `NudoHardTest` con
+  "Stratega senza chiave = Hard", `DiaryNeutralityTest`, `CampagnaOmbraTest` compresi).
+- Prove locali (Europa 1940, senza chiave, f1 seme 1261): prima prova 10 round, nessun errore, trovato e corretto il difetto della quota A3
+  (scelta 1); seconda prova 14 round: 5 ondate (Southern France x2, Sardinia, Sicily, Normandy Bordeaux), 13 controlli SICURA, 2 RINUNCIA,
+  1 ZONA_CAMBIATA (Normandy Bordeaux da 110), 8 rientri dei vuoti verso la 91 (6 arrivati), 1 rientro al porto; trasporti USA persi 0 fino
+  al R13 (R14: 3 trasporti in 98, non del programma); spola 3 coppie a turno (42 PU su ~50 del programma: la quarta coppia non entra nei PU).

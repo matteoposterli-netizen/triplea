@@ -64,6 +64,12 @@ final class StrategistPanel {
   /** Step R2b: the commitment ("Impegno") of the "Pro+ Stratega LLM" player (user profile). */
   @Getter private final javax.swing.JCheckBox impegno = new javax.swing.JCheckBox();
 
+  /** Step R6b (D): the Axis' siege ("Assedio") with the commitment (user profile). */
+  @Getter private final javax.swing.JCheckBox assedio = new javax.swing.JCheckBox();
+
+  /** Step R6b (D): the Allies' Gibraltar squadron with the commitment (user profile). */
+  @Getter private final javax.swing.JCheckBox squadraGibilterra = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -144,6 +150,16 @@ final class StrategistPanel {
         "<html>campagna via terra che AGISCE (step R2b, sperimentale): un obiettivo per nazione,"
             + " 70% dei PU, instradamento, attacchi forzati; vale per le partite nuove</html>");
     panel.add(row("Impegno:", impegno));
+    assedio.setSelected(profile.assedio());
+    assedio.setText(
+        "<html>Asse: assedio di Mosca e Africa italiana (step R4, sperimentale); accende anche"
+            + " Impegno per l'Asse; vale per le partite nuove</html>");
+    panel.add(row("Assedio:", assedio));
+    squadraGibilterra.setSelected(profile.squadraGibilterra());
+    squadraGibilterra.setText(
+        "<html>Alleati: squadra USA a Gibilterra con trasporti protetti (step R6b, sperimentale);"
+            + " accende anche Impegno per gli Alleati; vale per le partite nuove</html>");
+    panel.add(row("Squadra di Gibilterra:", squadraGibilterra));
     panel.add(
         row(
             "",
@@ -164,6 +180,8 @@ final class StrategistPanel {
     llmMode.ifPresent(profile::setModalitaPredefinita);
     profile.setTettoPartitaUsd(((Number) usdCap.getValue()).doubleValue());
     profile.setImpegno(impegno.isSelected());
+    profile.setAssedio(assedio.isSelected());
+    profile.setSquadraGibilterra(squadraGibilterra.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

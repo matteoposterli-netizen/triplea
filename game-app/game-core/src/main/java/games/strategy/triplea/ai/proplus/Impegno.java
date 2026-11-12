@@ -416,6 +416,17 @@ public final class Impegno {
         }
         factories.add(o.get("fabbrica_programma").getAsString());
       }
+      // step R6b (C3): the shuttle's troops at the second factory
+      if (o.has("tipi_programma_extra")) {
+        for (final var e : o.getAsJsonObject("tipi_programma_extra").entrySet()) {
+          mandatory.add(
+              new ProPurchaseOrders.Mandatory(
+                  "programma " + e.getKey() + " seconda fabbrica",
+                  List.of(e.getKey()),
+                  e.getValue().getAsInt(),
+                  o.get("fabbrica_programma_extra").getAsString()));
+        }
+      }
       if (mandatory.isEmpty()) {
         return Optional.empty();
       }
@@ -1031,7 +1042,33 @@ public final class Impegno {
         SbarcoCoordinato.registraProgramma(
             data, player, turn.has("programma") ? turn.getAsJsonObject("programma") : null);
         if (!mix.isEmpty() && p.porto() != null) {
-          order.add("tipi_programma", mappa(mix));
+          // step R6b (C3): the shuttle's troops that do not fit at the port go to the second
+          // factory (next to the port's zone: they load from there)
+          final Territory second =
+              r6 && !SquadraGibilterra.costruzione(round, SquadraGibilterra.Config.get())
+                  ? TrasportiProtetti.secondaFabbrica(p)
+                  : null;
+          final Map<String, Integer> extra = new LinkedHashMap<>();
+          if (second != null) {
+            final Set<String> land = new HashSet<>();
+            data.getUnitTypeList()
+                .getAllUnitTypes()
+                .forEach(
+                    ut -> {
+                      if (!ut.getUnitAttachment().isSea() && !ut.getUnitAttachment().isAir()) {
+                        land.add(ut.getName());
+                      }
+                    });
+            extra.putAll(TrasportiProtetti.eccedenza(mix, Assedio.capacita(p.porto()), land));
+          }
+          final Map<String, Integer> atPort = new LinkedHashMap<>(mix);
+          extra.forEach((k, v) -> atPort.merge(k, -v, Integer::sum));
+          atPort.values().removeIf(v -> v <= 0);
+          order.add("tipi_programma", mappa(atPort));
+          if (!extra.isEmpty()) {
+            order.add("tipi_programma_extra", mappa(extra));
+            order.addProperty("fabbrica_programma_extra", second.getName());
+          }
           order.addProperty("fabbrica_programma", p.porto().getName());
           final Map<String, Integer> costs = costiAcquisto(data, player);
           for (final var e : mix.entrySet()) {

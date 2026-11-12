@@ -122,12 +122,32 @@ public final class Stratega {
     }
     // step R2b: the commitment turned on in the user's profile (Pro+ settings, "Impegno"), once
     // per game and alliance, unless the game turned it off explicitly
-    final String impegno = StrategaInterruttori.IMPEGNO.id();
-    if (!StrategaInterruttori.accesi(props, alliance.get()).contains(impegno)
-        && !StrategaInterruttori.spenti(props, alliance.get()).contains(impegno)
-        && games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega.carica().impegno()) {
-      final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
-      on.add(impegno);
+    final games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega profile =
+        games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega.carica();
+    final List<StrategaInterruttori> wanted = new ArrayList<>();
+    if (profile.impegno()) {
+      wanted.add(StrategaInterruttori.IMPEGNO);
+    }
+    // step R6b (D): "Assedio" (Axis) and "Squadra di Gibilterra" (Allies) turn on their switch
+    // together with the commitment
+    if ("Axis".equals(alliance.get()) && profile.assedio()) {
+      wanted.add(StrategaInterruttori.IMPEGNO);
+      wanted.add(StrategaInterruttori.ASSEDIO);
+    }
+    if ("Allies".equals(alliance.get()) && profile.squadraGibilterra()) {
+      wanted.add(StrategaInterruttori.IMPEGNO);
+      wanted.add(StrategaInterruttori.SQUADRA_GIBILTERRA);
+    }
+    final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
+    boolean changed = false;
+    for (final StrategaInterruttori w : wanted) {
+      if (!on.contains(w.id())
+          && !StrategaInterruttori.spenti(props, alliance.get()).contains(w.id())) {
+        on.add(w.id());
+        changed = true;
+      }
+    }
+    if (changed) {
       StrategaInterruttori.accendi(props, alliance.get(), String.join(",", on));
     }
   }

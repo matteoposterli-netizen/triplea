@@ -117,6 +117,35 @@ public final class ProfiloStratega {
     values.setProperty(KEY_IMPEGNO, on ? "si" : "no");
   }
 
+  private static final String KEY_ASSEDIO = "assedio";
+  private static final String KEY_SQUADRA = "squadra_gibilterra";
+
+  /** Step R6b (D): "Assedio" for the Axis (turns on "impegno" and "assedio"). Off unless set. */
+  public boolean assedio() {
+    return si(KEY_ASSEDIO);
+  }
+
+  public void setAssedio(final boolean on) {
+    values.setProperty(KEY_ASSEDIO, on ? "si" : "no");
+  }
+
+  /**
+   * Step R6b (D): "Squadra di Gibilterra" for the Allies (turns on "impegno" and
+   * "squadra_gibilterra"). Off unless set.
+   */
+  public boolean squadraGibilterra() {
+    return si(KEY_SQUADRA);
+  }
+
+  public void setSquadraGibilterra(final boolean on) {
+    values.setProperty(KEY_SQUADRA, on ? "si" : "no");
+  }
+
+  private boolean si(final String key) {
+    final String v = values.getProperty(key, "").strip();
+    return "si".equalsIgnoreCase(v) || "true".equalsIgnoreCase(v);
+  }
+
   /** The key saved for {@code f}. */
   public Optional<String> chiaveSalvata(final Fornitore f) {
     final String k = values.getProperty(KEY_PREFIX + f.id(), "").strip();

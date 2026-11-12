@@ -22,6 +22,7 @@ import games.strategy.triplea.delegate.data.BattleRecords;
 import games.strategy.triplea.util.TuvCostsCalculator;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -214,6 +215,9 @@ final class Monitor {
     runningStep = step.getName();
     runningPlayer = Optional.ofNullable(step.getPlayerId()).map(GamePlayer::getName).orElse("-");
     r4.beforeStep(runningStep);
+    if (GameStep.isBattleStepName(runningStep)) {
+      attacchiPrima();
+    }
     if (!runningPlayer.equals(turnPlayer)) {
       turnPlayer = runningPlayer;
       ownersAtTurnStart.clear();
@@ -248,6 +252,9 @@ final class Monitor {
     recordLostTransports(lastRound);
     recordDelayTools(lastRound);
     r4.afterStep(runningStep, runningPlayer, lastRound);
+    if (GameStep.isBattleStepName(runningStep)) {
+      attacchiDopo(lastRound);
+    }
     runningStep = "";
     final int round = data.getSequence().getRound();
     final GameStep step = data.getSequence().getStep();
@@ -585,6 +592,144 @@ final class Monitor {
           l.addProperty("fase", phase.get(territory));
           landings.add(l);
         });
+  }
+
+  // --------------------------------------------------------- step R6b: attacks on US ships
+
+  /** Step R6b: sea zones with US units and units of the player in turn before its battle step. */
+  private final Map<Territory, List<Unit>[]> pendingAttacks = new LinkedHashMap<>();
+
+  private int attackSeq;
+
+  /** Step R6b: the transports loaded when the battle step started. */
+  private final Set<Unit> loadedAtStart = new HashSet<>();
+
+  /** Step R6b: the enemy's attackers and the US side's defenders where a sea battle is due. */
+  @SuppressWarnings("unchecked")
+  private void attacchiPrima() {
+    pendingAttacks.clear();
+    loadedAtStart.clear();
+    final GamePlayer usa = data.getPlayerList().getPlayerId("Americans");
+    final GamePlayer attacker = data.getPlayerList().getPlayerId(runningPlayer);
+    if (usa == null || attacker == null || !data.getRelationshipTracker().isAtWar(attacker, usa)) {
+      return;
+    }
+    for (final Territory z : data.getMap().getTerritories()) {
+      if (!z.isWater() || !z.anyUnitsMatch(Matches.unitIsOwnedBy(usa))) {
+        continue;
+      }
+      final List<Unit> att = z.getMatches(Matches.isUnitAllied(attacker));
+      if (att.isEmpty()) {
+        continue;
+      }
+      final List<Unit> def = z.getMatches(Matches.isUnitAllied(usa));
+      def.stream().filter(Unit::isTransporting).forEach(loadedAtStart::add);
+      pendingAttacks.put(z, new List[] {new ArrayList<>(att), new ArrayList<>(def)});
+    }
+  }
+
+  /** Step R6b: after the battle step, one row {@code attacco_subito} per zone fought. */
+  private void attacchiDopo(final int round) {
+    if (pendingAttacks.isEmpty()) {
+      return;
+    }
+    final Set<Territory> fought = new HashSet<>();
+    final var all = data.getBattleRecordsList();
+    final BattleRecords records = all == null ? null : all.getBattleRecordsMapCopy().get(round);
+    if (records != null) {
+      for (final BattleRecord r : BattleRecords.getAllRecords(records)) {
+        final Territory site = field(r, "battleSite");
+        if (site != null) {
+          fought.add(site);
+        }
+      }
+    }
+    for (final var e : pendingAttacks.entrySet()) {
+      final Territory z = e.getKey();
+      final List<Unit> att = e.getValue()[0];
+      final List<Unit> def = e.getValue()[1];
+      final Set<Unit> now = new HashSet<>(z.getUnits());
+      final List<Unit> attLost = att.stream().filter(u -> !now.contains(u)).toList();
+      final List<Unit> defLost = def.stream().filter(u -> !now.contains(u)).toList();
+      if (!fought.contains(z) && attLost.isEmpty() && defLost.isEmpty()) {
+        continue;
+      }
+      final JsonObject a = new JsonObject();
+      a.addProperty("zona", z.getName());
+      a.addProperty("attaccante", runningPlayer);
+      a.add("attaccanti", byType(att));
+      a.add("difensori", byType(def));
+      a.add(
+          "difensori_usa",
+          byType(def.stream().filter(u -> "Americans".equals(u.getOwner().getName())).toList()));
+      a.add("perdite_attaccante", byType(attLost));
+      a.add("perdite_difensore", byType(defLost));
+      a.add(
+          "perdite_usa",
+          byType(
+              defLost.stream().filter(u -> "Americans".equals(u.getOwner().getName())).toList()));
+      a.addProperty("tuv_perso_attaccante", tuvOf(attLost));
+      a.addProperty("tuv_perso_difensore", tuvOf(defLost));
+      a.addProperty(
+          "trasporti_usa_persi",
+          defLost.stream()
+              .filter(u -> "Americans".equals(u.getOwner().getName()))
+              .filter(Matches.unitIsSeaTransportButNotCombatSeaTransport())
+              .count());
+      int loadedLost = 0;
+      int emptyLost = 0;
+      int cargoLost = 0;
+      for (final Unit u : defLost) {
+        if (!"Americans".equals(u.getOwner().getName())) {
+          continue;
+        }
+        if (Matches.unitIsSeaTransportButNotCombatSeaTransport().test(u)) {
+          if (loadedAtStart.contains(u)) {
+            loadedLost++;
+          } else {
+            emptyLost++;
+          }
+        } else if (Matches.unitIsLand().test(u)) {
+          cargoLost++;
+        }
+      }
+      a.addProperty("trasporti_usa_persi_carichi", loadedLost);
+      a.addProperty("trasporti_usa_persi_vuoti", emptyLost);
+      a.addProperty("carico_usa_perso", cargoLost);
+      final JsonArray alt = new JsonArray();
+      alt.add(a);
+      attackSeq++;
+      games.strategy.triplea.ai.proplus.RegistroDecisioni.scriviEsterna(
+          data,
+          "R" + round + "-Americans-attacco_subito-m" + attackSeq,
+          round,
+          "Americans",
+          "attacco_subito",
+          alt,
+          z.getName(),
+          "ATTACCO",
+          runningPlayer + " attacca navi USA in " + z.getName());
+    }
+    pendingAttacks.clear();
+  }
+
+  private static JsonObject byType(final Collection<Unit> units) {
+    final Map<String, Integer> m = new TreeMap<>();
+    units.forEach(u -> m.merge(u.getType().getName(), 1, Integer::sum));
+    final JsonObject o = new JsonObject();
+    m.forEach(o::addProperty);
+    return o;
+  }
+
+  private int tuvOf(final Collection<Unit> units) {
+    int sum = 0;
+    for (final Unit u : units) {
+      sum +=
+          costs
+              .getOrDefault(u.getOwner().getName(), Map.of())
+              .getOrDefault(u.getType().getName(), 0);
+    }
+    return sum;
   }
 
   /** Step 3d-1-bis: the transports gone since the last step, per owner, in {@code round}. */

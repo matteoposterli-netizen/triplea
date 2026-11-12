@@ -1048,6 +1048,14 @@
         },
         "origine": "dalla mappa (ww2eur40_2nd_edition.xml, verificato con uno script sull'XML): informazione, il codice legge costi e capienze dalla partita"
       }
+    },
+    "r6b": {
+      "nota": "Step R6b TRASPORTI PROTETTI. Stesso interruttore squadra_gibilterra (spento = comportamento di oggi), solo USA. Nessun trasporto mosso dal programma finisce il turno in una zona di mare dove l'attacco realistico del nemico vince oltre la soglia contro i difensori (navi da guerra alleate a fine turno, aerei che decollano in difesa, aerei sulle portaerei); scorta minima dalla squadra, poi zona di scarico alternativa, poi rinuncia; rientro dei vuoti con la scorta; spola che parte in gruppo se la zona d'arrivo e' sicura; seconda fabbrica per le truppe della spola. Nessun valore tarato.",
+      "soglia_trasporti": {"valore": 40, "origine": "richiesta dello step R6b (A1): vittoria nemica <= 40%"},
+      "round_pericolo": {"valore": 3, "origine": "dalle soste sicure (OperazioniAnfibie.DANGER_ROUNDS): perdite USA in difesa nella zona negli ultimi 3 round => soglia dimezzata"},
+      "zona_rientro": {"valore": "91 Sea Zone", "origine": "richiesta dello step R6b (B2): scorta e trasporti rientrano nella zona 91"},
+      "seconda_fabbrica": {"valore": "Central United States", "origine": "dalla mappa: fabbrica major (10 unita') confinante con la 101 del porto; le truppe della spola caricano da li' direttamente sui trasporti nella 101 (C3)"},
+      "max_scorta_spola_per_turno": {"valore": 1, "origine": "scelto: un cacciatorpediniere solo se una zona d'arrivo o di sosta della spola non e' sicura (C2)"}
     }
   },
   "difesa": {

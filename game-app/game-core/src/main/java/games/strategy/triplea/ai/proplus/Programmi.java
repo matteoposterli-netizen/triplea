@@ -628,6 +628,35 @@ public final class Programmi {
      * {@code ours}.
      */
     double vittoriaNemicaMare(final Territory z, final Collection<Unit> ours) {
+      final List<Unit> defenders =
+          new ArrayList<>(z.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsSea())));
+      ours.stream().filter(u -> !defenders.contains(u)).forEach(defenders::add);
+      return attaccoRealistico(z, defenders).vittoria();
+    }
+
+    /** Step R6b: the realistic counterattack on {@code z} and its win against {@code defenders}. */
+    record Attacco(double vittoria, List<Unit> attaccanti) {}
+
+    /**
+     * The enemy's win% in {@code z} with the realistic counterattack (the enemy ships and planes in
+     * reach, the commitment share A3, most expensive first) against exactly {@code defenders}.
+     */
+    Attacco attaccoRealistico(final Territory z, final List<Unit> defenders) {
+      return attacco(
+          z,
+          defenders,
+          StimaUnica.impegno(data, alliance, z, StimaUnica.TipoBersaglio.CONQUISTA).frazione());
+    }
+
+    /**
+     * Step R6b (A1): every enemy unit that can reach {@code z} (no commitment share) against
+     * exactly {@code defenders}.
+     */
+    Attacco attaccoPieno(final Territory z, final List<Unit> defenders) {
+      return attacco(z, defenders, 1.0);
+    }
+
+    private Attacco attacco(final Territory z, final List<Unit> defenders, final double share) {
       if (enemy == null) {
         enemy = new ProTerritoryManager(calc, proData);
         final List<Territory> all = new ArrayList<>();
@@ -644,12 +673,10 @@ public final class Programmi {
       }
       final ProTerritory max = enemy.getEnemyAttackOptions().getMax(z);
       if (max == null || max.getMaxUnits().isEmpty()) {
-        return 0;
+        return new Attacco(0, List.of());
       }
       final List<Unit> all = new ArrayList<>(max.getMaxUnits());
       all.sort(Comparator.comparingDouble((Unit u) -> -c.tuv(List.of(u))));
-      final double share =
-          StimaUnica.impegno(data, alliance, z, StimaUnica.TipoBersaglio.CONQUISTA).frazione();
       final double total = c.tuv(all);
       final List<Unit> counter = new ArrayList<>();
       double sum = 0;
@@ -660,14 +687,12 @@ public final class Programmi {
         counter.add(u);
         sum += c.tuv(List.of(u));
       }
-      final List<Unit> defenders =
-          new ArrayList<>(z.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsSea())));
-      ours.stream().filter(u -> !defenders.contains(u)).forEach(defenders::add);
       if (defenders.isEmpty()) {
-        return 100;
+        return new Attacco(100, counter);
       }
-      return calc.calculateBattleResults(proData, z, counter, defenders, List.of())
-          .getWinPercentage();
+      return new Attacco(
+          calc.calculateBattleResults(proData, z, counter, defenders, List.of()).getWinPercentage(),
+          counter);
     }
 
     private boolean sicuroMare(final Territory z, final Collection<Unit> ours) {
@@ -712,7 +737,8 @@ public final class Programmi {
       // 1 the empty ones back to the port (from the shuttle's zones or within 2 zones of it)
       for (final Unit tr : trasporti()) {
         final Territory z = dove(tr);
-        if (stayAtHub && baseZones.contains(z) && !tr.isTransporting()) {
+        // step R6b (B2-B3): the empty transports come back with the squadron's gathering
+        if (r6 || (stayAtHub && baseZones.contains(z) && !tr.isTransporting())) {
           continue;
         }
         if (z == null
@@ -732,6 +758,17 @@ public final class Programmi {
       }
       // 2 load at the port (transports there, also those just arrived)
       final List<Unit> waiting = new ArrayList<>(inAttesa(port, garrison));
+      // step R6b (C3): the troops of the second factory load from there too (next to the port's
+      // zone)
+      final Map<Unit, Territory> origin = new LinkedHashMap<>();
+      waiting.forEach(u -> origin.put(u, port));
+      final Territory second = r6 ? TrasportiProtetti.secondaFabbrica(this) : null;
+      if (second != null) {
+        for (final Unit u : inAttesa(second, 0)) {
+          origin.put(u, second);
+          waiting.add(u);
+        }
+      }
       waiting.removeIf(u -> !Matches.unitHasMovementLeft().test(u));
       if (usa() && SnodoAlleati.programmaPerId(data, player)) {
         // step R4 (B3): the shuttle carries only the landing program's units (followed by id)
@@ -762,9 +799,13 @@ public final class Programmi {
             if (cost > room) {
               continue;
             }
+            final Territory from = origin.getOrDefault(u, port);
+            if (!data.getMap().getNeighbors(from).contains(z)) {
+              continue;
+            }
             final Optional<String> error =
                 moveDel.performMove(
-                    new MoveDescription(List.of(u), new Route(port, z), Map.of(u, tr)));
+                    new MoveDescription(List.of(u), new Route(from, z), Map.of(u, tr)));
             if (error.isEmpty()) {
               room -= cost;
               waiting.remove(u);
@@ -786,6 +827,7 @@ public final class Programmi {
           loadedByZone.computeIfAbsent(z, k -> new ArrayList<>()).add(tr);
         }
       }
+      final JsonObject r6State = r6 ? SbarcoCoordinato.stato(data.getProperties(), alliance) : null;
       for (final var e : loadedByZone.entrySet()) {
         final Territory z = e.getKey();
         final List<Unit> group = e.getValue();
@@ -808,14 +850,60 @@ public final class Programmi {
         if (!shuttle.contains(z) && distanzaMare(z, portZones) > 2) {
           continue; // a transport Hard took elsewhere: Hard's
         }
-        final Optional<Territory> to =
-            r5() ? navigaR5(group, z, baseZones, held, true) : naviga(group, z, baseZones, held);
+        final Optional<Territory> to;
+        if (r6) {
+          // step R6b (C2): all the loaded transports of the zone together, with the program's
+          // warships there (the squadron's left at the port too, C4), to zone 91 if safe
+          final List<Unit> sailing = new ArrayList<>(group);
+          z.getMatches(
+                  Matches.unitIsOwnedBy(player)
+                      .and(AlleatiR5.naveDaGuerra())
+                      .and(Matches.unitHasMovementLeft())
+                      .and(u -> !held.contains(u))
+                      .and(AlleatiR5.delProgramma(data, player)))
+              .forEach(sailing::add);
+          final Territory arrival =
+              data.getMap().getTerritoryOrNull(TrasportiProtetti.Config.get().zonaRientro());
+          to =
+              TrasportiProtetti.naviga(
+                  this,
+                  sailing,
+                  z,
+                  arrival == null ? baseZones : List.of(arrival),
+                  held,
+                  moveDel,
+                  "spola",
+                  r6State);
+          SbarcoCoordinato.salva(data.getProperties(), alliance, r6State);
+        } else {
+          to = r5() ? navigaR5(group, z, baseZones, held, true) : naviga(group, z, baseZones, held);
+        }
         if (to.isPresent()) {
           sailed += group.size();
           if (baseZones.contains(to.get()) && unload) {
             brought += scarica(group, to.get(), base, held);
           }
         }
+      }
+      if (r6) {
+        // step R6b (C1): the program's troops left at the port (and the second factory) after the
+        // loading, as units, and the empty program transports there
+        int left = 0;
+        for (final Unit u : waiting) {
+          left += Matches.unitHasMovementLeft().test(u) ? 1 : 0;
+        }
+        int emptyLeft = 0;
+        for (final Territory z : portZones) {
+          emptyLeft +=
+              z.getMatches(
+                      Matches.unitIsSeaTransportButNotCombatSeaTransport()
+                          .and(AlleatiR5.trasportoDelProgramma(data, player))
+                          .and(u -> !u.isTransporting()))
+                  .size();
+        }
+        s.addProperty("truppe_rimaste_al_porto", left);
+        s.addProperty("trasporti_vuoti_programma_al_porto", emptyLeft);
+        s.addProperty("seconda_fabbrica", second == null ? "" : second.getName());
       }
       s.addProperty("trasporti_al_porto", atPort);
       s.addProperty("vuoti_al_porto", emptyAtPort);
