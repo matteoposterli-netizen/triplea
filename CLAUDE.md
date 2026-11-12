@@ -5016,3 +5016,29 @@ bombardieri, spola italiana, Sudafrica, id del programma), `SbarcoCoordinato` (s
   Libya/Tunisia R7, Sicily R9, Southern France R14 (15 unita'); attese per tenuta; Sudafrica 3 unita' a turno; Eastern Persia presa;
   sbarramento su Trans-Jordan. Prima versione: bombardieri usati e persi da Hard prima di arrivare alla base (corretto: tutti trattenuti
   con una base in portata) e trasporti USA che tornavano al porto lasciando 30+ unita' ferme a Gibilterra (corretto: restano allo snodo).
+
+#### Autoplay in CI (run 43120375671, commit 60a628a, tutto verde: 202 job, 200 partite [completa] senza chiave, semi 1141-1180, costo API 0)
+Tutte e 200 le partite finite con un vincitore (0 stalli, round 10-52), durata media 9-12 min. Vittorie del lato che cambia con IC 95% di
+Wilson, test esatto di Fisher contro (a) e contro la versione attuale (senza l'interruttore R4):
+
+| Configurazione | Asse / Alleati vince | Quota del lato | p da (a) | p nuova vs attuale | Round vittoria mediana (XML) |
+|---|---|---|---|---|---|
+| a Hard / Hard | 11 / 29 | - | - | - | 21 (20) |
+| c1 Asse impegno (R2c) | 18 / 22 | Asse 45% [31; 60] | 0,162 | - | 19 (18) |
+| c1n Asse impegno + assedio | **29 / 11** | Asse **73% [57; 84]** | **< 0,001** | **0,022** | 18 (16) |
+| c2 Alleati impegno (R3a) | 26 / 14 | Alleati 35% [22; 50] | **0,002 (peggio)** | - | 23 (22) |
+| c2n Alleati R3a + alleati_r4 | 22 / 18 | Alleati 45% [31; 60] | **0,022 (peggio)** | 0,494 | 23 (21) |
+
+- **Assedio (A)**: unico blocco che migliora oltre il rumore. Mosca cade 31/40 (R9) contro 12/40 in (a) e 22/40 in c1; Stalingrado 36/40;
+  esercito russo R12 18,7 contro 44,0; reddito tedesco R12 52,9 contro 39,8; VC Asse R12 6,2 contro 5,0. Raid: 54 PU a partita in
+  bombardieri e scorta, danno medio 8,1 al R6, Mosca produce 6,9 (R6) / 3,2 (R8) contro 8,4 / 6,7; bombardieri persi 0,1-0,3 per round.
+  Unita' nelle fabbriche catturate 57 a partita (a 38). Italia: territori dell'Asse in Africa R8 2,7 + 2,0 (a 1,6 + 1,1), 18 PU in navi a
+  partita, obiettivi italiani attivi piu' a lungo (Mediterraneo 10,5 round contro 8,3). Costo: Parigi/Roma/Berlino cadono meno (15/13/11
+  su 40 contro 31/30/29) perche' la partita finisce prima. Effetto separato dei tre pezzi (A1 bersagli, A3 raid, A4 Italia) NON misurato.
+- **R3a in partite complete e' peggio di Hard** (c2: Alleati 35% contro 73%), cosa non visibile a 12 round. La Germania sta meglio (R12
+  52,8 di reddito contro 39,8): le unita' alleate trattenute alla base e gli sbarchi coordinati tolgono pressione.
+- **alleati_r4 (B)**: +4 vittorie su c2, non distinguibile (p 0,49), ancora sotto Hard. Snodo: AFRICA 119 round, FRANCIA 12, **MISTO 0**,
+  attese **881**; sbarchi 127 ma 866 unita' sbarcate contro 2.380 di c2; Sudafrica 1.274 unita' comprate (31 a partita), neutrali presi 51,
+  sbarramento attivo 511 turni. Nord Africa all'Asse a zero dal R9; unita' britanniche "altrove" (Africa/Medio Oriente) R16 42,7 contro 18,9
+  di (a), in Europa occidentale 3,7 contro 20,6: il blocco B sposta l'esercito britannico fuori dall'Europa. Gibilterra all'Asse 12/40.
+- Gibilterra dell'Asse (A4 facoltativo) non fatta. Lettura XML: vittoria in media 1-2 round prima delle note.
