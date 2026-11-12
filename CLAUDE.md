@@ -5146,3 +5146,36 @@ Wilson, test esatto di Fisher contro (a) e contro la versione attuale (senza l'i
   sbarramento attivo 511 turni. Nord Africa all'Asse a zero dal R9; unita' britanniche "altrove" (Africa/Medio Oriente) R16 42,7 contro 18,9
   di (a), in Europa occidentale 3,7 contro 20,6: il blocco B sposta l'esercito britannico fuori dall'Europa. Gibilterra all'Asse 12/40.
 - Gibilterra dell'Asse (A4 facoltativo) non fatta. Lettura XML: vittoria in media 1-2 round prima delle note.
+
+### Step R5 ALLEATI RIFATTI — interruttore alleati_r5 per USA e Regno Unito (2026-11-12)
+
+Vedi "Alleati rifatti (step R5)" e "Scelte di R5". File nuovi: `ai/proplus/AlleatiR5`, test `AlleatiR5Test` (11); autoplay
+`ConfrontoR5` + test (4). Modificati: `SbarcoCoordinato`, `Programmi`, `Impegno`, `SnodoAlleati`, `Reddito`, `RegistroDecisioni`,
+`StrategaInterruttori`, `ProPlusAi`, `stratega-llm.json` (`impegno.r5`), autoplay `Monitor` (+`r5`), `ConfrontoCompleta`, workflow
+`[completa]` (4 configurazioni x semi 1181-1220). Hard e le altre voci invariate (golden Hard, `NudoHardTest` con "Stratega senza
+chiave = Hard", `DiaryNeutralityTest`, `CampagnaOmbraTest`, test R3a/R4 = interruttore spento: verdi).
+- Test locali: AI di game-core + `:proplus-autoplay` **639, 0 falliti**; `:ai:test` 13. Prove locali: e1 seme 1181 10 round, e3 5 round
+  fino a vittoria, nessuna eccezione.
+
+#### Autoplay in CI (run 43180663316, commit 63642a1, verde, 160 partite [completa] senza chiave, semi 1181-1220, costo API 0)
+160/160 concluse con un vincitore (0 stalli). Vittorie (IC 95% Wilson, Fisher sulle vittorie alleate):
+
+| Configurazione | Asse / Alleati | Quota del lato | p | Round vittoria mediana |
+|---|---|---|---|---|
+| a Hard / Hard | 15 / 25 | Alleati 63% [47; 76] | - | 22 |
+| e1 Hard / Alleati R5 | 30 / 10 | Alleati **25% [14; 40]** | **0,001 contro a (peggio)** | 24 |
+| e2 Asse impegno+assedio / Hard | 27 / 13 | Asse 68% [52; 80] | - | 19 |
+| e3 Asse assedio / Alleati R5 | 23 / 17 | Alleati 43% [29; 58] | 0,489 contro e2 | 21 |
+
+- **alleati_r5 peggiora gli Alleati** (e1 −15 vittorie alleate contro Hard vs Hard). Sbarcate in Europa occidentale a partita 83 (a 130),
+  Italia e isole 16 (27); Roma cade 14/40 (28/40), Berlino 10/40 (26/40), Mosca 31/40 (19/40); Russia R12 esercito 20,5 / reddito 7,2
+  (43,2 / 15,9). Tedeschi in Europa occidentale R12 66,6 (62,6): nessuna pressione in piu'.
+- Programma USA: quota PU 35%, UK 14%; sbarchi USA del registro 191 (presi 168, tenuti 1 round 81/166), logoramento UK 89 (presi 74,
+  tenuti 1 round 13/74); attese dello snodo 20 a partita (manca carico 476, manca vittoria 190, nessun bersaglio 143 su 40 partite).
+  **Spola senza controllo del contrattacco: 19,8 trasporti e 23 unita' del programma persi in mare a partita** (trasporti USA persi
+  17,1 contro 6,8 di a). Gibilterra snodo dal R1 in 40/40, cade all'Asse in 20/40 (R19); battaglie navali decise 8, sotto soglia 23.
+  UK: mare del porto non difeso in 339 turni (8,5 a partita: trasporti vietati). B5 falsa dal R3 (mediana), 19,4 unita' in Sudafrica.
+- **Errore del calcolatore** in 13 partite R5 su 80 (1 per partita, 0 in a ed e2): `ConcurrentBattleCalculator` "Error while trying to
+  set GameData" (ConcurrentModificationException / OptionalDataException nella copia in background: la partita veniva scritta mentre il
+  calcolatore la copiava). Partite comunque concluse. Correzione: in `ProPlusAi` attesa della copia (`attendiCalcolatore`) prima delle
+  scritture dell'acquisto e del piazzamento, solo con `alleati_r5` acceso. Secondo tentativo con `[completa]` (run successiva).

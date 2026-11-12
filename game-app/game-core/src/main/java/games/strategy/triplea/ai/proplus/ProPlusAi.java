@@ -104,6 +104,12 @@ public class ProPlusAi extends ProAi {
           CampagnaOmbra.calcola(getProData(), getCalc(), player);
           // step R2b: the first campaign that acts (switch "impegno", off by default)
           if (Impegno.attivo(data, player)) {
+            // step R5: the battle calculator may still be copying the game in the background (the
+            // previous nation set it): wait for the copy before the game properties are written
+            if (AlleatiR5.attivo(data, player)) {
+              prepareData(data);
+              attendiCalcolatore(data, player);
+            }
             initializeData();
             Impegno.inizioTurno(getProData(), getCalc(), player);
             // step R3a: the landing force in preparation and the wave stay out of Hard's plan
@@ -567,6 +573,10 @@ public class ProPlusAi extends ProAi {
         placeForBid ? java.util.Set.of() : Impegno.primaDelPiazzamento(data, player);
     super.place(placeForBid, placeDelegate, data, player);
     if (!placeForBid) {
+      // step R5: no background copy of the calculator while the followed ids are written
+      if (data instanceof GameData gameData && AlleatiR5.attivo(gameData, player)) {
+        attendiCalcolatore(gameData, player);
+      }
       Impegno.dopoIlPiazzamento(data, player, before);
     }
     saveCheck(data, player);
