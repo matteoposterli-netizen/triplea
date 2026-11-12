@@ -5329,3 +5329,30 @@ a R5, un cacciatorpediniere ogni due round, carico bilanciato bloccato a round a
   prima del push: `PRESA` fuori elenco (vedi sopra), scorta della spola rimasta a Gibilterra (blocco a round alterni), trasporti vuoti
   della squadra fermi accanto al bersaglio, attaccanti della battaglia senza il bonus del porto all'acquisto.
 
+- Test locali: AI di game-core 609 (1 saltato), `:ai:test` 13, `:proplus-autoplay:test` 46, `:game-headed:test` 94: 0 falliti (golden Hard,
+  `NudoHardTest` con "Stratega senza chiave = Hard", `DiaryNeutralityTest`, `CampagnaOmbraTest` ombra accesa = spenta compresi).
+
+#### Autoplay in CI (run 43264777394, commit a991cec, 200/200 partite [completa] senza chiave, semi 1221-1260, costo API 0)
+Tentativo 1: `DiaryNeutralityTest` instabile (gia' noto) ⇒ rilancio dei job falliti; tentativo 2: 199 partite (il job a seme 1242 ha
+perso il runner a meta' partita, nessun log); tentativo 3: rilanciato solo quel job, `autoplay-latest` ripubblicata con 200 partite.
+**Errori del calcolatore ("Error while trying to set GameData" / "Can't calculate"): 0 in 200 partite** (R5: 12-13 su 80). Tutte
+concluse: 198 con un vincitore, 2 stalli al tetto di 60 round (Hard vs Hard, semi 1226 e 1241).
+
+| Configurazione | Asse / Alleati (stalli) | Quota del lato [IC 95%] | Confronto, p (Fisher) | Round vittoria mediana |
+|---|---|---|---|---|
+| a Hard / Hard | 15 / 23 (2) | Alleati 58% [42; 71] | - | 21 |
+| f1 Hard / Alleati squadra | 16 / 24 | Alleati 60% [45; 74] | f1 contro a: 1,000 | 23 |
+| e2 Asse impegno+assedio (70) / Hard | 25 / 15 | Asse 63% [47; 76] | - | 18 |
+| f3 Asse assedio / Alleati squadra | 21 / 19 | Alleati 48% [33; 63] | f3 contro e2: 0,498 | 20 |
+| g Asse assedio quota 80 / Hard | 30 / 10 | Asse 75% [60; 86] | g contro e2: 0,335 | 18 |
+
+- Squadra: arrivata a Gibilterra al R4 in 75/80 partite (R3 3, R5 2), composizione tipica 1 portaerei + 1 caccia, incrociatore,
+  cacciatorpediniere, sottomarino, 4 trasporti carichi (8 unita'); corazzata MAI comprata (147 PU spesi su ~165 nei R1-4: dopo i trasporti
+  e le altre navi non restano 20 PU). Gibilterra alleata da R5 in tutte; battaglie navali della squadra ~0 (il mare 91/92 e' quasi sempre
+  libero), sbarchi per prenderla 0,1-0,2 a partita.
+- Sbarchi del programma: ~8,5 ondate a partita (6,9 unita' per ondata), Europa occidentale 48 e Italia/isole 12 unita' a partita (f1);
+  totale alleato in Europa occidentale 129 contro 117 di Hard. Russia meglio (esercito R12 44 contro 32; Mosca cade 17/40 contro 20/40).
+  Tedeschi in Europa occidentale R12 70 contro 64.
+- **Costo**: trasporti USA persi 22,8 a partita (Hard 8,9), del programma 27,4 trasporti e 28,7 unita' perse in mare; spola 864 PU a
+  partita, sostegno quasi mai (vittoria nemica sulla squadra < 1%). Il guadagno di sbarchi e' pagato dalle perdite della spola.
+- Quota dell'Asse 80 contro 70: +5 vittorie (non distinguibile, p 0,34), reddito finale Asse 69 contro 60.
