@@ -5178,4 +5178,4 @@ chiave = Hard", `DiaryNeutralityTest`, `CampagnaOmbraTest`, test R3a/R4 = interr
 - **Errore del calcolatore** in 13 partite R5 su 80 (1 per partita, 0 in a ed e2): `ConcurrentBattleCalculator` "Error while trying to
   set GameData" (ConcurrentModificationException / OptionalDataException nella copia in background: la partita veniva scritta mentre il
   calcolatore la copiava). Partite comunque concluse. Correzione: in `ProPlusAi` attesa della copia (`attendiCalcolatore`) prima delle
-  scritture dell'acquisto e del piazzamento, solo con `alleati_r5` acceso. Secondo tentativo con `[completa]` (run successiva).
+  scritture dell'acquisto e del piazzamento, solo con `alleati_r5` acceso (commit 739d86a). Secondo tentativo: run del commit successivo (stessa configurazione, semi 1181-1220).
