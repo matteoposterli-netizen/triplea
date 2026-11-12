@@ -5179,3 +5179,23 @@ chiave = Hard", `DiaryNeutralityTest`, `CampagnaOmbraTest`, test R3a/R4 = interr
   set GameData" (ConcurrentModificationException / OptionalDataException nella copia in background: la partita veniva scritta mentre il
   calcolatore la copiava). Partite comunque concluse. Correzione: in `ProPlusAi` attesa della copia (`attendiCalcolatore`) prima delle
   scritture dell'acquisto e del piazzamento, solo con `alleati_r5` acceso (commit 739d86a). Secondo tentativo: run del commit successivo (stessa configurazione, semi 1181-1220).
+
+#### Secondo tentativo (run 43202113717, commit ef05652, 159/160 partite, semi 1181-1220, costo API 0)
+Stessi semi della prima run (il seme fissa solo i dadi: le partite sono diverse). 1 partita fallita (e3 seme 1181, dopo 80 s:
+`IllegalStateException: Can't calculate while operation is still running!`, causata dall'attesa del calcolatore di 739d86a).
+
+| Configurazione | Asse / Alleati (stalli) | Quota del lato | p | Unione delle due run |
+|---|---|---|---|---|
+| a Hard / Hard | 15 / 25 | Alleati 63% [47; 76] | - | Alleati 50/80 = 63% [52; 72] |
+| e1 Hard / Alleati R5 | 22 / 17 (1) | Alleati 43% [29; 58] | 0,117 contro a | Alleati 27/80 = 34% [25; 45], **p 0,0005 contro a (peggio)** |
+| e2 Asse impegno+assedio / Hard | 26 / 14 | Asse 65% [50; 78] | - | Asse 53/80 |
+| e3 Asse assedio / Alleati R5 | 28 / 10 (2, uno e' la partita fallita) | Alleati 25% [14; 40] | 0,465 contro e2 | Alleati 27/80 contro 27/80 di e2, p 1,0 |
+
+- **La correzione del calcolatore NON funziona**: errore "Error while trying to set GameData" in 7/40 partite e1 e 5/39 e3 (prima run
+  13/80), 0 in a ed e2; in piu' 1 partita interrotta. Causa vera NON trovata: la copia avviene anche durante fasi non coperte dalle
+  attese (le eccezioni sono ConcurrentModificationException e NoSuchElementException nella copia in background).
+- e1: sbarcate in Europa occidentale 82 a partita (a 131), Italia e isole 23 (24); Roma cade 20/40 (28/40), Berlino 18/40 (25/40),
+  Mosca 24/40 (17/40); trasporti USA persi 13,5 (a 6,2), del programma 17,3 + 22,5 unita' perse in mare; tedeschi in Europa
+  occidentale R16 75 (a 59). Quota PU del programma USA 38%, UK 11%; attese dello snodo 19 a partita (manca carico 465).
+- Verdetto (due tentativi, regola dello step): **alleati_r5 peggiora gli Alleati contro Hard** (unione p 0,0005) e non cambia nulla
+  contro l'Asse con assedio. Resta spento di default.
