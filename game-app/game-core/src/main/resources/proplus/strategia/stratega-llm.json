@@ -770,6 +770,156 @@
         ],
         "origine": "dalla mappa: objectiveAttachment (objectiveValue) e trigger con resource PUs; tipo ciascuno = valore per ogni territorio posseduto, almeno = valore con almeno minimo territori, altro = condizioni non di possesso (navi, presenza, relazioni): non cambiano col territorio preso. 'original' di British_1 espanso nei territori britannici di inizio partita"
       }
+    },
+    "r5": {
+      "nota": "Step R5 ALLEATI RIFATTI. Interruttore alleati_r5 (spento di default = comportamento di oggi), sopra impegno: per USA e Regno Unito sostituisce R3a e alleati_r4. Il 70% dei PU (dopo il presidio caso c) compra ondate che vengono usate: si sbarca con vittoria >= 70 anche se non si tiene (logoramento), nessuna condizione di tenuta, niente teatro aperto/chiuso, niente arresto della spola per contrattacco stimato, niente tetto ai trasporti, trattenute solo le unita' comprate dal programma finche' non partono, Sudafrica solo con la condizione B5. Valori scelti o dalla mappa, nessuno tarato.",
+      "alleati_r5_acceso_di_default": {
+        "valore": false,
+        "origine": "richiesta dello step R5: spento = comportamento di oggi"
+      },
+      "quota_programma": {
+        "valore": 70,
+        "origine": "richiesta dello step R5: % dei PU al programma (USA dopo il presidio della capitale; Regno Unito dopo Londra, Egitto, campagna e Sudafrica)"
+      },
+      "soglia_sbarco": {
+        "valore": 70,
+        "origine": "richiesta dello step R5: vittoria >= 70 sulle forze reali del turno, nessuna condizione di tenuta (A5, B3)"
+      },
+      "soglia_battaglia_gibilterra": {
+        "valore": 70,
+        "origine": "richiesta dello step R5 (A3)"
+      },
+      "soglia_presa_gibilterra": {
+        "valore": 70,
+        "origine": "richiesta dello step R5 (A4)"
+      },
+      "soglia_mare_difeso": {
+        "valore": 40,
+        "origine": "richiesta dello step R5 (B2): contrattacco realistico <= 40% contro navi, aerei che possono decollare in difesa e aerei sulle portaerei"
+      },
+      "gibilterra": {
+        "valore": "Gibraltar",
+        "origine": "dalla mappa"
+      },
+      "zone_gibilterra": {
+        "valore": [
+          "91 Sea Zone",
+          "92 Sea Zone"
+        ],
+        "origine": "dalla mappa: le due zone di mare confinanti con Gibraltar (e con Morocco)"
+      },
+      "base_atlantico": {
+        "valore": "United Kingdom",
+        "origine": "richiesta dello step R5 (A3): con il mare di Gibilterra occupato le ondate vanno al Regno Unito dall'Atlantico"
+      },
+      "tipo_scorta": {
+        "valore": "destroyer",
+        "origine": "scelto: la nave da guerra piu' economica per la scorta e la battaglia di Gibilterra"
+      },
+      "max_scorta_per_turno": {
+        "valore": 4,
+        "origine": "scelto: cacciatorpediniere comprati in un turno dal programma USA per A3 (quanto serve per il 70%, al massimo questi)"
+      },
+      "min_navi_nel_gruppo": {
+        "valore": 1,
+        "origine": "richiesta dello step R5 (A2): almeno una nave da guerra nel gruppo della spola"
+      },
+      "max_scorta_mossa": {
+        "valore": 4,
+        "origine": "scelto: navi da guerra della zona che viaggiano col gruppo della spola"
+      },
+      "tipi_difesa_porto": {
+        "valore": [
+          "destroyer",
+          "fighter"
+        ],
+        "origine": "richiesta dello step R5 (B2): nave da guerra o caccia; scelto il piu' economico che porta la zona a <= 40"
+      },
+      "max_difesa_porto_per_turno": {
+        "valore": 3,
+        "origine": "scelto: unita' comprate in un turno per difendere la zona del porto britannico"
+      },
+      "bersagli_africa": {
+        "valore": [
+          "Morocco",
+          "Algeria",
+          "Tunisia",
+          "Libya",
+          "Tobruk",
+          "Alexandria"
+        ],
+        "origine": "dalla mappa: obiettivo italiano North Africa; Morocco: scarico se alleato"
+      },
+      "bersagli_resto": {
+        "valore": [
+          "Normandy Bordeaux",
+          "Southern France",
+          "Sardinia",
+          "Sicily",
+          "Southern Italy"
+        ],
+        "origine": "richiesta dello step R5 (A5): coste francesi atlantiche (Normandy Bordeaux, zone 105/110) e mediterranee (Southern France, 93/95), Sardegna, Sicilia, Italia del sud (95/97)"
+      },
+      "bersagli_logoramento_uk": {
+        "valore": [
+          "Normandy Bordeaux",
+          "Holland Belgium",
+          "Denmark",
+          "Norway",
+          "Western Germany",
+          "Germany"
+        ],
+        "origine": "dalla mappa: territori costieri dell'Europa occidentale di proprieta' iniziale tedesca o francese vicini alle zone del Nord Atlantico e del Mare del Nord (bersagli NORD di R3a); a ogni turno solo quelli raggiungibili dai trasporti"
+      },
+      "africa_italia_territori": {
+        "valore": [
+          "Egypt",
+          "Alexandria",
+          "Tobruk",
+          "Libya",
+          "Tunisia",
+          "Algeria",
+          "Morocco"
+        ],
+        "origine": "richiesta dello step R5 (A5): Egitto + Nord Africa; tenuti dall'Asse"
+      },
+      "bonus_africani_italiani": {
+        "valore": [
+          "objectiveAttachment_Italians_3_North_Africa",
+          "objectiveAttachment_Italians_2_Roman_Empire"
+        ],
+        "origine": "dalla mappa: obiettivi italiani legati all'Africa: North Africa (5 PU, tutti i 6 territori nordafricani) e Roman Empire (5 PU, 3 su 4 tra Greece, Egypt, Southern France, Gibraltar: contiene Egitto e Gibilterra). Escluso Control Iraq/Persia (Medio Oriente) e Control the Mediterranean (navi)"
+      },
+      "regioni": {
+        "valore": {
+          "europa_occidentale": [
+            "Normandy Bordeaux",
+            "France",
+            "Southern France",
+            "Holland Belgium",
+            "Western Germany",
+            "Germany",
+            "Denmark",
+            "Norway"
+          ],
+          "italia_isole": [
+            "Northern Italy",
+            "Southern Italy",
+            "Sicily",
+            "Sardinia"
+          ],
+          "nord_africa": [
+            "Morocco",
+            "Algeria",
+            "Tunisia",
+            "Libya",
+            "Tobruk",
+            "Alexandria",
+            "Egypt"
+          ]
+        },
+        "origine": "scelto per le tabelle della run"
+      }
     }
   },
   "difesa": {

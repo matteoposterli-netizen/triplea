@@ -180,10 +180,35 @@ public final class Programmi {
       final Map<String, Integer> transportCosts,
       final int capacitaTrasporto,
       final Config cfg) {
+    return caricoBilanciato(
+        pu,
+        fermiVuoti,
+        postiLiberi,
+        inAttesa,
+        scorta,
+        costs,
+        transportCosts,
+        capacitaTrasporto,
+        cfg,
+        cfg.maxScortaPerTurno());
+  }
+
+  /** The balanced load with an explicit cap on the escort (step R5: what A3 needs). */
+  static Map<String, Integer> caricoBilanciato(
+      final int pu,
+      final int fermiVuoti,
+      final int postiLiberi,
+      final int inAttesa,
+      final int scorta,
+      final Map<String, Integer> costs,
+      final Map<String, Integer> transportCosts,
+      final int capacitaTrasporto,
+      final Config cfg,
+      final int maxScorta) {
     final Map<String, Integer> out = new LinkedHashMap<>();
     int left = pu;
     final int escortCost = costs.getOrDefault(cfg.tipoScorta(), 0);
-    for (int i = 0; i < Math.min(scorta, cfg.maxScortaPerTurno()); i++) {
+    for (int i = 0; i < Math.min(scorta, maxScorta); i++) {
       if (escortCost <= 0 || escortCost > left) {
         break;
       }
@@ -248,6 +273,15 @@ public final class Programmi {
     @Nullable ProTerritoryManager enemy;
     @Nullable IMoveDelegate moveDel;
 
+    /** Step R5: escorts of the program (A3) instead of the shuttle's rule; -1 = R2c's rule. */
+    int scortaR5 = -1;
+
+    /** Step R5: cap on the escorts bought in a turn. */
+    int maxScortaR5;
+
+    /** Step R5 (B2): no transport for the program (the port's zone is not defended). */
+    boolean vietaTrasporti;
+
     Turno(
         final ProData proData,
         final ProOddsCalculator calc,
@@ -270,6 +304,11 @@ public final class Programmi {
 
     boolean uk() {
       return UK.equals(player.getName());
+    }
+
+    /** Step R5: the program uses only its own transports and its shuttle never stops. */
+    boolean r5() {
+      return (usa() || uk()) && AlleatiR5.attivo(data, player);
     }
 
     /** Step R4 (A4): Italy's Africa shuttle (switch "assedio"). */
@@ -359,12 +398,14 @@ public final class Programmi {
 
     private List<Unit> trasporti() {
       final List<Unit> out = new ArrayList<>();
+      final Predicate<Unit> own = r5() ? AlleatiR5.trasportoDelProgramma(data, player) : u -> true;
       for (final Territory z : data.getMap().getTerritories()) {
         if (z.isWater()) {
           out.addAll(
               z.getMatches(
                   Matches.unitIsSeaTransportButNotCombatSeaTransport()
-                      .and(Matches.unitIsOwnedBy(player))));
+                      .and(Matches.unitIsOwnedBy(player))
+                      .and(own)));
         }
       }
       out.sort(Comparator.comparing(u -> u.getId().toString()));
@@ -421,7 +462,7 @@ public final class Programmi {
                       .and(Matches.unitIsNotInfrastructure())
                       .and(u -> u.getUnitAttachment().getTransportCost() > 0)
                       .and(u -> u.getUnitAttachment().getAttack(u.getOwner()) > 0)));
-      if (usa() && SnodoAlleati.attivo(data, player)) {
+      if (usa() && SnodoAlleati.programmaPerId(data, player)) {
         // step R4 (B3): only the landing program's units are the shuttle's
         final Set<String> program = SnodoAlleati.programma(data, player);
         units.removeIf(u -> !program.contains(u.getId().toString()));
@@ -478,7 +519,7 @@ public final class Programmi {
           inAttesa(port, garrison).stream()
               .mapToInt(u -> u.getUnitAttachment().getTransportCost())
               .sum();
-      final int escort = scortaNecessaria(portZones);
+      final int escort = scortaR5 >= 0 ? scortaR5 : scortaNecessaria(portZones);
       final Map<String, Integer> costs = Impegno.costiAcquisto(data, player);
       final Map<String, Integer> tcs = new HashMap<>();
       int capacity = 0;
@@ -489,7 +530,17 @@ public final class Programmi {
         }
       }
       final Map<String, Integer> mix =
-          caricoBilanciato(pu, idleEmpty, room, waiting, escort, costs, tcs, capacity, cfg);
+          caricoBilanciato(
+              pu,
+              vietaTrasporti ? Math.max(1, idleEmpty) : idleEmpty,
+              room,
+              waiting,
+              escort,
+              costs,
+              tcs,
+              capacity,
+              cfg,
+              scortaR5 >= 0 ? maxScortaR5 : cfg.maxScortaPerTurno());
       int spent = 0;
       for (final var e : mix.entrySet()) {
         spent += costs.getOrDefault(e.getKey(), 0) * e.getValue();
@@ -642,7 +693,7 @@ public final class Programmi {
       // step R4 (B2): with program units waiting at the hub the empty transports there stay (the
       // landing from the hub loads them)
       final boolean stayAtHub =
-          usa() && unload && SnodoAlleati.attivo(data, player) && attesaAllaBase(base) > 0;
+          usa() && unload && SnodoAlleati.programmaPerId(data, player) && attesaAllaBase(base) > 0;
       // 1 the empty ones back to the port (from the shuttle's zones or within 2 zones of it)
       for (final Unit tr : trasporti()) {
         final Territory z = dove(tr);
@@ -657,14 +708,17 @@ public final class Programmi {
             || tr.getMovementLeft().signum() <= 0) {
           continue;
         }
-        if (naviga(new ArrayList<>(List.of(tr)), z, portZones, held).isPresent()) {
+        if ((r5()
+                ? navigaR5(new ArrayList<>(List.of(tr)), z, portZones, held, false)
+                : naviga(new ArrayList<>(List.of(tr)), z, portZones, held))
+            .isPresent()) {
           back++;
         }
       }
       // 2 load at the port (transports there, also those just arrived)
       final List<Unit> waiting = new ArrayList<>(inAttesa(port, garrison));
       waiting.removeIf(u -> !Matches.unitHasMovementLeft().test(u));
-      if (usa() && SnodoAlleati.attivo(data, player)) {
+      if (usa() && SnodoAlleati.programmaPerId(data, player)) {
         // step R4 (B3): the shuttle carries only the landing program's units (followed by id)
         final Set<String> program = SnodoAlleati.programma(data, player);
         waiting.removeIf(u -> !program.contains(u.getId().toString()));
@@ -734,7 +788,8 @@ public final class Programmi {
         if (!shuttle.contains(z) && distanzaMare(z, portZones) > 2) {
           continue; // a transport Hard took elsewhere: Hard's
         }
-        final Optional<Territory> to = naviga(group, z, baseZones, held);
+        final Optional<Territory> to =
+            r5() ? navigaR5(group, z, baseZones, held, true) : naviga(group, z, baseZones, held);
         if (to.isPresent()) {
           sailed += group.size();
           if (baseZones.contains(to.get())) {
@@ -874,6 +929,70 @@ public final class Programmi {
       }
       if (sicuroMare(z, conCarico(group))) {
         held.addAll(conCarico(group));
+      }
+      return Optional.empty();
+    }
+
+    /**
+     * Step R5 (A2): {@code group} sails from {@code z} toward the nearest of {@code targets} as far
+     * as its movement allows, never stopping for the estimated counterattack, through zones without
+     * enemies; a loaded group ({@code scorta}) only with at least {@code min_navi_nel_gruppo}
+     * warships of the zone travelling with it (otherwise it waits where it is).
+     */
+    private Optional<Territory> navigaR5(
+        final List<Unit> group,
+        final Territory z,
+        final List<Territory> targets,
+        final Set<Unit> held,
+        final boolean scorta) {
+      final AlleatiR5.Config r5 = AlleatiR5.Config.get();
+      final Predicate<Territory> free =
+          x -> mare().test(x) && !x.anyUnitsMatch(Matches.enemyUnit(player));
+      Route best = null;
+      for (final Territory t : targets) {
+        final Optional<Route> r =
+            data.getMap().getRouteForUnits(z, t, free, conCarico(group), player);
+        if (r.isPresent() && (best == null || r.get().numberOfSteps() < best.numberOfSteps())) {
+          best = r.get();
+        }
+      }
+      final List<Unit> escorts =
+          new ArrayList<>(
+              z.getMatches(
+                  Matches.unitIsOwnedBy(player)
+                      .and(AlleatiR5.naveDaGuerra())
+                      .and(Matches.unitIsCarrier().negate())
+                      .and(Matches.unitHasMovementLeft())
+                      .and(u -> !held.contains(u))));
+      escorts.sort(Comparator.comparing(u -> u.getId().toString()));
+      if (best == null || (scorta && escorts.size() < r5.minNaviNelGruppo())) {
+        if (scorta) {
+          held.addAll(conCarico(group));
+          lines.add(
+              "  Spola R5: gruppo fermo in "
+                  + z.getName()
+                  + (best == null
+                      ? " (nessuna rotta libera)"
+                      : " (nessuna nave da guerra di scorta)"));
+        }
+        return Optional.empty();
+      }
+      final List<Unit> moving = new ArrayList<>(group);
+      if (scorta) {
+        moving.addAll(escorts.subList(0, Math.min(r5.maxScortaMossa(), escorts.size())));
+      }
+      final int range =
+          moving.stream().mapToInt(u -> u.getMovementLeft().intValue()).min().orElse(0);
+      final List<Territory> steps = best.getSteps();
+      for (int i = Math.min(range, steps.size()); i >= 1; i--) {
+        final Route r = new Route(z, steps.subList(0, i).toArray(new Territory[0]));
+        final List<Unit> units = conCarico(moving);
+        final Optional<String> error = moveDel.performMove(new MoveDescription(units, r));
+        if (error.isEmpty()) {
+          held.addAll(units);
+          return Optional.of(steps.get(i - 1));
+        }
+        ProLogger.warn("[Pro+] Spola R5: rotta non riuscita " + error.get());
       }
       return Optional.empty();
     }

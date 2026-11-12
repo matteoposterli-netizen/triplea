@@ -738,6 +738,7 @@ final class Monitor {
     json.add("nord_africa_asse", northAfricaOfTheAxis());
     r3aTheater().ifPresent(t -> json.addProperty("teatro_r3a", t));
     json.add("r4", r4.snapshot(round, alliances));
+    json.add("r5", r5Snapshot());
     if (complete) {
       rounds.put(round, json);
       partialRound = null;
@@ -745,6 +746,30 @@ final class Monitor {
       partialRound = json;
     }
     battles.put(round, roundBattles);
+  }
+
+  /**
+   * Step R5: the land units of the USA, the United Kingdom, Germany and Italy by region of the
+   * tables (Western Europe, Italy and islands, North Africa, elsewhere, at sea).
+   */
+  private JsonObject r5Snapshot() {
+    final JsonObject json = new JsonObject();
+    final JsonObject regions = new JsonObject();
+    for (final String name : List.of("Americans", "British", "Germans", "Italians")) {
+      final GamePlayer p = data.getPlayerList().getPlayerId(name);
+      if (p == null) {
+        continue;
+      }
+      final JsonObject reg = new JsonObject();
+      try {
+        games.strategy.triplea.ai.proplus.AlleatiR5.regioni(data, p).forEach(reg::addProperty);
+      } catch (final RuntimeException e) {
+        reg.addProperty("errore", e.toString());
+      }
+      regions.add(name, reg);
+    }
+    json.add("regioni", regions);
+    return json;
   }
 
   /** Step R3a: the shuttle's base of the Allies (theater or bridgehead), United Kingdom if none. */

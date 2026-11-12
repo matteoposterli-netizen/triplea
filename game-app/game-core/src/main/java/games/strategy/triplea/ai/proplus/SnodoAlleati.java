@@ -91,14 +91,24 @@ public final class SnodoAlleati {
 
   // ========================================================================== entry points
 
-  /** The switch is on and the nation plays block B (the R3a nations: USA, UK, Russia). */
+  /**
+   * The switch is on and the nation plays block B (the R3a nations: USA, UK, Russia); off for the
+   * USA and the United Kingdom when step R5 replaces it.
+   */
   public static boolean attivo(final GameState data, final GamePlayer player) {
-    if (player == null || !SbarcoCoordinato.attivo(data, player)) {
+    if (player == null
+        || !SbarcoCoordinato.attivo(data, player)
+        || AlleatiR5.attivo(data, player)) {
       return false;
     }
     return ProPlusSettings.allianceOf(data, player)
         .map(a -> StrategaInterruttori.ALLEATI_R4.acceso(data.getProperties(), a))
         .orElse(false);
+  }
+
+  /** Step R4 or R5: the program's units are followed by id. */
+  static boolean programmaPerId(final GameState data, final GamePlayer player) {
+    return attivo(data, player) || AlleatiR5.attivo(data, player);
   }
 
   /** B3: the ids of the landing program's units of {@code player} (followed since bought). */
@@ -162,31 +172,8 @@ public final class SnodoAlleati {
     final boolean egyptOk = egypt != null && Matches.isTerritoryAllied(player).test(egypt);
     final int capacity = Assedio.capacita(factory);
     final int units = unitaSudafrica(axis, egyptOk, capacity);
-    final Map<String, Integer> costs = Impegno.costiAcquisto(data, player);
-    final Map<String, Integer> mix = new LinkedHashMap<>();
-    int left = pu;
-    for (int i = 0; i < units; i++) {
-      boolean bought = false;
-      for (int k = 0; k < cfg.tipiSudafrica().size(); k++) {
-        final String t = cfg.tipiSudafrica().get((i + k) % cfg.tipiSudafrica().size());
-        final int cost = costs.getOrDefault(t, 0);
-        if (cost > 0 && cost <= left) {
-          mix.merge(t, 1, Integer::sum);
-          left -= cost;
-          bought = true;
-          break;
-        }
-      }
-      if (!bought) {
-        break;
-      }
-    }
-    if (!mix.isEmpty()) {
-      final JsonObject m = new JsonObject();
-      mix.forEach(m::addProperty);
-      order.add("tipi_sudafrica", m);
-      order.addProperty("fabbrica_sudafrica", factory.getName());
-    }
+    final Map<String, Integer> mix = compraSudafrica(data, player, factory, units, pu, order);
+    final int left = pu - Impegno.costo(data, player, mix);
     final JsonArray alt = new JsonArray();
     final JsonObject a = new JsonObject();
     a.addProperty("asse_in_africa", axis);
@@ -212,6 +199,46 @@ public final class SnodoAlleati {
     return pu - left;
   }
 
+  /**
+   * B4 (and step R5's B5): {@code units} of {@code tipi_sudafrica} in rotation within {@code pu},
+   * written in the order with the South African factory. Returns the mix.
+   */
+  static Map<String, Integer> compraSudafrica(
+      final GameState data,
+      final GamePlayer player,
+      final Territory factory,
+      final int units,
+      final int pu,
+      final JsonObject order) {
+    final ConfigR4 cfg = ConfigR4.get();
+    final Map<String, Integer> costs = Impegno.costiAcquisto(data, player);
+    final Map<String, Integer> mix = new LinkedHashMap<>();
+    int left = pu;
+    for (int i = 0; i < units; i++) {
+      boolean bought = false;
+      for (int k = 0; k < cfg.tipiSudafrica().size(); k++) {
+        final String t = cfg.tipiSudafrica().get((i + k) % cfg.tipiSudafrica().size());
+        final int cost = costs.getOrDefault(t, 0);
+        if (cost > 0 && cost <= left) {
+          mix.merge(t, 1, Integer::sum);
+          left -= cost;
+          bought = true;
+          break;
+        }
+      }
+      if (!bought) {
+        break;
+      }
+    }
+    if (!mix.isEmpty()) {
+      final JsonObject m = new JsonObject();
+      mix.forEach(m::addProperty);
+      order.add("tipi_sudafrica", m);
+      order.addProperty("fabbrica_sudafrica", factory.getName());
+    }
+    return mix;
+  }
+
   // -------------------------------------------------------------- UK non-combat (B4-B6)
 
   /**
@@ -229,7 +256,7 @@ public final class SnodoAlleati {
       final List<String> lines) {
     final Set<Unit> held = new LinkedHashSet<>();
     final GameState data = proData.getData();
-    if (!attivo(data, player) || !Programmi.UK.equals(player.getName())) {
+    if (!programmaPerId(data, player) || !Programmi.UK.equals(player.getName())) {
       return held;
     }
     try {

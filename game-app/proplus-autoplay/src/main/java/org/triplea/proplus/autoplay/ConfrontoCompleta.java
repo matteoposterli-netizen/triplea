@@ -110,6 +110,12 @@ final class ConfrontoCompleta {
     } catch (final RuntimeException e) {
       md.append("\n(tabelle per configurazione non scritte: ").append(e).append(")\n");
     }
+    // step R5: the subsection "R5"
+    try {
+      ConfrontoR5.write(md, games, alliances);
+    } catch (final RuntimeException e) {
+      md.append("\n(tabelle R5 non scritte: ").append(e).append(")\n");
+    }
     // one section per game only for small runs (200 games would be unreadable)
     for (final Game g : complete.size() <= MAX_DETAIL ? complete : List.<Game>of()) {
       final JsonObject j = g.json();

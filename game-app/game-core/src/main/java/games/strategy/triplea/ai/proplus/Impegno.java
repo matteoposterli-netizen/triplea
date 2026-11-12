@@ -718,7 +718,7 @@ public final class Impegno {
             Assedio.esitoRinforzo(data, player, bought.placements());
           }
           // step R4 (B3, B4): the landing program's units and South Africa's, by id
-          if (bought != null && SnodoAlleati.attivo(data, player)) {
+          if (bought != null && SnodoAlleati.programmaPerId(data, player)) {
             final Map<String, Integer> south = new LinkedHashMap<>();
             bought
                 .units()
@@ -940,15 +940,30 @@ public final class Impegno {
         final int garrison = presidioPorto(cases, p.porto());
         ns.addProperty("presidio_porto", garrison);
         // step R4 (B4): the United Kingdom's PUs: London, Africa (South Africa), landing force
+        final boolean r5 = AlleatiR5.attivo(data, player);
         final int puAfrica =
-            SnodoAlleati.acquistiSudafrica(
-                data, player, Math.max(0, puTurn - puC - puOp), order, lines);
+            r5
+                ? AlleatiR5.acquistiSudafrica(
+                    data,
+                    player,
+                    Math.max(0, puTurn - puC - puOp),
+                    order,
+                    lines,
+                    casoC(cases, "Egypt"))
+                : SnodoAlleati.acquistiSudafrica(
+                    data, player, Math.max(0, puTurn - puC - puOp), order, lines);
         puProg += puAfrica;
+        final double usaShare = r5 ? AlleatiR5.Config.get().quota() : r2c.quotaProgrammaUsa();
+        final double ukShare = r5 ? AlleatiR5.Config.get().quota() : r2c.quotaForzaSbarcoUk();
         final int pu =
             Programmi.USA.equals(player.getName())
-                ? puOperazione(puTurn, puC, r2c.quotaProgrammaUsa())
-                : puOperazione(puTurn, puC + puOp + puAfrica, r2c.quotaForzaSbarcoUk());
-        final Map<String, Integer> mix = p.acquisti(pu, garrison, turn);
+                ? puOperazione(puTurn, puC, usaShare)
+                : puOperazione(puTurn, puC + puOp + puAfrica, ukShare);
+        // step R5 (A1, B1-B2): escorts for A3, the defended port's zone of the United Kingdom
+        final Map<String, Integer> mix =
+            r5
+                ? AlleatiR5.acquistiProgramma(proData, calc, p, pu, garrison, turn)
+                : p.acquisti(pu, garrison, turn);
         SbarcoCoordinato.registraProgramma(
             data, player, turn.has("programma") ? turn.getAsJsonObject("programma") : null);
         if (!mix.isEmpty() && p.porto() != null) {
@@ -1009,6 +1024,16 @@ public final class Impegno {
 
     private Programmi.Turno programmi() {
       return new Programmi.Turno(proData, calc, player, alliance, c, lines);
+    }
+
+    /** Step R5 (B5): the territory {@code name} is own and in case c. */
+    private static boolean casoC(final Map<Territory, JsonObject> cases, final String name) {
+      for (final var e : cases.entrySet()) {
+        if (e.getKey().getName().equals(name)) {
+          return CampagnaOmbra.CASO_C.equals(e.getValue().get("caso").getAsString());
+        }
+      }
+      return false;
     }
 
     /** The minimal garrison (units) of case c in the program's port, 0 if not in case c. */
@@ -2251,6 +2276,16 @@ public final class Impegno {
       t.getUnitCollection().stream().filter(set::contains).forEach(u -> out.put(u, t));
     }
     return out;
+  }
+
+  /** The PUs of {@code mix} (type → count). */
+  static int costo(final GameState data, final GamePlayer player, final Map<String, Integer> mix) {
+    final Map<String, Integer> costs = costiAcquisto(data, player);
+    int n = 0;
+    for (final var e : mix.entrySet()) {
+      n += costs.getOrDefault(e.getKey(), 0) * e.getValue();
+    }
+    return n;
   }
 
   /** PUs of one unit of each type the nation can buy (production frontier), by type name. */

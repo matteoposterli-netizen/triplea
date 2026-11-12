@@ -347,7 +347,10 @@ public final class SbarcoCoordinato {
       return;
     }
     final GameProperties props = proData.getData().getProperties();
-    props.set(KEY_TETTO + player.getName(), (Serializable) null);
+    if (!AlleatiR5.attivo(proData.getData(), player)) {
+      // step R5 decides the cap (B2) at the program's purchase
+      props.set(KEY_TETTO + player.getName(), (Serializable) null);
+    }
     if (Programmi.USA.equals(player.getName()) || Programmi.UK.equals(player.getName())) {
       try {
         new Turno(proData, calc, player, c, lines).inizio();
@@ -603,6 +606,7 @@ public final class SbarcoCoordinato {
             par));
     // the loaded transports at sea at the end of the turn: lost at sea before the next US turn?
     final JsonArray ids = new JsonArray();
+    final JsonArray transports = new JsonArray();
     for (final Territory z : data.getMap().getTerritories()) {
       if (!z.isWater()) {
         continue;
@@ -612,6 +616,7 @@ public final class SbarcoCoordinato {
               Matches.unitIsSeaTransportButNotCombatSeaTransport()
                   .and(Matches.unitIsOwnedBy(player)))) {
         ids.add(tr.getId().toString());
+        transports.add(tr.getId().toString());
         tr.getTransporting().forEach(u -> ids.add(u.getId().toString()));
       }
     }
@@ -622,6 +627,7 @@ public final class SbarcoCoordinato {
     p.addProperty("round", round);
     p.addProperty("controllo", "perse_in_mare");
     p.add("unita", ids);
+    p.add("trasporti", transports);
     arr(st, "pendenti").add(p);
     salva(data.getProperties(), alliance, st);
   }
@@ -689,6 +695,15 @@ public final class SbarcoCoordinato {
     /** Step R4 (B2, B3): only these units are loaded by {@link #piano} (null = any). */
     @Nullable Predicate<Unit> filtro;
 
+    /** Step R5: only these transports are used by {@link #piano} (null = any). */
+    @Nullable Predicate<Unit> filtroTrasporti;
+
+    /** Step R5: the United Kingdom lands from its home port (null = the alliance's base). */
+    @Nullable Territory baseFissa;
+
+    /** Step R5: the land units unloaded by {@link #esegui} (they leave the program). */
+    final List<Unit> partite = new ArrayList<>();
+
     Turno(
         final ProData proData,
         final ProOddsCalculator calc,
@@ -706,6 +721,42 @@ public final class SbarcoCoordinato {
       this.lines = lines;
       this.st = stato(props, alliance);
       this.p = new Programmi.Turno(proData, calc, player, alliance, c, lines);
+      if (r5()) {
+        filtroTrasporti = AlleatiR5.trasportoDelProgramma(data, player);
+        if (!usa()) {
+          baseFissa = p.porto();
+        }
+      }
+    }
+
+    /** Step R5: one row "perdite_in_mare" from a check of the units at sea. */
+    private void perditeInMare(final JsonObject x, final Set<String> onMap, final int lost) {
+      int lostTransports = 0;
+      if (x.has("trasporti")) {
+        for (final JsonElement id : x.getAsJsonArray("trasporti")) {
+          lostTransports += onMap.contains(id.getAsString()) ? 0 : 1;
+        }
+      }
+      final JsonArray alt = new JsonArray();
+      final JsonObject a = new JsonObject();
+      a.addProperty("decisione", x.get("id").getAsString());
+      a.addProperty("unita_in_mare", x.getAsJsonArray("unita").size());
+      a.addProperty("unita_perse", lost);
+      a.addProperty("trasporti_persi", lostTransports);
+      a.addProperty("carico_perso", Math.max(0, lost - lostTransports));
+      alt.add(a);
+      RegistroDecisioni.scrivi(
+          data,
+          RegistroDecisioni.decisione(
+              RegistroDecisioni.nuovoId(st, round, player.getName(), "perdite_in_mare"),
+              round,
+              player.getName(),
+              "perdite_in_mare",
+              alt,
+              String.valueOf(lost),
+              "CONTROLLO",
+              lost + " unita' perse in mare (" + lostTransports + " trasporti)",
+              AlleatiR5.parametri()));
     }
 
     boolean usa() {
@@ -715,6 +766,11 @@ public final class SbarcoCoordinato {
     /** Step R4 block B (switch "alleati_r4"). */
     boolean r4() {
       return SnodoAlleati.attivo(data, player);
+    }
+
+    /** Step R5 (switch "alleati_r5"): replaces R3a and R4 for the USA and the United Kingdom. */
+    boolean r5() {
+      return AlleatiR5.attivo(data, player);
     }
 
     /** Step R4 (B3): the landing program's units (followed by id). */
@@ -736,6 +792,10 @@ public final class SbarcoCoordinato {
     // -------------------------------------------------------------------------- purchase
 
     void inizio() {
+      if (r5()) {
+        AlleatiR5.inizio(this);
+        return;
+      }
       lines.add("  --- R3a sbarco coordinato e teatri (" + player.getName() + ") ---");
       controlli();
       if (usa()) {
@@ -764,7 +824,7 @@ public final class SbarcoCoordinato {
     }
 
     /** The outcomes known now of earlier decisions (pending checks). */
-    private void controlli() {
+    void controlli() {
       final JsonArray pending = arr(st, "pendenti");
       final JsonArray keep = new JsonArray();
       final Set<String> onMap = new HashSet<>();
@@ -821,6 +881,9 @@ public final class SbarcoCoordinato {
             }
             out.addProperty("controllo", "unita' perse in mare nei turni nemici");
             out.addProperty("unita_perse_in_mare", lost);
+            if (r5()) {
+              perditeInMare(x, onMap, lost);
+            }
           }
           case "preso" -> {
             final Territory t = data.getMap().getTerritoryOrNull(x.get("bersaglio").getAsString());
@@ -1241,6 +1304,9 @@ public final class SbarcoCoordinato {
 
     @Nullable
     Territory base() {
+      if (baseFissa != null) {
+        return baseFissa;
+      }
       return st.has("base") ? data.getMap().getTerritoryOrNull(st.get("base").getAsString()) : null;
     }
 
@@ -1359,7 +1425,9 @@ public final class SbarcoCoordinato {
       }
       transports.sort(Comparator.comparing(u -> u.getId().toString()));
       for (final Unit tr : transports) {
-        if (!tr.getUnloaded().isEmpty() || trasportiUsati.contains(tr)) {
+        if (!tr.getUnloaded().isEmpty()
+            || trasportiUsati.contains(tr)
+            || (filtroTrasporti != null && !filtroTrasporti.test(tr))) {
           continue;
         }
         final Territory z = luogo(tr);
@@ -1753,7 +1821,7 @@ public final class SbarcoCoordinato {
     /**
      * Transports already taken by the African wave (step R4): the main wave does not count them.
      */
-    private final Set<Unit> trasportiUsati = new HashSet<>();
+    final Set<Unit> trasportiUsati = new HashSet<>();
 
     /**
      * B2: among {@code targets} the one with the green light and the highest score (alliance hold x
@@ -1959,6 +2027,7 @@ public final class SbarcoCoordinato {
       final Predicate<Unit> fast = u -> SnodoAlleati.veloce(u, r);
       return switch (w.get("filtro").getAsString()) {
         case "veloci" -> prog.and(fast);
+        case "lenti" -> prog.and(fast.negate());
         default -> prog;
       };
     }
@@ -2002,13 +2071,17 @@ public final class SbarcoCoordinato {
               landed > 0 ? "ESEGUITO" : "NON_ESEGUITO",
               "unita' veloci in Africa: " + landed,
               parametri()));
+      w.addProperty("id_sbarco", id);
+      final JsonArray ships = new JsonArray();
+      plan.viaggi().forEach(v -> ships.add(v.trasporto().getId().toString()));
+      w.add("trasporti_ids", ships);
       st.add("ondata_africa", w);
       lines.add("  SBARCO USA (veloci, Africa) su " + t.getName() + ": " + landed + " unita'");
       return moved;
     }
 
     /** The case-c garrison of the base (Impegno's port garrison when the base is the port). */
-    private int presidioBase() {
+    int presidioBase() {
       final Territory base = base();
       if (base == null || !base.isOwnedBy(player)) {
         return 0;
@@ -2214,6 +2287,22 @@ public final class SbarcoCoordinato {
     Set<Unit> combattimento(final IMoveDelegate delegate) {
       this.moveDel = delegate;
       final Set<Unit> moved = new LinkedHashSet<>();
+      if (r5()) {
+        try {
+          if (usa()) {
+            // step R5 (A3): the naval battle of Gibraltar first
+            moved.addAll(AlleatiR5.battaglia(this, delegate));
+          }
+          moved.addAll(combattimentoOnde(moved));
+        } finally {
+          AlleatiR5.partite(data, player, partite);
+        }
+        return moved;
+      }
+      return combattimentoOnde(moved);
+    }
+
+    private Set<Unit> combattimentoOnde(final Set<Unit> moved) {
       JsonObject plan = null;
       String key = null;
       if (usa() && st.has("ondata")) {
@@ -2223,7 +2312,8 @@ public final class SbarcoCoordinato {
         plan = st.getAsJsonObject("azione_uk");
         key = "azione_uk";
         if (!plan.has("tipo")
-            || !List.of("completamento", "solo").contains(plan.get("tipo").getAsString())) {
+            || !List.of("completamento", "solo", "logoramento")
+                .contains(plan.get("tipo").getAsString())) {
           return moved;
         }
       }
@@ -2239,7 +2329,7 @@ public final class SbarcoCoordinato {
       final int garrison =
           plan.has("presidio_base") ? plan.get("presidio_base").getAsInt() : presidioBase();
       // step R4 (B2): the African wave of the fast units first, then the main wave without them
-      if (usa() && r4() && st.has("ondata_africa")) {
+      if (usa() && (r4() || r5()) && st.has("ondata_africa")) {
         moved.addAll(ondataAfrica(garrison));
       }
       filtro = filtroOndata(plan);
@@ -2253,7 +2343,7 @@ public final class SbarcoCoordinato {
       piano.viaggi().forEach(v -> ships.add(v.trasporto().getId().toString()));
       plan.add("trasporti_ids", ships);
       st.add(key, plan);
-      final String tipo = usa() ? "sbarco" : "rinforzo_testa_di_ponte";
+      final String tipo = usa() || r5() ? "sbarco" : "rinforzo_testa_di_ponte";
       final String id = RegistroDecisioni.nuovoId(st, round, player.getName(), tipo);
       plan.addProperty("id_sbarco", id);
       final JsonArray alt = new JsonArray();
@@ -2294,7 +2384,7 @@ public final class SbarcoCoordinato {
     }
 
     /** Loads, sails and unloads the plan; returns the land units unloaded on {@code t}. */
-    private int esegui(final Piano plan, final Territory t, final Set<Unit> moved) {
+    int esegui(final Piano plan, final Territory t, final Set<Unit> moved) {
       int landed = 0;
       final Territory base = base();
       for (final Viaggio v : plan.viaggi()) {
@@ -2334,6 +2424,7 @@ public final class SbarcoCoordinato {
             moveDel.performMove(new MoveDescription(cargo, new Route(at, t)));
         if (error.isEmpty()) {
           landed += cargo.size();
+          partite.addAll(cargo);
         } else {
           ProLogger.warn("[Pro+] R3a: scarico non riuscito " + error.get());
         }
@@ -2347,15 +2438,26 @@ public final class SbarcoCoordinato {
       this.moveDel = delegate;
       final Set<Unit> held = new LinkedHashSet<>();
       if (usa()) {
-        esitoOndata();
+        if (r5()) {
+          AlleatiR5.esitoBattaglia(this);
+        }
+        esitoOndata("ondata");
+        if (r5()) {
+          esitoOndata("ondata_africa");
+        }
       } else {
         held.addAll(esitoUk());
+        if (r5()) {
+          // step R5 (B3): the program's units left reinforce the US conquest of the round
+          held.addAll(AlleatiR5.rinforzoUk(this));
+          AlleatiR5.partite(data, player, partite);
+        }
       }
       // the landing force still at the base stays (it defends the base)
       final Territory base = base();
       if (base != null && !toccaNemico(base)) {
         final List<Unit> force = new ArrayList<>(forzaAllaBase(base, true));
-        if (r4()) {
+        if (r4() || r5()) {
           force.removeIf(delProgramma().negate());
         }
         held.addAll(force);
@@ -2365,11 +2467,11 @@ public final class SbarcoCoordinato {
     }
 
     /** The US wave's outcome after the battles: taken, losses against P80; the bridgehead. */
-    private void esitoOndata() {
-      if (!st.has("ondata")) {
+    private void esitoOndata(final String key) {
+      if (!st.has(key)) {
         return;
       }
-      final JsonObject w = st.getAsJsonObject("ondata");
+      final JsonObject w = st.getAsJsonObject(key);
       if (w.get("round").getAsInt() != round
           || !w.get("eseguito").getAsBoolean()
           || w.has("esito")) {
@@ -2423,6 +2525,7 @@ public final class SbarcoCoordinato {
         w.getAsJsonArray("trasporti_ids").forEach(ids::add);
       }
       sea.add("unita", ids);
+      sea.add("trasporti", ids.deepCopy());
       arr(st, "pendenti").add(sea);
     }
 
@@ -2475,7 +2578,13 @@ public final class SbarcoCoordinato {
           "tenuta_stimata_pct", a.has("tenuta_pct") ? a.get("tenuta_pct").getAsDouble() : -1);
       a.addProperty("esito", taken ? "preso" : "non preso");
       RegistroDecisioni.scrivi(
-          data, RegistroDecisioni.esito(id, round, player.getName(), "rinforzo_testa_di_ponte", x));
+          data,
+          RegistroDecisioni.esito(
+              id,
+              round,
+              player.getName(),
+              "logoramento".equals(kind) ? "sbarco" : "rinforzo_testa_di_ponte",
+              x));
       if (taken) {
         final JsonObject pend = new JsonObject();
         pend.addProperty("id", id);
@@ -2516,6 +2625,11 @@ public final class SbarcoCoordinato {
       final int n = esegui(plan, t, moved);
       held.addAll(moved);
       return n;
+    }
+
+    @Nullable
+    Territory luogoDi(final Unit u) {
+      return luogo(u);
     }
 
     private @Nullable Territory luogo(final Unit u) {
@@ -2565,14 +2679,14 @@ public final class SbarcoCoordinato {
     return o;
   }
 
-  private static JsonObject obj(final JsonObject o, final String key) {
+  static JsonObject obj(final JsonObject o, final String key) {
     if (!o.has(key) || !o.get(key).isJsonObject()) {
       o.add(key, new JsonObject());
     }
     return o.getAsJsonObject(key);
   }
 
-  private static JsonArray arr(final JsonObject o, final String key) {
+  static JsonArray arr(final JsonObject o, final String key) {
     if (!o.has(key) || !o.get(key).isJsonArray()) {
       o.add(key, new JsonArray());
     }

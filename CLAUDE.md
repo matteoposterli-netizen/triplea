@@ -205,6 +205,9 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `StrategaInterruttori.ASSEDIO`/`ALLEATI_R4`, `ProPurchaseOrders.Mandatory.factory` (facoltativo, usato da `ProPlanPurchase`),
   `Assedio.bombarda` dall'hook `reviewAttacks`; autoplay `MonitorR4`, `ConfrontoR4`, `Vittoria.letturaXml`/`letturaNote`. Vedi
   "Strategia completa (step R4)" e "Scelte di R4".
+- Step R5 ALLEATI RIFATTI: `ai/proplus/AlleatiR5` (config `impegno.r5`, interruttore `alleati_r5`), agganci in `SbarcoCoordinato`,
+  `Programmi`, `Impegno`, `SnodoAlleati`, `Reddito`, `RegistroDecisioni`, `StrategaInterruttori.ALLEATI_R5`; autoplay `ConfrontoR5`,
+  `Monitor` (+`r5`). Vedi "Alleati rifatti (step R5)" e "Scelte di R5".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -490,6 +493,9 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   (`Axis=impegno+assedio`), c2 `Hard-vs-Alleati-R3a` (`Allies=impegno`), c2n `Hard-vs-Alleati-R3a-R4` (`Allies=impegno+alleati_r4`);
   `publish` timeout 45 min, riepilogo nel sommario della run troncato a 900 KB (completo nello zip). Tabelle per configurazione in
   "Partite complete" (`ConfrontoR4`).
+  **Dallo step R5** `[completa]` = 4 configurazioni x 40 semi 1181-1220 = 160 partite senza chiave: a `Hard-vs-Hard`, e1
+  `Hard-vs-Alleati-R5` (`Allies=impegno+alleati_r5`), e2 `Asse-impegno-assedio-vs-Hard` (`Axis=impegno+assedio`), e3
+  `Asse-assedio-vs-Alleati-R5` (entrambe le alleanze Stratega senza chiave); sottosezione "R5" (`ConfrontoR5`).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -2537,6 +2543,104 @@ autoplay `MonitorR4`, `ConfrontoR4`.
 18. **Trasporti allo snodo**: con unita' del programma ferme a Gibilterra i trasporti USA vuoti nelle zone di Gibilterra restano li' (non
     tornano al porto) e lo sbarco dallo snodo li carica; visto in prova che altrimenti le unita' si accumulavano a Gibilterra senza
     trasporti (attese "NESSUN_CARICO" con 30+ unita'). Scartato: comprare trasporti nuovi a Gibilterra (non c'e' fabbrica).
+
+### Alleati rifatti (step R5)
+
+Interruttore nuovo `alleati_r5` di `StrategaInterruttori` (default dal file dati `impegno.r5.alleati_r5_acceso_di_default` =
+**false**: spento = comportamento di prima), sopra `impegno` (autoplay `--stratega-acceso Allies=impegno+alleati_r5`, etichetta
+"[con alleati_r5]"). Acceso, per **USA e Regno Unito** sostituisce R3a e `alleati_r4` (`SnodoAlleati.attivo` diventa falso per
+loro); la Russia resta Hard (nessuna campagna), la Francia non gioca l'impegno; l'Asse non cambia; livello LLM e tenute invariati.
+Valori in `stratega-llm.json` `impegno.r5` (`AlleatiR5.Config`), ognuno `{"valore", "origine"}` ("scelto", "richiesta dello step R5"
+o "dalla mappa"), nessuno tarato. Classe nuova `ai/proplus/AlleatiR5`; agganci in `SbarcoCoordinato.Turno` (`r5()`: `inizio`,
+`combattimento`, `nonCombattimento`, filtro dei trasporti del programma, base fissa del Regno Unito, unita' partite), `Programmi.Turno`
+(`r5()`: solo trasporti del programma, scorta di A3, divieto dei trasporti di B2, `navigaR5`), `Impegno` (Sudafrica B5, quota 70 e
+acquisti R5, `casoC`, `costo`), `SnodoAlleati` (`programmaPerId`, `compraSudafrica`), `Reddito.valoreOra`, `RegistroDecisioni` (tipi e
+motivi). **Non valgono piu'** (acceso): condizione di tenuta nel via libera, teatro aperto/chiuso, arresto della spola per contrattacco
+stimato, tetto ai trasporti (USA mai; Regno Unito solo B2), trattenute di unita' non comprate dal programma, Sudafrica senza condizione.
+- **A1 Acquisti USA** (`AlleatiR5.acquistiProgramma`): presidio della capitale (caso c) tolto, 70% al programma col carico bilanciato
+  di R2c contato **sui soli trasporti del programma** (id in `programma_ids`), scorta = max(1 nave da guerra per il gruppo se al porto
+  non ce n'e', cacciatorpediniere che servono ad A3 per arrivare al 70%) fino a `max_scorta_per_turno` 4. Prima della guerra: trasporti
+  carichi fermi sulla costa est (invariato).
+- **A2 Rotta** (`rotta`, registro `rotta_usa`): Gibilterra dell'alleanza e zone 91/92 senza navi da guerra nemiche ⇒ snodo Gibilterra
+  (teatro SUD), altrimenti base United Kingdom (teatro NORD). Spola (`Programmi.Turno.navigaR5`): il gruppo dei trasporti carichi parte
+  solo con almeno `min_navi_nel_gruppo` 1 nave da guerra della stessa zona (fino a 4 con lui) e fa tutto il movimento verso la base per
+  zone senza nemici, **senza controllo del contrattacco**; senza scorta resta fermo (trattenuto). I vuoti tornano al porto senza scorta.
+- **A3 Battaglia di Gibilterra** (`battagliaPrevista` all'acquisto, `battaglia` nel combattimento USA prima di tutto, `esitoBattaglia`
+  nel non combattimento): per ogni zona di Gibilterra con navi da guerra nemiche, le navi USA in portata (non portaerei) contro tutte le
+  unita' nemiche della zona; >= 70 ⇒ battaglia (ricalcolata sul tabellone reale); sotto ⇒ niente, il programma compra scorta e le
+  ondate vanno al Regno Unito. Esito: mare liberato, navi perse.
+- **A4 Presa di Gibilterra** (`presaGibilterra`, `presa_gibilterra`): Gibilterra dell'Asse e mare libero ⇒ sbarco del programma (dalla
+  base Regno Unito) con vittoria >= 70.
+- **A5 Snodo** (`snodo`, `snodo_usa`): ogni round dalla base corrente; finche' l'Asse tiene Egitto o un territorio del Nord Africa o un
+  bonus italiano africano e' attivo (`africaAperta`) le unita' veloci del programma (movimento >= 2) vanno in Marocco se alleato o sul
+  bersaglio nordafricano migliore (`bersagli_africa`); il resto (le lente, o tutte quando l'Africa e' chiusa) sul bersaglio di valore
+  piu' alto tra `bersagli_resto` (Normandy Bordeaux, Southern France, Sardinia, Sicily, Southern Italy) con vittoria >= 70 sulle forze
+  reali; valore = indice + bonus ottenuti + bonus tolti (C di R4); parita' = vittoria. **Nessuna condizione di tenuta** (la tenuta
+  stimata e' registrata solo come informazione: `tenuta_stimata_pct_info`). Nessun bersaglio ⇒ ATTESA_ACCUMULO con `parametri.manca`.
+  Codici AFRICA / FRANCIA / ITALIA / MISTO.
+- **A6 Sbarco e trattenute**: ondate eseguite dal meccanismo di R3a/R4 nel combattimento prima di Hard (africana prima), solo trasporti
+  del programma (`filtroTrasporti`); le unita' di terra sbarcate escono da `programma_ids` (`partite`): da quel momento sono di Hard.
+  Trattenute (acquisto, combattimento di Hard, carico anfibio di Hard) = unita' del programma non partite, aerei esclusi. Esito dello
+  sbarco (preso, perdite) e tenuta dopo 1 e 2 round (solo informazione) anche per l'ondata africana.
+- **B1-B2 Acquisti UK**: Londra (caso c) ed Egitto (`presidi_prioritari`) e campagna, poi Sudafrica (B5), poi 70% al programma.
+  `difesaPorto`: per ogni zona del porto (109, 110) contrattacco realistico (`Programmi.Turno.vittoriaNemicaMare`) contro navi alleate
+  della zona + aerei alleati sulle portaerei della zona + aerei che possono fare scramble verso la zona (`AlleatiR5.scramble`, logica del
+  motore `ScrambleLogic`); la zona migliore <= 40 ⇒ difesa: trasporti permessi a programma e Hard; altrimenti la proprieta' del tetto di
+  R3a vieta i trasporti a Hard e al programma e il programma compra prima la difesa (il tipo piu' economico tra destroyer e fighter che
+  porta la zona <= 40, fighter solo nei posti di scramble liberi della base aerea del porto, max 3; nessuno basta ⇒ quello che scende di
+  piu'). Registro `trasporti_mare_difeso` con i numeri per zona.
+- **B3 Logoramento** (`logoramento`, `logoramento_uk`; sbarco nel combattimento come "azione_uk" tipo `logoramento`): unita' del
+  programma britannico dal porto di casa (base fissa United Kingdom) sul bersaglio di `bersagli_logoramento_uk` di valore piu' alto con
+  vittoria >= 70, senza tenuta. `rinforzoUk` nel non combattimento: se un'ondata USA del round ha preso il suo bersaglio, le unita' del
+  programma rimaste lo rinforzano.
+- **B4**: Egitto (presidio caso c, riconquista), Nord Africa a tenaglia, neutrali a est e sbarramento a sud: meccanismi esistenti
+  (`SnodoAlleati.nonCombattimentoUk` attivo anche con R5).
+- **B5 Sudafrica** (`AlleatiR5.acquistiSudafrica`): fino alla capacita' solo se un bonus italiano africano e' attivo (`bonus_africani_italiani`:
+  North Africa e Roman Empire, valutati sul possesso con `Reddito.valoreOra`), o l'Egitto non e' alleato, o l'Egitto e' in caso c;
+  registro `africa_sudafrica` con la condizione vera o `CONDIZIONE_FALSA`.
+- **Registro**: tipi nuovi `rotta_usa`, `battaglia_gibilterra`, `presa_gibilterra`, `logoramento_uk`, `trasporti_mare_difeso`,
+  `perdite_in_mare` (ai controlli delle unita' in mare: unita' e trasporti persi); motivi nuovi nell'elenco chiuso.
+- **Autoplay**: `Monitor` scrive in ogni round `r5.regioni` (unita' di terra di USA, Regno Unito, Germania, Italia per Europa
+  occidentale, Italia e isole, Nord Africa, altrove, mare; liste in `impegno.r5.regioni`); `ConfrontoR5` scrive la sottosezione **"R5"**
+  di "Partite complete" (vittorie, IC di Wilson, Fisher e1 contro a ed e3 contro e2; sbarchi per periodo e regione divisi programma/Hard;
+  trasporti; terra; Gibilterra; Russia e citta'; Italia e Africa; quota PU del programma e attese). Modalita' `[completa]` = 4
+  configurazioni x semi 1181-1220.
+- Test: `AlleatiR5Test` (11, Global 1940), `ConfrontoR5Test` (4).
+
+### Scelte di R5 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Interruttore sopra `impegno`** (come `assedio`/`alleati_r4`): senza impegno non ci sono programmi. Con `alleati_r4` e `alleati_r5`
+   accesi vince R5 (`SnodoAlleati.attivo` falso per USA e UK). Scartato: interruttore indipendente.
+2. **Trasporti del programma**: il programma usa solo i trasporti che ha comprato (id) e il carico bilanciato conta solo quelli; i
+   trasporti iniziali e quelli comprati da Hard restano a Hard. Scartato: usare qualsiasi trasporto USA (toglieva a Hard i suoi sbarchi).
+3. **Trattenute**: unita' del programma non partite, comprese navi (trasporti e scorte, servono alla spola); aerei comprati dal programma
+   (difesa del porto) mai trattenuti. "Partite" = di terra scaricate da uno sbarco o da un rinforzo del programma. Scartato: trattenere
+   anche le navi solo finche' in porto.
+4. **Scorta di A3**: cacciatorpediniere temporanei aggiunti alle navi USA in portata adesso finche' la battaglia arriva al 70% (max 4
+   per turno); e' una stima (le navi comprate arrivano dopo). Piu' 1 nave per il gruppo se al porto non ce n'e'. Scartato: stimare la
+   flotta tra due turni.
+5. **Gruppo della spola**: parte solo con almeno una nave da guerra della stessa zona; i trasporti vuoti tornano senza scorta (sono il
+   rischio minore e non devono bloccarsi). Scartato: muovere comunque senza scorta.
+6. **Battaglia di Gibilterra**: attaccanti = navi da guerra USA in portata nel turno (non portaerei, non aerei), difensori = tutte le
+   unita' nemiche della zona; ogni zona occupata separatamente. Scramble dell'Asse in difesa non stimato. Scartato: includere gli aerei
+   USA (atterraggio non verificato).
+7. **Base con Gibilterra non utilizzabile**: United Kingdom; da li' A5 continua sui bersagli raggiungibili (Normandy Bordeaux) invece di
+   fermarsi. Scartato: nessuno sbarco USA finche' Gibilterra non e' libera.
+8. **Africa aperta**: territori "tenuti dall'Italia" letti come dell'Asse (l'obiettivo italiano North Africa conta il possesso
+   d'alleanza); bonus africani = North Africa e Roman Empire (contiene Egitto e Gibilterra). Scartato: solo proprieta' italiana diretta.
+9. **Unita' veloci con l'Africa aperta ma senza bersaglio al 70%**: restano (accumulo), non vanno col resto. Scartato: mandarle in
+   Francia (la regola le vuole in Africa finche' l'Italia la tiene).
+10. **Valore e spareggio**: indice di R2b + bonus ottenuti + bonus tolti; a parita' la vittoria piu' alta.
+11. **Zona del porto difesa (B2)**: basta la migliore delle zone del porto (109 o 110); il piazzamento di Hard sceglie la zona e non e'
+    controllato. Scartato: tutte le zone (avrebbe bloccato quasi sempre).
+12. **Difesa comprata**: il tipo piu' economico che porta la zona <= 40; i caccia contano solo nei posti di scramble liberi della base
+    aerea del porto (la mappa permette 3 aerei per base); nessuno basta ⇒ quello che abbassa di piu' il contrattacco.
+13. **Logoramento UK**: dal porto di casa con i trasporti del programma; bersagli = i costieri NORD di R3a; rinforzo della conquista USA
+    con le unita' del programma rimaste (nessuna soglia). Scartato: logoramento anche dal Mediterraneo (il Regno Unito non ha base li').
+14. **Sudafrica**: "Egitto in caso c" letto dalla regola 2.6 dell'acquisto del turno; capacita' della fabbrica come in R4.
+15. **Perdite in mare**: dai controlli gia' esistenti (trasporti della spola a fine turno e dell'ondata) con una riga `perdite_in_mare`.
+16. **Tabelle**: "Hard" = sbarchi del monitor meno quelli del programma (il monitor conta solo territori nemici a inizio turno, il
+    programma anche il Marocco alleato: per questo il minimo e' 0).
 
 ## Come configurare lo stratega
 

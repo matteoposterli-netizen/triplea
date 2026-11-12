@@ -53,7 +53,14 @@ public final class RegistroDecisioni {
           "snodo_usa",
           "africa_sudafrica",
           "neutrali_est",
-          "sbarramento_sud");
+          "sbarramento_sud",
+          // step R5
+          "rotta_usa",
+          "battaglia_gibilterra",
+          "presa_gibilterra",
+          "logoramento_uk",
+          "trasporti_mare_difeso",
+          "perdite_in_mare");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
@@ -120,7 +127,21 @@ public final class RegistroDecisioni {
           "PRESO",
           "NON_PRESO",
           "PRESIDIO",
-          "NESSUNA_MINACCIA");
+          "NESSUNA_MINACCIA",
+          // step R5
+          "MARE_GIBILTERRA_OCCUPATO",
+          "GIBILTERRA_ASSE",
+          "BATTAGLIA",
+          "SOTTO_SOGLIA",
+          "ITALIA",
+          "ATTESA_ACCUMULO",
+          "LOGORAMENTO",
+          "MARE_DIFESO",
+          "MARE_NON_DIFESO",
+          "CONDIZIONE_VERA",
+          "CONDIZIONE_FALSA",
+          "SOLO_PROGRAMMA",
+          "CONTROLLO");
 
   private static final int MAX_MEMORIA = 5000;
   private static final Map<GameState, List<JsonObject>> MEMORIA =

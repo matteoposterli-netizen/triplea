@@ -34,6 +34,26 @@ public final class Reddito {
     }
   }
 
+  /** Step R5: the PUs the objective {@code id} gives now by ownership (0 = not active). */
+  public static int valoreOra(final GameState data, final String id) {
+    final Map<String, String> owners = new HashMap<>();
+    for (final Territory x : data.getMap().getTerritories()) {
+      if (!x.isWater()) {
+        owners.put(x.getName(), x.getOwner().getName());
+      }
+    }
+    final Map<String, String> alliances = new HashMap<>();
+    for (final GamePlayer p : data.getPlayerList().getPlayers()) {
+      alliances.put(p.getName(), ProPlusSettings.allianceOf(data, p).orElse(""));
+    }
+    for (final ConfigR4.Obiettivo o : ConfigR4.get().obiettivi()) {
+      if (o.id().equals(id)) {
+        return valore(o, owners, n -> alliances.getOrDefault(n, ""));
+      }
+    }
+    return 0;
+  }
+
   /** Gain of {@code nation} taking {@code t} on the real board. */
   public static Guadagno guadagno(
       final GameState data, final GamePlayer nation, final Territory t) {
