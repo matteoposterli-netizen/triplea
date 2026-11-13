@@ -1040,6 +1040,9 @@ public final class Assedio {
     final Territory port = data.getMap().getTerritoryOrNull(cfg.portoItalia());
     if (fleet) {
       mix = Impegno.composizione(pu, cfg.tipiFlottaItalia(), costs);
+    } else if (ConvoglioItalia.attivo(data, player)) {
+      // step R6c (E4): warships until the convoy's route is safe, then complete pairs
+      mix = ConvoglioItalia.acquisti(programs, pu, garrison, turn);
     } else {
       mix = programs.acquisti(pu, garrison, turn);
     }

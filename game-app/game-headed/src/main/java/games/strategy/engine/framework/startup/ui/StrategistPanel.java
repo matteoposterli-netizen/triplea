@@ -70,6 +70,9 @@ final class StrategistPanel {
   /** Step R6b (D): the Allies' Gibraltar squadron with the commitment (user profile). */
   @Getter private final javax.swing.JCheckBox squadraGibilterra = new javax.swing.JCheckBox();
 
+  /** Step R6c: Italy's Africa shuttle in convoy (with the siege and the commitment). */
+  @Getter private final javax.swing.JCheckBox italiaConvoglio = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -155,6 +158,12 @@ final class StrategistPanel {
         "<html>Asse: assedio di Mosca e Africa italiana (step R4, sperimentale); accende anche"
             + " Impegno per l'Asse; vale per le partite nuove</html>");
     panel.add(row("Assedio:", assedio));
+    italiaConvoglio.setSelected(profile.italiaConvoglio());
+    italiaConvoglio.setText(
+        "<html>Asse: spola italiana in Africa in convoglio con la flotta (step R6c,"
+            + " sperimentale); accende anche Assedio e Impegno per l'Asse; vale per le partite"
+            + " nuove</html>");
+    panel.add(row("Italia in convoglio:", italiaConvoglio));
     squadraGibilterra.setSelected(profile.squadraGibilterra());
     squadraGibilterra.setText(
         "<html>Alleati: squadra USA a Gibilterra con trasporti protetti (step R6b, sperimentale);"
@@ -182,6 +191,7 @@ final class StrategistPanel {
     profile.setImpegno(impegno.isSelected());
     profile.setAssedio(assedio.isSelected());
     profile.setSquadraGibilterra(squadraGibilterra.isSelected());
+    profile.setItaliaConvoglio(italiaConvoglio.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

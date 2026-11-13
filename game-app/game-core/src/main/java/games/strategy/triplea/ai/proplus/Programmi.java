@@ -419,7 +419,7 @@ public final class Programmi {
     }
 
     @Nullable
-    private Territory dove(final Unit u) {
+    Territory dove(final Unit u) {
       for (final Territory t : data.getMap().getTerritories()) {
         if (t.getUnitCollection().contains(u)) {
           return t;
@@ -459,7 +459,7 @@ public final class Programmi {
     }
 
     /** The own land units waiting at the port (transportable), minus the garrison of case c. */
-    private List<Unit> inAttesa(final Territory port, final int garrison) {
+    List<Unit> inAttesa(final Territory port, final int garrison) {
       final List<Unit> units =
           new ArrayList<>(
               port.getMatches(

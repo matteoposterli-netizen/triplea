@@ -220,6 +220,11 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `Impegno` (seconda fabbrica negli ordini), `RegistroDecisioni` (tipi, motivi, `scriviEsterna`), `Stratega.registra` + `ProfiloStratega` +
   `StrategistPanel` (caselle "Assedio" e "Squadra di Gibilterra"); autoplay `Monitor` (`attacco_subito`), `ConfrontoR6b` +
   `r6-riferimento.json`. Vedi "Trasporti protetti (step R6b)" e "Scelte di R6b".
+- Step R6c ITALIA IN CONVOGLIO: `ai/proplus/ConvoglioItalia` (config `impegno.r6c`, interruttore `italia_convoglio` sopra `assedio`,
+  spento di default = Asse identico), agganci in `Assedio.acquistiItalia`, `Impegno.nonCombattimento`, `ProPlusAi` (trattenute, sbarco nel
+  combattimento), `StrategaInterruttori.ITALIA_CONVOGLIO`, `RegistroDecisioni` (`italia_convoglio`), terza casella "Italia in convoglio" nel
+  pannello Stratega; autoplay `Monitor` (attacchi subiti anche dalle navi italiane, `portate_africa`), `ConfrontoItalia`. Vedi "Italia in
+  convoglio (step R6c)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -5492,3 +5497,23 @@ in 40 partite f1); quota PU dal R5 al 60%.
 - Giudizio: R6b fa quello che chiede (trasporti del programma persi −72%, rientri e spola funzionanti) ma il numero di vittorie non
   cambia (f1 = a). e2 18/40 contro 25/40 di R6 con codice dell'Asse identico: varianza tra run (p ~0,17), da tenere presente nei
   confronti tra run diverse.
+
+### Step R6c ITALIA IN CONVOGLIO — spola italiana con stato corretto, regola A1 e convoglio scortato (2026-11-13)
+
+Interruttore nuovo `italia_convoglio` (sopra `assedio`, solo Italia; default dal file dati `impegno.r6c.italia_convoglio_acceso_di_default` =
+**false**: spento = Asse identico a prima; autoplay `--stratega-acceso Axis=impegno+assedio+italia_convoglio`; terza casella del pannello).
+- **Causa del "prima della guerra"** della spola italiana (R6: 850 turni su 1980, 43%): senza una base dell'Asse in Africa
+  `Programmi.puoScaricare()` era falso e la spola scriveva il testo di default degli USA. Ora (`ConvoglioItalia.meta`): base = la base
+  dell'Asse in Africa piu' vicina via mare dal porto (`basi_africa_italia`); senza base, sbarco sul bersaglio africano di valore piu' alto con
+  vittoria >= 70 (`soglia_sbarco`), da una zona confinante; mai "prima della guerra", mai il Regno Unito come base.
+- **E2 regola A1 per l'Italia**: `TrasportiProtetti.valuta` con difensori = navi da guerra italiane e tedesche della zona, aerei
+  italiani/tedeschi che possono fare scramble, aerei sulle portaerei; gli aerei tedeschi non vengono mossi.
+- **E3 convoglio**: i trasporti partono con la scorta minima (una nave da guerra italiana alla volta, quella che abbassa di piu' la vittoria
+  nemica, da qualsiasi zona da cui raggiunge l'arrivo) fino alla zona piu' lontana sicura; scorta ferma con i trasporti, rientro insieme.
+- **E4 acquisti**: prima navi da guerra (`tipi_flotta_italia`, un'unita' alla volta con il calo maggiore per PU, max 4) finche' la zona d'arrivo
+  e' sicura con tutta la flotta; poi coppie complete (trasporto + carico); truppe in attesa contate in unita'.
+- Registro: tipo `italia_convoglio` (round, stato, base, sicurezza della rotta, acquisto, caricate/scaricate); `trasporti_sicurezza` e
+  `attacco_subito` anche per le navi italiane. Sezione "R6c" (o "R6b-bis" con semi >= 1301) del riepilogo (`ConfrontoItalia`).
+- Test: `ConvoglioItaliaTest` (7), autoplay `ConfrontoItaliaTest` (2). Suite locale: 3414 test, 1 fallito (`ContentDownloaderIntegrationTest`,
+  rete della sandbox), 1 saltato; golden Hard, `NudoHardTest`, `DiaryNeutralityTest`, `CampagnaOmbraTest` verdi.
+- Run `[completa]`: e2 (Asse impegno+assedio quota 70 vs Hard) e h (e2 + italia_convoglio vs Hard), semi 1261-1300, 80 partite.

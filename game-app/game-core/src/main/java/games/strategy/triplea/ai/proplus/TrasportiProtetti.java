@@ -964,7 +964,7 @@ public final class TrasportiProtetti {
     return o;
   }
 
-  private static String registra(
+  static String registra(
       final GameState data,
       final JsonObject st,
       final GamePlayer player,

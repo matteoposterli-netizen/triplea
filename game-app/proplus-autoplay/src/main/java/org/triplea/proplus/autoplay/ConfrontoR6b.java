@@ -46,7 +46,9 @@ final class ConfrontoR6b {
       return true;
     }
     for (final Game g : games) {
-      if (g.json() != null && !ConfrontoR5.decisioni(g.json(), "trasporti_sicurezza").isEmpty()) {
+      if (g.json() != null
+          && ConfrontoR5.decisioni(g.json(), "trasporti_sicurezza").stream()
+              .anyMatch(d -> "Americans".equals(d.get("nazione").getAsString()))) {
         return true;
       }
     }
@@ -442,10 +444,15 @@ Configurazioni: (a) Hard vs Hard; (f1) Hard vs Alleati con impegno + squadra_gib
   // ============================================================================ attacks
 
   static List<JsonObject> attacchi(final JsonObject j) {
+    return attacchi(j, "Americans");
+  }
+
+  /** The {@code attacco_subito} rows of {@code nation}'s ships. */
+  static List<JsonObject> attacchi(final JsonObject j, final String nation) {
     final List<JsonObject> out = new ArrayList<>();
     for (final JsonObject d : ConfrontoR5.decisioni(j, "attacco_subito")) {
       final JsonObject a = ConfrontoR5.alt0(d);
-      if (a != null) {
+      if (a != null && nation.equals(d.get("nazione").getAsString())) {
         a.addProperty("_round", d.get("round").getAsInt());
         out.add(a);
       }
@@ -521,7 +528,7 @@ Attacchi subiti dalle navi USA (registro attacco_subito, scritto dal monitor del
     }
   }
 
-  private static String medieTipo(final List<JsonObject> rows, final String key) {
+  static String medieTipo(final List<JsonObject> rows, final String key) {
     final Map<String, Double> m = new TreeMap<>();
     for (final JsonObject a : rows) {
       if (a.has(key)) {

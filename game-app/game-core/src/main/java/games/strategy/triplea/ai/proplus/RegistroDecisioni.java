@@ -70,7 +70,9 @@ public final class RegistroDecisioni {
           "trasporti_sicurezza",
           "scorta_ondata",
           "rientro_trasporti",
-          "attacco_subito");
+          "attacco_subito",
+          // step R6c
+          "italia_convoglio");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =

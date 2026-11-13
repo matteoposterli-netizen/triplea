@@ -32,6 +32,8 @@ import java.util.Optional;
  *   <li>{@link #SQUADRA_GIBILTERRA} (step R6, default from {@code impegno.r6}: OFF), on top of
  *       {@link #IMPEGNO}: the USA's Gibraltar squadron ({@link SquadraGibilterra}); only the USA
  *       play the commitment, the other Allies play as Hard.
+ *   <li>{@link #ITALIA_CONVOGLIO} (step R6c, default from {@code impegno.r6c}: OFF), on top of
+ *       {@link #ASSEDIO}: Italy's Africa shuttle in convoy ({@link ConvoglioItalia}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -42,7 +44,8 @@ public enum StrategaInterruttori {
   ASSEDIO("assedio", false),
   ALLEATI_R4("alleati_r4", false),
   ALLEATI_R5("alleati_r5", false),
-  SQUADRA_GIBILTERRA("squadra_gibilterra", false);
+  SQUADRA_GIBILTERRA("squadra_gibilterra", false),
+  ITALIA_CONVOGLIO("italia_convoglio", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -75,6 +78,9 @@ public enum StrategaInterruttori {
     }
     if (this == SQUADRA_GIBILTERRA) {
       return SquadraGibilterra.Config.get().accesoDiDefault();
+    }
+    if (this == ITALIA_CONVOGLIO) {
+      return ConvoglioItalia.Config.get().accesoDiDefault();
     }
     return predefinito;
   }
@@ -137,7 +143,7 @@ public enum StrategaInterruttori {
                                     "Interruttore dello Stratega sconosciuto: "
                                         + x
                                         + " (liste, tenute, ombra, impegno, assedio, alleati_r4,"
-                                        + " alleati_r5, squadra_gibilterra)"))
+                                        + " alleati_r5, squadra_gibilterra, italia_convoglio)"))
                         .id())
             .distinct()
             .toList();

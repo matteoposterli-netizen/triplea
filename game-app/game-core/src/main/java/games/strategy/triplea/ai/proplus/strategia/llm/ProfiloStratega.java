@@ -119,6 +119,19 @@ public final class ProfiloStratega {
 
   private static final String KEY_ASSEDIO = "assedio";
   private static final String KEY_SQUADRA = "squadra_gibilterra";
+  private static final String KEY_CONVOGLIO = "italia_convoglio";
+
+  /**
+   * Step R6c: "Italia in convoglio" for the Axis (turns on "impegno", "assedio" and
+   * "italia_convoglio"). Off unless set.
+   */
+  public boolean italiaConvoglio() {
+    return si(KEY_CONVOGLIO);
+  }
+
+  public void setItaliaConvoglio(final boolean on) {
+    values.setProperty(KEY_CONVOGLIO, on ? "si" : "no");
+  }
 
   /** Step R6b (D): "Assedio" for the Axis (turns on "impegno" and "assedio"). Off unless set. */
   public boolean assedio() {

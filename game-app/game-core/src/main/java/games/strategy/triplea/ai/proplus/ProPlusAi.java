@@ -117,6 +117,8 @@ public class ProPlusAi extends ProAi {
             keep.addAll(SbarcoCoordinato.trattenute(data, player));
             // step R4 (A3): the bombers for the raid on Moscow stay out of Hard's attacks
             keep.addAll(Assedio.trattenute(data, player));
+            // step R6c: the Italian convoy stays out of Hard's attacks
+            keep.addAll(ConvoglioItalia.trattenute(data, player));
           }
           if (!keep.isEmpty()) {
             tuning.holdCombatForPurchase(data, player, keep);
@@ -272,7 +274,8 @@ public class ProPlusAi extends ProAi {
    */
   private void playCoordinatedLanding(
       final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
-    if (!SbarcoCoordinato.attivo(data, player)
+    final boolean convoy = ConvoglioItalia.attivo(data, player);
+    if (!(SbarcoCoordinato.attivo(data, player) || convoy)
         || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
       return;
     }
@@ -280,8 +283,11 @@ public class ProPlusAi extends ProAi {
       initializeData();
       prepareData(data);
       attendiCalcolatore(data, player);
+      // step R6c: the Italian convoy lands on an African target (no Axis base there)
       final java.util.Set<games.strategy.engine.data.Unit> moved =
-          SbarcoCoordinato.combattimento(getProData(), getCalc(), moveDel, player);
+          convoy
+              ? ConvoglioItalia.combattimento(getProData(), getCalc(), moveDel, player)
+              : SbarcoCoordinato.combattimento(getProData(), getCalc(), moveDel, player);
       if (moved.isEmpty()) {
         return;
       }

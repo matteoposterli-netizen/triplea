@@ -162,6 +162,15 @@ final class Monitor {
    */
   private final Set<Unit> broughtCounted = new HashSet<>();
 
+  /** Step R6c: round -> nation -> land units unloaded by transports in Africa (any owner). */
+  private final Map<Integer, Map<String, Integer>> broughtToAfrica = new TreeMap<>();
+
+  /** Step R6c: the land units at sea (aboard) when the step started. */
+  private final Set<Unit> atSeaBefore = new HashSet<>();
+
+  /** Step R6c: the siege's African territories (and Egypt). */
+  private Set<String> africa;
+
   /** Round -> nation -> transports that did nothing in the nation's turn (empty, not moved). */
   private final Map<Integer, Map<String, Integer>> idleTransports = new TreeMap<>();
 
@@ -218,6 +227,12 @@ final class Monitor {
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiPrima();
     }
+    atSeaBefore.clear();
+    for (final Territory z : data.getMap().getTerritories()) {
+      if (z.isWater()) {
+        atSeaBefore.addAll(z.getMatches(Matches.unitIsLand()));
+      }
+    }
     if (!runningPlayer.equals(turnPlayer)) {
       turnPlayer = runningPlayer;
       ownersAtTurnStart.clear();
@@ -255,6 +270,7 @@ final class Monitor {
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiDopo(lastRound);
     }
+    recordAfrica(lastRound);
     runningStep = "";
     final int round = data.getSequence().getRound();
     final GameStep step = data.getSequence().getStep();
@@ -596,35 +612,45 @@ final class Monitor {
 
   // --------------------------------------------------------- step R6b: attacks on US ships
 
-  /** Step R6b: sea zones with US units and units of the player in turn before its battle step. */
-  private final Map<Territory, List<Unit>[]> pendingAttacks = new LinkedHashMap<>();
+  /** Step R6b/R6c: the nations whose ships are watched (USA; Italy from step R6c). */
+  static final List<String> VITTIME = List.of("Americans", "Italians");
+
+  /** A sea battle due: zone, watched nation, attackers and defenders before the battle step. */
+  private record Attesa(Territory zona, String nazione, List<Unit> att, List<Unit> def) {}
+
+  /** Step R6b: the battles due in the battle step of the player in turn. */
+  private final List<Attesa> pendingAttacks = new ArrayList<>();
 
   private int attackSeq;
 
   /** Step R6b: the transports loaded when the battle step started. */
   private final Set<Unit> loadedAtStart = new HashSet<>();
 
-  /** Step R6b: the enemy's attackers and the US side's defenders where a sea battle is due. */
-  @SuppressWarnings("unchecked")
+  /** Step R6b: the enemy's attackers and the watched side's defenders where a sea battle is due. */
   private void attacchiPrima() {
     pendingAttacks.clear();
     loadedAtStart.clear();
-    final GamePlayer usa = data.getPlayerList().getPlayerId("Americans");
     final GamePlayer attacker = data.getPlayerList().getPlayerId(runningPlayer);
-    if (usa == null || attacker == null || !data.getRelationshipTracker().isAtWar(attacker, usa)) {
+    if (attacker == null) {
       return;
     }
-    for (final Territory z : data.getMap().getTerritories()) {
-      if (!z.isWater() || !z.anyUnitsMatch(Matches.unitIsOwnedBy(usa))) {
+    for (final String name : VITTIME) {
+      final GamePlayer victim = data.getPlayerList().getPlayerId(name);
+      if (victim == null || !data.getRelationshipTracker().isAtWar(attacker, victim)) {
         continue;
       }
-      final List<Unit> att = z.getMatches(Matches.isUnitAllied(attacker));
-      if (att.isEmpty()) {
-        continue;
+      for (final Territory z : data.getMap().getTerritories()) {
+        if (!z.isWater() || !z.anyUnitsMatch(Matches.unitIsOwnedBy(victim))) {
+          continue;
+        }
+        final List<Unit> att = z.getMatches(Matches.isUnitAllied(attacker));
+        if (att.isEmpty()) {
+          continue;
+        }
+        final List<Unit> def = z.getMatches(Matches.isUnitAllied(victim));
+        def.stream().filter(Unit::isTransporting).forEach(loadedAtStart::add);
+        pendingAttacks.add(new Attesa(z, name, new ArrayList<>(att), new ArrayList<>(def)));
       }
-      final List<Unit> def = z.getMatches(Matches.isUnitAllied(usa));
-      def.stream().filter(Unit::isTransporting).forEach(loadedAtStart::add);
-      pendingAttacks.put(z, new List[] {new ArrayList<>(att), new ArrayList<>(def)});
     }
   }
 
@@ -644,45 +670,24 @@ final class Monitor {
         }
       }
     }
-    for (final var e : pendingAttacks.entrySet()) {
-      final Territory z = e.getKey();
-      final List<Unit> att = e.getValue()[0];
-      final List<Unit> def = e.getValue()[1];
+    for (final Attesa e : pendingAttacks) {
+      final Territory z = e.zona();
+      final String nation = e.nazione();
+      final List<Unit> att = e.att();
+      final List<Unit> def = e.def();
       final Set<Unit> now = new HashSet<>(z.getUnits());
       final List<Unit> attLost = att.stream().filter(u -> !now.contains(u)).toList();
       final List<Unit> defLost = def.stream().filter(u -> !now.contains(u)).toList();
       if (!fought.contains(z) && attLost.isEmpty() && defLost.isEmpty()) {
         continue;
       }
-      final JsonObject a = new JsonObject();
-      a.addProperty("zona", z.getName());
-      a.addProperty("attaccante", runningPlayer);
-      a.add("attaccanti", byType(att));
-      a.add("difensori", byType(def));
-      a.add(
-          "difensori_usa",
-          byType(def.stream().filter(u -> "Americans".equals(u.getOwner().getName())).toList()));
-      a.add("perdite_attaccante", byType(attLost));
-      a.add("perdite_difensore", byType(defLost));
-      a.add(
-          "perdite_usa",
-          byType(
-              defLost.stream().filter(u -> "Americans".equals(u.getOwner().getName())).toList()));
-      a.addProperty("tuv_perso_attaccante", tuvOf(attLost));
-      a.addProperty("tuv_perso_difensore", tuvOf(defLost));
-      a.addProperty(
-          "trasporti_usa_persi",
-          defLost.stream()
-              .filter(u -> "Americans".equals(u.getOwner().getName()))
-              .filter(Matches.unitIsSeaTransportButNotCombatSeaTransport())
-              .count());
+      final List<Unit> mine = def.stream().filter(u -> nation.equals(u.getOwner().getName())).toList();
+      final List<Unit> mineLost =
+          defLost.stream().filter(u -> nation.equals(u.getOwner().getName())).toList();
       int loadedLost = 0;
       int emptyLost = 0;
       int cargoLost = 0;
-      for (final Unit u : defLost) {
-        if (!"Americans".equals(u.getOwner().getName())) {
-          continue;
-        }
+      for (final Unit u : mineLost) {
         if (Matches.unitIsSeaTransportButNotCombatSeaTransport().test(u)) {
           if (loadedAtStart.contains(u)) {
             loadedLost++;
@@ -693,22 +698,42 @@ final class Monitor {
           cargoLost++;
         }
       }
-      a.addProperty("trasporti_usa_persi_carichi", loadedLost);
-      a.addProperty("trasporti_usa_persi_vuoti", emptyLost);
-      a.addProperty("carico_usa_perso", cargoLost);
+      final JsonObject a = new JsonObject();
+      a.addProperty("zona", z.getName());
+      a.addProperty("attaccante", runningPlayer);
+      a.add("attaccanti", byType(att));
+      a.add("difensori", byType(def));
+      a.add("difensori_nazione", byType(mine));
+      a.add("perdite_attaccante", byType(attLost));
+      a.add("perdite_difensore", byType(defLost));
+      a.add("perdite_nazione", byType(mineLost));
+      a.addProperty("tuv_perso_attaccante", tuvOf(attLost));
+      a.addProperty("tuv_perso_difensore", tuvOf(defLost));
+      a.addProperty("trasporti_persi_carichi", loadedLost);
+      a.addProperty("trasporti_persi_vuoti", emptyLost);
+      a.addProperty("carico_perso", cargoLost);
+      if ("Americans".equals(nation)) {
+        // step R6b's names
+        a.add("difensori_usa", byType(mine));
+        a.add("perdite_usa", byType(mineLost));
+        a.addProperty("trasporti_usa_persi", loadedLost + emptyLost);
+        a.addProperty("trasporti_usa_persi_carichi", loadedLost);
+        a.addProperty("trasporti_usa_persi_vuoti", emptyLost);
+        a.addProperty("carico_usa_perso", cargoLost);
+      }
       final JsonArray alt = new JsonArray();
       alt.add(a);
       attackSeq++;
       games.strategy.triplea.ai.proplus.RegistroDecisioni.scriviEsterna(
           data,
-          "R" + round + "-Americans-attacco_subito-m" + attackSeq,
+          "R" + round + "-" + nation + "-attacco_subito-m" + attackSeq,
           round,
-          "Americans",
+          nation,
           "attacco_subito",
           alt,
           z.getName(),
           "ATTACCO",
-          runningPlayer + " attacca navi USA in " + z.getName());
+          runningPlayer + " attacca navi di " + nation + " in " + z.getName());
     }
     pendingAttacks.clear();
   }
@@ -730,6 +755,37 @@ final class Monitor {
               .getOrDefault(u.getType().getName(), 0);
     }
     return sum;
+  }
+
+  /** Step R6c: land units that were at sea when the step began and are now in Africa. */
+  private void recordAfrica(final int round) {
+    if (atSeaBefore.isEmpty()) {
+      return;
+    }
+    if (africa == null) {
+      africa = new HashSet<>();
+      try {
+        africa.addAll(games.strategy.triplea.ai.proplus.ConfigR4.get().italiaLivello1());
+        africa.addAll(games.strategy.triplea.ai.proplus.ConfigR4.get().italiaLivello2());
+        africa.add("Egypt");
+      } catch (final RuntimeException e) {
+        // no data file: nothing counted
+      }
+    }
+    for (final String n : africa) {
+      final Territory t = data.getMap().getTerritoryOrNull(n);
+      if (t == null) {
+        continue;
+      }
+      for (final Unit u : t.getUnits()) {
+        if (atSeaBefore.contains(u)) {
+          broughtToAfrica
+              .computeIfAbsent(round, k -> new TreeMap<>())
+              .merge(u.getOwner().getName(), 1, Integer::sum);
+        }
+      }
+    }
+    atSeaBefore.clear();
   }
 
   /** Step 3d-1-bis: the transports gone since the last step, per owner, in {@code round}. */
@@ -839,6 +895,8 @@ final class Monitor {
         n.addProperty(
             "portate_regno_unito",
             broughtToBase.getOrDefault(round, Map.of()).getOrDefault(name, 0));
+        n.addProperty(
+            "portate_africa", broughtToAfrica.getOrDefault(round, Map.of()).getOrDefault(name, 0));
         n.addProperty(
             "trasporti_persi", lostTransports.getOrDefault(round, Map.of()).getOrDefault(name, 0));
         n.addProperty(

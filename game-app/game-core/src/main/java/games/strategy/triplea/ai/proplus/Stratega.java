@@ -134,6 +134,12 @@ public final class Stratega {
       wanted.add(StrategaInterruttori.IMPEGNO);
       wanted.add(StrategaInterruttori.ASSEDIO);
     }
+    // step R6c: "Italia in convoglio" (Axis) with the siege and the commitment
+    if ("Axis".equals(alliance.get()) && profile.italiaConvoglio()) {
+      wanted.add(StrategaInterruttori.IMPEGNO);
+      wanted.add(StrategaInterruttori.ASSEDIO);
+      wanted.add(StrategaInterruttori.ITALIA_CONVOGLIO);
+    }
     if ("Allies".equals(alliance.get()) && profile.squadraGibilterra()) {
       wanted.add(StrategaInterruttori.IMPEGNO);
       wanted.add(StrategaInterruttori.SQUADRA_GIBILTERRA);

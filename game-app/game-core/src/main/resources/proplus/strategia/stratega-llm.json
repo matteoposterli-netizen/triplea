@@ -1056,6 +1056,12 @@
       "zona_rientro": {"valore": "91 Sea Zone", "origine": "richiesta dello step R6b (B2): scorta e trasporti rientrano nella zona 91"},
       "seconda_fabbrica": {"valore": "Central United States", "origine": "dalla mappa: fabbrica major (10 unita') confinante con la 101 del porto; le truppe della spola caricano da li' direttamente sui trasporti nella 101 (C3)"},
       "max_scorta_spola_per_turno": {"valore": 1, "origine": "scelto: un cacciatorpediniere solo se una zona d'arrivo o di sosta della spola non e' sicura (C2)"}
+    },
+    "r6c": {
+      "nota": "Step R6c ITALIA: SPOLA IN CONVOGLIO. Interruttore italia_convoglio (spento di default = Asse come prima), sopra assedio. Spola italiana con la guerra dell'Italia e una base dell'Asse in Africa (senza base: sbarco sul bersaglio africano di valore piu' alto >= 70), regola A1 di R6b per i trasporti, convoglio con la scorta minima della flotta italiana, acquisti: navi finche' la rotta scortata dalla flotta non e' sicura, poi coppie complete. Nessun valore tarato.",
+      "italia_convoglio_acceso_di_default": {"valore": false, "origine": "richiesta dello step R6c: spento = Asse identico a oggi"},
+      "soglia_sbarco": {"valore": 70, "origine": "richiesta dello step R6c (E1): sbarco sul bersaglio africano con vittoria >= 70"},
+      "max_navi_per_turno": {"valore": 4, "origine": "scelto: come il sostegno della squadra di R6 (max 4 unita' per turno)"}
     }
   },
   "difesa": {

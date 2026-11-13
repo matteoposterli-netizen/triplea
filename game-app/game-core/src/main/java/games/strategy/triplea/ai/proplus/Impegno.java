@@ -1884,7 +1884,14 @@ public final class Impegno {
       }
       // step R4: the raid's outcome and the bombers' base (Germany), the Africa shuttle (Italy)
       held.addAll(Assedio.nonCombattimento(proData, calc, delegate, player, c, lines));
-      if (Assedio.italia(data, player)) {
+      if (ConvoglioItalia.attivo(data, player)) {
+        // step R6c (E1-E3): the shuttle in convoy
+        held.addAll(
+            ConvoglioItalia.nonCombattimento(
+                programmi(),
+                delegate,
+                ns.has("presidio_porto") ? ns.get("presidio_porto").getAsInt() : 0));
+      } else if (Assedio.italia(data, player)) {
         held.addAll(
             programmi()
                 .spola(
