@@ -5517,3 +5517,27 @@ Interruttore nuovo `italia_convoglio` (sopra `assedio`, solo Italia; default dal
 - Test: `ConvoglioItaliaTest` (7), autoplay `ConfrontoItaliaTest` (2). Suite locale: 3414 test, 1 fallito (`ContentDownloaderIntegrationTest`,
   rete della sandbox), 1 saltato; golden Hard, `NudoHardTest`, `DiaryNeutralityTest`, `CampagnaOmbraTest` verdi.
 - Run `[completa]`: e2 (Asse impegno+assedio quota 70 vs Hard) e h (e2 + italia_convoglio vs Hard), semi 1261-1300, 80 partite.
+
+#### Autoplay in CI (run 43340700205, commit 7f7943d, tutto verde al 1° tentativo, 80/80 partite [completa] senza chiave, semi 1261-1300, costo API 0)
+**Errori del calcolatore 0**, 0 stalli, tutte con un vincitore.
+
+| Configurazione | Asse / Alleati | Quota Asse [IC 95%] | p (Fisher) | Round vittoria mediana |
+|---|---|---|---|---|
+| e2 Asse impegno+assedio / Hard | 20 / 20 | 50% [35; 65] | - | 19 |
+| h e2 + italia_convoglio / Hard | **30 / 10** | **75% [60; 86]** | **0,037 contro e2** | 17 |
+
+- Italia (h contro e2, a partita): unita' portate in Africa via mare 0,7 contro 1,4 (quasi nulla in entrambe); rotta sicura in 221 turni
+  su 416 di acquisto del convoglio; convogli fermi 0,8; truppe ferme al porto dopo il carico **3,9 per turno**; acquisti della quota 3,9
+  fanterie + 3,1 artiglierie + 2,6 trasporti + 5,1 cacciatorpediniere + 1,7 incrociatori (e2: 1,3 + 0,4 + 0,9 + 8,4 + 0,3); trasporti
+  persi 4,5 contro 3,5.
+- Africa e Italia: territori africani dell'Asse R8 4,8 contro 3,1, R16 3,8 contro 1,9; Egitto dell'Asse a R8 18/39 contro 7/40; reddito
+  italiano R12 18,0 contro 12,1 (bonus 4,7 contro 2,6); **Roma cade 13/40 contro 26/40**.
+- Lettura (non verificata con un esperimento): il convoglio quasi non parte (A1 per l'Italia: bombardieri e caccia britannici coprono il
+  Mediterraneo), quindi il guadagno NON viene dalle unita' portate in Africa ma probabilmente dagli acquisti: fanteria e artiglieria in
+  attesa al porto (Northern Italy) difendono l'Italia (Roma cade la meta' delle volte) e la flotta comprata prima tiene le zone vicine.
+  Da confermare con R6b-bis (semi 1301-1340).
+
+### Step R6b-bis — stessa versione di R6c, semi nuovi, anche contro gli Alleati con la squadra (2026-11-13)
+Nessun cambio di codice: solo il workflow `[completa]` = 4 configurazioni x semi 1301-1340 = 160 partite senza chiave: e2' (Asse
+impegno+assedio vs Hard), h' (e2' + italia_convoglio vs Hard), f3' (Asse di e2 vs Alleati impegno+squadra_gibilterra), i (Asse di h vs
+Alleati di f3). Sottosezione "R6b-bis" (`ConfrontoItalia`, semi >= 1301) + "R6b" (Alleati). Somma h+h' contro e2+e2' (80 per lato) nel report.
