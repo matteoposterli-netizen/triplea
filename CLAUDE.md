@@ -5541,3 +5541,20 @@ Interruttore nuovo `italia_convoglio` (sopra `assedio`, solo Italia; default dal
 Nessun cambio di codice: solo il workflow `[completa]` = 4 configurazioni x semi 1301-1340 = 160 partite senza chiave: e2' (Asse
 impegno+assedio vs Hard), h' (e2' + italia_convoglio vs Hard), f3' (Asse di e2 vs Alleati impegno+squadra_gibilterra), i (Asse di h vs
 Alleati di f3). Sottosezione "R6b-bis" (`ConfrontoItalia`, semi >= 1301) + "R6b" (Alleati). Somma h+h' contro e2+e2' (80 per lato) nel report.
+
+#### Autoplay in CI (run 43349893920, commit af313a3, tutto verde al 1° tentativo, 160/160 partite [completa] senza chiave, semi 1301-1340, costo API 0)
+**Errori del calcolatore 0**, 0 stalli.
+
+| Configurazione | Asse / Alleati | Quota Asse [IC 95%] | p (Fisher, convoglio contro senza) |
+|---|---|---|---|
+| e2' Asse impegno+assedio / Hard | 26 / 14 | 65% [50; 78] | - |
+| h' e2' + italia_convoglio / Hard | 26 / 14 | 65% [50; 78] | 1,000 |
+| f3' Asse di e2 / Alleati squadra | 26 / 14 | 65% [50; 78] | - |
+| i Asse di h / Alleati squadra | 24 / 16 | 60% [45; 74] | 0,818 |
+
+- **Somma con R6c** (stessa versione): h+h' 56/80 (70%) contro e2+e2' 46/80 (57,5%), Fisher **p 0,139**: il +25 punti di R6c (p 0,037) non
+  si ripete. e2 nelle quattro run con lo stesso codice dell'Asse: 25, 18, 20, 26 su 40 (89/160 = 56%); contro questo h+h' p 0,036, ma e'
+  un confronto tra run diverse (varianza tra run gia' vista). Verdetto: convoglio non distinguibile da senza, al massimo un effetto piccolo.
+- Convoglio (h'): unita' in Africa via mare 1,1 contro 2,4 (meno di senza), rotta sicura 216/431 turni, truppe ferme al porto 3,6 per
+  turno, Roma cade 15/40 come e2' (15/40): il meccanismo ipotizzato in R6c (truppe al porto che difendono l'Italia) non si vede qui.
+- Squadra degli Alleati contro l'Asse con assedio: Alleati 14/40 come contro Hard (f3' = e2'): `squadra_gibilterra` non aiuta gli Alleati.
