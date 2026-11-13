@@ -5465,3 +5465,30 @@ in 40 partite f1); quota PU dal R5 al 60%.
   (scelta 1); seconda prova 14 round: 5 ondate (Southern France x2, Sardinia, Sicily, Normandy Bordeaux), 13 controlli SICURA, 2 RINUNCIA,
   1 ZONA_CAMBIATA (Normandy Bordeaux da 110), 8 rientri dei vuoti verso la 91 (6 arrivati), 1 rientro al porto; trasporti USA persi 0 fino
   al R13 (R14: 3 trasporti in 98, non del programma); spola 3 coppie a turno (42 PU su ~50 del programma: la quarta coppia non entra nei PU).
+
+#### Autoplay in CI (run 43318646930, commit 8624c2e, tutto verde al 1° tentativo, 200/200 partite [completa] senza chiave, semi 1261-1300, costo API 0)
+**Errori del calcolatore 0 in 200 partite**, 0 stalli, tutte con un vincitore. Righe "(R6)" = run 43264777394 (semi 1221-1260).
+
+| Configurazione | Asse / Alleati | Quota del lato [IC 95%] | Confronto, p (Fisher) | R6 |
+|---|---|---|---|---|
+| a Hard / Hard | 17 / 23 | Alleati 58% [42; 71] | - | 15 / 23 (2 stalli) |
+| f1 Hard / Alleati squadra (R6b) | 17 / 23 | Alleati 58% [42; 71] | f1 contro a: 1,000 | 16 / 24 |
+| e2 Asse impegno+assedio / Hard | 18 / 22 | Asse 45% [31; 60] | - | 25 / 15 |
+| f3 Asse assedio / Alleati squadra | 24 / 16 | Alleati 40% [26; 55] | f3 contro e2: 0,263 | 21 / 19 |
+| g Asse assedio quota 80 / Hard | 24 / 16 | Asse 60% [45; 74] | g contro e2: 0,263 | 30 / 10 |
+
+- **Trasporti** (f1, a partita, R6b / R6): comprati dal programma 56,3 / 53,5; trasporti USA persi (monitor) **9,3 / 22,8** (Hard vs
+  Hard 5,0); trasporti del programma persi in mare **7,8 / 27,4**; rientrati a caricare 46,3 / 0. f3: persi 7,6 / 23,4, del programma
+  6,6 / 33,7. Attacchi subiti: 3,8 a partita (f1), soprattutto 101 (sottomarini/flotta tedesca sul porto USA), 95, 93, 112; i trasporti
+  persi negli attacchi sono quasi tutti VUOTI (7,7 vuoti contro 1,0 carichi a partita).
+- **Ondate** (f1): 6,8 a partita (R6 8,9), 10,2 unita' per ondata (6,9), prese 257/270, tenute 1 round 143/257; controlli: sicure 3,8,
+  scortate 1,6, zona cambiata 1,5, **rinunce 9,9 a partita** (f3 17,4); scorta per ondata 0,2 navi, 3,7 navi restano nella 91.
+- **Porto**: truppe del programma ferme dopo il carico 1,1 per turno (R6 0,8), trasporti vuoti fermi al porto 1,4 (R6 3,6); quota PU del
+  programma dal R5 68% (R6 60%).
+- **Squadra** R4: portaerei, incrociatore, cacciatorpediniere, sottomarino, caccia, 3,8 trasporti (corazzata quasi mai); R5: + corazzata,
+  2° caccia, 5,9 trasporti (C4 funziona). Navi da guerra perse quasi solo dal R13; turni senza navi nella 91 0,1-0,2 a partita.
+- **Sbarchi alleati in Europa occidentale** a partita: f1 113 (programma 58 + Hard 55) contro a 106; Italia e isole 18,7 contro 26,2.
+  Esercito russo R12 49,6 (a 39,0); Mosca cade 17/40 (a 21/40); Roma e Berlino 23/40 come in a.
+- Giudizio: R6b fa quello che chiede (trasporti del programma persi −72%, rientri e spola funzionanti) ma il numero di vittorie non
+  cambia (f1 = a). e2 18/40 contro 25/40 di R6 con codice dell'Asse identico: varianza tra run (p ~0,17), da tenere presente nei
+  confronti tra run diverse.
