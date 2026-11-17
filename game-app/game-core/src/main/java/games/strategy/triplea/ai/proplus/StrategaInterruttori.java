@@ -34,6 +34,9 @@ import java.util.Optional;
  *       play the commitment, the other Allies play as Hard.
  *   <li>{@link #ITALIA_CONVOGLIO} (step R6c, default from {@code impegno.r6c}: OFF), on top of
  *       {@link #ASSEDIO}: Italy's Africa shuttle in convoy ({@link ConvoglioItalia}).
+ *   <li>{@link #COMPITI} (step P1, default from {@code compiti.json}: OFF), on top of {@link
+ *       #IMPEGNO}: the generic task mechanism ({@link Compiti}); it replaces the commitment of the
+ *       alliance: the nations with a task play it, the others play as Hard.
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -45,7 +48,8 @@ public enum StrategaInterruttori {
   ALLEATI_R4("alleati_r4", false),
   ALLEATI_R5("alleati_r5", false),
   SQUADRA_GIBILTERRA("squadra_gibilterra", false),
-  ITALIA_CONVOGLIO("italia_convoglio", false);
+  ITALIA_CONVOGLIO("italia_convoglio", false),
+  COMPITI("compiti", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -81,6 +85,9 @@ public enum StrategaInterruttori {
     }
     if (this == ITALIA_CONVOGLIO) {
       return ConvoglioItalia.Config.get().accesoDiDefault();
+    }
+    if (this == COMPITI) {
+      return Compito.dati().accesoDiDefault();
     }
     return predefinito;
   }
@@ -143,7 +150,8 @@ public enum StrategaInterruttori {
                                     "Interruttore dello Stratega sconosciuto: "
                                         + x
                                         + " (liste, tenute, ombra, impegno, assedio, alleati_r4,"
-                                        + " alleati_r5, squadra_gibilterra, italia_convoglio)"))
+                                        + " alleati_r5, squadra_gibilterra, italia_convoglio,"
+                                        + " compiti)"))
                         .id())
             .distinct()
             .toList();

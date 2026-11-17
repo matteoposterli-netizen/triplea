@@ -225,6 +225,14 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   combattimento), `StrategaInterruttori.ITALIA_CONVOGLIO`, `RegistroDecisioni` (`italia_convoglio`), terza casella "Italia in convoglio" nel
   pannello Stratega; autoplay `Monitor` (attacchi subiti anche dalle navi italiane, `portate_africa`), `ConfrontoItalia`. Vedi "Italia in
   convoglio (step R6c)".
+- Step P1 COMPITO: meccanismo generico `ai/proplus/Compiti` (motore: analisi degli ostacoli, risposta, acquisti, convoglio, sbarchi,
+  registro), `Compito` (dati: risultati, parametri), `Ostacolo` (MARE/TERRA/CAPACITA/DISTANZA con i numeri), `Risposta` (regole pure:
+  bersaglio, risposte, trasporti da comprare, direzione); dati `game-core/src/main/resources/proplus/strategia/compiti.json`; interruttore
+  `compiti` (`StrategaInterruttori.COMPITI`, sopra `impegno`, spento di default) che sostituisce l'impegno dell'alleanza (`Impegno.attivo` →
+  `Compiti.escludeImpegno`); agganci in `ProPlusAi` (acquisto, `playTask` nel combattimento e nel non combattimento), `ProPlusTuning`
+  (`purchaseOrders`, `strategyCapPercent`, `buysSeaTransports`, `amphibiousHeldUnits`), `RegistroDecisioni` (tipi e motivi), casella
+  "Compiti (USA)" (`ProfiloStratega.compiti`, `Stratega.registra`, `StrategistPanel`); autoplay `MonitorP1`, `ConfrontoP1` (blocco `p1` del
+  riepilogo e sezione "P1"). Vedi "Compiti (step P1)" e "Scelte di P1".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -2843,6 +2851,100 @@ anche dalla seconda fabbrica, partenza in gruppo con `TrasportiProtetti.naviga`)
     perdite (i registri di battaglia hanno solo i TUV); scartato: modificare il motore o l'AI dell'Asse (vietato).
 11. **Riga "(R6)" delle tabelle** da un file di riferimento calcolato offline con lo stesso codice sulle partite di R6 (gli stessi numeri
     del riepilogo R6 dove la misura esisteva; "-" dove R6 non aveva il dato, es. attacchi subiti, rientri, composizione a R4/R5).
+
+### Compiti (step P1)
+
+Cambio d'impostazione dopo R6/R6b/R6c (nessuna vittoria in piu'): niente ricette per nazione, un meccanismo unico guidato dai dati.
+Interruttore `compiti` (sotto `impegno`, lato Alleati; default dal file `compiti.json` `compiti_acceso_di_default` = **false**: spento =
+comportamento di prima, Hard e le altre voci invariate). Autoplay `--stratega-acceso Allies=impegno+compiti`, etichetta "[con compiti]";
+pannello: casella "Compiti (USA)". Acceso, l'impegno dell'alleanza e' sostituito: le nazioni con un compito nel file lo giocano (in P1 solo
+gli Americans), Regno Unito, Russia e Francia giocano come Hard; `squadra_gibilterra`, `italia_convoglio`, `alleati_r4`, `alleati_r5`
+restano nel codice (spenti nelle run di P1). L'Asse non cambia.
+- **Dati** (`compiti.json`): alleanza → direzione (testo: "negare Il Cairo, poi Roma o Parigi/Berlino"), `nazioni_attive`, per nazione
+  `porto`, `fabbriche_truppe` e la lista ORDINATA dei risultati: R1 `controllo_e_flotta` (Gibraltar dell'alleanza E navi da guerra della
+  nazione nella 91 senza nemici e con la regola A1 <= soglia; traguardo R6; `mantieni`: se Gibilterra si perde torna in corso), R2 `scelta`
+  (ITALIA → Southern Italy, FRANCIA → France; tenuta 3 round), R3 `presa` (la capitale della direzione dell'alleanza, vista prima nemica;
+  traguardo indicativo R8 = primo sbarco verso la capitale). Parametri: soglia d'attacco 70, soglia dei trasporti 40 (quella esistente, con la
+  memoria del pericolo di R6b), quota 100% fino al primo risultato poi 80% (parametri esistenti di R6), tipi MARE destroyer/cruiser/battleship/
+  carrier/fighter (caccia solo nei posti liberi delle portaerei), truppe infantry/artillery, max 6 unita' per stima MARE, max 16 truppe per la
+  stima TERRA, 10 PU per turno di DISTANZA, margine di cambio bersaglio 10 PU, presidio della capitale a 40%. Nessun valore tarato.
+- **Esecuzione** (`Compiti.Turno`, all'acquisto sul tabellone reale): esiti del turno prima (trasporti e navi persi = `perdite_in_mare`),
+  risultati raggiunti / mancati / persi (`compito_risultato`, controllati anche a fine non combattimento), direzione (`compito_direzione`, ogni
+  3 round), bersagli del risultato in corso e loro ostacoli (`Risposta.Bersaglio`): **MARE** = vittoria nemica a fine turno nella zona di
+  sbarco/base con TUTTA la flotta, gli aerei imbarcati e i trasporti (regola A1 di R6b: tutte le unita' nemiche in portata, scramble) oltre la
+  soglia, e/o flotta nemica nella zona non battuta al 70%; misura in PU = acquisto stimato un'unita' alla volta (sotto); flotta nemica nella
+  zona battibile = ostacolo nominale (TUV nemico x probabilita' di perdere, min 1 PU) con risposta ATTACCO_FLOTTA. **TERRA** = difensori del
+  bersaglio contro truppe caricate + pronte al porto + unita' confinanti + caccia imbarcati (bombardamento delle navi), truppe mancanti fino
+  al 70%. **CAPACITA** = posti delle truppe pronte (+ quelle da comprare) contro i posti liberi di TUTTI i trasporti posseduti (anche vuoti e
+  fermi). **DISTANZA** = turni di flotta e trasporti (x 10 PU). Bersagli: R1 = Gibilterra (sbarco se dell'Asse) + zona 91; R3 = la capitale
+  (sbarco se costiera, via terra da una testa di ponte tenuta se interna) e i territori costieri nemici confinanti via terra (teste di ponte;
+  per una capitale interna la loro somma include la TERRA della capitale). Scelta (`Risposta.decidi`): ottenibile ⇒ ESEGUI; altrimenti il
+  bersaglio attuale salvo uno con ostacoli minori di oltre 10 PU (CAMBIO_BERSAGLIO); flotta nemica battibile ⇒ ATTACCO_FLOTTA; poi per
+  ostacolo dal piu' grande: MARE ⇒ ACQUISTO_MARE + SCORTA, TERRA ⇒ ACQUISTO_TERRA, CAPACITA ⇒ ACQUISTO_CAPACITA, DISTANZA ⇒ AVVICINAMENTO.
+- **Acquisti** (ordini obbligati `ProPurchaseOrders`, proprieta' `Pro+ compiti ordine: <nazione>`, quota minima = PU ordinati): MARE un'unita'
+  alla volta, quella che abbassa di piu' l'ostacolo per PU (vittoria nemica oltre la soglia + vittoria mancante contro la flotta nemica);
+  se una sola unita' non lo sposta (vittoria saturata al 100%), al primo passo tutte le unita' di un tipo che il budget permette, poi il TUV
+  swing; ci si ferma quando la zona e' tenibile / la flotta battibile o finiscono i PU. TERRA: fanteria e artiglieria alternate; CAPACITA:
+  trasporti solo per i posti che mancano (`Risposta.trasportiDaComprare`). Navi alla fabbrica del porto, truppe al porto fino alla capienza,
+  poi nella seconda fabbrica. Hard non compra trasporti per la nazione nei turni in cui il compito non ne compra (`Pro+ compiti niente
+  trasporti a Hard`); la difesa critica della capitale resta di Hard. PU non spesi dal compito = Hard.
+- **Mosse**: combattimento prima di Hard (`Compiti.combattimento`): attacco alla flotta battibile (ricontrollata sul tabellone reale, navi
+  e caccia delle portaerei in portata), sbarco sul bersaglio ottenibile (carico al porto se serve, scorta che arriva nella zona, sicurezza
+  A1 e vittoria ricontrollate, scarico, unita' confinanti, caccia imbarcati), attacco via terra di una capitale interna dalle teste di ponte.
+  Non combattimento prima di Hard: esiti (battaglia, sbarco), carico delle truppe pronte, **convoglio** (il gruppo principale di trasporti
+  carichi e tutta la flotta si fermano insieme nella zona piu' lontana del percorso che entrambi raggiungono e che possono tenere; nessuna
+  ⇒ insieme nella meno esposta), trasporti carichi rimasti verso la sosta, vuoti verso il porto con soste sicure, scarico sulla testa di ponte
+  tenuta, caccia sulle portaerei; guardia minima di navi da guerra per i trasporti che restano in una zona (`muoviGruppo`). Trattenute da
+  Hard: tutte le unita' navali della nazione, gli aerei in mare, le truppe a bordo, le truppe pronte al porto fino ai posti dei trasporti, le
+  truppe sulle teste di ponte del bersaglio.
+- **Registro** (`impegno-decisioni.jsonl`): `compito_stato` (all'acquisto: risultato, ottenibile, bersaglio scelto con gli ostacoli e i
+  numeri, `tipi_ostacolo`, `risposte`, `acquisti`, perche', alternative scartate; nel non combattimento motivo `MOSSE_NON_COMBATTIMENTO` con le
+  mosse), `compito_acquisto` (ostacolo, comprato, PU, vittoria nemica prima → dopo, trasporti posseduti/vuoti/fuori porto), `compito_direzione`
+  (conti per ITALIA e FRANCIA, scelta, fino a che round), `compito_risultato` (RAGGIUNTO / MANCATO / PERSO), `compito_battaglia` (+ esito
+  vinta/persa), `sbarco` (+ esito preso), `perdite_in_mare`; `attacco_subito` dal monitor.
+- **Autoplay**: `MonitorP1` (acquisti USA per tipo e round dagli id nuovi dopo il piazzamento; round degli attacchi USA a Southern Italy e
+  France; presa USA = proprietario cambiato nel passo di battaglia USA da un nemico a un non nemico; per round `p1` = unita' di terra USA per
+  regione con base Gibraltar, trasporti e navi USA). Blocco `p1` del `riepilogo.json` (`ConfrontoP1.blocco`, anche per gli USA di Hard):
+  `r1_round`, `risultati_raggiunti`, `traguardi_mancati`, `direzione`, `direzione_round`, `direzioni`, `cambi_direzione`, `sbarchi_compito`,
+  `primo_sbarco_capitale_round`, `primo_sbarco_usa_verso` (monitor), `attacchi_usa`, `prese_usa`, `acquisti_usa_dal_r5` (navi da guerra,
+  aerei, trasporti, truppe, round), `turni_compito`, `turni_mare`, `turni_mare_con_risposta`, `turni_mare_con_acquisto_o_attacco`,
+  `turni_mare_senza_risposta`, `battaglie_navali_usa`, `trasporti_usa_persi` (totale dal monitor, carichi/vuoti dagli attacchi subiti),
+  `per_round` R8/R12/R16. Sezione "P1" di "Partite complete" (`ConfrontoP1.write`): vittorie con IC di Wilson e Fisher (p1 contro e2, p2
+  contro a), criteri 1-7 per configurazione, regioni e trasporti per round. `[completa]` = a, p2, e2, p1 x semi 1341-1380.
+- Test: `CompitiTest` (13: dati, nessuna nazione o nome della mappa nel motore, risposta scelta, cambio bersaglio col margine, niente
+  trasporti nuovi con posti sufficienti (regola pura e acquisto sul tabellone), direzione tenuta 3 round (regola e tabellone), acquisto MARE
+  per PU, interruttore spento = niente, ostacoli della base con i numeri e flotta battibile attaccata, casella del pannello), autoplay
+  `ConfrontoP1Test` (2).
+
+### Scelte di P1 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Codice nuovo invece di estendere la macchina R5/R6** (`SbarcoCoordinato`/`AlleatiR5`/`SquadraGibilterra`): quella macchina e' a ricette
+   (squadra fissa, coppie, rinuncia) e intrecciata per nazione; riusati solo i pezzi generici: regola A1 (`TrasportiProtetti.valuta`, attacco
+   pieno di `Programmi.Turno`), scramble, calcolatore, registro, ordini d'acquisto. Scartato: aggiungere un ramo "compito" dentro R5/R6.
+2. **`compiti` sostituisce l'impegno dell'alleanza** (UK, Russia, Francia = Hard, come chiede il perimetro). Scartato: lasciare R3a a UK/Russia.
+3. **Unita' di misura comune = PU equivalenti** (MARE = acquisto stimato, TERRA = truppe, CAPACITA = trasporti, DISTANZA = 10 PU per turno)
+   per sommare e confrontare gli ostacoli (direzione, cambio bersaglio, ordine degli acquisti). Scartato: confrontare solo vittorie (non si
+   sommano con capacita' e distanze).
+4. **Flotta nemica battibile nella zona = ostacolo MARE nominale** (TUV x probabilita' di perdere, min 1 PU) con risposta ATTACCO_FLOTTA:
+   cosi' compare nel registro. Scartato: non contarla (in prova risultava "nessun ostacolo" con navi nemiche nella zona).
+5. **Acquisto MARE a blocco quando una nave non sposta la vittoria** (saturata al 100%): in prova R1-R2 l'ostacolo da 300 PU non comprava
+   nulla. Scartato: niente acquisto finche' la zona non migliora da sola.
+6. **Convoglio** (flotta e trasporti carichi fermi insieme nella stessa zona tenibile): in prova la flotta andava avanti da sola e i trasporti
+   carichi restavano al porto (nessuna sosta sicura per loro soli). Scartato: flotta prima e trasporti dopo con soste sicure (prima versione).
+7. **Divieto dei trasporti a Hard solo nei turni in cui il compito non ne compra**: con il divieto sempre attivo le opzioni d'acquisto
+   perdevano i trasporti anche per gli ordini del compito (in prova "6 trasporti comprati" a turno, 0 arrivati). Scartato: divieto sempre.
+8. **Truppe pronte = tutte le unita' di terra trasportabili nelle fabbriche delle truppe oltre il presidio** (anche quelle comprate da Hard):
+   la capacita' conta ogni truppa che puo' partire. Il presidio della capitale e' 0 se nessun nemico la raggiunge (USA). Scartato: solo le
+   truppe comprate dal compito (in R6b-bis restavano ~80 unita' ferme in patria).
+9. **Capitale interna (France) bersaglio solo con una testa di ponte tenuta o unita' confinanti**: in prova France senza testa di ponte
+   (DISTANZA 60) batteva le teste di ponte raggiungibili. Le teste di ponte includono la TERRA della capitale nella loro somma.
+10. **SCORTA conta come risposta a MARE** (tutta la flotta si muove con i trasporti e si ferma solo dove la zona tiene), come da elenco del
+    prompt; nel riepilogo c'e' anche la colonna piu' severa "con acquisto o attacco". **Guardia**: non una regola "Gibilterra", ma la regola
+    generica che nessuna nave lascia trasporti fermi in una zona che senza di lei non tiene.
+11. **R1 controllato anche a fine non combattimento** (la flotta arriva nel non combattimento: senza il controllo il risultato risultava
+    raggiunto solo al round dopo).
+12. **Presa USA nel monitor = proprietario cambiato nel passo di battaglia USA da un nemico** (France liberata torna ai francesi, non agli
+    USA). Scartato: proprietario = Americans (non conterebbe mai France).
 
 ## Come configurare lo stratega
 
@@ -5558,3 +5660,28 @@ Alleati di f3). Sottosezione "R6b-bis" (`ConfrontoItalia`, semi >= 1301) + "R6b"
 - Convoglio (h'): unita' in Africa via mare 1,1 contro 2,4 (meno di senza), rotta sicura 216/431 turni, truppe ferme al porto 3,6 per
   turno, Roma cade 15/40 come e2' (15/40): il meccanismo ipotizzato in R6c (truppe al porto che difendono l'Italia) non si vede qui.
 - Squadra degli Alleati contro l'Asse con assedio: Alleati 14/40 come contro Hard (f3' = e2'): `squadra_gibilterra` non aiuta gli Alleati.
+
+### Step P1 COMPITO — impianto "compito" applicato agli USA (2026-11-17)
+
+Vedi "Compiti (step P1)" e "Scelte di P1". Motivo (40 partite f3 di R6b-bis): dal R5 gli USA compravano solo trasporti e truppe, zero navi
+da guerra (lo sguardo dell'acquisto era la sola zona 91), 703 rinunce della regola dei trasporti senza risposta, 44 trasporti a R18 (41
+inattivi), ~80 unita' ferme: tre regole separate (acquisto, sicurezza, scorta) che non conoscevano l'obiettivo.
+- File nuovi: `ai/proplus/Compiti`, `Compito`, `Ostacolo`, `Risposta`, risorsa `proplus/strategia/compiti.json`, test `CompitiTest` (13);
+  autoplay `MonitorP1`, `ConfrontoP1`, test `ConfrontoP1Test` (2). Modificati: `StrategaInterruttori` (`compiti`), `Impegno.attivo`,
+  `ProPlusAi` (acquisto, `playTask`), `ProPlusTuning` (ordini, tetto, trasporti, carico anfibio), `RegistroDecisioni` (tipi e motivi),
+  `Stratega.registra`, `ProfiloStratega`, `StrategistPanel` (casella "Compiti (USA)"); autoplay `Monitor`, `Riepilogo` (blocco `p1`),
+  `ConfrontoCompleta` (sezione "P1"); workflow `[completa]` = a, p2, e2, p1 x semi 1341-1380 (160 partite, costo API 0).
+- Test locali: game-core 3272 (1 fallito: `ContentDownloaderIntegrationTest`, rete della sandbox, non toccato; 1 saltato), AI di game-core
+  640 verdi (golden Hard, `NudoHardTest` "Stratega senza chiave = Hard", `DiaryNeutralityTest`, `CampagnaOmbraTest`), `:ai:test` 13,
+  `:game-headed:test` 94, `:proplus-autoplay:test` 50: verdi. JDK 25 non presente nella sandbox: scaricato Temurin 25.0.1 da GitHub.
+- Prove locali (Europa 1940, senza chiave), registro letto turno per turno, difetti corretti prima del push: (1) MARE saturato al 100% =
+  nessun acquisto (R1-R2) ⇒ acquisto a blocco; (2) flotta avanti da sola e trasporti carichi fermi al porto ⇒ convoglio; (3) senza sosta
+  sicura la flotta lasciava il trasporto carico al porto ⇒ insieme nella zona meno esposta; (4) "6-7 trasporti comprati" a turno ma 1
+  posseduto: il divieto a Hard toglieva i trasporti anche agli ordini del compito ⇒ divieto solo senza trasporti del compito; (5) France
+  senza testa di ponte (DISTANZA 60) preferita alle teste di ponte ⇒ capitale interna bersaglio solo con testa di ponte; (6) flotta nemica
+  battibile nella zona non registrata come MARE ⇒ ostacolo nominale. Prova finale p1 seme 1341 (14 round): R1 al R6 (flotta in 91 al R5),
+  FRANCIA (119 contro 147 PU), sbarchi del compito su Holland Belgium R6 (2 unita'), R8 (12), R11 (18), France attaccata via terra e
+  liberata al R12 (ripresa dalla Germania al R13), poi Southern France con acquisto MARE (2 corazzate + 1 cacciatorpediniere, vittoria nemica
+  100% → 46%); turni MARE 6/6 con risposta (4 con acquisto o attacco); 0 trasporti USA persi; R12: 17 trasporti (9 inattivi), 18 unita' in
+  patria. Prova p2 seme 1342 (10 round, Asse Hard): R1 al R5, FRANCIA (115 contro 165), battaglia navale in 89 contro un sottomarino (si e'
+  immerso: "non vinta", 0 perdite), sbarchi su Holland Belgium R6/R8/R10, 0 trasporti persi.

@@ -131,6 +131,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle R6 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P1: the task mechanism of the USA
+    if (ConfrontoP1.applicabile(games)) {
+      try {
+        ConfrontoP1.write(md, games, alliances);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P1 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step R6c / R6b-bis: Italy's shuttle in convoy
     if (ConfrontoItalia.applicabile(games)) {
       try {

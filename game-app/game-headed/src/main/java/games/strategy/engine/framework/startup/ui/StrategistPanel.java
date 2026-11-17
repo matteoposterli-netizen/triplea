@@ -73,6 +73,9 @@ final class StrategistPanel {
   /** Step R6c: Italy's Africa shuttle in convoy (with the siege and the commitment). */
   @Getter private final javax.swing.JCheckBox italiaConvoglio = new javax.swing.JCheckBox();
 
+  /** Step P1: "Compiti (USA)", the generic task mechanism for the USA. */
+  @Getter private final javax.swing.JCheckBox compiti = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -169,6 +172,13 @@ final class StrategistPanel {
         "<html>Alleati: squadra USA a Gibilterra con trasporti protetti (step R6b, sperimentale);"
             + " accende anche Impegno per gli Alleati; vale per le partite nuove</html>");
     panel.add(row("Squadra di Gibilterra:", squadraGibilterra));
+    compiti.setSelected(profile.compiti());
+    compiti.setText(
+        "<html>Alleati: compito degli USA (step P1, sperimentale): base di Gibilterra, direzione"
+            + " Italia o Francia, presa della capitale guidate dagli ostacoli; accende anche Impegno"
+            + " per gli Alleati (Regno Unito e Russia giocano come Hard); vale per le partite"
+            + " nuove</html>");
+    panel.add(row("Compiti (USA):", compiti));
     panel.add(
         row(
             "",
@@ -192,6 +202,7 @@ final class StrategistPanel {
     profile.setAssedio(assedio.isSelected());
     profile.setSquadraGibilterra(squadraGibilterra.isSelected());
     profile.setItaliaConvoglio(italiaConvoglio.isSelected());
+    profile.setCompiti(compiti.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

@@ -331,7 +331,9 @@ public final class Impegno {
         && StrategaInterruttori.IMPEGNO.acceso(data.getProperties(), alliance.get())
         && !StrategaConfig.get().nazioniSenzaRuoli().contains(player.getName())
         // step R6: with the Gibraltar squadron only the USA play the commitment
-        && !SquadraGibilterra.esclusa(data, player, alliance.get());
+        && !SquadraGibilterra.esclusa(data, player, alliance.get())
+        // step P1: with the tasks the alliance's commitment is replaced
+        && !Compiti.escludeImpegno(data, alliance.get());
   }
 
   /**

@@ -1,0 +1,61 @@
+{
+  "versione": 1,
+  "nota": "Step P1: impianto 'compito'. Un'alleanza ha una direzione; ogni nazione ha un COMPITO = lista ORDINATA di RISULTATI (condizioni verificabili sul tabellone, round traguardo, vincoli). Il motore (Compiti) e' generico: per il risultato in corso calcola se e' ottenibile nel turno e, se no, gli OSTACOLI (MARE, TERRA, CAPACITA, DISTANZA) con i numeri, e sceglie la RISPOSTA (eseguire, attaccare la flotta, cambiare bersaglio, comprare, avvicinare le forze). Nessuna ricetta per nazione: i passi intermedi emergono dagli ostacoli. In questo step ha effetto solo per gli Americans (interruttore 'compiti', sotto 'impegno', lato Alleati). Valori scelti a mano, NON tarati.",
+  "compiti_acceso_di_default": {"valore": false, "origine": "richiesta dello step P1 (default spento)"},
+  "parametri": {
+    "soglia_attacco": {"valore": 70, "origine": "richiesta dello step P1 (vittoria >= 70% per attaccare una forza nemica o sbarcare)"},
+    "soglia_trasporti": {"valore": 40, "origine": "soglia esistente dei trasporti (impegno.r6b.soglia_trasporti)"},
+    "quota_prima_del_primo_risultato": {"valore": 100, "origine": "parametro esistente impegno.r6.quota_costruzione"},
+    "quota_dopo": {"valore": 80, "origine": "parametro esistente impegno.r6.quota_pressione"},
+    "tipi_mare": {"valore": ["destroyer", "cruiser", "battleship", "carrier", "fighter"], "origine": "richiesta dello step P1: navi da guerra e aerei imbarcabili (il caccia solo nei posti liberi delle portaerei)"},
+    "tipi_truppe": {"valore": ["infantry", "artillery"], "origine": "scelto (come il carico di R6: 7 PU per 5 posti)"},
+    "tipo_trasporto": {"valore": "transport", "origine": "dalla mappa"},
+    "max_passi_acquisto_mare": {"valore": 6, "origine": "scelto (limite di calcolo: un'unita' alla volta, al massimo 6 per stima)"},
+    "max_truppe_stima": {"valore": 16, "origine": "scelto (limite di calcolo della forza da sbarco necessaria)"},
+    "pu_per_turno_di_distanza": {"valore": 10, "origine": "scelto: per sommare la DISTANZA (turni) agli altri ostacoli (PU) nella scelta della direzione e del bersaglio"},
+    "margine_cambio_bersaglio_pu": {"valore": 10, "origine": "scelto: si cambia bersaglio solo se l'altro ha ostacoli minori di almeno 10 PU"},
+    "max_turni_distanza": {"valore": 6, "origine": "scelto (oltre: irraggiungibile)"},
+    "soglia_presidio_capitale": {"valore": 40, "origine": "scelto: la capitale regge il turno se il massimo attacco nemico vince <= 40% (minimo indispensabile)"}
+  },
+  "alleanze": {
+    "Allies": {
+      "direzione": "negare Il Cairo, poi Roma o Parigi/Berlino",
+      "nazioni_attive": ["Americans"],
+      "nazioni": {
+        "Americans": {
+          "porto": "Eastern United States",
+          "fabbriche_truppe": ["Eastern United States", "Central United States"],
+          "risultati": [
+            {
+              "id": "R1",
+              "nome": "Base di Gibilterra",
+              "tipo": "controllo_e_flotta",
+              "territorio": "Gibraltar",
+              "zona": "91 Sea Zone",
+              "traguardo_round": 6,
+              "mantieni": true,
+              "nota": "Gibilterra controllata dagli Alleati E una forza navale della nazione nella zona che la zona puo' tenere (vittoria nemica <= soglia_trasporti). Se Gibilterra e' dell'Asse: battaglia navale se serve + sbarco."
+            },
+            {
+              "id": "R2",
+              "nome": "Direzione",
+              "tipo": "scelta",
+              "opzioni": {"ITALIA": "Southern Italy", "FRANCIA": "France"},
+              "tenuta_round": 3,
+              "nota": "Si va dove la somma degli ostacoli verso la capitale e' minore; la scelta si tiene almeno tenuta_round round, poi si ricontrolla."
+            },
+            {
+              "id": "R3",
+              "nome": "Capitale della direzione",
+              "tipo": "presa",
+              "territorio_da": "R2",
+              "traguardo_round": 8,
+              "traguardo_cosa": "primo sbarco verso la capitale (capitale o territorio costiero confinante)",
+              "nota": "Southern Italy presa oppure France presa. I passi intermedi (flotta nemica, testa di ponte, isole) emergono dagli ostacoli."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

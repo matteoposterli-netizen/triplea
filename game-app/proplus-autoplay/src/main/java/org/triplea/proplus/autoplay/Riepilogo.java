@@ -116,6 +116,14 @@ final class Riepilogo {
     json.add("ombra_dettagli", OmbraDettagli.leggi(diary));
     // step R3a: the register of the commitment's decisions (diary file)
     json.add("impegno_decisioni", RegistroLettura.leggi(diary));
+    // step P1: the task's block (also for the USA of Hard, from the monitor)
+    try {
+      json.add("p1", ConfrontoP1.blocco(json, data.getAsJsonObject("p1")));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p1", err);
+    }
     return json;
   }
 

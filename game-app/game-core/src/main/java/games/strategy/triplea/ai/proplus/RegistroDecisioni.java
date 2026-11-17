@@ -72,11 +72,32 @@ public final class RegistroDecisioni {
           "rientro_trasporti",
           "attacco_subito",
           // step R6c
-          "italia_convoglio");
+          "italia_convoglio",
+          // step P1
+          "compito_stato",
+          "compito_acquisto",
+          "compito_direzione",
+          "compito_risultato",
+          "compito_battaglia");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P1
+          "OTTENIBILE",
+          "OSTACOLI",
+          "RISULTATO_RAGGIUNTO",
+          "RISULTATO_MANCATO",
+          "RISULTATO_PERSO",
+          "DIREZIONE_SCELTA",
+          "DIREZIONE_TENUTA",
+          "DIREZIONE_CAMBIATA",
+          "ACQUISTO_MARE",
+          "ACQUISTO_TERRA",
+          "ACQUISTO_CAPACITA",
+          "ATTACCO_FLOTTA",
+          "PERDITE",
+          "MOSSE_NON_COMBATTIMENTO",
           // teatro
           "PRIMA_SCELTA",
           "UNICO_APERTO",

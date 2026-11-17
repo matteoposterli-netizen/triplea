@@ -128,6 +128,7 @@ final class Monitor {
 
   /** Step R4: cities, factories, Moscow, Africa and the national objectives every round. */
   private final MonitorR4 r4;
+  private final MonitorP1 p1;
 
   private int lastRound;
 
@@ -186,6 +187,7 @@ final class Monitor {
   Monitor(final GameData data) {
     this.data = data;
     this.r4 = new MonitorR4(data, this::allianceOf);
+    this.p1 = new MonitorP1(data);
     // reverse name order: Axis before Allies, as in the plans (Asse / Alleati)
     final List<String> names = new ArrayList<>(ProPlusSettings.configurableAlliances(data));
     names.sort(Comparator.reverseOrder());
@@ -224,6 +226,7 @@ final class Monitor {
     runningStep = step.getName();
     runningPlayer = Optional.ofNullable(step.getPlayerId()).map(GamePlayer::getName).orElse("-");
     r4.beforeStep(runningStep);
+    p1.beforeStep(runningStep, runningPlayer);
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiPrima();
     }
@@ -267,6 +270,7 @@ final class Monitor {
     recordLostTransports(lastRound);
     recordDelayTools(lastRound);
     r4.afterStep(runningStep, runningPlayer, lastRound);
+    p1.afterStep(runningStep, runningPlayer, lastRound);
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiDopo(lastRound);
     }
@@ -369,6 +373,8 @@ final class Monitor {
         games.strategy.triplea.ai.proplus.DecisoreOperazione.uso(data.getProperties()));
     // step STRATEGA LLM: portfolios, operations with their outcome and decisions, cost
     json.add("stratega_llm", games.strategy.triplea.ai.proplus.Stratega.riepilogoPartita(data));
+    // step P1: US purchases by type, US attacks and captures of Southern Italy and France
+    json.add("p1", p1.toJson());
     return json;
   }
 
@@ -942,6 +948,8 @@ final class Monitor {
     r3aTheater().ifPresent(t -> json.addProperty("teatro_r3a", t));
     json.add("r4", r4.snapshot(round, alliances));
     json.add("r5", r5Snapshot());
+    // step P1: US land units by region (base Gibraltar), US transports and warships
+    json.add("p1", p1.snapshot());
     if (complete) {
       rounds.put(round, json);
       partialRound = null;

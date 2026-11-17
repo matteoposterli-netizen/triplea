@@ -120,6 +120,14 @@ public class ProPlusAi extends ProAi {
             // step R6c: the Italian convoy stays out of Hard's attacks
             keep.addAll(ConvoglioItalia.trattenute(data, player));
           }
+          // step P1: the task (switch "compiti", replaces the commitment of the alliance)
+          if (Compiti.attivo(data, player)) {
+            prepareData(data);
+            attendiCalcolatore(data, player);
+            initializeData();
+            Compiti.inizioTurno(getProData(), getCalc(), player);
+            keep.addAll(Compiti.trattenute(data, player));
+          }
           if (!keep.isEmpty()) {
             tuning.holdCombatForPurchase(data, player, keep);
           }
@@ -153,8 +161,10 @@ public class ProPlusAi extends ProAi {
     playJointOperation(nonCombat, moveDel, data, player);
     if (nonCombat) {
       playCommitment(moveDel, data, player);
+      playTask(true, moveDel, data, player);
     } else {
       playCoordinatedLanding(moveDel, data, player);
+      playTask(false, moveDel, data, player);
     }
     super.move(nonCombat, moveDel, data, player);
     saveCheck(data, player);
@@ -264,6 +274,49 @@ public class ProPlusAi extends ProAi {
       }
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "Commitment non-combat move failed: " + e);
+    }
+  }
+
+  /**
+   * Step P1: the task's combat move (attack on an enemy force, landing) and non-combat move (fleet,
+   * transports, planes) before Hard's; Hard leaves the task's units where they are and, in the
+   * combat move, plans again on the real board. Nothing with the switch off.
+   */
+  private void playTask(
+      final boolean nonCombat,
+      final IMoveDelegate moveDel,
+      final GameData data,
+      final GamePlayer player) {
+    if (!Compiti.attivo(data, player)
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      attendiCalcolatore(data, player);
+      if (nonCombat) {
+        final java.util.Set<games.strategy.engine.data.Unit> held =
+            Compiti.nonCombattimento(getProData(), getCalc(), moveDel, player);
+        if (!held.isEmpty()) {
+          tuning.holdForOperation(data, player, held);
+        }
+        return;
+      }
+      final java.util.Set<games.strategy.engine.data.Unit> moved =
+          Compiti.combattimento(getProData(), getCalc(), moveDel, player);
+      initializeData();
+      final java.util.Set<games.strategy.engine.data.Unit> keep =
+          new java.util.LinkedHashSet<>(tuning.combatHeldUnits(getProData()));
+      keep.removeIf(u -> !u.isOwnedBy(player) || !data.getUnits().getUnits().contains(u));
+      keep.addAll(moved);
+      keep.addAll(Compiti.trattenute(data, player));
+      tuning.holdCombat(data, player, keep);
+      if (!moved.isEmpty() && hasStoredCombatMove()) {
+        forgetStoredCombatMove();
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "Task move failed: " + e);
     }
   }
 

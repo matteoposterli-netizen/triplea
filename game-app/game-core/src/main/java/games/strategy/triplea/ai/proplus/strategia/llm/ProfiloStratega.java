@@ -120,6 +120,18 @@ public final class ProfiloStratega {
   private static final String KEY_ASSEDIO = "assedio";
   private static final String KEY_SQUADRA = "squadra_gibilterra";
   private static final String KEY_CONVOGLIO = "italia_convoglio";
+  private static final String KEY_COMPITI = "compiti";
+
+  /**
+   * Step P1: "Compiti (USA)" for the Allies (turns on "impegno" and "compiti"). Off unless set.
+   */
+  public boolean compiti() {
+    return si(KEY_COMPITI);
+  }
+
+  public void setCompiti(final boolean on) {
+    values.setProperty(KEY_COMPITI, on ? "si" : "no");
+  }
 
   /**
    * Step R6c: "Italia in convoglio" for the Axis (turns on "impegno", "assedio" and

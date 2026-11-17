@@ -310,6 +310,11 @@ public final class ProPlusTuning implements ProTuning {
   public Optional<ProPurchaseOrders> purchaseOrders(final ProData proData) {
     // step PROVA DI VALORE: the joint operation's reserves (only with its switch on)
     final Optional<ProPurchaseOrders> reserves = OperazioniCongiunte.ordiniAcquisto(proData);
+    // step P1: the task's orders (switch "compiti")
+    final Optional<ProPurchaseOrders> task = Compiti.ordini(proData);
+    if (task.isPresent()) {
+      return operationAnswer(task);
+    }
     // step R2b: the commitment's orders (switch "impegno"), with the operations' reserves if any
     final Optional<ProPurchaseOrders> commitment = Impegno.ordini(proData);
     if (commitment.isPresent()) {
@@ -343,6 +348,10 @@ public final class ProPlusTuning implements ProTuning {
   /** Step R3a: no transport for Hard while an idle empty usable one exists (USA, UK). */
   @Override
   public boolean buysSeaTransports(final ProData proData) {
+    // step P1: the task decides the nation's transports (capacity rule)
+    if (Compiti.vietaTrasporti(proData)) {
+      return operationAnswer(false);
+    }
     return !SbarcoCoordinato.tetto(proData);
   }
 
@@ -350,7 +359,9 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public java.util.Set<Unit> amphibiousHeldUnits(final ProData proData) {
     final GamePlayer player = proData.getPlayer();
-    return player != null && SbarcoCoordinato.attivo(proData.getData(), player)
+    return player != null
+            && (SbarcoCoordinato.attivo(proData.getData(), player)
+                || Compiti.attivo(proData.getData(), player))
         ? combatHeldUnits(proData)
         : java.util.Set.of();
   }
@@ -574,7 +585,7 @@ public final class ProPlusTuning implements ProTuning {
     }
     // step R2b: with the commitment's orders the share of the orders reserves the PUs (only the
     // capital and the factories at risk are defended without a limit)
-    if (Impegno.ordini(proData).isPresent()) {
+    if (Impegno.ordini(proData).isPresent() || Compiti.ordini(proData).isPresent()) {
       return operationAnswer(java.util.OptionalDouble.empty());
     }
     return ProPlusSettings.allianceOf(proData.getData(), player)
