@@ -5685,3 +5685,33 @@ inattivi), ~80 unita' ferme: tre regole separate (acquisto, sicurezza, scorta) c
   100% → 46%); turni MARE 6/6 con risposta (4 con acquisto o attacco); 0 trasporti USA persi; R12: 17 trasporti (9 inattivi), 18 unita' in
   patria. Prova p2 seme 1342 (10 round, Asse Hard): R1 al R5, FRANCIA (115 contro 165), battaglia navale in 89 contro un sottomarino (si e'
   immerso: "non vinta", 0 perdite), sbarchi su Holland Belgium R6/R8/R10, 0 trasporti persi.
+
+#### Autoplay in CI (run 44178195628, commit c7366b1, tutto verde al 1° tentativo, 160/160 partite [completa] senza chiave, semi 1341-1380, costo API 0)
+**Errori del calcolatore 0**, 0 stalli, tutte con un vincitore. Numeri ricontabili dal blocco `p1` dei `riepilogo.json` (campi tra parentesi).
+
+| Configurazione | Asse / Alleati | Quota Alleati [IC 95% Wilson] | p (Fisher) | Round vittoria mediana |
+|---|---|---|---|---|
+| a Hard / Hard | 20 / 20 | 50% [35; 65] | - | 22 |
+| p2 Hard / Alleati compiti | 22 / 18 | 45% [31; 60] | p2 contro a 0,823 | 21 |
+| e2 Asse impegno+assedio / Hard | 22 / 18 | 45% [31; 60] | - | 18 |
+| p1 Asse impegno+assedio / Alleati compiti | **35 / 5** | **12,5% [5; 26]** | **p1 contro e2 0,003 (peggio)** | 16 |
+
+Criteri (p1 / p2; tra parentesi gli USA di Hard sugli stessi semi, e2 / a):
+1. R1 entro R6 (`r1_round`): 40/40 / 40/40 — si'. Direzione (`direzione`): FRANCIA 34 e 37, ITALIA 6 e 3.
+2. Turni MARE senza risposta (`turni_mare_senza_risposta`): 0 su 149 / 0 su 135 — si' (con acquisto o attacco, criterio piu' severo:
+   97/149 e 89/135; gli altri hanno solo SCORTA).
+3. Navi da guerra + aerei comprati dagli USA dal R5 a round (`acquisti_usa_dal_r5`): 2,44 / 2,22 (Hard 1,84 / 1,84; solo navi 0,90 /
+   0,55 contro 0,84 / 0,74); trasporti inattivi R12 (`per_round.12.trasporti_inattivi`) 8,9 / 8,0 (Hard 24,4 / 23,1) — si'. Ma trasporti
+   comprati dal R5 29,5 / 39,5 (Hard 31,9 / 38,1): il conteggio "inattivi" e' solo dei trasporti vuoti fermi; quelli carichi fermi non contano.
+4. Primo sbarco verso la capitale entro R8 (`primo_sbarco_capitale_round`) 35/40 / 38/40; Southern Italy o France attaccate dagli USA
+   (`attacchi_usa`) 32/40 / 38/40 (Hard 30/40 / 33/40) — si'.
+5. Unita' USA ferme patria + base a R12 (`per_round.12.ferme_patria_base`) 9,4 / 13,5 (Hard 22,5 / 24,5) — si', **ma le truppe sono
+   passate in mare**: unita' USA a bordo (`regioni_usa.mare`) R8 12,3 / 12,3, R12 16,7 / 21,2, R16 31,7 / 40,3 (Hard 0,7-3,8).
+6. Trasporti USA persi a partita (`trasporti_usa_persi.totale`) 1,4 / 0,8 (Hard 5,1 / 6,3) — si'.
+7. 0 errori del calcolatore, 0 stalli, 160/160 con un vincitore — si'.
+- **Effetto sul gioco (p1 contro e2)**: Roma cade 9/40 contro 22/40, Berlino 5/40 contro 18/40, Mosca 35/40 contro 25/40; reddito
+  italiano R12 20 contro 15. Sbarchi USA (monitor, unita' a partita): Holland Belgium 31,9, Gibilterra 4,5, Normandy 3,6, Italia 1,8;
+  con Hard Western Germany 13,9, Holland 6,5, Normandy 5,1, Southern Italy 3,9, Mediterraneo/Nord Africa 3,5-8,3 a terra. Il compito porta
+  tutti gli USA sulla direzione FRANCIA, li tiene sui trasporti in attesa di uno sbarco "ottenibile" e toglie al Mediterraneo la pressione
+  che Hard gli dava: l'Italia non e' piu' attaccata e l'Asse con l'assedio vince prima (R16 contro R18). Contro l'Asse di Hard (p2) nessuna
+  differenza.
