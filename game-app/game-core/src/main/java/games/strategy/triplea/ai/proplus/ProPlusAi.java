@@ -167,6 +167,9 @@ public class ProPlusAi extends ProAi {
       playTask(false, moveDel, data, player);
     }
     super.move(nonCombat, moveDel, data, player);
+    if (nonCombat) {
+      registerCityAndBridgehead(data, player);
+    }
     saveCheck(data, player);
   }
 
@@ -274,6 +277,24 @@ public class ProPlusAi extends ProAi {
       }
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "Commitment non-combat move failed: " + e);
+    }
+  }
+
+  /**
+   * Step P3: after Hard's non-combat move, the register of the bridgehead weight and of the city
+   * (rows only, no move). Nothing with the switch off.
+   */
+  private void registerCityAndBridgehead(final GameData data, final GamePlayer player) {
+    if (!CittaPonte.attivo(data, player)) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      attendiCalcolatore(data, player);
+      CittaPonte.dopoNonCombattimento(getProData(), getCalc(), player);
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P3 register failed: " + e);
     }
   }
 

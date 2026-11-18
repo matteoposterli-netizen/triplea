@@ -37,6 +37,8 @@ import java.util.Optional;
  *   <li>{@link #COMPITI} (step P1, default from {@code compiti.json}: OFF), on top of {@link
  *       #IMPEGNO}: the generic task mechanism ({@link Compiti}); it replaces the commitment of the
  *       alliance: the nations with a task play it, the others play as Hard.
+ *   <li>{@link #REGNO_UNITO_P3} (step P3, default from {@code compiti.json} {@code p3}: OFF), on
+ *       top of {@link #COMPITI}: the city to hold and the bridgehead weight ({@link CittaPonte}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -49,7 +51,8 @@ public enum StrategaInterruttori {
   ALLEATI_R5("alleati_r5", false),
   SQUADRA_GIBILTERRA("squadra_gibilterra", false),
   ITALIA_CONVOGLIO("italia_convoglio", false),
-  COMPITI("compiti", false);
+  COMPITI("compiti", false),
+  REGNO_UNITO_P3("regno_unito_p3", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -88,6 +91,9 @@ public enum StrategaInterruttori {
     }
     if (this == COMPITI) {
       return Compito.dati().accesoDiDefault();
+    }
+    if (this == REGNO_UNITO_P3) {
+      return CittaPonte.Config.get().accesoDiDefault();
     }
     return predefinito;
   }
@@ -151,7 +157,7 @@ public enum StrategaInterruttori {
                                         + x
                                         + " (liste, tenute, ombra, impegno, assedio, alleati_r4,"
                                         + " alleati_r5, squadra_gibilterra, italia_convoglio,"
-                                        + " compiti)"))
+                                        + " compiti, regno_unito_p3)"))
                         .id())
             .distinct()
             .toList();

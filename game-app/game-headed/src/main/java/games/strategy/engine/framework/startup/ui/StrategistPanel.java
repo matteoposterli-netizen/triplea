@@ -76,6 +76,9 @@ final class StrategistPanel {
   /** Step P1/P2: "Compiti (USA + Regno Unito)", the generic task mechanism (alliance level). */
   @Getter private final javax.swing.JCheckBox compiti = new javax.swing.JCheckBox();
 
+  /** Step P3: "Regno Unito: Il Cairo e ponte" (with the tasks and the commitment). */
+  @Getter private final javax.swing.JCheckBox regnoUnitoP3 = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -179,6 +182,13 @@ final class StrategistPanel {
             + " per gli Alleati (Regno Unito e Russia giocano come Hard); vale per le partite"
             + " nuove</html>");
     panel.add(row("Compiti (USA + Regno Unito):", compiti));
+    regnoUnitoP3.setSelected(profile.regnoUnitoP3());
+    regnoUnitoP3.setText(
+        "<html>Alleati: il Regno Unito tiene Il Cairo (riserva minima, rinforzi via terra e via"
+            + " mare, ripresa, truppe dalla fabbrica piu' vicina) e da' a Hard un valore piu' alto"
+            + " sulle teste di ponte alleate del round (step P3, sperimentale); accende anche"
+            + " Compiti e Impegno per gli Alleati; vale per le partite nuove</html>");
+    panel.add(row("Regno Unito: Il Cairo e ponte:", regnoUnitoP3));
     panel.add(
         row(
             "",
@@ -203,6 +213,7 @@ final class StrategistPanel {
     profile.setSquadraGibilterra(squadraGibilterra.isSelected());
     profile.setItaliaConvoglio(italiaConvoglio.isSelected());
     profile.setCompiti(compiti.isSelected());
+    profile.setRegnoUnitoP3(regnoUnitoP3.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

@@ -3065,6 +3065,87 @@ regole pure in `Risposta`): nazioni, direzioni, teatri e risultati stanno in `co
 11. **Truppe a bordo da 2 round scaricate su terra alleata accanto** (prima il teatro, poi altro): poi sono di Hard. Scartato:
     riportarle in porto (altri 1-2 round a bordo).
 
+### Citta' da tenere e peso del ponte (step P3)
+
+Interruttore `regno_unito_p3` (sotto `compiti`, default dal blocco `p3` di `compiti.json` = **spento**; spento = P2-bis).
+Autoplay `--stratega-acceso Allies=impegno+compiti+regno_unito_p3`, etichetta "[con regno_unito_p3]"; pannello: casella
+"Regno Unito: Il Cairo e ponte" (accende anche Compiti e Impegno). Codice generico `ai/proplus/CittaPonte` (nessun nome di
+nazione o territorio: test). Dati `compiti.json` `p3`: per nazione `citta` (Egypt) e `sostituisce` (U1, U2: il compito non
+li esegue piu'; U0 resta); parametri `peso_ponte_attacco` 20, `forza_ponte_rinforzo` 0,5, `vittoria_attacco_minaccia` 70,
+`max_turni_fabbrica` 4, `raggio_trasporti_nemici` 3, `tipo_truppa` infantry; soglie esistenti `soglia_tenuta` 40 e
+`soglia_attacco` 70.
+- **A, peso del ponte** (al turno della nazione, `CittaPonte.ponte` all'acquisto): teste di ponte del round = territori
+  del continente (almeno un vicino di terra) dove un'ALTRA nazione attiva dell'alleanza (`nazioni_attive`: gli USA) ha
+  combattuto in questo round (`BattleRecords`) o che erano nemici nella fotografia del round (`p3_proprietari`, scritta al
+  primo turno di una nazione del compito nel round, prima delle sue mosse: per gli Alleati gli USA) e ora hanno sue unita'
+  di terra. Prese (alleate) ⇒ ordini di ammassamento di Hard (`ProPlusTuning.stagingOrders`, uniti a quelli esistenti):
+  il territorio e le zone di mare accanto, forza 0,5 (meta' della miglior destinazione del turno; la difesa, Londra
+  compresa, e' pianificata prima e non legge questi valori). Attaccate e non prese ⇒ +20 alla priorita' d'attacco di Hard
+  (`attackPriorityPlanBonus`, come un obiettivo di piano). Nessuna unita' trattenuta; senza teste di ponte niente cambia.
+  Proprieta' `Pro+ p3 ponte: <nazione>` (round, attacco, rinforzo).
+- **B, la citta'** (`CittaPonte.acquisto` all'acquisto, `combattimento` e `nonCombattimento` prima di Hard): minaccia =
+  attacco realistico esistente (`Alleanza.contrattacco`) con lo **schermo navale**: la parte che arriva per mare conta per
+  la probabilita' che lo schermo cada (zone accanto alla citta' raggiungibili da un trasporto nemico entro 3; nessuna nave
+  da guerra alleata = 0; con navi = 1 - vittoria nemica A1 nella zona). B1 riserva minima: unita' proprie nella citta' e
+  nei territori alleati accanto (la capitale esclusa), le piu' forti in difesa prima, finche' la minaccia <= 40% (tutte se
+  non basta): fuori dal combattimento di Hard (`Compiti.trattenute`), quelle nella citta' ferme anche nel non
+  combattimento; eccezione: attacco alla fonte della minaccia (terra nemica o zona di mare con i trasporti) con vittoria
+  >= 70 e citta' che regge dopo, solo con la citta' minacciata (eseguito dal compito prima di Hard). B2 non combattimento:
+  via terra, aerei che ci atterrano, poi via mare (`pianoMare`: ogni trasporto proprio in portata, carico gia' o vuoto che
+  carica truppe proprie su una costa alleata non confinante via terra con la citta' e non la capitale, scarico nella
+  citta'; zone con nemici escluse), fino a minaccia <= 40%. B3 citta' persa: via terra + anfibio (stesso piano, combattimento)
+  se vittoria >= 70. B4 se 1-3 non bastano (proiezione all'acquisto): truppe mancanti nella fabbrica propria piu' vicina in
+  turni di viaggio (`fabbriche`: terra = distanza su territori alleati, mare = zone/2), tetto = produzione, trasporto solo
+  se la via e' il mare e nella zona della fabbrica non ce n'e'; poi **consegna** (`p3_consegna`, `p3_trasporti`): i trasporti
+  vuoti accanto alla fabbrica caricano, i carichi della consegna vanno verso la citta' fermandosi solo in zone sicure (A1) e
+  scaricano quando arrivano. PU non usati = Hard (la quota del Regno Unito resta 80%).
+- **Registro**: `ponte_peso` (dopo il non combattimento di Hard, `ProPlusAi.registerCityAndBridgehead`: teste di ponte,
+  peso, unita' britanniche nuove sulla testa di ponte via mare/terra, attaccata da noi, perche'; codici NESSUNA_TESTA /
+  PESO_SEGUITO / PESO_IGNORATO), `cairo_tenuta` (stato TENUTO/MINACCIATO/PERSO, attacco realistico prima, dopo le leve, a
+  fine turno; riservate; piano via mare; attacco alla minaccia; ripresa; mosse via terra/aria/mare con trasporti e
+  partenze; acquisto con fabbrica, turni, PU; stato del turno prima).
+- **Autoplay**: `MonitorP2` scrive anche `uk_egitto` per round; blocco `p3` del `riepilogo.json` (`ConfrontoP3.blocco`):
+  `egitto_asse_fine_round` (1-4), `round_egitto_asse`/`round_con_fotografia`, `uk_in_egitto_r1`, `turni_citta`,
+  `portate_in_egitto_via_mare/terra/aria`, `pu_cairo`, `unita_riservate_totale`, `attacchi_alla_minaccia`, `riprese`,
+  `turni_con_teste_di_ponte`, `turni_peso_seguito`, `uk_mandate_teste_di_ponte(_via_mare)`, `sbarchi_alleati`,
+  `sbarchi_alleati_con_britannici`, `..._noti_round_dopo`, `..._ancora_alleati` (sbarchi USA del monitor P2),
+  `unita_sbarcate_usa_uk`, `trasporti_uk_r12`, `regno_unito_perso(_round)`, `esercito_r12`. Sezione "P3" del
+  `riepilogo-generale.md` (`ConfrontoP3.write`: vittorie con Wilson, Fisher contro e2 e contro p1). `[completa]` = e2, p1,
+  p3 x semi 1461-1500 (120 partite, costo API 0).
+- Test: `CittaPonteTest` (12), `ConfrontoP3Test` (2).
+
+### Scelte di P3 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Peso d'attacco 20 e forza di rinforzo 0,5**: 20 = il peso degli obiettivi piu' alti dei piani esistenti (sposta la
+   scelta tra sbarchi equivalenti senza rendere vincibile un attacco perso); 0,5 = la forza esistente dei rinforzi prioritari
+   dello Stratega. La difesa di Hard (e di Londra) e' pianificata prima degli ordini di ammassamento. Scartato: un bonus
+   d'attacco anche sulle teste di ponte prese (non serve: sono alleate) e un "bersaglio forzato" (sarebbe una ricetta).
+2. **Teste di ponte = combattimento di un alleato del compito nel round o territorio nemico alla fotografia del round con
+   sue unita' ora**: i registri delle battaglie coprono "attaccato e non preso"; la fotografia copre le prese senza battaglia.
+   La fotografia e' presa al primo turno di una nazione del compito (gli USA), non a inizio round (prima gioca la Germania,
+   che puo' essere umana). Alleati = le altre nazioni attive (gli USA): la Russia combatte ogni round sul suo fronte e
+   avrebbe tirato le truppe britanniche verso est. "Continente" = territorio con un vicino di terra (le isole no).
+3. **Schermo navale come probabilita'** (minaccia = terra + (con sbarchi - terra) x probabilita' che lo schermo cada):
+   le navi britanniche contano senza ignorare che l'Asse puo' attaccarle prima di sbarcare. Scartato: ignorare gli sbarchi
+   con navi in zona (troppo ottimista).
+4. **Riserva minima per aggiunta** (le piu' forti prima, prima quelle gia' nella citta'): e' il "minimo che serve"; tutte se
+   non basta (la citta' e' l'obiettivo). Attacco alla minaccia solo con la citta' minacciata (con la citta' tenuta Hard e'
+   gia' libero di attaccare con le unita' non riservate).
+5. **Via mare scelta solo se piu' veloce della terra** per la fabbrica (in prova il Sudafrica era raggiungibile anche via
+   terra in Africa: il primo codice non comprava il trasporto per quello).
+6. **Registro dopo il non combattimento di Hard** (nuovo aggancio in `ProPlusAi.move`, solo righe): "Hard ci ha mandato
+   unita'?" si vede solo dopo le sue mosse.
+7. **U1 e U2 sostituiti, non modificati**: con l'interruttore spento il codice di P2-bis gira identico (test).
+8. **Nel non combattimento restano ferme TUTTE le unita' proprie nella citta' (aerei compresi: nella seconda prova al
+   R3 l'attacco realistico e' passato dal 27% all'83% durante il non combattimento di Hard) e, con minaccia > meta' soglia
+   all'inizio della mossa, anche quelle nei territori confinanti; lo schermo navale li' non conta**: nella prima prova
+   (seme 1461, R2) la citta' "tenuta" al 9% all'acquisto era all'80% dopo il non combattimento di Hard, che aveva tolto 2
+   unita' da Egypt e svuotato i vicini (via di terra aperta: solo terra 7% → 38%) e spostato la flotta. Hard muove dopo il
+   compito, quindi il minimo calcolato prima delle sue mosse non regge. Scartato: ricalcolare la minaccia su un tabellone
+   ipotetico (costoso, il gestore delle opzioni nemiche andrebbe ricostruito per ogni prova).
+9. **Teste di ponte solo su territori dell'altra alleanza** (alla fotografia del round, o ora se attaccati): nella prima
+   prova contavano anche i neutrali presi dagli USA (Venezuela, Colombia, Spagna...).
+
 ## Come configurare lo stratega
 
 Per Matteo e gli amici (stesso testo, piu' corto, nel `LEGGIMI.txt` dello zip):
@@ -5940,3 +6021,32 @@ condiviso, compito del Regno Unito, quote, soglie e parametri come in P2. ProAi 
 - Lettura: tolti divieto e sequestri, gli Alleati con `compiti` tornano al livello di Hard (anzi sopra, non distinguibile) e sbarcano piu'
   di Hard; il crollo di P2 veniva dal divieto e dai sequestri, non dal livello alleanza in se'. Il compito del Regno Unito quasi non
   sbarca (2,7 unita' a partita): gli sbarchi britannici sono di Hard. Nessun guadagno misurabile del compito sopra Hard (+3 vittorie, p 0,64).
+
+### Step P3 — Regno Unito: Il Cairo tenuto e ponte come peso sui bersagli di Hard (2026-11-18)
+
+Vedi "Citta' da tenere e peso del ponte (step P3)" e "Scelte di P3". Motivo (run P2-bis 44390108394): il compito britannico non
+agiva (U1 "nessuna fabbrica accanto: PU a Hard" in 440 turni su 783; Egypt dell'Asse a fine R1 31/40) e U2 sbarcava 2,7 unita' a
+partita su un bersaglio suo. Regola: niente divieti, tetti o sequestri sulle forze di Hard oltre B1 (riserva minima) e B4 (PU solo
+quanto serve).
+- File nuovi: `ai/proplus/CittaPonte`, test `CittaPonteTest` (12); autoplay `ConfrontoP3`, test `ConfrontoP3Test` (2).
+  Modificati: `StrategaInterruttori` (`regno_unito_p3`), `Compiti` (fotografia del round, U1/U2 sostituiti, agganci acquisto /
+  combattimento / non combattimento, `trattenute` + riservate), `ProPlusTuning` (`attackPriorityPlanBonus`, `stagingOrders`),
+  `ProPlusAi` (registro dopo il non combattimento di Hard), `RegistroDecisioni` (`ponte_peso`, `cairo_tenuta`, codici PERSO /
+  NESSUNA_TESTA / PESO_SEGUITO / PESO_IGNORATO), `Stratega`, `ProfiloStratega`, `StrategistPanel` (casella), `compiti.json`
+  (blocco `p3`); autoplay `MonitorP2` (`uk_egitto`), `Riepilogo` (blocco `p3`), `ConfrontoCompleta` (sezione "P3"); workflow
+  `[completa]` = e2, p1, p3 x semi 1461-1500 (120 partite, costo API 0).
+- Test locali: AI di game-core 661 (1 saltato; golden Hard, `NudoHardTest`, `DiaryNeutralityTest`, `CampagnaOmbraTest`,
+  `CompitiTest` 22, `CittaPonteTest` 12), `:ai:test` 13, `:proplus-autoplay:test` 54, `:game-headed:test` 94: verdi. JDK 25
+  Temurin 25.0.1 da GitHub.
+- Prove locali p3 seme 1461, 12 round (le simulazioni dell'AI restano casuali: stesso seme, partite diverse), registro letto
+  turno per turno. Prova 1 (prima delle correzioni): R1 Egypt minacciato (41%), 5 unita' riservate (2 fanterie, artiglieria,
+  meccanizzata, il corazzato di Alexandria), dopo le leve 9%, l'Italia attacca ma non lo prende; R2 "tenuto" al 9% ma a fine
+  turno 80% (Hard aveva tolto unita' da Egypt e svuotato i vicini) ⇒ preso dall'Italia; R3 ripreso via mare con 3 trasporti
+  (Persia orientale, Somalia italiana, Kenya: 5 unita', vittoria 85%); R4 tenuto. Egypt dell'Asse 1 round su 12. Teste di ponte:
+  contavano i neutrali presi dagli USA (Venezuela, Colombia...) ⇒ corretto. Prova 2 (correzioni 8 e 9): R1 minacciato 49% →
+  18% con la riserva, tenuto; R2 tenuto; R3 33% all'acquisto, 83% a fine turno ⇒ perso (causa: gli aerei in Egypt non erano
+  tenuti fermi ⇒ corretto, scelta 8); R4-R5 persi (ripresa 44% e 56% < 70: 13 + 6 PU, 4 fanterie e 1 trasporto in Sudafrica,
+  consegna via mare partita al R5); R6 ripreso (99%, 4 via terra + 1 via mare); R7-R12 tenuto. Egypt dell'Asse 3 round su 12.
+  Sbarchi USA 18, con britannici a fine round 1; britannici mandati da Hard sulle teste di ponte 15 (6 via mare), quasi tutti
+  su Spagna/Portogallo. Trasporti UK R12 9, United Kingdom mai perso. 0 eccezioni.
+- CI: `[completa]` = e2, p1, p3 x semi 1461-1500 (risultati: da aggiungere dopo la run).

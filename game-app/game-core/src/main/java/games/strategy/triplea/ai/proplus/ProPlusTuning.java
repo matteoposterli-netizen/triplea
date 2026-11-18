@@ -294,7 +294,10 @@ public final class ProPlusTuning implements ProTuning {
     if (OperazioniCongiunte.forzaBersaglio(proData, target)) {
       return operationAnswer(OperazioniCongiunte.BONUS_FORZATO);
     }
-    final double plan = planOf(proData).map(p -> p.peso(target)).orElse(0.0);
+    final double planWeight = planOf(proData).map(p -> p.peso(target)).orElse(0.0);
+    // step P3 (A): an allied bridgehead of the round attacked and not taken yet
+    final double bridgehead = CittaPonte.pesoAttacco(proData, target);
+    final double plan = bridgehead > 0 ? Math.max(planWeight, bridgehead) : planWeight;
     // step PROVA DI VALORE: an access territory of the joint operation (only with its switch on)
     final double access = OperazioniCongiunte.bonusAccesso(proData, target);
     return access > plan ? operationAnswer(access) : plan;
@@ -724,6 +727,16 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public Optional<ProStagingOrders> stagingOrders(final ProData proData) {
+    // step P3 (A): the allied bridgeheads taken this round pull Hard's non-combat move
+    final Optional<ProStagingOrders> base = stagingOrdersBase(proData);
+    final Optional<ProStagingOrders> bridge = CittaPonte.rinforzo(proData);
+    if (bridge.isEmpty()) {
+      return base;
+    }
+    return Optional.of(base.map(b -> CittaPonte.unisci(bridge.get(), b)).orElse(bridge.get()));
+  }
+
+  private Optional<ProStagingOrders> stagingOrdersBase(final ProData proData) {
     // step STRATEGA LLM: the strategist's priority reinforcements of the round (only its nations)
     final Optional<ProStagingOrders> llm = rinforziStratega(proData);
     if (llm.isPresent()) {

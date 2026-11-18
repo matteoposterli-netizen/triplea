@@ -149,6 +149,12 @@ public final class Stratega {
       wanted.add(StrategaInterruttori.IMPEGNO);
       wanted.add(StrategaInterruttori.COMPITI);
     }
+    // step P3: "Regno Unito: Il Cairo e ponte" (Allies) with the tasks and the commitment
+    if ("Allies".equals(alliance.get()) && profile.regnoUnitoP3()) {
+      wanted.add(StrategaInterruttori.IMPEGNO);
+      wanted.add(StrategaInterruttori.COMPITI);
+      wanted.add(StrategaInterruttori.REGNO_UNITO_P3);
+    }
     final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
     boolean changed = false;
     for (final StrategaInterruttori w : wanted) {

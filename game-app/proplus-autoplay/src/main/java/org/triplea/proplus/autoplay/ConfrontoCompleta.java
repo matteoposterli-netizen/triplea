@@ -147,6 +147,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P2 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P3: the UK's city held and the bridgehead weight
+    if (ConfrontoP3.applicabile(games)) {
+      try {
+        ConfrontoP3.write(md, games, alliances);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step R6c / R6b-bis: Italy's shuttle in convoy
     if (ConfrontoItalia.applicabile(games)) {
       try {

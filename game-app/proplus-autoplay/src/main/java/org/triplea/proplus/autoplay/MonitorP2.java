@@ -106,6 +106,8 @@ final class MonitorP2 {
     o.addProperty(
         "egitto_asse",
         egypt != null && "Axis".equals(allianceOf.apply(egypt.getOwner().getName())));
+    // step P3: the British land units in Egypt at the end of the round
+    o.addProperty("uk_egitto", egypt == null ? 0 : land(egypt, UK));
     final JsonObject board = new JsonObject();
     for (final String n : A_BORDO) {
       final GamePlayer p = data.getPlayerList().getPlayerId(n);

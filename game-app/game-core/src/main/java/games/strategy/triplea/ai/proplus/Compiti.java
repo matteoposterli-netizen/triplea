@@ -129,7 +129,10 @@ public final class Compiti {
         return new LinkedHashSet<>(forza(data, player, task, true));
       }
       // step P2 (D): only the units the task uses this turn
-      return usate(data, player, task);
+      final Set<Unit> out = usate(data, player, task);
+      // step P3: the units the city needs this turn (B1, B3)
+      out.addAll(CittaPonte.riservate(data, player));
+      return out;
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Compito, trattenute: " + e);
       return Set.of();
@@ -2141,6 +2144,8 @@ public final class Compiti {
               + (Alleanza.ha(this) ? "P2" : "P1")
               + ") ===");
       esitiPrecedenti();
+      // step P3: the owners at the round's first task turn (register of the bridgeheads)
+      CittaPonte.fotografiaRound(this);
       final boolean livello = Alleanza.ha(this);
       if (livello) {
         // step P2: the alliance level (direction, bridgeheads taken) at its first nation's turn
@@ -2167,7 +2172,7 @@ public final class Compiti {
       final JsonArray tenute = new JsonArray();
       boolean constraintOk = true;
       for (final Compito.Risultato r : task.risultati()) {
-        if (!r.continuo()) {
+        if (!r.continuo() || CittaPonte.sostituito(this, r.id())) {
           continue;
         }
         final JsonObject x = tenuta(r, cassa);
@@ -2186,7 +2191,16 @@ public final class Compiti {
         cassa.perFabbrica.clear();
         lines.add("  Vincolo non rispettato: il compito non prende PU, tutto a Hard");
       }
+      // step P3: the bridgehead weight for Hard (A) and the city to hold (B)
+      if (CittaPonte.attivo(data, player)) {
+        CittaPonte.ponte(this);
+        CittaPonte.acquisto(this, cassa);
+      }
       Compito.Risultato r = constraintOk ? corrente() : null;
+      if (r != null && CittaPonte.sostituito(this, r.id())) {
+        lines.add("  Risultato " + r.id() + " sostituito dallo step P3: a Hard");
+        r = null;
+      }
       final String dir = direzioneAlleanza();
       if (r != null && !r.valePer(dir)) {
         lines.add("  Risultato " + r.id() + " non vale con la direzione " + dir + ": a Hard");
@@ -2876,6 +2890,8 @@ public final class Compiti {
           }
         }
       }
+      // step P3: the attack on the city's threat, the city taken back
+      moved.addAll(CittaPonte.combattimento(this, delegate));
       if (!piano.has("risultato")) {
         salva(data.getProperties(), alliance, st);
         Impegno.diarioRighe(data, lines);
@@ -3389,6 +3405,9 @@ public final class Compiti {
         held.addAll(defended);
         aggiorna();
       }
+      // step P3: the city reinforced by land, air and sea; the delivery of the troops bought
+      held.addAll(CittaPonte.nonCombattimento(this, delegate, moves));
+      aggiorna();
       // 6 transports left where the enemy sinks them
       final JsonArray exposed = new JsonArray();
       if (landingUse) {

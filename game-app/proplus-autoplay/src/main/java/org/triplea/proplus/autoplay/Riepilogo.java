@@ -132,6 +132,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p2", err);
     }
+    // step P3: the city held and the bridgehead weight (also for the Allies of Hard)
+    try {
+      json.add("p3", ConfrontoP3.blocco(json));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p3", err);
+    }
     return json;
   }
 

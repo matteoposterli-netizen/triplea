@@ -113,5 +113,24 @@
         }
       }
     }
+  },
+  "p3": {
+    "nota": "Step P3 (interruttore regno_unito_p3 sotto compiti, default spento). A: le teste di ponte alleate del round (territorio del continente preso o attaccato in questo round da un'altra nazione attiva dell'alleanza) hanno un valore alzato per Hard della nazione: bonus di priorita' d'attacco se non ancora prese, attrazione del non combattimento (ordini di ammassamento) se prese. B: la citta' da tenere (riserva minima, rinforzo via terra/aria/mare, ripresa, truppe nella fabbrica piu' vicina). Le voci della nazione in 'sostituisce' non sono piu' eseguite dal compito.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P3 (default spento)"},
+    "parametri": {
+      "peso_ponte_attacco": {"valore": 20, "origine": "scelto: = il peso piu' alto degli obiettivi dei piani esistenti (15-20 nel file di strategia), aggiunto alla priorita' d'attacco di Hard prima dei moltiplicatori; sposta la scelta tra sbarchi equivalenti, non basta da solo a un attacco senza vittoria"},
+      "forza_ponte_rinforzo": {"valore": 0.5, "origine": "scelto = la forza esistente dei rinforzi prioritari dello Stratega (ProPlusTuning, 0,5): la testa di ponte vale meta' della miglior destinazione del turno; la difesa (anche di Londra) viene prima ed e' pianificata senza questi valori"},
+      "vittoria_attacco_minaccia": {"valore": 70, "origine": "richiesta dello step P3 (= soglia_attacco)"},
+      "max_turni_fabbrica": {"valore": 4, "origine": "scelto: oltre 4 turni di viaggio le truppe arrivano troppo tardi; PU a Hard"},
+      "raggio_trasporti_nemici": {"valore": 3, "origine": "scelto: movimento del trasporto (2) + base navale (1); una zona accanto alla citta' e' usabile per lo sbarco nemico se un trasporto nemico e' entro 3 zone"},
+      "tipo_truppa": {"valore": "infantry", "origine": "come tipi_difesa: miglior difesa per PU della mappa"}
+    },
+    "nazioni": {
+      "British": {
+        "citta": "Egypt",
+        "sostituisce": ["U1", "U2"],
+        "nota": "U1 (Il Cairo) e U2 (esecutore della testa di ponte) sostituiti dallo step P3; U0 (vincolo di Londra) resta"
+      }
+    }
   }
 }

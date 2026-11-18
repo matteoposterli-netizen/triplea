@@ -83,11 +83,19 @@ public final class RegistroDecisioni {
           "alleanza_direzione",
           "alleanza_risultato_condiviso",
           "compito_tenuta",
-          "compito_a_bordo");
+          "compito_a_bordo",
+          // step P3
+          "ponte_peso",
+          "cairo_tenuta");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P3
+          "PERSO",
+          "NESSUNA_TESTA",
+          "PESO_SEGUITO",
+          "PESO_IGNORATO",
           // step P2
           "CONGIUNTO",
           "ACCUMULO",

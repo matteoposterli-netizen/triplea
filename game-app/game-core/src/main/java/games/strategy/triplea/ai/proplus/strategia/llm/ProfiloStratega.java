@@ -134,6 +134,20 @@ public final class ProfiloStratega {
     values.setProperty(KEY_COMPITI, on ? "si" : "no");
   }
 
+  private static final String KEY_REGNO_UNITO_P3 = "regno_unito_p3";
+
+  /**
+   * Step P3: "Regno Unito: Il Cairo e ponte" for the Allies (turns on "impegno", "compiti" and
+   * "regno_unito_p3"). Off unless set.
+   */
+  public boolean regnoUnitoP3() {
+    return si(KEY_REGNO_UNITO_P3);
+  }
+
+  public void setRegnoUnitoP3(final boolean on) {
+    values.setProperty(KEY_REGNO_UNITO_P3, on ? "si" : "no");
+  }
+
   /**
    * Step R6c: "Italia in convoglio" for the Axis (turns on "impegno", "assedio" and
    * "italia_convoglio"). Off unless set.
