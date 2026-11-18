@@ -165,6 +165,7 @@ jobs:
               # step P2: the alliance level (direction, shared bridgehead, the UK's task), same 4
               # configurations on new seeds 1381-1420 = 160 games
               # step P2-bis: no ban on Hard's transports, e2 and p1 on new seeds 1421-1460 = 80 games
+              # (criteria and stop rule fixed beforehand: CLAUDE.md "Step P2-bis"; block p2.p2bis)
               completa = [
                   ("e2", "Asse-impegno-assedio-vs-Hard",
                    "Asse Stratega con impegno e assedio (quota 70) / Alleati Hard",
