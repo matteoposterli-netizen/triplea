@@ -242,6 +242,10 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `compiti.json` v2, `RegistroDecisioni` (tipi `alleanza_direzione`, `alleanza_risultato_condiviso`, `compito_tenuta`,
   `compito_a_bordo`); casella "Compiti (USA + Regno Unito)"; autoplay `MonitorP2`, `ConfrontoP2` (blocco `p2`, sezione "P2"). Vedi
   "Livello alleanza (step P2)" e "Scelte di P2".
+- Step P2-BIS: via il divieto dei trasporti a Hard (`KEY_TRASPORTI`, `Compiti.vietaTrasporti` tolti; `ProPlusTuning.buysSeaTransports`
+  senza il ramo compiti) e via il sequestro dei trasporti vuoti e delle truppe in patria (`Compiti.usate`, `nonCombattimento`,
+  `muoviTrasporti`); registro `Compiti.KEY_SCARICATE` (solo per l'autoplay); autoplay `MonitorP2` (trasporti piazzati),
+  `Monitor` (`sbarchi[].unita_compito`), `ConfrontoP2.p2bis` (blocco `p2.p2bis`, tabella "P2-bis"). Vedi "Step P2-bis".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -2940,7 +2944,7 @@ restano nel codice (spenti nelle run di P1). L'Asse non cambia.
    nulla. Scartato: niente acquisto finche' la zona non migliora da sola.
 6. **Convoglio** (flotta e trasporti carichi fermi insieme nella stessa zona tenibile): in prova la flotta andava avanti da sola e i trasporti
    carichi restavano al porto (nessuna sosta sicura per loro soli). Scartato: flotta prima e trasporti dopo con soste sicure (prima versione).
-7. **Divieto dei trasporti a Hard solo nei turni in cui il compito non ne compra**: con il divieto sempre attivo le opzioni d'acquisto
+7. **(Superata da P2-bis: divieto tolto del tutto)** **Divieto dei trasporti a Hard solo nei turni in cui il compito non ne compra**: con il divieto sempre attivo le opzioni d'acquisto
    perdevano i trasporti anche per gli ordini del compito (in prova "6 trasporti comprati" a turno, 0 arrivati). Scartato: divieto sempre.
 8. **Truppe pronte = tutte le unita' di terra trasportabili nelle fabbriche delle truppe oltre il presidio** (anche quelle comprate da Hard):
    la capacita' conta ogni truppa che puo' partire. Il presidio della capitale e' 0 se nessun nemico la raggiunge (USA). Scartato: solo le
@@ -5880,3 +5884,34 @@ p2 7,1; trasporti UK inattivi R12 p1 2,1 (si'). 8 trasporti USA persi (`trasport
   OGNI nazione del compito in ogni turno in cui il compito non ne compra; con P2 vale anche per il Regno Unito, che con MEDITERRANEO ha solo U1 ⇒ Hard
   britannico non compra piu' trasporti e non sbarca piu' in Europa. Gli USA rilasciano a Hard solo cio' che il compito non usa, ma gli sbarchi di Hard
   americani crollano comunque (201 contro 876 sbarchi USA tra tutte le partite).
+
+### Step P2-bis — prova di chiusura: via il divieto dei trasporti a Hard (2026-11-18)
+
+Scopo: separare la causa del fallimento di P2. Se senza divieto gli Alleati con `compiti` tornano al livello di Hard, la linea "compiti"
+resta aperta; altrimenti si chiude (criteri e regola d'arresto decisi prima, nel prompt). Nient'altro cambia: direzione, risultato
+condiviso, compito del Regno Unito, quote, soglie e parametri come in P2. ProAi (Hard) e interruttori spenti invariati.
+- **Tolto**: (1) il divieto a Hard di comprare trasporti per le nazioni del compito (`Compiti.KEY_TRASPORTI`, `vietaTrasporti`, la
+  scrittura in `Turno.ordina`, il ramo in `ProPlusTuning.buysSeaTransports`): via del tutto, non condizionale. (2) Altri limiti trovati
+  alla capacita' di sbarco di Hard, tutti del livello alleanza (uso SBARCO): `Compiti.usate` sequestrava al combattimento di Hard TUTTI i
+  trasporti della nazione (anche vuoti e lontani) e tutte le truppe trasportabili nelle fabbriche delle truppe ⇒ ora solo i trasporti
+  carichi e il loro carico; `nonCombattimento` tratteneva tutti i trasporti ⇒ solo i carichi; `muoviTrasporti` riportava al porto i
+  trasporti vuoti (consumandone il movimento) ⇒ i vuoti sono di Hard; le truppe pronte trattenute al porto fino ai posti liberi di tutti
+  i trasporti posseduti ⇒ di Hard. Il ramo P1 (alleanza senza `direzioni`) non e' toccato: con `compiti.json` v2 non e' usato.
+  Il compito continua a comprare i propri trasporti con la regola CAPACITA (che conta anche i trasporti posseduti, quelli di Hard compresi).
+- **Registro** (solo lettura, nessuna decisione lo usa): `Compiti.KEY_SCARICATE` = id delle unita' scaricate dal compito nel turno (il
+  compito muove prima di Hard: differenza dei `getUnloaded` prima/dopo la sua parte di combattimento e non combattimento). Monitor:
+  `sbarchi[].unita_compito`, `round[].p2.trasporti_piazzati` (USA, Regno Unito). Blocco `p2.p2bis` del `riepilogo.json`:
+  `trasporti_comprati.N.compito/hard/totale` (compito = trasporti nei suoi ordini `compito_acquisto`, al massimo quelli piazzati nel round;
+  Hard = il resto dei piazzati), `unita_sbarcate.N.compito/hard/totale`, `trasporti_posseduti.N.4/8/12` (N = Americans, British).
+  Tabella "P2-bis" nella sezione "P2" di `riepilogo-generale.md`.
+- Test: `CompitiTest` 22 (nuovi: con `compiti` acceso Hard puo' comprare trasporti per USA e Regno Unito; con SBARCO trattenuti solo i
+  trasporti carichi e il carico, non i vuoti ne' le truppe in patria; il vecchio "Hard non compra" ora verifica il contrario),
+  `ConfrontoP2Test` 2. Suite: AI di game-core 649 (1 saltato; golden Hard, `NudoHardTest`, `DiaryNeutralityTest`, `CampagnaOmbraTest`,
+  `CompitiTest`), `:ai:test` 13, `:proplus-autoplay:test` 52, `:game-headed:test` 94: verdi. JDK 25 Temurin 25.0.1 da GitHub; Maven
+  Central 429 al primo tentativo (ritentato).
+- **Prova locale** p1 seme 1421, 12 round (464 s, nessuna vittoria entro 12, VC Asse 6 / Alleati 5, 0 eccezioni): trasporti posseduti
+  R4 / R8 / R12 USA 1 / 16 / 24, Regno Unito 6 / 10 / 10 (P2 in CI: UK R12 2,4); trasporti comprati USA 35 (compito 0, Hard 35), UK 12
+  (compito 0, Hard 12); unita' sbarcate USA 72 (compito 28, Hard 44), UK 56 (tutte di Hard) = 128 (P2 in CI: 57 a partita); direzione
+  MED 6 / FR 6 round; Egypt dell'Asse 6/12 round; Roma cade al R10. Il compito non ha comprato trasporti in nessun turno (CAPACITA: i
+  posseduti, quelli di Hard compresi, bastano): con il divieto tolto tutti i trasporti nuovi sono di Hard.
+- CI: `[completa]` = e2, p1 x semi 1421-1460 (80 partite, costo API 0). Risultati nella sottosezione qui sotto quando la run e' finita.
