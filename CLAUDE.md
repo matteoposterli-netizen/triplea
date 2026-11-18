@@ -5855,3 +5855,28 @@ bordo), Regno Unito Hard senza compito; p1 5/40 contro e2 18/40 (p 0,003).
   a bordo 14 / 0 / 1; 0 trasporti USA persi; nel R13-15 Hard con le unita' USA rilasciate sbarca su neutrali (Spain, Turkey, Sud
   America). Seme 1383: MED 10 / FR 6 round, Egypt dell'Asse 13/16, Roma non cade, a bordo R16 16. p2 seme 1382 (versione precedente
   della CAPACITA): MED 9 / FR 7, sbarco congiunto su Denmark al R11 (USA + 1 britannica, perso al round dopo), 8 trasporti USA persi.
+
+#### Autoplay in CI (run 44353323969, commit ad31c69, tutto verde al 1° tentativo, 160/160 partite [completa] senza chiave, semi 1381-1420, costo API 0)
+**Step FALLITO**: p1 1/40 vittorie alleate contro e2 16/40 (Fisher p < 0,001); p2 6/40 contro a 20/40 (p 0,002). Peggio di P1 (5/40, 18/40).
+0 errori del calcolatore (log), 0 stalli, 160/160 con un vincitore. Numeri dai blocchi `p2`/`esito` dei `riepilogo.json`.
+
+| Configurazione | Asse / Alleati | Quota Alleati [IC 95% Wilson] | p (Fisher) | Round vittoria mediana |
+|---|---|---|---|---|
+| a Hard / Hard | 20 / 20 | 50% [35; 65] | - | 22 |
+| p2 Hard / Alleati compiti | 34 / 6 | 15% [7; 29] | 0,002 contro a | 17 |
+| e2 Asse impegno+assedio / Hard | 24 / 16 | 40% [26; 55] | - | 18 |
+| p1 Asse impegno+assedio / Alleati compiti | 39 / 1 | 3% [0; 13] | < 0,001 contro e2 | 15 |
+
+Criteri (p1 / e2): 1 round con Egypt dell'Asse (`round_egitto_asse`) 8,4 (53% dei round) / 8,0 (39%): NO. 2 Roma cade (`cadute.roma`) 10/40 / 17/40: NO;
+reddito italiano R12 / R16 (`per_round.N.reddito_italia`) 20,9 / 15,1 contro 16,3 / 11,4: NO. 3 Mosca cade (`cadute.mosca`) 39/40 / 28/40: NO.
+4 vittorie: FALLITO (sopra). 5 direzione prevalente (`direzione_prevalente`) p1 MED 30 / FR 10, p2 MED 27 / FR 13; round MED/FR (`round_per_direzione`)
+p1 10,0 / 5,8, p2 11,0 / 8,3; decisioni (`decisioni_condivise`) p1 ACCUMULO 246, CONGIUNTO 136, NIENTE 45, LOGORAMENTO 15. 6 con FRANCIA: sbarchi USA con
+britannici a fine round (`sbarchi_usa_con_francia*`) p1 24/49 = 49% (criterio 50%: NO), p2 34/77 = 44%; congiunti tenuti il round dopo
+(`sbarchi_congiunti_con_francia*`) p1 10/24 = 42% (criterio 60%: NO), p2 21/34 = 62%. 7 a bordo USA+UK R12 (`per_round.12.a_bordo_totale`) p1 5,9 (si'),
+p2 7,1; trasporti UK inattivi R12 p1 2,1 (si'). 8 trasporti USA persi (`trasporti_usa_persi`) p1 0,9 / e2 5,1 (si'), 0 errori, 0 stalli (si').
+- Sbarchi veri degli Alleati a partita: p1 13 contro e2 45, p2 15 contro a 51; reddito finale Alleati p2 84 contro 122 (IC Welch esclude lo 0);
+  trasporti britannici a R12 p1 2,4 contro 12,2 di Hard. Berlino cade 1/40 (e2 18/40).
+- Causa probabile (dal codice, NON verificata con un esperimento): in `Compiti.Turno.ordina` il divieto dei trasporti a Hard (`KEY_TRASPORTI`) vale per
+  OGNI nazione del compito in ogni turno in cui il compito non ne compra; con P2 vale anche per il Regno Unito, che con MEDITERRANEO ha solo U1 ⇒ Hard
+  britannico non compra piu' trasporti e non sbarca piu' in Europa. Gli USA rilasciano a Hard solo cio' che il compito non usa, ma gli sbarchi di Hard
+  americani crollano comunque (201 contro 876 sbarchi USA tra tutte le partite).
