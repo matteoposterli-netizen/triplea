@@ -60,36 +60,76 @@ class CompitiTest extends AbstractClientSettingTestCase {
   // =========================================================================== data, code
 
   @Test
-  void theDataFileHasTheTaskOfTheUsaAsData() {
+  void theDataFileHasTheTasksOfTheUsaAndTheUkAndTheAllianceLevelAsData() {
     final Compito.Dati d = Compito.dati();
     assertThat(d.accesoDiDefault()).isFalse();
     assertThat(StrategaInterruttori.COMPITI.predefinito()).isFalse();
-    assertThat(d.nazioniAttive().get("Allies")).containsExactly("Americans");
+    assertThat(d.nazioniAttive().get("Allies")).containsExactly("Americans", "British");
     final Compito usa = d.di("Allies", "Americans").orElseThrow();
-    assertThat(usa.risultati()).extracting(Compito.Risultato::id).containsExactly("R1", "R2", "R3");
+    assertThat(usa.risultati())
+        .extracting(Compito.Risultato::id)
+        .containsExactly("R1", "R2", "R3", "R4");
     assertThat(usa.risultati().get(0).tipo()).isEqualTo(Compito.CONTROLLO_E_FLOTTA);
     assertThat(usa.risultati().get(0).traguardo()).isEqualTo(6);
-    assertThat(usa.risultati().get(1).opzioni())
-        .containsEntry("ITALIA", "Southern Italy")
-        .containsEntry("FRANCIA", "France");
-    assertThat(usa.risultati().get(1).tenutaRound()).isEqualTo(3);
+    assertThat(usa.risultati().get(1).tipo()).isEqualTo(Compito.DIREZIONE_ALLEANZA);
+    assertThat(usa.risultati().get(2).tipo()).isEqualTo(Compito.TESTA_DI_PONTE);
+    assertThat(usa.risultati().get(3).tipo()).isEqualTo(Compito.PRESA);
+    final Compito uk = d.di("Allies", "British").orElseThrow();
+    assertThat(uk.risultati()).extracting(Compito.Risultato::id).containsExactly("U0", "U1", "U2");
+    assertThat(uk.risultati().get(0).vincolo()).isTrue();
+    assertThat(uk.risultati().get(0).continuo()).isTrue();
+    assertThat(uk.risultati().get(1).continuo()).isTrue();
+    assertThat(uk.risultati().get(1).territorio()).isEqualTo("Egypt");
+    assertThat(uk.risultati().get(2).tipo()).isEqualTo(Compito.TESTA_DI_PONTE);
+    assertThat(uk.risultati().get(2).valePer("FRANCIA")).isTrue();
+    assertThat(uk.risultati().get(2).valePer("MEDITERRANEO")).isFalse();
+    assertThat(uk.quotaPrima()).isEqualTo(80);
+    assertThat(uk.quotaDopo()).isEqualTo(80);
+    final Compito.Livello lv = d.livello("Allies").orElseThrow();
+    assertThat(lv.tenutaRound()).isEqualTo(3);
+    assertThat(lv.direzioni().keySet()).containsExactly("MEDITERRANEO", "FRANCIA");
+    assertThat(lv.direzioni().get("MEDITERRANEO").capitali()).containsExactly("Southern Italy");
+    assertThat(lv.direzioni().get("FRANCIA").capitali()).containsExactly("France", "Germany");
+    assertThat(lv.direzioni().get("FRANCIA").contributori()).containsExactly("Americans", "British");
+    assertThat(lv.direzioni().get("MEDITERRANEO").contributori()).containsExactly("Americans");
     assertThat(d.parametri().sogliaAttacco()).isEqualTo(70);
     assertThat(d.parametri().sogliaTrasporti()).isEqualTo(40);
     assertThat(d.parametri().quotaPrima()).isEqualTo(100);
     assertThat(d.parametri().quotaDopo()).isEqualTo(80);
-    assertThat(d.di("Allies", "British")).isEmpty();
+    assertThat(d.parametri().roundAccumuloMax()).isEqualTo(2);
+    assertThat(d.parametri().roundABordoMax()).isEqualTo(2);
     assertThat(d.di("Axis", "Germans")).isEmpty();
+    assertThat(d.livello("Axis")).isEmpty();
   }
 
   @Test
   void theEngineKnowsNoNationAndNoMapName() throws Exception {
-    for (final String file : List.of("Compiti.java", "Risposta.java", "Ostacolo.java", "Compito.java")) {
+    for (final String file :
+        List.of(
+            "Compiti.java",
+            "Risposta.java",
+            "Ostacolo.java",
+            "Compito.java",
+            "Alleanza.java",
+            "ValoreDirezione.java")) {
       final String src =
           Files.readString(
               Path.of("src/main/java/games/strategy/triplea/ai/proplus/" + file),
               StandardCharsets.UTF_8);
       for (final String word :
-          List.of("Americans", "\"USA\"", "Gibraltar", "Southern Italy", "\"France\"", "91 Sea")) {
+          List.of(
+              "Americans",
+              "\"USA\"",
+              "British",
+              "Gibraltar",
+              "Southern Italy",
+              "\"France\"",
+              "\"Germany\"",
+              "Egypt",
+              "United Kingdom",
+              "91 Sea",
+              "MEDITERRANEO",
+              "\"FRANCIA\"")) {
         assertThat(src).as(file + " contiene " + word).doesNotContain(word);
       }
     }
@@ -195,7 +235,9 @@ class CompitiTest extends AbstractClientSettingTestCase {
     assertThat(Compiti.trattenute(data, player("Americans"))).isEmpty();
     StrategaInterruttori.accendi(data.getProperties(), "Allies", "impegno,compiti");
     assertThat(Compiti.attivo(data, player("Americans"))).isTrue();
-    assertThat(Compiti.attivo(data, player("British"))).isFalse();
+    // step P2: the United Kingdom has a task too
+    assertThat(Compiti.attivo(data, player("British"))).isTrue();
+    assertThat(Compiti.attivo(data, player("Russians"))).isFalse();
     // with the tasks the commitment of the alliance is replaced (the others play as Hard)
     assertThat(Impegno.attivo(data, player("British"))).isFalse();
     assertThat(Impegno.attivo(data, player("Americans"))).isFalse();
@@ -257,7 +299,10 @@ class CompitiTest extends AbstractClientSettingTestCase {
     final Risposta.Bersaglio b =
         new Risposta.Bersaglio("Southern Italy", null, false, List.of(capacity), null, -1);
     final List<String> responses = new ArrayList<>(List.of("ACQUISTO_CAPACITA"));
-    final JsonArray bought = t.acquisti(r3, b, List.of(Risposta.Tipo.ACQUISTO_CAPACITA), responses);
+    final Compiti.Turno.Cassa cassa = t.cassa();
+    t.acquisti(r3, b, List.of(Risposta.Tipo.ACQUISTO_CAPACITA), responses, cassa);
+    t.ordina(cassa, "prova");
+    final JsonArray bought = cassa.righe;
     assertThat(bought.toString()).doesNotContain("\"transport\"");
     assertThat(responses).doesNotContain("ACQUISTO_CAPACITA");
     assertThat(Compiti.ordini(t.proData)).isEmpty();
@@ -271,9 +316,28 @@ class CompitiTest extends AbstractClientSettingTestCase {
             .getTransportCost();
     add(port, "Americans", "infantry", 3 * cap / perInfantry + 1);
     final Compiti.Turno t2 = turno(6);
-    final JsonArray bought2 =
-        t2.acquisti(r3, b, List.of(Risposta.Tipo.ACQUISTO_CAPACITA), new ArrayList<>());
-    final JsonObject row = bought2.get(0).getAsJsonObject();
+    // step P2: the transports carry the troops the result needs (the TERRA obstacle's missing
+    // troops), not every troop at home
+    final JsonObject missing = new JsonObject();
+    missing.addProperty("truppe_mancanti", 3 * cap / perInfantry + 1);
+    final Risposta.Bersaglio b2 =
+        new Risposta.Bersaglio(
+            "Southern Italy",
+            null,
+            false,
+            List.of(capacity, new Ostacolo(Ostacolo.Tipo.TERRA, "x", 1, -1, missing)),
+            null,
+            -1);
+    final Compiti.Turno.Cassa cassa2 = t2.cassa();
+    t2.acquisti(r3, b2, List.of(Risposta.Tipo.ACQUISTO_CAPACITA), new ArrayList<>(), cassa2);
+    final JsonArray bought2 = cassa2.righe;
+    JsonObject row = null;
+    for (final var e : bought2) {
+      if ("CAPACITA".equals(e.getAsJsonObject().get("ostacolo").getAsString())) {
+        row = e.getAsJsonObject();
+      }
+    }
+    assertThat(row).as(bought2.toString()).isNotNull();
     final int expected =
         Risposta.trasportiDaComprare(
             row.get("posti_da_portare").getAsInt(),
@@ -284,27 +348,268 @@ class CompitiTest extends AbstractClientSettingTestCase {
   }
 
   @Test
-  void theDirectionIsChosenOnTheBoardAndHeldThreeRounds() {
+  void theAllianceChoosesTheDirectionOnTheBoardWithValueAndObstaclesAndHoldsItThreeRounds() {
     on();
     atWar();
     final Compiti.Turno t = turno(5);
-    final Compito.Risultato r2 = t.task.risultati().get(1);
-    t.direzione(r2, true);
-    assertThat(t.ns.has("direzione")).isTrue();
-    final JsonObject d = t.ns.getAsJsonObject("direzione");
+    Alleanza.inizioRound(t);
+    final JsonObject al = t.st.getAsJsonObject("alleanza");
+    assertThat(al.has("direzione")).isTrue();
+    final JsonObject d = al.getAsJsonObject("direzione");
     assertThat(d.get("dal_round").getAsInt()).isEqualTo(5);
-    assertThat(d.getAsJsonObject("conti").keySet()).containsExactlyInAnyOrder("ITALIA", "FRANCIA");
+    assertThat(d.get("fino_al_round").getAsInt()).isEqualTo(7);
+    assertThat(d.getAsJsonObject("conti").keySet())
+        .containsExactlyInAnyOrder("MEDITERRANEO", "FRANCIA");
+    for (final String k : List.of("MEDITERRANEO", "FRANCIA")) {
+      final JsonObject c = d.getAsJsonObject("conti").getAsJsonObject(k);
+      assertThat(c.has("valore")).isTrue();
+      assertThat(c.has("ostacoli")).isTrue();
+      assertThat(c.has("rapporto")).isTrue();
+    }
+    // the choice is the best ratio value / obstacles
+    final List<Risposta.ContoDirezione> conti = new ArrayList<>();
+    for (final var e : d.getAsJsonObject("conti").entrySet()) {
+      final JsonObject c = e.getValue().getAsJsonObject();
+      conti.add(
+          new Risposta.ContoDirezione(
+              e.getKey(), c.get("valore").getAsDouble(), c.get("ostacoli").getAsDouble()));
+    }
+    assertThat(d.get("scelta").getAsString())
+        .isEqualTo(
+            Risposta.scegliDirezioneAlleanza(conti, Compito.dati().parametri().ostacoliMinimiPu()));
+    // the row with the items of the value (read from the map)
+    final JsonObject row = lastRow("alleanza_direzione");
+    assertThat(row.getAsJsonArray("alternative")).hasSize(2);
+    final JsonObject first = row.getAsJsonArray("alternative").get(0).getAsJsonObject();
+    assertThat(first.getAsJsonObject("voci_valore").keySet())
+        .contains("territori", "capitale", "obiettivi", "urgenza", "totale");
+    assertThat(row.getAsJsonObject("parametri").getAsJsonArray("forze_di").toString())
+        .contains("Americans", "British");
     Compiti.salva(data.getProperties(), "Allies", t.st);
-    final long rows = rows("compito_direzione");
+    final long rows = rows("alleanza_direzione");
     // rounds 6 and 7: held, no new row
-    turno(6).direzione(r2, false);
-    turno(7).direzione(r2, false);
-    assertThat(rows("compito_direzione")).isEqualTo(rows);
+    Alleanza.inizioRound(turno(6));
+    final Compiti.Turno t7 = turno(7);
+    Alleanza.inizioRound(t7);
+    Compiti.salva(data.getProperties(), "Allies", t7.st);
+    assertThat(rows("alleanza_direzione")).isEqualTo(rows);
     // round 8: checked again
     final Compiti.Turno t8 = turno(8);
-    t8.direzione(r2, false);
-    assertThat(rows("compito_direzione")).isEqualTo(rows + 1);
-    assertThat(t8.ns.getAsJsonObject("direzione").get("dal_round").getAsInt()).isEqualTo(8);
+    Alleanza.inizioRound(t8);
+    assertThat(rows("alleanza_direzione")).isEqualTo(rows + 1);
+    assertThat(t8.st.getAsJsonObject("alleanza").getAsJsonObject("direzione").get("dal_round").getAsInt())
+        .isEqualTo(8);
+  }
+
+  @Test
+  void aNationNotAtWarLeavesTheAllianceCountsToTheNextOne() {
+    on();
+    final GamePlayer usa = player("Americans");
+    final GamePlayer uk = player("British");
+    // Global 1940 at the start: the USA at war with nobody, the UK at war with the Axis
+    assertThat(usa.isAtWar(player("Germans"))).isFalse();
+    final Compiti.Turno t = turno(usa, 1);
+    assertThat(Alleanza.inGuerraConNemici(t, usa)).isFalse();
+    Alleanza.inizioRound(t);
+    assertThat(t.st.getAsJsonObject("alleanza").has("direzione")).isFalse();
+    Compiti.salva(data.getProperties(), "Allies", t.st);
+    final Compiti.Turno u = turno(uk, 1);
+    assertThat(Alleanza.inGuerraConNemici(u, uk)).isTrue();
+    Alleanza.inizioRound(u);
+    assertThat(u.st.getAsJsonObject("alleanza").has("direzione")).isTrue();
+    assertThat(lastRow("alleanza_direzione").get("nazione").getAsString()).isEqualTo("British");
+  }
+
+  @Test
+  void theDirectionWithTheBestRatioOfValueToObstaclesIsChosen() {
+    // the Mediterranean is worth more for fewer obstacles
+    assertThat(
+            Risposta.scegliDirezioneAlleanza(
+                List.of(
+                    new Risposta.ContoDirezione("MED", 60, 40),
+                    new Risposta.ContoDirezione("FR", 40, 40)),
+                10))
+        .isEqualTo("MED");
+    // the enemy reinforces the Mediterranean: its obstacles grow, France wins
+    assertThat(
+            Risposta.scegliDirezioneAlleanza(
+                List.of(
+                    new Risposta.ContoDirezione("MED", 60, 200),
+                    new Risposta.ContoDirezione("FR", 40, 40)),
+                10))
+        .isEqualTo("FR");
+    // obstacles below the minimum count as the minimum; ties: the smaller obstacles
+    assertThat(new Risposta.ContoDirezione("x", 30, 2).rapporto(10)).isEqualTo(3.0);
+    assertThat(
+            Risposta.scegliDirezioneAlleanza(
+                List.of(
+                    new Risposta.ContoDirezione("A", 20, 20),
+                    new Risposta.ContoDirezione("B", 10, 10)),
+                5))
+        .isEqualTo("B");
+  }
+
+  @Test
+  void theValueOfADirectionIsReadFromTheMap() {
+    atWar();
+    final GamePlayer uk = player("British");
+    final Territory si = territory("Southern Italy");
+    final ValoreDirezione.Conto v =
+        ValoreDirezione.valore(data, uk, List.of(si), List.of(si), 30, t -> false);
+    final int prod =
+        games.strategy.triplea.attachments.TerritoryAttachment.getProduction(si);
+    assertThat(v.voci().get("territori").getAsDouble()).isEqualTo(2.0 * prod);
+    // the Italian capital: Italy collects nothing without it
+    assertThat(v.voci().get("capitale").getAsDouble()).isPositive();
+    assertThat(v.valore())
+        .isEqualTo(
+            v.voci().get("territori").getAsDouble()
+                + v.voci().get("capitale").getAsDouble()
+                + v.voci().get("obiettivi").getAsDouble()
+                + v.voci().get("urgenza").getAsDouble());
+    // an allied territory is not taken: no value
+    final Territory london = territory("United Kingdom");
+    assertThat(
+            ValoreDirezione.valore(data, uk, List.of(london), List.of(london), 30, t -> false)
+                .valore())
+        .isZero();
+  }
+
+  @Test
+  void theSharedResultLandsWhenObtainableGathersAtMostTwoRoundsThenAttrition() {
+    final int max = Compito.dati().parametri().roundAccumuloMax();
+    assertThat(max).isEqualTo(2);
+    assertThat(Risposta.decidiCondiviso(true, true, 0, max, true))
+        .isEqualTo(Risposta.Condivisa.CONGIUNTO);
+    assertThat(Risposta.decidiCondiviso(false, true, 0, max, true))
+        .isEqualTo(Risposta.Condivisa.ACCUMULO);
+    assertThat(Risposta.decidiCondiviso(false, true, 1, max, true))
+        .isEqualTo(Risposta.Condivisa.ACCUMULO);
+    // after 2 rounds of gathering: land anyway where the exchange is best
+    assertThat(Risposta.decidiCondiviso(false, true, 2, max, true))
+        .isEqualTo(Risposta.Condivisa.LOGORAMENTO);
+    assertThat(Risposta.decidiCondiviso(false, true, 2, max, false))
+        .isEqualTo(Risposta.Condivisa.NESSUNO);
+    assertThat(Risposta.decidiCondiviso(false, false, 0, max, false))
+        .isEqualTo(Risposta.Condivisa.NESSUNO);
+    // obtainable wins over the gathering count
+    assertThat(Risposta.decidiCondiviso(true, true, 5, max, true))
+        .isEqualTo(Risposta.Condivisa.CONGIUNTO);
+    assertThat(Risposta.roundDiAccumulo(7, 0)).isZero();
+    assertThat(Risposta.roundDiAccumulo(7, 5)).isEqualTo(2);
+    // the troops never stay on board beyond 2 rounds
+    assertThat(Risposta.troppoABordo(6, 5, 2)).isFalse();
+    assertThat(Risposta.troppoABordo(7, 5, 2)).isTrue();
+    assertThat(Risposta.troppoABordo(7, 0, 2)).isFalse();
+  }
+
+  @Test
+  void theSharedResultCountsTheCombinedForcesOfTheNations() {
+    on();
+    atWar();
+    final Territory nb = territory("Normandy Bordeaux");
+    final Territory z = territory("110 Sea Zone");
+    clear(z);
+    final GamePlayer usa = player("Americans");
+    final GamePlayer uk = player("British");
+    // US transports loaded in the landing zone; British troops ready at their port
+    final List<Unit> usTr = add(z, "Americans", "transport", 2);
+    final List<Unit> usInf = add(z, "Americans", "infantry", 4);
+    for (int i = 0; i < 4; i++) {
+      data.performChange(
+          ChangeFactory.unitPropertyChange(
+              usInf.get(i), usTr.get(i / 2), Unit.PropertyName.TRANSPORTED_BY));
+    }
+    add(z, "Americans", "battleship", 2);
+    final Compiti.Turno t = turno(6);
+    final Compiti.Turno c = Alleanza.combinata(t);
+    assertThat(c.squadra).containsExactly(usa, uk);
+    final Alleanza.Valutazione v = Alleanza.valuta(t, c, nb, List.of(usa, uk));
+    final JsonObject forces = v.json().getAsJsonObject("forze_sbarcabili");
+    assertThat(forces.keySet()).containsExactly("Americans", "British");
+    assertThat(forces.getAsJsonObject("Americans").getAsJsonObject("carico").get("infantry").getAsInt())
+        .isEqualTo(4);
+    assertThat(v.json().has("contrattacco_pct")).isTrue();
+    assertThat(v.json().has("truppe_mancanti")).isTrue();
+    // the combined analysis counts the units of both nations
+    assertThat(c.flotta().stream().map(Unit::getOwner).distinct().toList()).contains(usa);
+    assertThat(c.flotta().stream().anyMatch(u -> u.isOwnedBy(uk))).isTrue();
+  }
+
+  @Test
+  void theUnitsTheTaskDoesNotUseThisTurnGoBackToHard() {
+    // pure rule
+    assertThat(Risposta.uso(Compito.TESTA_DI_PONTE, Risposta.Condivisa.NESSUNO, false, 0, 2)).isEmpty();
+    assertThat(Risposta.uso(Compito.TESTA_DI_PONTE, null, false, 0, 2)).isEmpty();
+    assertThat(Risposta.uso(Compito.TESTA_DI_PONTE, Risposta.Condivisa.ACCUMULO, false, 0, 2))
+        .containsExactlyInAnyOrder(Risposta.Uso.FLOTTA, Risposta.Uso.SBARCO);
+    assertThat(Risposta.uso(Compito.CONTROLLO_E_FLOTTA, null, false, 0, 2))
+        .containsExactly(Risposta.Uso.FLOTTA);
+    assertThat(Risposta.uso(Compito.CONTROLLO_E_FLOTTA, null, true, 0, 2))
+        .containsExactlyInAnyOrder(Risposta.Uso.FLOTTA, Risposta.Uso.SBARCO);
+    assertThat(Risposta.uso(Compito.PRESA, null, false, 1, 2)).contains(Risposta.Uso.TERRA_VICINA);
+    assertThat(Risposta.uso(Compito.PRESA, null, false, 2, 2)).doesNotContain(Risposta.Uso.TERRA_VICINA);
+    // on the board: the plan of the round says what is held
+    on();
+    atWar();
+    final GamePlayer usa = player("Americans");
+    final Territory z = territory("101 Sea Zone");
+    add(z, "Americans", "transport", 1);
+    add(z, "Americans", "destroyer", 1);
+    final Compiti.Turno t = turno(6);
+    final JsonObject piano = new JsonObject();
+    piano.addProperty("round", 6);
+    piano.add("uso", new JsonArray());
+    t.ns.add("piano", piano);
+    Compiti.salva(data.getProperties(), "Allies", t.st);
+    assertThat(Compiti.trattenute(data, usa)).isEmpty();
+    final JsonArray fleet = new JsonArray();
+    fleet.add("FLOTTA");
+    piano.add("uso", fleet);
+    t.ns.add("piano", piano);
+    Compiti.salva(data.getProperties(), "Allies", t.st);
+    final java.util.Set<Unit> held = Compiti.trattenute(data, usa);
+    assertThat(held).isNotEmpty();
+    assertThat(held).allMatch(u -> !Compiti.trasporto(u) && !Matches.unitIsLand().test(u));
+  }
+
+  @Test
+  void theUkServesCairoFirstAndGivesTheRestToTheBridgeheadOnlyTowardFrance() {
+    on();
+    atWar();
+    final GamePlayer uk = player("British");
+    final Compiti.Turno t = turno(uk, 6);
+    // continuous results are never current: the current one is the bridgehead
+    assertThat(t.corrente().id()).isEqualTo("U2");
+    // the direction MEDITERRANEO: no shared result for the UK (Hard lands), U1 only
+    final JsonObject dir = new JsonObject();
+    dir.addProperty("scelta", "MEDITERRANEO");
+    dir.addProperty("dal_round", 6);
+    dir.addProperty("fino_al_round", 8);
+    Compiti.obj(t.st, "alleanza").add("direzione", dir);
+    Compiti.obj(t.st, "alleanza").addProperty("round", 6);
+    Compiti.salva(data.getProperties(), "Allies", t.st);
+    final long tenute = rows("compito_tenuta");
+    final Compiti.Turno t2 = turno(uk, 6);
+    t2.inizio();
+    // U0 and U1 were served (two rows), the bridgehead not
+    assertThat(rows("compito_tenuta")).isEqualTo(tenute + 2);
+    final JsonObject piano = t2.ns.getAsJsonObject("piano");
+    assertThat(piano.has("risultato")).isFalse();
+    assertThat(piano.getAsJsonArray("tenute")).hasSize(2);
+    assertThat(piano.getAsJsonArray("tenute").get(1).getAsJsonObject().get("territorio").getAsString())
+        .isEqualTo("Egypt");
+    // the direction FRANCIA: the rest of the share goes to U2
+    dir.addProperty("scelta", "FRANCIA");
+    Compiti.obj(t2.st, "alleanza").add("direzione", dir);
+    Compiti.salva(data.getProperties(), "Allies", t2.st);
+    final Compiti.Turno t3 = turno(uk, 6);
+    t3.inizio();
+    final JsonObject p3 = t3.ns.getAsJsonObject("piano");
+    assertThat(p3.get("risultato").getAsString()).isEqualTo("U2");
+    final JsonObject stato = lastRow("compito_stato");
+    assertThat(stato.get("nazione").getAsString()).isEqualTo("British");
+    assertThat(stato.getAsJsonObject("parametri").get("quota_pct").getAsDouble()).isEqualTo(80);
   }
 
   @Test
@@ -349,8 +654,21 @@ class CompitiTest extends AbstractClientSettingTestCase {
   }
 
   private Compiti.Turno turno(final int round) {
-    final GamePlayer usa = player("Americans");
-    return new Compiti.Turno(proData(usa, round), calc(), usa);
+    return turno(player("Americans"), round);
+  }
+
+  private Compiti.Turno turno(final GamePlayer p, final int round) {
+    return new Compiti.Turno(proData(p, round), calc(), p);
+  }
+
+  private JsonObject lastRow(final String tipo) {
+    final List<JsonObject> all =
+        RegistroDecisioni.righe(data).stream()
+            .filter(r -> "decisione".equals(r.get("riga").getAsString()))
+            .filter(r -> tipo.equals(r.get("tipo").getAsString()))
+            .toList();
+    assertThat(all).as("righe " + tipo).isNotEmpty();
+    return all.get(all.size() - 1);
   }
 
   private void clear(final Territory z) {

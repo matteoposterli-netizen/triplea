@@ -233,6 +233,15 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   (`purchaseOrders`, `strategyCapPercent`, `buysSeaTransports`, `amphibiousHeldUnits`), `RegistroDecisioni` (tipi e motivi), casella
   "Compiti (USA)" (`ProfiloStratega.compiti`, `Stratega.registra`, `StrategistPanel`); autoplay `MonitorP1`, `ConfrontoP1` (blocco `p1` del
   riepilogo e sezione "P1"). Vedi "Compiti (step P1)" e "Scelte di P1".
+- Step P2 LIVELLO ALLEANZA: `ai/proplus/Alleanza` (direzione valore/ostacoli, teste di ponte prese, risultato condiviso, contrattacco
+  realistico, ricontrollo al turno di ogni contributore), `ai/proplus/ValoreDirezione` (valore letto dalla mappa: produzione, capitali,
+  obiettivi nazionali `RulesAttachment.getOwnershipTest`, condizione di vittoria nemica dai trigger), `Risposta` (regole pure P2:
+  `ContoDirezione`, `scegliDirezioneAlleanza`, `Condivisa`, `decidiCondiviso`, `troppoABordo`, `Uso`, `uso`), `Compito` (tipi
+  `direzione_alleanza`, `testa_di_ponte`, `tenuta`, `vincolo`, `solo_direzioni`, quote per nazione, `Direzione`, `Livello`),
+  `Compiti.Turno` (`squadra`, `forzaOra`, `Cassa`, `tenuta`, `difendiTenute`, `scaricaSu`, `limiteABordo`, `usate`), dati
+  `compiti.json` v2, `RegistroDecisioni` (tipi `alleanza_direzione`, `alleanza_risultato_condiviso`, `compito_tenuta`,
+  `compito_a_bordo`); casella "Compiti (USA + Regno Unito)"; autoplay `MonitorP2`, `ConfrontoP2` (blocco `p2`, sezione "P2"). Vedi
+  "Livello alleanza (step P2)" e "Scelte di P2".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -2945,6 +2954,112 @@ restano nel codice (spenti nelle run di P1). L'Asse non cambia.
     raggiunto solo al round dopo).
 12. **Presa USA nel monitor = proprietario cambiato nel passo di battaglia USA da un nemico** (France liberata torna ai francesi, non agli
     USA). Scartato: proprietario = Americans (non conterebbe mai France).
+
+### Livello alleanza (step P2)
+
+Sopra i compiti di P1, stesso interruttore `compiti` (default spento; acceso: Americans **e British** giocano il compito, Russia e
+Francia Hard, Asse invariato; casella del pannello "Compiti (USA + Regno Unito)"). Codice generico (`Alleanza`, `ValoreDirezione`,
+regole pure in `Risposta`): nazioni, direzioni, teatri e risultati stanno in `compiti.json` (versione 2). Con l'alleanza senza
+`direzioni` nei dati il motore e' quello di P1 (ramo `Alleanza.ha` falso).
+- **Dati**: `alleanze.Allies.nazioni_attive` = Americans, British; `tenuta_direzione_round` 3; `direzioni`: MEDITERRANEO (capitali
+  Southern Italy; teatro Nord Africa, isole, penisola, Grecia, Creta; contributori Americans) e FRANCIA (capitali France poi Germany;
+  teatro Normandy Bordeaux, Holland Belgium, Southern France, Denmark, Western Germany, France, Germany; contributori Americans,
+  British). USA: R1 `controllo_e_flotta` Gibilterra (come P1), R2 `direzione_alleanza`, R3 `testa_di_ponte` (condiviso, `mantieni`),
+  R4 `presa` (prima capitale della direzione non dell'alleanza). Regno Unito (quota 80% sempre): U0 `tenuta` United Kingdom
+  `vincolo`, U1 `tenuta` Egypt, U2 `testa_di_ponte` `solo_direzioni` FRANCIA. Parametri nuovi: `soglia_tenuta` 40, `round_accumulo_max`
+  2, `round_a_bordo_max` 2, `peso_urgenza_pu` 30, `ostacoli_minimi_pu` 10, `tipi_difesa` infantry.
+- **Direzione** (`Alleanza.scegliDirezione`, al primo turno di una nazione del compito nel round, ogni 3 round): analisi COMBINATA
+  (`Compiti.Turno` con `squadra` = nazioni del compito; le unita' di un'altra nazione entrano nelle stime come unita' temporanee
+  della nazione di turno), sempre al turno di una nazione in guerra con l'altra alleanza (gli USA neutrali al R1-R3 passano: conta il
+  Regno Unito nello stesso round). OSTACOLI = la somma minima di P1 (MARE, TERRA, CAPACITA, DISTANZA) tra le teste di ponte candidate del
+  teatro (territori dell'altra alleanza, costieri; le capitali successive alla prossima escluse) e i bersagli di `presa` della prossima
+  capitale. VALORE (`ValoreDirezione`, tutto letto dalla mappa) dei prossimi risultati = {testa di ponte migliore, capitale}:
+  territori 2 x produzione (tolta al nemico e data all'alleanza); capitale = produzione della nazione nemica che la perde (o di
+  quella alleata che la riprende); obiettivi nazionali (`RulesAttachment.getNationalObjectives`, parte di proprieta'
+  `getOwnershipTest`) che saltano al nemico o si attivano per l'alleanza; urgenza = `peso_urgenza_pu` x citta' della condizione di
+  vittoria nemica (trigger `victory` della mappa, condizione con piu' citta') sul teatro e in gioco (presa al nemico o alleata e
+  minacciata dall'attacco realistico) / citta' che mancano al nemico. Scelta = miglior rapporto valore / max(ostacoli,
+  `ostacoli_minimi_pu`) (parita': ostacoli minori). Riga `alleanza_direzione` (per direzione valore, ostacoli, rapporto, voci del
+  valore, bersaglio; scelta; fino a quale round).
+- **Teste di ponte prese** (`aggiornaPrese`): un territorio dei teatri nemico al primo controllo della partita e visto dell'alleanza
+  all'inizio di un round; `visto` >= 2 = ancora alleato alla fine del round dopo ⇒ R3/U2 raggiunti (persi se nessuna e' piu'
+  dell'alleanza). Un territorio alleato perso e ripreso (Il Cairo) non e' una testa di ponte.
+- **Risultato condiviso** (`Alleanza.condivisoDelRound`, al primo contributore del round; contributori = nazioni della direzione col
+  risultato condiviso in corso): per ogni candidato la zona di sbarco dell'analisi combinata, per nazione in ordine di turno cio' che
+  puo' mettere a terra ora (`Turno.forzaOra`: trasporti carichi che arrivano + truppe pronte al porto, unita' confinanti, aerei delle
+  portaerei, bombardamento, zona sicura A1), chi lo prende (il primo con vittoria >= 70 e zona sicura, o via terra con le unita'
+  confinanti), superstiti medi + cio' che i contributori successivi sbarcano nello stesso round contro il contrattacco realistico
+  (`Alleanza.contrattacco`: `ProTerritoryManager` con il territorio preso, quota impegnata `StimaUnica.impegno` CONQUISTA, il piu' caro
+  prima), truppe mancanti fino a <= `soglia_tenuta`, scambio di perdite (swing della presa - swing del contrattacco). Decisione
+  (`Risposta.decidiCondiviso`): ottenibile ⇒ CONGIUNTO (contrattacco minore); dopo 2 round di accumulo ⇒ LOGORAMENTO (miglior scambio
+  tra quelli prendibili) o NESSUNO; altrimenti ACCUMULO (il bersaglio dell'accumulo resta lo stesso). Riga
+  `alleanza_risultato_condiviso` (territorio, zona, forze sbarcabili per nazione, contrattacco, truppe mancanti, round di accumulo,
+  decisione, alternative). Al turno di ogni contributore (`Alleanza.bersaglio`) si ricontrolla sullo stato reale: territorio gia'
+  dell'alleanza ⇒ RINFORZO (scarico nel non combattimento, `scaricaSu`); nemico ⇒ presa se vince (CONGIUNTO: se tiene con i
+  contributori successivi; LOGORAMENTO: comunque); ACCUMULO ⇒ acquisti TERRA (le truppe mancanti) e convoglio verso la zona.
+- **Rilascio a Hard (D)** (`Risposta.uso`, `piano.uso`, `Compiti.usate`): FLOTTA (navi da guerra, aerei in mare), SBARCO (trasporti,
+  truppe a bordo e pronte), TERRA_VICINA (truppe accanto al bersaglio). Base R1: FLOTTA (+ SBARCO se il territorio va preso);
+  testa di ponte: FLOTTA+SBARCO solo con CONGIUNTO/ACCUMULO/LOGORAMENTO, niente con NESSUNO; capitale: tutto, TERRA_VICINA solo nei
+  primi 2 round di accumulo. Il resto (e i PU non spesi) a Hard. Truppe a bordo da 2 round (`a_bordo`, `limiteABordo`): scaricate su
+  terra alleata accanto (prima il teatro), riga `compito_a_bordo`.
+- **Regno Unito**: risultati continui `tenuta` (`Turno.tenuta`, riga `compito_tenuta`) serviti ogni turno prima del risultato in
+  corso: alleato e attacco realistico > 40% ⇒ DIFESA (unita' proprie confinanti e aerei che ci arrivano entrano nel non
+  combattimento, `difendiTenute`; truppe comprate solo in una fabbrica propria nel territorio o accanto, altrimenti PU a Hard);
+  perso ⇒ RIPRESA via terra se vince >= 70 (`attaccoTerra`), altrimenti accumulo. Vincolo U0 non rispettato ⇒ nessun PU e nessun
+  risultato in corso (Hard difende la capitale). U2 vale solo con FRANCIA (`solo_direzioni`); con MEDITERRANEO il resto e' di Hard.
+- **CAPACITA** (con il livello alleanza): posti al massimo per la forza da sbarco piu' grande delle stime (`max_truppe_stima` = 16
+  truppe, 32 posti), non per tutte le truppe in patria; poi la regola di P1 (trasporti posseduti anche fermi e vuoti contati prima).
+- **Autoplay**: `MonitorP2` (a fine round: Egypt dell'Asse, truppe USA/UK a bordo, per gli sbarchi USA del round britannici sullo
+  stesso territorio e alleato a fine round, per quelli del round prima ancora alleato), blocco `p2` del `riepilogo.json`
+  (`ConfrontoP2.blocco`): `direzione_per_round`, `round_per_direzione`, `prima_direzione`, `direzione_prevalente`, `scelte_direzione`,
+  `decisioni_condivise`, `sbarchi_logoramento`, `sbarchi_compito_congiunto`, `sbarchi_usa` (con `britannici_fine_round`,
+  `alleato_round_dopo`), `sbarchi_usa_totale`, `sbarchi_usa_tenuti_round_dopo`, `sbarchi_congiunti*`, `sbarchi_usa_con_francia*`,
+  `sbarchi_congiunti_con_francia*`, `round_egitto_asse`, `round_con_fotografia`, `per_round` R8/R12/R16 (`a_bordo_usa/uk/totale`,
+  `usa_mediterraneo_nord_africa`, `trasporti_uk`, `trasporti_uk_inattivi`, `reddito_italia`), `cadute` (roma, berlino, mosca),
+  `trasporti_usa_persi`. Sezione "P2" di "Partite complete" (`ConfrontoP2.write`). `[completa]` = a, p2, e2, p1 x semi 1381-1420.
+- Test: `CompitiTest` (19: dati di USA, Regno Unito e alleanza; nessun nome nel motore anche in `Alleanza`/`ValoreDirezione`;
+  direzione sul tabellone con valore, ostacoli, voci e tenuta 3 round; rapporto valore/ostacoli; valore letto dalla mappa;
+  condiviso: accumulo al massimo 2 round poi logoramento, a bordo al massimo 2 round; forze combinate di USA e Regno Unito; rilascio
+  a Hard; Regno Unito U0/U1 prima, U2 solo con FRANCIA), autoplay `ConfrontoP2Test` (1).
+
+### Scelte di P2 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Formula della direzione = valore / max(ostacoli, 10 PU)**, valore = PU a round dei prossimi risultati (testa di ponte con meno
+   ostacoli + capitale): territori x2, capitale (reddito di chi la perde o la riprende), obiettivi nazionali che cambiano, urgenza
+   (30 PU per citta' della vittoria nemica in gioco sul teatro / citta' che mancano al nemico). Rispetta il principio di Matteo: se la
+   Germania rinforza il Mediterraneo crescono gli ostacoli MED e vince la FRANCIA; se l'Italia e' sola e Il Cairo minacciato cresce
+   il valore MED. Scartato: valore - ostacoli (somma di grandezze diverse: PU a round contro PU una tantum) e pesi diversi per voce.
+2. **I conti dell'alleanza li fa la prima nazione del compito IN GUERRA nel round** (al R1-R3 gli USA sono neutrali con tutti,
+   anche con Regno Unito e Francia: dal loro punto di vista valore 0 e ostacoli infiniti, visto nella prima prova; e i dati AI degli
+   USA contano come nemico ogni non alleato, Regno Unito compreso: con il punto di vista britannico e i dati americani il calcolatore
+   riceveva unita' britanniche sia tra gli attaccanti sia tra i difensori, eccezione "Attackers and defenders collections must be
+   distinct" vista nella seconda prova). "Dell'alleanza" letto dalle alleanze dei dati, non dallo stato di guerra. Scartato: punto di
+   vista britannico con i dati AI americani.
+3. **Unita' delle altre nazioni come unita' temporanee della nazione di turno** nelle stime d'attacco combinate (una battaglia ha un
+   solo attaccante). E' una stima per gli ostacoli; le decisioni d'esecuzione (presa, rinforzo) usano le forze reali di ogni nazione.
+4. **Ottenibile = un contributore prende da solo + gli altri rinforzano nello stesso round**: gli USA attaccano nel combattimento, il
+   Regno Unito (dopo) scarica nel non combattimento sul territorio preso. Due nazioni non possono attaccare insieme nello stesso turno.
+   Anche la presa via terra (unita' gia' a terra accanto) conta come presa: in prova al R12 gli USA avevano 33 unita' in Normandia e
+   la decisione era ACCUMULO per mancanza di carico.
+5. **Testa di ponte = territorio del teatro nemico al primo controllo della partita**: in prova Il Cairo perso e ripreso dal Regno
+   Unito risultava "testa di ponte tenuta" e mandava gli USA alla capitale senza piede in Europa. Scartato: proprietario originale
+   (la Normandia e' francese in origine).
+6. **Le capitali successive alla prossima non sono teste di ponte** (in prova la FRANCIA aveva come "testa di ponte" Berlino, con il
+   valore della capitale tedesca). Southern Italy resta candidata: e' la prossima capitale del Mediterraneo.
+7. **Accumulo contato in round dalla prima decisione ACCUMULO**, anche se in un round nessun contributore ha potuto comprare
+   (vincolo): la regola chiede "senza attese lunghe". Dopo 2 round senza nessuno che possa prendere: NESSUNO (unita' a Hard) e
+   l'accumulo riparte. Scartato: contare solo i round con acquisti.
+8. **CAPACITA limitata a 32 posti (16 truppe = `max_truppe_stima`)**: in prova con la regola di P1 USA e Regno Unito compravano 1-6
+   trasporti a round per portare tutte le truppe in patria (anche quelle di Hard); con il tetto alle sole truppe mancanti (2-4) gli
+   USA restavano con 2 trasporti e portavano 4 unita' alla volta nel Mediterraneo (1-3 sbarchi a partita in 3 prove). Scartate
+   entrambe.
+9. **U1 senza fabbrica vicina = solo mosse**: il Regno Unito non ha fabbriche in Egitto o accanto; i PU di U1 si spendono solo in
+   una fabbrica propria nel territorio o confinante, altrimenti restano a Hard (DISTANZA registrata). Scartato: comprare una fabbrica
+   (il piazzamento di fabbriche non passa dagli ordini di acquisto) o caccia in patria (2 turni, non "l'ostacolo del turno").
+10. **Vincolo U0 non rispettato = nessun PU al compito e nessun risultato in corso** (la difesa critica della capitale e' gia' di
+    Hard e precede gli ordini): il "minimo indispensabile" e' non togliere nulla alla difesa quando la capitale non regge.
+11. **Truppe a bordo da 2 round scaricate su terra alleata accanto** (prima il teatro, poi altro): poi sono di Hard. Scartato:
+    riportarle in porto (altri 1-2 round a bordo).
 
 ## Come configurare lo stratega
 
@@ -5715,3 +5830,28 @@ Criteri (p1 / p2; tra parentesi gli USA di Hard sugli stessi semi, e2 / a):
   tutti gli USA sulla direzione FRANCIA, li tiene sui trasporti in attesa di uno sbarco "ottenibile" e toglie al Mediterraneo la pressione
   che Hard gli dava: l'Italia non e' piu' attaccata e l'Asse con l'assedio vince prima (R16 contro R18). Contro l'Asse di Hard (p2) nessuna
   differenza.
+
+### Step P2 LIVELLO ALLEANZA — direzione scelta dall'alleanza, testa di ponte condivisa, compito del Regno Unito (2026-11-18)
+
+Vedi "Livello alleanza (step P2)" e "Scelte di P2". Motivo (run P1 44178195628): direzione scelta sulla sola facilita' (FRANCIA 34/40),
+USA fuori dal Mediterraneo, tutta la forza USA sequestrata dal compito, sbarco solo se "ottenibile" con le sole forze USA (truppe ferme a
+bordo), Regno Unito Hard senza compito; p1 5/40 contro e2 18/40 (p 0,003).
+- File nuovi: `ai/proplus/Alleanza`, `ValoreDirezione`; autoplay `MonitorP2`, `ConfrontoP2`, test `ConfrontoP2Test`. Modificati:
+  `Compiti` (squadra combinata, `forzaOra`, risultati continui, `Cassa`, rilascio a Hard, rinforzo, limite a bordo, presa via terra, AA
+  escluse dallo sbarco), `Compito`, `Risposta`, `RegistroDecisioni`, `compiti.json` v2, `StrategistPanel` (casella "Compiti (USA + Regno
+  Unito)"), commenti `Stratega`/`ProfiloStratega`; autoplay `Monitor`, `Riepilogo` (blocco `p2`), `ConfrontoCompleta` (sezione "P2");
+  workflow `[completa]` = a, p2, e2, p1 x semi 1381-1420 (160 partite, costo API 0); test `CompitiTest` (20).
+- Test locali: game-core 3279 (2 falliti: `ContentDownloaderIntegrationTest`, rete della sandbox; `DiaryNeutralityTest` solo nel giro
+  completo con 2 partite in parallelo sulla stessa CPU, verde da solo 2 volte su 2), `:ai:test`, `:game-headed:test`,
+  `:proplus-autoplay:test` verdi. JDK 25 scaricato da GitHub (Temurin 25.0.1); Maven Central a tratti 429 (ritentato).
+- Prove locali (Europa 1940, 14-16 round, 7 partite), difetti trovati nel registro e corretti prima del push: (1) al R1 gli USA neutrali
+  vedevano valore 0 e ostacoli infiniti; (2) con il punto di vista britannico e i dati AI americani il calcolatore riceveva unita'
+  britanniche tra attaccanti e difensori (eccezione) ⇒ i conti dell'alleanza li fa la prima nazione in guerra; (3) Berlino "testa di
+  ponte" della FRANCIA ⇒ capitali successive escluse; (4) Il Cairo perso e ripreso contava come testa di ponte ⇒ solo territori nemici al
+  primo controllo; (5) presa via terra eseguita come sbarco ("nessun carico"); (6) sbarco britannico rifiutato dal motore per un cannone
+  contraereo a bordo; (7) CAPACITA: troppi trasporti con la regola P1, troppo pochi con il tetto alle truppe mancanti ⇒ 32 posti.
+  Prova finale p1 seme 1381 (16 round): FRANCIA R1-R3, poi MEDITERRANEO; USA in Mediterraneo/Nord Africa 16 / 28 / 23 unita' a R8 /
+  R12 / R16; sbarchi del compito Morocco R6 (16 unita'), Sicilia, Sardegna, Southern Italy; Roma cade al R12; Egypt dell'Asse 8/16 round;
+  a bordo 14 / 0 / 1; 0 trasporti USA persi; nel R13-15 Hard con le unita' USA rilasciate sbarca su neutrali (Spain, Turkey, Sud
+  America). Seme 1383: MED 10 / FR 6 round, Egypt dell'Asse 13/16, Roma non cade, a bordo R16 16. p2 seme 1382 (versione precedente
+  della CAPACITA): MED 9 / FR 7, sbarco congiunto su Denmark al R11 (USA + 1 britannica, perso al round dopo), 8 trasporti USA persi.

@@ -78,11 +78,25 @@ public final class RegistroDecisioni {
           "compito_acquisto",
           "compito_direzione",
           "compito_risultato",
-          "compito_battaglia");
+          "compito_battaglia",
+          // step P2
+          "alleanza_direzione",
+          "alleanza_risultato_condiviso",
+          "compito_tenuta",
+          "compito_a_bordo");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P2
+          "CONGIUNTO",
+          "ACCUMULO",
+          "TENUTO",
+          "MINACCIATO",
+          "VINCOLO_NON_RISPETTATO",
+          "RIPRESA",
+          "SCARICATE",
+          "RILASCIO",
           // step P1
           "OTTENIBILE",
           "OSTACOLI",

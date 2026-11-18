@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -238,5 +239,123 @@ public final class Risposta {
       }
     }
     return Optional.ofNullable(best);
+  }
+
+  // ============================================================================ step P2
+
+  /**
+   * Step P2: the counts of one direction of the alliance: VALUE (PUs per round the alliance gains
+   * if its next results succeed) and OBSTACLES (PU-equivalents, combined forces).
+   */
+  public record ContoDirezione(String nome, double valore, double ostacoli) {
+    /** The ratio of the step: value over obstacles (at least {@code minimo} PU). */
+    public double rapporto(final double minimo) {
+      return valore / Math.max(minimo, ostacoli);
+    }
+  }
+
+  /**
+   * Step P2: the direction with the best ratio value / obstacles (obstacles at least {@code
+   * minimo}); ties: the smaller obstacles, then the first in the data's order. Without any value
+   * (all 0): the smallest obstacles (the rule of P1).
+   */
+  public static String scegliDirezioneAlleanza(
+      final List<ContoDirezione> conti, final double minimo) {
+    if (conti.isEmpty()) {
+      throw new IllegalArgumentException("nessuna direzione");
+    }
+    ContoDirezione best = null;
+    for (final ContoDirezione c : conti) {
+      if (best == null) {
+        best = c;
+        continue;
+      }
+      final double a = c.rapporto(minimo);
+      final double b = best.rapporto(minimo);
+      if (a > b + 1e-9 || (Math.abs(a - b) <= 1e-9 && c.ostacoli() < best.ostacoli() - 1e-9)) {
+        best = c;
+      }
+    }
+    return best.nome();
+  }
+
+  /** Step P2: the decision of the alliance on the shared result of the round. */
+  public enum Condivisa {
+    /** Obtainable: the nations land together on the same territory this round. */
+    CONGIUNTO,
+    /** Not obtainable: the nations gather forces (troops; no new transports if the owned suffice). */
+    ACCUMULO,
+    /** Not obtainable after the gathering rounds: land where the exchange of losses is best. */
+    LOGORAMENTO,
+    /** Nothing to do (no target the forces can take): the units go back to Hard. */
+    NESSUNO
+  }
+
+  /**
+   * Step P2, the rule of the shared result: obtainable ⇒ CONGIUNTO; otherwise after {@code
+   * maxAccumulo} rounds of gathering ⇒ LOGORAMENTO (if a target can be taken at all, else
+   * NESSUNO); otherwise ACCUMULO if there is a target to gather for, else NESSUNO. No long waits:
+   * the gathering never lasts more than {@code maxAccumulo} rounds.
+   */
+  public static Condivisa decidiCondiviso(
+      final boolean ottenibile,
+      final boolean accumulabile,
+      final int roundDiAccumulo,
+      final int maxAccumulo,
+      final boolean logoramentoPossibile) {
+    if (ottenibile) {
+      return Condivisa.CONGIUNTO;
+    }
+    if (roundDiAccumulo >= maxAccumulo) {
+      return logoramentoPossibile ? Condivisa.LOGORAMENTO : Condivisa.NESSUNO;
+    }
+    return accumulabile ? Condivisa.ACCUMULO : Condivisa.NESSUNO;
+  }
+
+  /** Step P2: rounds of gathering already done before {@code round} (0 = none). */
+  public static int roundDiAccumulo(final int round, final int accumuloDal) {
+    return accumuloDal <= 0 ? 0 : Math.max(0, round - accumuloDal);
+  }
+
+  /** Step P2: troops loaded since {@code dalRound} must land this round (at most {@code max}). */
+  public static boolean troppoABordo(final int round, final int dalRound, final int max) {
+    return dalRound > 0 && round - dalRound >= max;
+  }
+
+  /** Step P2: what the task holds in a turn (the rest goes back to Hard). */
+  public enum Uso {
+    /** The warships (and the planes on the carriers). */
+    FLOTTA,
+    /** The transports, the troops on them and the troops ready at the port. */
+    SBARCO,
+    /** The troops on the land territories next to the target (gathering for an attack). */
+    TERRA_VICINA
+  }
+
+  /**
+   * Step P2 (D): the units the task holds this turn. The current result's kind decides: a base with
+   * a fleet holds the fleet (and the landing force if the territory must be taken: {@code
+   * ottenibile} = landing needed); the shared result holds the landing force while landing or gathering
+   * (never while nothing can be done); the capital holds the landing force and, while the gathering
+   * has lasted at most {@code maxAccumulo} rounds, the troops next to it.
+   */
+  public static Set<Uso> uso(
+      final String tipoRisultato,
+      @Nullable final Condivisa decisione,
+      final boolean ottenibile,
+      final int roundDiAccumulo,
+      final int maxAccumulo) {
+    return switch (tipoRisultato) {
+      case Compito.CONTROLLO_E_FLOTTA -> ottenibile ? Set.of(Uso.FLOTTA, Uso.SBARCO) : Set.of(Uso.FLOTTA);
+      case Compito.TESTA_DI_PONTE ->
+          decisione == null || decisione == Condivisa.NESSUNO
+              ? Set.of()
+              : Set.of(Uso.FLOTTA, Uso.SBARCO);
+      case Compito.PRESA ->
+          ottenibile || roundDiAccumulo < maxAccumulo
+              ? Set.of(Uso.FLOTTA, Uso.SBARCO, Uso.TERRA_VICINA)
+              : Set.of(Uso.FLOTTA, Uso.SBARCO);
+      default -> Set.of();
+    };
   }
 }

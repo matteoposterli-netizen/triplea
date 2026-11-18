@@ -1,6 +1,6 @@
 {
-  "versione": 1,
-  "nota": "Step P1: impianto 'compito'. Un'alleanza ha una direzione; ogni nazione ha un COMPITO = lista ORDINATA di RISULTATI (condizioni verificabili sul tabellone, round traguardo, vincoli). Il motore (Compiti) e' generico: per il risultato in corso calcola se e' ottenibile nel turno e, se no, gli OSTACOLI (MARE, TERRA, CAPACITA, DISTANZA) con i numeri, e sceglie la RISPOSTA (eseguire, attaccare la flotta, cambiare bersaglio, comprare, avvicinare le forze). Nessuna ricetta per nazione: i passi intermedi emergono dagli ostacoli. In questo step ha effetto solo per gli Americans (interruttore 'compiti', sotto 'impegno', lato Alleati). Valori scelti a mano, NON tarati.",
+  "versione": 2,
+  "nota": "Step P1: impianto 'compito'. Un'alleanza ha una direzione; ogni nazione ha un COMPITO = lista ORDINATA di RISULTATI (condizioni verificabili sul tabellone, round traguardo, vincoli). Il motore (Compiti) e' generico: per il risultato in corso calcola se e' ottenibile nel turno e, se no, gli OSTACOLI (MARE, TERRA, CAPACITA, DISTANZA) con i numeri, e sceglie la RISPOSTA. Step P2: livello ALLEANZA sopra i compiti (Alleanza): l'alleanza sceglie la direzione col miglior rapporto VALORE/OSTACOLI (forze combinate) e la tiene tenuta_round round; risultato condiviso 'testa di ponte tenuta' a cui contribuiscono piu' nazioni (accumulo al massimo round_accumulo_max round, poi logoramento); risultati 'tenuta' continui (vincolo della capitale, Il Cairo). Nessuna ricetta per nazione: nazioni, direzioni, teatri e risultati sono dati. Valori scelti a mano, NON tarati.",
   "compiti_acceso_di_default": {"valore": false, "origine": "richiesta dello step P1 (default spento)"},
   "parametri": {
     "soglia_attacco": {"valore": 70, "origine": "richiesta dello step P1 (vittoria >= 70% per attaccare una forza nemica o sbarcare)"},
@@ -15,12 +15,33 @@
     "pu_per_turno_di_distanza": {"valore": 10, "origine": "scelto: per sommare la DISTANZA (turni) agli altri ostacoli (PU) nella scelta della direzione e del bersaglio"},
     "margine_cambio_bersaglio_pu": {"valore": 10, "origine": "scelto: si cambia bersaglio solo se l'altro ha ostacoli minori di almeno 10 PU"},
     "max_turni_distanza": {"valore": 6, "origine": "scelto (oltre: irraggiungibile)"},
-    "soglia_presidio_capitale": {"valore": 40, "origine": "scelto: la capitale regge il turno se il massimo attacco nemico vince <= 40% (minimo indispensabile)"}
+    "soglia_presidio_capitale": {"valore": 40, "origine": "scelto: la capitale regge il turno se il massimo attacco nemico vince <= 40% (minimo indispensabile)"},
+    "soglia_tenuta": {"valore": 40, "origine": "step P2, scelto = soglia_presidio_capitale: un territorio (testa di ponte, Il Cairo) e' tenuto se il contrattacco realistico nemico vince <= 40%"},
+    "round_accumulo_max": {"valore": 2, "origine": "richiesta dello step P2: dopo 2 round di accumulo senza risultato ottenibile si sbarca comunque (logoramento)"},
+    "round_a_bordo_max": {"valore": 2, "origine": "richiesta dello step P2: le truppe non restano a bordo oltre 2 round"},
+    "peso_urgenza_pu": {"valore": 30, "origine": "step P2, scelto: PU a round di una citta' della vittoria nemica in gioco sulla direzione (presa o minacciata), diviso per le citta' che mancano al nemico per vincere"},
+    "ostacoli_minimi_pu": {"valore": 10, "origine": "step P2, scelto: denominatore minimo del rapporto valore/ostacoli (= un turno di DISTANZA)"},
+    "tipi_difesa": {"valore": ["infantry"], "origine": "step P2, scelto: unita' comprate per la tenuta di un territorio (miglior difesa per PU della mappa)"}
   },
   "alleanze": {
     "Allies": {
-      "direzione": "negare Il Cairo, poi Roma o Parigi/Berlino",
-      "nazioni_attive": ["Americans"],
+      "direzione": "impedire le citta' della vittoria all'Asse e prendere Roma e Berlino",
+      "nazioni_attive": ["Americans", "British"],
+      "tenuta_direzione_round": 3,
+      "direzioni": {
+        "MEDITERRANEO": {
+          "capitali": ["Southern Italy"],
+          "teatro": ["Morocco", "Algeria", "Tunisia", "Libya", "Tobruk", "Alexandria", "Egypt", "Sicily", "Sardinia", "Southern Italy", "Northern Italy", "Albania", "Greece", "Crete"],
+          "contributori": ["Americans"],
+          "nota": "Nord Africa, isole, penisola; sostiene Il Cairo. Il Regno Unito non contribuisce alla testa di ponte (resta U1 e Hard)."
+        },
+        "FRANCIA": {
+          "capitali": ["France", "Germany"],
+          "teatro": ["Normandy Bordeaux", "Holland Belgium", "Southern France", "Denmark", "Western Germany", "France", "Germany"],
+          "contributori": ["Americans", "British"],
+          "nota": "costa nord, Parigi, poi Berlino; testa di ponte di USA e Regno Unito"
+        }
+      },
       "nazioni": {
         "Americans": {
           "porto": "Eastern United States",
@@ -38,20 +59,55 @@
             },
             {
               "id": "R2",
-              "nome": "Direzione",
-              "tipo": "scelta",
-              "opzioni": {"ITALIA": "Southern Italy", "FRANCIA": "France"},
-              "tenuta_round": 3,
-              "nota": "Si va dove la somma degli ostacoli verso la capitale e' minore; la scelta si tiene almeno tenuta_round round, poi si ricontrolla."
+              "nome": "Direzione dell'alleanza",
+              "tipo": "direzione_alleanza",
+              "nota": "Step P2: la direzione la sceglie l'alleanza (valore/ostacoli, forze combinate); il risultato e' raggiunto quando l'alleanza ne ha una."
             },
             {
               "id": "R3",
+              "nome": "Testa di ponte tenuta",
+              "tipo": "testa_di_ponte",
+              "mantieni": true,
+              "nota": "Risultato condiviso (step P2): un territorio del teatro della direzione preso e ANCORA alleato alla fine del round successivo."
+            },
+            {
+              "id": "R4",
               "nome": "Capitale della direzione",
               "tipo": "presa",
-              "territorio_da": "R2",
-              "traguardo_round": 8,
+              "traguardo_round": 10,
               "traguardo_cosa": "primo sbarco verso la capitale (capitale o territorio costiero confinante)",
-              "nota": "Southern Italy presa oppure France presa. I passi intermedi (flotta nemica, testa di ponte, isole) emergono dagli ostacoli."
+              "nota": "La prima capitale della direzione non ancora alleata, via terra dalla testa di ponte o dal mare quando ottenibile."
+            }
+          ]
+        },
+        "British": {
+          "porto": "United Kingdom",
+          "fabbriche_truppe": ["United Kingdom"],
+          "quota_prima_del_primo_risultato": 80,
+          "quota_dopo": 80,
+          "risultati": [
+            {
+              "id": "U0",
+              "nome": "La capitale regge il turno",
+              "tipo": "tenuta",
+              "territorio": "United Kingdom",
+              "vincolo": true,
+              "nota": "Vincolo (minimo indispensabile): se il contrattacco realistico sulla capitale vince oltre soglia_presidio_capitale il compito non prende PU (la difesa della capitale e' di Hard)."
+            },
+            {
+              "id": "U1",
+              "nome": "Il Cairo alleato",
+              "tipo": "tenuta",
+              "territorio": "Egypt",
+              "nota": "Tenuto, o ripreso se perso: i PU e le unita' vanno qui per quanto serve a togliere l'ostacolo del turno (difesa contro l'attacco realistico, o forza per riprenderlo)."
+            },
+            {
+              "id": "U2",
+              "nome": "Contributo alla testa di ponte",
+              "tipo": "testa_di_ponte",
+              "solo_direzioni": ["FRANCIA"],
+              "mantieni": true,
+              "nota": "Tutto il resto della quota quando la direzione e' FRANCIA; con MEDITERRANEO nessun risultato condiviso al nord (Hard fa i suoi sbarchi)."
             }
           ]
         }

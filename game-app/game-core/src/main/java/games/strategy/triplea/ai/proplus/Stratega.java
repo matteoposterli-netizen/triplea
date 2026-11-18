@@ -144,7 +144,7 @@ public final class Stratega {
       wanted.add(StrategaInterruttori.IMPEGNO);
       wanted.add(StrategaInterruttori.SQUADRA_GIBILTERRA);
     }
-    // step P1: "Compiti (USA)" (Allies) with the commitment
+    // step P1/P2: "Compiti (USA + Regno Unito)" (Allies) with the commitment
     if ("Allies".equals(alliance.get()) && profile.compiti()) {
       wanted.add(StrategaInterruttori.IMPEGNO);
       wanted.add(StrategaInterruttori.COMPITI);

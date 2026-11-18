@@ -129,6 +129,7 @@ final class Monitor {
   /** Step R4: cities, factories, Moscow, Africa and the national objectives every round. */
   private final MonitorR4 r4;
   private final MonitorP1 p1;
+  private final MonitorP2 p2;
 
   private int lastRound;
 
@@ -188,6 +189,7 @@ final class Monitor {
     this.data = data;
     this.r4 = new MonitorR4(data, this::allianceOf);
     this.p1 = new MonitorP1(data);
+    this.p2 = new MonitorP2(data, this::allianceOf);
     // reverse name order: Axis before Allies, as in the plans (Asse / Alleati)
     final List<String> names = new ArrayList<>(ProPlusSettings.configurableAlliances(data));
     names.sort(Comparator.reverseOrder());
@@ -950,6 +952,10 @@ final class Monitor {
     json.add("r5", r5Snapshot());
     // step P1: US land units by region (base Gibraltar), US transports and warships
     json.add("p1", p1.snapshot());
+    // step P2: Egypt, troops on board, joint landings and bridgeheads held
+    if (complete) {
+      json.add("p2", p2.snapshot(round, landings));
+    }
     if (complete) {
       rounds.put(round, json);
       partialRound = null;

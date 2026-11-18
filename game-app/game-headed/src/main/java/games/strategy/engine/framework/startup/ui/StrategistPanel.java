@@ -73,7 +73,7 @@ final class StrategistPanel {
   /** Step R6c: Italy's Africa shuttle in convoy (with the siege and the commitment). */
   @Getter private final javax.swing.JCheckBox italiaConvoglio = new javax.swing.JCheckBox();
 
-  /** Step P1: "Compiti (USA)", the generic task mechanism for the USA. */
+  /** Step P1/P2: "Compiti (USA + Regno Unito)", the generic task mechanism (alliance level). */
   @Getter private final javax.swing.JCheckBox compiti = new javax.swing.JCheckBox();
 
   private final ProfiloStratega profile;
@@ -178,7 +178,7 @@ final class StrategistPanel {
             + " Italia o Francia, presa della capitale guidate dagli ostacoli; accende anche Impegno"
             + " per gli Alleati (Regno Unito e Russia giocano come Hard); vale per le partite"
             + " nuove</html>");
-    panel.add(row("Compiti (USA):", compiti));
+    panel.add(row("Compiti (USA + Regno Unito):", compiti));
     panel.add(
         row(
             "",

@@ -139,6 +139,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P1 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P2: the alliance level (direction, shared bridgehead, the UK's task)
+    if (ConfrontoP2.applicabile(games)) {
+      try {
+        ConfrontoP2.write(md, games, alliances);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P2 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step R6c / R6b-bis: Italy's shuttle in convoy
     if (ConfrontoItalia.applicabile(games)) {
       try {

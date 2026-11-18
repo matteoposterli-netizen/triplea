@@ -124,6 +124,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p1", err);
     }
+    // step P2: the alliance level's block (also for the Allies of Hard, from the monitor)
+    try {
+      json.add("p2", ConfrontoP2.blocco(json));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p2", err);
+    }
     return json;
   }
 
