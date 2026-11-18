@@ -5914,4 +5914,29 @@ condiviso, compito del Regno Unito, quote, soglie e parametri come in P2. ProAi 
   (compito 0, Hard 12); unita' sbarcate USA 72 (compito 28, Hard 44), UK 56 (tutte di Hard) = 128 (P2 in CI: 57 a partita); direzione
   MED 6 / FR 6 round; Egypt dell'Asse 6/12 round; Roma cade al R10. Il compito non ha comprato trasporti in nessun turno (CAPACITA: i
   posseduti, quelli di Hard compresi, bastano): con il divieto tolto tutti i trasporti nuovi sono di Hard.
-- CI: `[completa]` = e2, p1 x semi 1421-1460 (80 partite, costo API 0). Risultati nella sottosezione qui sotto quando la run e' finita.
+- CI: `[completa]` = e2, p1 x semi 1421-1460 (80 partite, costo API 0). Primo push `[completa]` (240227e) solo `.md` ⇒ ignorato
+  (`paths-ignore`): la run e' partita dal commit 27df0b4 (tocca anche il workflow).
+
+#### Autoplay in CI (run 44390108394, commit 27df0b4, tutto verde al 1° tentativo, 80/80 partite [completa] senza chiave, semi 1421-1460, costo API 0)
+**Linea "compiti" per gli Alleati APERTA** (criterio 3: p1 15/40 >= e2 12/40 − 4; Fisher p 0,64). 0 errori del calcolatore (log), 0 stalli,
+80/80 con un vincitore. Numeri dai `riepilogo.json` (campi tra parentesi; medie per partita, R12 sulle partite arrivate al R12: e2 34, p1 37).
+
+| Configurazione | Asse / Alleati | Quota Alleati [IC 95% Wilson] | Round vittoria mediana |
+|---|---|---|---|
+| e2 Asse impegno+assedio / Hard | 28 / 12 | 30% [18; 45] | 17 |
+| p1 Asse impegno+assedio / Alleati compiti | 25 / 15 | 38% [24; 53] | 18 |
+
+1. Trasporti posseduti R4 / R8 / R12 (`p2.p2bis.trasporti_posseduti`): p1 UK 5,5 / 8,8 / **9,7** (>= 8: si'; P2 2,4), USA 1,1 / 15,9 /
+   **21,9** (>= 20: si'; P2 12); e2 UK 6,7 / 9,7 / 11,5, USA 1,0 / 19,9 / 26,7.
+2. Unita' sbarcate a partita USA + UK (`p2.p2bis.unita_sbarcate.N.totale`): p1 **168,7** contro e2 126,6 = 133% (>= 80%: si'; P2 57 contro
+   176). p1: USA 104,5 (compito 51,7, Hard 52,8), UK 64,3 (compito 2,7, Hard 61,6); e2 USA 69,2, UK 57,4.
+   Trasporti comprati (`trasporti_comprati`): p1 USA compito 4,9 / Hard 31,6, UK compito 0,5 / Hard 15,1; e2 USA 33,9, UK 15,5.
+3. Vittorie alleate: p1 15/40 contro e2 12/40 (+3; Fisher 0,64): APERTA. Attenzione: e2 (stesso codice dell'Asse e degli Alleati di
+   Hard) era 16/40 in P2, 18/40 in P1: anche qui varianza tra run; il confronto valido e' dentro la run.
+4. Egypt dell'Asse (`p2.round_egitto_asse`/`round_con_fotografia`): p1 8,4 / 19,6 (43% dei round), e2 7,8 / 17,2 (45%). Cadute
+   (`p2.cadute`): Southern Italy p1 22/40 contro e2 14/40, Germany 15 contro 12, Russia 30 contro 31. Reddito italiano R12
+   (`p2.per_round.12.reddito_italia`) 18,4 contro 18,3. Esercito R12 (`round[12].r4.esercito`): tedesco 119,7 contro 123,8, russo 25,8
+   contro 23,7. Direzione prevalente (`p2.direzione_prevalente`) p1 MEDITERRANEO 25, FRANCIA 15.
+- Lettura: tolti divieto e sequestri, gli Alleati con `compiti` tornano al livello di Hard (anzi sopra, non distinguibile) e sbarcano piu'
+  di Hard; il crollo di P2 veniva dal divieto e dai sequestri, non dal livello alleanza in se'. Il compito del Regno Unito quasi non
+  sbarca (2,7 unita' a partita): gli sbarchi britannici sono di Hard. Nessun guadagno misurabile del compito sopra Hard (+3 vittorie, p 0,64).
