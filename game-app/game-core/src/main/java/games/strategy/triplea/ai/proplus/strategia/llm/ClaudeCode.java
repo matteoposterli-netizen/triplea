@@ -38,6 +38,7 @@ public final class ClaudeCode {
 
   /** System property: "true" = never look for Claude Code (tests of the panel). */
   public static final String DISABLED_PROPERTY = "proplus.stratega.senzaClaude";
+
   static final Duration TIMEOUT_PROVA = Duration.ofSeconds(60);
   static final String MODELLO = "haiku";
 
@@ -106,7 +107,9 @@ public final class ClaudeCode {
     try {
       final Processo.Esito e =
           processo.esegui(
-              comando(command.get(), null, false), "Rispondi solo con la parola OK.", TIMEOUT_PROVA);
+              comando(command.get(), null, false),
+              "Rispondi solo con la parola OK.",
+              TIMEOUT_PROVA);
       final String problem = problema(e);
       return problem.isEmpty()
           ? new Stato(command.get(), true, "Claude Code trovato e collegato")
@@ -177,8 +180,7 @@ public final class ClaudeCode {
         throw new ErroreStratega("Claude Code: " + problem);
       }
       final JsonObject json = JsonParser.parseString(e.uscita().strip()).getAsJsonObject();
-      final JsonObject usage =
-          json.has("usage") ? json.getAsJsonObject("usage") : new JsonObject();
+      final JsonObject usage = json.has("usage") ? json.getAsJsonObject("usage") : new JsonObject();
       return new Risposta(
           json.get("result").getAsString(),
           "Claude Code",
@@ -274,8 +276,10 @@ public final class ClaudeCode {
       final List<String> command, final String stdin, final Duration timeout) throws IOException {
     final Path dir = Files.createTempDirectory("proplus-stratega");
     final Process p = new ProcessBuilder(command).directory(dir.toFile()).start();
-    final CompletableFuture<String> out = CompletableFuture.supplyAsync(() -> read(p.getInputStream()));
-    final CompletableFuture<String> err = CompletableFuture.supplyAsync(() -> read(p.getErrorStream()));
+    final CompletableFuture<String> out =
+        CompletableFuture.supplyAsync(() -> read(p.getInputStream()));
+    final CompletableFuture<String> err =
+        CompletableFuture.supplyAsync(() -> read(p.getErrorStream()));
     try (OutputStream in = p.getOutputStream()) {
       in.write(stdin.getBytes(StandardCharsets.UTF_8));
     } catch (final IOException e) {

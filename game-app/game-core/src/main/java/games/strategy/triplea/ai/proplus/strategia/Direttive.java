@@ -756,9 +756,9 @@ public final class Direttive {
    * LLM step, turn orders (schema ordini-turno-v1): the directives {@code nation} plays its turn
    * with = the strategic directives of the round with, for {@code nation} only, the targets, the
    * operation decisions and the delay tools of {@code orders}. Plan, posture, risk, enemy reading
-   * and roles stay the strategic ones (in {@code orders} they are ignored, with a notice). Ranges and
-   * guard rails as for the directives (weight 0-20, accepted loss 0-30 per operation and in total,
-   * unknown names ignored); operations that are not the nation's are ignored.
+   * and roles stay the strategic ones (in {@code orders} they are ignored, with a notice). Ranges
+   * and guard rails as for the directives (weight 0-20, accepted loss 0-30 per operation and in
+   * total, unknown names ignored); operations that are not the nation's are ignored.
    *
    * @param notes what was limited or ignored (Italian)
    * @return {"ordini": the checked orders, "direttive": the merged directives}
@@ -896,7 +896,9 @@ public final class Direttive {
     return out;
   }
 
-  /** Eg "Ordini: bersagli Normandy Bordeaux (15), operazioni Overlord UK lancia, tattiche nessuna". */
+  /**
+   * Eg "Ordini: bersagli Normandy Bordeaux (15), operazioni Overlord UK lancia, tattiche nessuna".
+   */
   public static String testoOrdini(final JsonObject orders) {
     final List<String> targets = new ArrayList<>();
     array(orders, "bersagli")
@@ -926,7 +928,9 @@ public final class Direttive {
         .forEach(
             t -> {
               final JsonObject x = t.getAsJsonObject();
-              tools.add(string(x, "strumento", "?") + (x.has("fronte") ? " " + x.get("fronte").getAsString() : ""));
+              tools.add(
+                  string(x, "strumento", "?")
+                      + (x.has("fronte") ? " " + x.get("fronte").getAsString() : ""));
             });
     return "bersagli "
         + (targets.isEmpty() ? "nessuno" : String.join(", ", targets))

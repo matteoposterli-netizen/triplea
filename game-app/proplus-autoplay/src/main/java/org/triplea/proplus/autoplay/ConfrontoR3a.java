@@ -75,7 +75,9 @@ final class ConfrontoR3a {
               .append(' ')
               .append(w.intervalText())
               .append(
-                  w.known() ? (w.low() > 0 || w.high() < 0 ? " esclude lo 0" : " include lo 0") : "")
+                  w.known()
+                      ? (w.low() > 0 || w.high() < 0 ? " esclude lo 0" : " include lo 0")
+                      : "")
               .append(" |");
         }
       }
@@ -83,7 +85,8 @@ final class ConfrontoR3a {
     }
 
     // 2 income and army per nation
-    md.append("\nReddito / esercito (TUV) per nazione, media sui semi:\n\n| Configurazione | Nazione |");
+    md.append(
+        "\nReddito / esercito (TUV) per nazione, media sui semi:\n\n| Configurazione | Nazione |");
     vcRounds.forEach(r -> md.append(" R").append(r).append(" reddito / TUV |"));
     md.append("\n|---|---|");
     vcRounds.forEach(r -> md.append("---|"));
@@ -111,10 +114,13 @@ final class ConfrontoR3a {
 
     // 3 theater
     md.append(
-        "\nTeatro (scelta d'alleanza nel turno USA). Round per teatro e round in cui era aperto"
-            + " (somma sulle partite); cambi col motivo:\n\n| Configurazione | Partite | Round NORD |"
-            + " Round SUD | NORD aperto | SUD aperto | Cambi | Motivi delle scelte |\n"
-            + "|---|---|---|---|---|---|---|---|\n");
+"""
+
+Teatro (scelta d'alleanza nel turno USA). Round per teatro e round in cui era aperto (somma sulle partite); cambi col motivo:
+
+| Configurazione | Partite | Round NORD | Round SUD | NORD aperto | SUD aperto | Cambi | Motivi delle scelte |
+|---|---|---|---|---|---|---|---|
+""");
     for (final String config : r3a) {
       final List<JsonObject> list = byConfig.get(config);
       int nord = 0;
@@ -164,12 +170,13 @@ final class ConfrontoR3a {
 
     // 4 coordinated landings per theater
     md.append(
-        "\nSbarchi coordinati USA per teatro (round del teatro a quel momento). Unita' per ondata,"
-            + " presi, tenuti dopo il turno nemico e dopo 2 round, rinforzi britannici arrivati:\n\n"
-            + "| Configurazione | Teatro | Sbarchi | Partite con sbarco | Round del primo (mediana) |"
-            + " Unita' per ondata | Presi | Tenuti 1 round | Tenuti 2 round | Perdite reali / P80 |"
-            + " Rinforzi UK (sbarchi rinforzati, unita') | Completamenti / sbarchi UK da solo |\n"
-            + "|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+"""
+
+Sbarchi coordinati USA per teatro (round del teatro a quel momento). Unita' per ondata, presi, tenuti dopo il turno nemico e dopo 2 round, rinforzi britannici arrivati:
+
+| Configurazione | Teatro | Sbarchi | Partite con sbarco | Round del primo (mediana) | Unita' per ondata | Presi | Tenuti 1 round | Tenuti 2 round | Perdite reali / P80 | Rinforzi UK (sbarchi rinforzati, unita') | Completamenti / sbarchi UK da solo |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+""");
     for (final String config : r3a) {
       final List<JsonObject> list = byConfig.get(config);
       for (final String theater : List.of("NORD", "SUD")) {
@@ -269,9 +276,13 @@ final class ConfrontoR3a {
       }
     }
     md.append(
-        "\nAttese del via libera USA (round senza via libera) per teatro e motivo; cosa mancava"
-            + " (esempi):\n\n| Configurazione | Teatro | Via libera | Attese per motivo | Esempi |\n"
-            + "|---|---|---|---|---|\n");
+"""
+
+Attese del via libera USA (round senza via libera) per teatro e motivo; cosa mancava (esempi):
+
+| Configurazione | Teatro | Via libera | Attese per motivo | Esempi |
+|---|---|---|---|---|
+""");
     for (final String config : r3a) {
       final List<JsonObject> list = byConfig.get(config);
       for (final String theater : List.of("NORD", "SUD")) {
@@ -327,7 +338,13 @@ final class ConfrontoR3a {
       final List<JsonObject> list = byConfig.get(config);
       for (final String n : List.of("Americans", "British")) {
         for (final int r : List.of(6, 9, 12)) {
-          md.append("| ").append(config).append(" | ").append(n).append(" | R").append(r).append(" |");
+          md.append("| ")
+              .append(config)
+              .append(" | ")
+              .append(n)
+              .append(" | R")
+              .append(r)
+              .append(" |");
           for (final String k : REGIONS) {
             md.append(' ').append(num1(mean(list, j -> regione(j, n, r, k)))).append(" |");
           }
@@ -393,8 +410,7 @@ final class ConfrontoR3a {
           md.append(' ')
               .append(num1(mean(list, j -> ConfrontoImpegno.nation(j, n, r, "trasporti"))))
               .append(" (")
-              .append(
-                  num1(mean(list, j -> ConfrontoImpegno.nation(j, n, r, "trasporti_inattivi"))))
+              .append(num1(mean(list, j -> ConfrontoImpegno.nation(j, n, r, "trasporti_inattivi"))))
               .append(") |");
         }
         int capped = 0;
@@ -431,7 +447,12 @@ final class ConfrontoR3a {
       }
     }
     if (!r3a.isEmpty()) {
-      md.append("\nUnita' trattenute alla base per round (media sulle partite, USA + Regno Unito):\n\n");
+      md.append(
+"""
+
+Unita' trattenute alla base per round (media sulle partite, USA + Regno Unito):
+
+""");
       md.append("| Configurazione |");
       for (int r = 1; r <= vcRounds.get(vcRounds.size() - 1); r++) {
         md.append(" R").append(r).append(" |");
@@ -480,7 +501,13 @@ final class ConfrontoR3a {
           .append(config)
           .append("): conteggio per tipo e motivo; righe esito ")
           .append(outcomes)
-          .append(".\n\n| Tipo | Decisioni | Per motivo |\n|---|---|---|\n");
+          .append(
+"""
+.
+
+| Tipo | Decisioni | Per motivo |
+|---|---|---|
+""");
       counts.forEach(
           (tipo, m) ->
               md.append("| ")
@@ -508,9 +535,7 @@ final class ConfrontoR3a {
               win[b][1] += x.get("preso").getAsBoolean() ? 1 : 0;
             }
           }
-          if (x.has("tenuto")
-              && x.has("tenuta_stimata")
-              && x.get("round_dopo").getAsInt() == 1) {
+          if (x.has("tenuto") && x.has("tenuta_stimata") && x.get("round_dopo").getAsInt() == 1) {
             final int b = band(x.get("tenuta_stimata").getAsDouble());
             hold[b][0]++;
             hold[b][1] += x.get("tenuto").getAsBoolean() ? 1 : 0;
@@ -521,7 +546,12 @@ final class ConfrontoR3a {
           "\nCalibrazione degli sbarchi ("
               + config
               + "): vittoria stimata a fasce contro presi; tenuta stimata a fasce contro tenuti"
-              + " dopo il turno nemico:\n\n| Fascia | Sbarchi | Presi | Tenute stimate | Tenuti |\n"
+              +
+"""
+ dopo il turno nemico:
+
+| Fascia | Sbarchi | Presi | Tenute stimate | Tenuti |
+"""
               + "|---|---|---|---|---|\n");
       for (int b = 0; b < 5; b++) {
         md.append("| ")
@@ -535,8 +565,7 @@ final class ConfrontoR3a {
             .append(" | ")
             .append(hold[b][0])
             .append(" | ")
-            .append(
-                hold[b][0] == 0 ? "-" : hold[b][1] + " (" + pct(hold[b][1], hold[b][0]) + ")")
+            .append(hold[b][0] == 0 ? "-" : hold[b][1] + " (" + pct(hold[b][1], hold[b][0]) + ")")
             .append(" |\n");
       }
     }
@@ -563,8 +592,8 @@ final class ConfrontoR3a {
   }
 
   /**
-   * The outcomes by "id|kind": "preso" (a landing), "tenuta1"/"tenuta2" (held after 1 or 2
-   * rounds), "rinforzo", "tetto".
+   * The outcomes by "id|kind": "preso" (a landing), "tenuta1"/"tenuta2" (held after 1 or 2 rounds),
+   * "rinforzo", "tetto".
    */
   private static Map<String, JsonObject> esiti(final JsonObject j) {
     final Map<String, JsonObject> out = new HashMap<>();
@@ -592,11 +621,7 @@ final class ConfrontoR3a {
   private static boolean isLanding(final JsonObject d) {
     return d.getAsJsonArray("alternative").size() == 1
         && d.getAsJsonArray("alternative").get(0).getAsJsonObject().has("unita_sbarcate")
-        && d.getAsJsonArray("alternative")
-                .get(0)
-                .getAsJsonObject()
-                .get("unita_sbarcate")
-                .getAsInt()
+        && d.getAsJsonArray("alternative").get(0).getAsJsonObject().get("unita_sbarcate").getAsInt()
             > 0;
   }
 

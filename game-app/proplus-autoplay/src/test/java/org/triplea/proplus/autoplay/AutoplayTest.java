@@ -1148,10 +1148,14 @@ class AutoplayTest {
     // VC with the difference from (a)
     assertThat(text).contains("| " + c2 + " | 1 | 3.00 ± 0.0 | +0.00 - | 2.00 ± 0.0 | -1.00 - |");
     // the theater: rounds, open, changes and reasons
-    assertThat(text).contains("| " + c2 + " | 1 | 2 | 0 | 2 | 1 | 0 | INVARIATO 1, PRIMA_SCELTA 1 |");
+    assertThat(text)
+        .contains("| " + c2 + " | 1 | 2 | 0 | 2 | 1 | 0 | INVARIATO 1, PRIMA_SCELTA 1 |");
     // the landing in the NORTH: taken, held after 1 round, British reinforcement
-    assertThat(text).contains("| " + c2 + " | NORD | 1 | 1/1 | R2.0 | 6.0 | 1 | 1 | 0 | 6 / 9 | 1, 4 | 0 / 0 |");
-    assertThat(text).contains("| " + c2 + " | NORD | 1 | MANCA_TENUTA 1 | R1 Normandy Bordeaux: tenuta 30% |");
+    assertThat(text)
+        .contains(
+            "| " + c2 + " | NORD | 1 | 1/1 | R2.0 | 6.0 | 1 | 1 | 0 | 6 / 9 | 1, 4 | 0 / 0 |");
+    assertThat(text)
+        .contains("| " + c2 + " | NORD | 1 | MANCA_TENUTA 1 | R1 Normandy Bordeaux: tenuta 30% |");
     // regions, North Africa, transports and the cap, the units held
     assertThat(text).contains("| " + c2 + " | Americans | R6 |");
     assertThat(text).contains("| Hard / Hard | 2.0 | 1.0 | 10.0 | 10.0 | 0/1 |");

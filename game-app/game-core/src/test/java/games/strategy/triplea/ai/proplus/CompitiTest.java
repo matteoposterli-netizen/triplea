@@ -90,7 +90,8 @@ class CompitiTest extends AbstractClientSettingTestCase {
     assertThat(lv.direzioni().keySet()).containsExactly("MEDITERRANEO", "FRANCIA");
     assertThat(lv.direzioni().get("MEDITERRANEO").capitali()).containsExactly("Southern Italy");
     assertThat(lv.direzioni().get("FRANCIA").capitali()).containsExactly("France", "Germany");
-    assertThat(lv.direzioni().get("FRANCIA").contributori()).containsExactly("Americans", "British");
+    assertThat(lv.direzioni().get("FRANCIA").contributori())
+        .containsExactly("Americans", "British");
     assertThat(lv.direzioni().get("MEDITERRANEO").contributori()).containsExactly("Americans");
     assertThat(d.parametri().sogliaAttacco()).isEqualTo(70);
     assertThat(d.parametri().sogliaTrasporti()).isEqualTo(40);
@@ -185,7 +186,8 @@ class CompitiTest extends AbstractClientSettingTestCase {
     final Risposta.Scelta s = Risposta.decidi(far, "A", 10);
     assertThat(s.bersaglio().nome()).isEqualTo("B");
     assertThat(s.risposte()).contains(Risposta.Tipo.CAMBIO_BERSAGLIO, Risposta.Tipo.ACQUISTO_TERRA);
-    assertThat(Risposta.decidi(List.of(), "A", 10).risposte()).containsExactly(Risposta.Tipo.ATTESA);
+    assertThat(Risposta.decidi(List.of(), "A", 10).risposte())
+        .containsExactly(Risposta.Tipo.ATTESA);
   }
 
   @Test
@@ -273,7 +275,7 @@ class CompitiTest extends AbstractClientSettingTestCase {
   }
 
   @Test
-  void noTransportIsBoughtWithEnoughEmptyOnesAndHardBuysNone() {
+  void noTransportIsBoughtWithEnoughEmptyOnes() {
     on();
     atWar();
     final Territory port = territory("Eastern United States");
@@ -306,7 +308,8 @@ class CompitiTest extends AbstractClientSettingTestCase {
     assertThat(bought.toString()).doesNotContain("\"transport\"");
     assertThat(responses).doesNotContain("ACQUISTO_CAPACITA");
     assertThat(Compiti.ordini(t.proData)).isEmpty();
-    assertThat(Compiti.vietaTrasporti(t.proData)).isTrue();
+    // step P2-bis: Hard is no longer banned from buying transports
+    assertThat(hardBuysTransports(t)).isTrue();
     // more troops than places: the transports that the missing places need, no more
     final int cap = t.capacita(zone.getMatches(Matches.unitIsSeaTransport()).get(0));
     final int perInfantry =
@@ -397,7 +400,12 @@ class CompitiTest extends AbstractClientSettingTestCase {
     final Compiti.Turno t8 = turno(8);
     Alleanza.inizioRound(t8);
     assertThat(rows("alleanza_direzione")).isEqualTo(rows + 1);
-    assertThat(t8.st.getAsJsonObject("alleanza").getAsJsonObject("direzione").get("dal_round").getAsInt())
+    assertThat(
+            t8.st
+                .getAsJsonObject("alleanza")
+                .getAsJsonObject("direzione")
+                .get("dal_round")
+                .getAsInt())
         .isEqualTo(8);
   }
 
@@ -456,8 +464,7 @@ class CompitiTest extends AbstractClientSettingTestCase {
     final Territory si = territory("Southern Italy");
     final ValoreDirezione.Conto v =
         ValoreDirezione.valore(data, uk, List.of(si), List.of(si), 30, t -> false);
-    final int prod =
-        games.strategy.triplea.attachments.TerritoryAttachment.getProduction(si);
+    final int prod = games.strategy.triplea.attachments.TerritoryAttachment.getProduction(si);
     assertThat(v.voci().get("territori").getAsDouble()).isEqualTo(2.0 * prod);
     // the Italian capital: Italy collects nothing without it
     assertThat(v.voci().get("capitale").getAsDouble()).isPositive();
@@ -527,7 +534,12 @@ class CompitiTest extends AbstractClientSettingTestCase {
     final Alleanza.Valutazione v = Alleanza.valuta(t, c, nb, List.of(usa, uk));
     final JsonObject forces = v.json().getAsJsonObject("forze_sbarcabili");
     assertThat(forces.keySet()).containsExactly("Americans", "British");
-    assertThat(forces.getAsJsonObject("Americans").getAsJsonObject("carico").get("infantry").getAsInt())
+    assertThat(
+            forces
+                .getAsJsonObject("Americans")
+                .getAsJsonObject("carico")
+                .get("infantry")
+                .getAsInt())
         .isEqualTo(4);
     assertThat(v.json().has("contrattacco_pct")).isTrue();
     assertThat(v.json().has("truppe_mancanti")).isTrue();
@@ -539,7 +551,8 @@ class CompitiTest extends AbstractClientSettingTestCase {
   @Test
   void theUnitsTheTaskDoesNotUseThisTurnGoBackToHard() {
     // pure rule
-    assertThat(Risposta.uso(Compito.TESTA_DI_PONTE, Risposta.Condivisa.NESSUNO, false, 0, 2)).isEmpty();
+    assertThat(Risposta.uso(Compito.TESTA_DI_PONTE, Risposta.Condivisa.NESSUNO, false, 0, 2))
+        .isEmpty();
     assertThat(Risposta.uso(Compito.TESTA_DI_PONTE, null, false, 0, 2)).isEmpty();
     assertThat(Risposta.uso(Compito.TESTA_DI_PONTE, Risposta.Condivisa.ACCUMULO, false, 0, 2))
         .containsExactlyInAnyOrder(Risposta.Uso.FLOTTA, Risposta.Uso.SBARCO);
@@ -548,7 +561,8 @@ class CompitiTest extends AbstractClientSettingTestCase {
     assertThat(Risposta.uso(Compito.CONTROLLO_E_FLOTTA, null, true, 0, 2))
         .containsExactlyInAnyOrder(Risposta.Uso.FLOTTA, Risposta.Uso.SBARCO);
     assertThat(Risposta.uso(Compito.PRESA, null, false, 1, 2)).contains(Risposta.Uso.TERRA_VICINA);
-    assertThat(Risposta.uso(Compito.PRESA, null, false, 2, 2)).doesNotContain(Risposta.Uso.TERRA_VICINA);
+    assertThat(Risposta.uso(Compito.PRESA, null, false, 2, 2))
+        .doesNotContain(Risposta.Uso.TERRA_VICINA);
     // on the board: the plan of the round says what is held
     on();
     atWar();
@@ -571,6 +585,51 @@ class CompitiTest extends AbstractClientSettingTestCase {
     final java.util.Set<Unit> held = Compiti.trattenute(data, usa);
     assertThat(held).isNotEmpty();
     assertThat(held).allMatch(u -> !Compiti.trasporto(u) && !Matches.unitIsLand().test(u));
+  }
+
+  @Test
+  void withTheTasksOnHardCanBuyTransportsForTheUsaAndTheUk() {
+    on();
+    atWar();
+    for (final String n : List.of("Americans", "British")) {
+      final Compiti.Turno t = turno(player(n), 6);
+      final Compiti.Turno.Cassa cassa = t.cassa();
+      // a turn whose task buys no transport
+      t.ordina(cassa, "prova");
+      assertThat(cassa.mix).doesNotContainKey("transport");
+      assertThat(hardBuysTransports(t)).as(n).isTrue();
+    }
+  }
+
+  @Test
+  void theLandingUseHoldsOnlyTheLoadedTransportsAndTheirCargo() {
+    on();
+    atWar();
+    final GamePlayer usa = player("Americans");
+    final Territory z = territory("101 Sea Zone");
+    clear(z);
+    final Territory port = territory("Eastern United States");
+    add(port, "Americans", "infantry", 2);
+    final Unit loaded =
+        data.getUnitTypeList().getUnitTypeOrThrow("transport").create(1, usa).get(0);
+    final Unit cargo = data.getUnitTypeList().getUnitTypeOrThrow("infantry").create(1, usa).get(0);
+    final Unit empty = data.getUnitTypeList().getUnitTypeOrThrow("transport").create(1, usa).get(0);
+    data.performChange(ChangeFactory.addUnits(z, List.of(loaded, cargo, empty)));
+    data.performChange(
+        ChangeFactory.unitPropertyChange(cargo, loaded, Unit.PropertyName.TRANSPORTED_BY));
+    final Compiti.Turno t = turno(6);
+    final JsonObject piano = new JsonObject();
+    piano.addProperty("round", 6);
+    final JsonArray landing = new JsonArray();
+    landing.add("SBARCO");
+    piano.add("uso", landing);
+    t.ns.add("piano", piano);
+    Compiti.salva(data.getProperties(), "Allies", t.st);
+    final java.util.Set<Unit> held = Compiti.trattenute(data, usa);
+    assertThat(held).contains(loaded, cargo);
+    assertThat(held).doesNotContain(empty);
+    // the troops at home are Hard's
+    assertThat(held).noneMatch(u -> port.getUnits().contains(u));
   }
 
   @Test
@@ -597,7 +656,8 @@ class CompitiTest extends AbstractClientSettingTestCase {
     final JsonObject piano = t2.ns.getAsJsonObject("piano");
     assertThat(piano.has("risultato")).isFalse();
     assertThat(piano.getAsJsonArray("tenute")).hasSize(2);
-    assertThat(piano.getAsJsonArray("tenute").get(1).getAsJsonObject().get("territorio").getAsString())
+    assertThat(
+            piano.getAsJsonArray("tenute").get(1).getAsJsonObject().get("territorio").getAsString())
         .isEqualTo("Egypt");
     // the direction FRANCIA: the rest of the share goes to U2
     dir.addProperty("scelta", "FRANCIA");
@@ -647,6 +707,11 @@ class CompitiTest extends AbstractClientSettingTestCase {
         .filter(r -> "decisione".equals(r.get("riga").getAsString()))
         .filter(r -> tipo.equals(r.get("tipo").getAsString()))
         .count();
+  }
+
+  private static boolean hardBuysTransports(final Compiti.Turno t) {
+    return ((ProPlusTuning) ProPlusTuning.unwrap(t.proData.getTuning()))
+        .buysSeaTransports(t.proData);
   }
 
   private void on() {

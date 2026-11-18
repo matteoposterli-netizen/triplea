@@ -17,7 +17,6 @@ import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.triplea.ai.pro.AbstractProAi;
 import games.strategy.triplea.ai.pro.ProData;
 import games.strategy.triplea.ai.pro.ProTuning;
-import games.strategy.triplea.ai.pro.data.ProPurchaseOption;
 import games.strategy.triplea.ai.pro.data.ProTerritoryManager;
 import games.strategy.triplea.ai.pro.util.ProOddsCalculator;
 import games.strategy.triplea.delegate.Matches;
@@ -39,12 +38,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Step R3a "SBARCO COORDINATO E TEATRI" (Global 1940, the Allies) on built positions: the only
- * open theater is chosen; no change before 3 rounds or with a wave at sea; green light at 70 and
- * not at 69; denied when the alliance's hold is not enough, given when the British reinforcements
- * are; the landing with all the load; Hard does not use the force held in preparation; the cap on
- * Hard's transports; Russia = Hard; every decision has its row in the register and its outcome
- * when it can be checked; switch off = nothing.
+ * Step R3a "SBARCO COORDINATO E TEATRI" (Global 1940, the Allies) on built positions: the only open
+ * theater is chosen; no change before 3 rounds or with a wave at sea; green light at 70 and not at
+ * 69; denied when the alliance's hold is not enough, given when the British reinforcements are; the
+ * landing with all the load; Hard does not use the force held in preparation; the cap on Hard's
+ * transports; Russia = Hard; every decision has its row in the register and its outcome when it can
+ * be checked; switch off = nothing.
  */
 class SbarcoCoordinatoTest extends AbstractClientSettingTestCase {
   private static final long SEED = 20261111L;
@@ -137,8 +136,7 @@ class SbarcoCoordinatoTest extends AbstractClientSettingTestCase {
   void noTheaterChangeBeforeThreeRoundsNorWithAWaveAtSea() {
     // first choice: no inertia
     assertThat(
-            SbarcoCoordinato.sceltaTeatro(null, 1, 1, true, false, true, 0, 0, 3, "NORD")
-                .teatro())
+            SbarcoCoordinato.sceltaTeatro(null, 1, 1, true, false, true, 0, 0, 3, "NORD").teatro())
         .isEqualTo("SUD");
     // only SOUTH open, 2 rounds since the change: stays NORTH
     final var early =
@@ -222,8 +220,7 @@ class SbarcoCoordinatoTest extends AbstractClientSettingTestCase {
       final var denied =
           SbarcoCoordinato.viaLibera(alone.vittoria(), alone.contrattaccoSolo(), 70, 40);
       final var given =
-          SbarcoCoordinato.viaLibera(
-              alliance.vittoria(), alliance.contrattaccoAlleanza(), 70, 40);
+          SbarcoCoordinato.viaLibera(alliance.vittoria(), alliance.contrattaccoAlleanza(), 70, 40);
       if (!denied.via() && given.via()) {
         assertThat(denied.codice()).isEqualTo("MANCA_TENUTA");
         found = true;
@@ -288,8 +285,7 @@ class SbarcoCoordinatoTest extends AbstractClientSettingTestCase {
         .isEmpty();
     assertThat(moves).isEmpty();
     final JsonObject landing = lastDecision("sbarco");
-    assertThat(landing.getAsJsonObject("motivo").get("codice").getAsString())
-        .isEqualTo("ESEGUITO");
+    assertThat(landing.getAsJsonObject("motivo").get("codice").getAsString()).isEqualTo("ESEGUITO");
   }
 
   @Test
@@ -302,7 +298,8 @@ class SbarcoCoordinatoTest extends AbstractClientSettingTestCase {
     final Territory scotland = territory("Scotland");
     data.performChange(
         ChangeFactory.removeUnits(
-            scotland, scotland.getMatches(Matches.unitIsLand().and(Matches.unitIsNotInfrastructure()))));
+            scotland,
+            scotland.getMatches(Matches.unitIsLand().and(Matches.unitIsNotInfrastructure()))));
     addUnits(territory("110 Sea Zone"), "British", "transport", 2);
     final ProData pd = proData(uk, 2);
     Impegno.inizioTurno(pd, calc(), uk);
@@ -332,8 +329,7 @@ class SbarcoCoordinatoTest extends AbstractClientSettingTestCase {
     assertThat(Integer.parseInt(row.get("scelta").getAsString())).isEqualTo(held.size());
     // in the non-combat move they stay at the base
     final ProData nc = proData(uk, 2, "Non Combat Move");
-    final Set<Unit> kept =
-        Impegno.nonCombattimento(nc, calc(), recording(new ArrayList<>()), uk);
+    final Set<Unit> kept = Impegno.nonCombattimento(nc, calc(), recording(new ArrayList<>()), uk);
     assertThat(kept).containsAll(atBase);
   }
 
@@ -356,7 +352,8 @@ class SbarcoCoordinatoTest extends AbstractClientSettingTestCase {
     assertThat(capped.getAllOptions())
         .noneMatch(o -> o.isTransport() && Matches.unitTypeIsSea().test(o.getUnitType()));
     assertThat(capped.getLandOptions()).hasSameSizeAs(pd.getPurchaseOptions().getLandOptions());
-    assertThat(lastDecision("tetto_trasporti").getAsJsonObject("motivo").get("codice").getAsString())
+    assertThat(
+            lastDecision("tetto_trasporti").getAsJsonObject("motivo").get("codice").getAsString())
         .isEqualTo("TRASPORTO_FERMO_VUOTO");
     // the outcome: what Hard bought
     final Set<String> before = Impegno.primaDelPiazzamento(data, usa);
@@ -519,7 +516,8 @@ class SbarcoCoordinatoTest extends AbstractClientSettingTestCase {
   }
 
   private void loadedTransport(final Territory zone, final String owner, final String... cargo) {
-    final Unit tr = data.getUnitTypeList().getUnitTypeOrThrow("transport").create(1, player(owner)).get(0);
+    final Unit tr =
+        data.getUnitTypeList().getUnitTypeOrThrow("transport").create(1, player(owner)).get(0);
     final List<Unit> all = new ArrayList<>(List.of(tr));
     final List<Unit> load = new ArrayList<>();
     for (final String type : cargo) {

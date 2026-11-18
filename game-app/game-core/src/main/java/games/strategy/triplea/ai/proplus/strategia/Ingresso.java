@@ -981,7 +981,9 @@ public final class Ingresso {
         continue;
       }
       final JsonObject byNationBefore =
-          alliesBefore.has(t.getName()) ? alliesBefore.getAsJsonObject(t.getName()) : new JsonObject();
+          alliesBefore.has(t.getName())
+              ? alliesBefore.getAsJsonObject(t.getName())
+              : new JsonObject();
       final Map<String, Double> byNationNow = new LinkedHashMap<>();
       for (final Unit u : t.getUnits()) {
         final String owner = u.getOwner().getName();
@@ -1015,7 +1017,8 @@ public final class Ingresso {
     out.add("nemici_spostati", movedTop);
     reinforced.sort(
         Comparator.comparingDouble(
-            (JsonObject o) -> -(o.get("tuv_ora").getAsDouble() - o.get("tuv_prima").getAsDouble())));
+            (JsonObject o) ->
+                -(o.get("tuv_ora").getAsDouble() - o.get("tuv_prima").getAsDouble())));
     final JsonArray reinforcedTop = new JsonArray();
     reinforced.stream().limit(6).forEach(reinforcedTop::add);
     out.add("alleati_rinforzati", reinforcedTop);
@@ -1054,7 +1057,8 @@ public final class Ingresso {
       boolean launched = false;
       boolean waited = false;
       if (entry.has(OrdiniTurno.KEY)) {
-        for (final Map.Entry<String, JsonElement> e : entry.getAsJsonObject(OrdiniTurno.KEY).entrySet()) {
+        for (final Map.Entry<String, JsonElement> e :
+            entry.getAsJsonObject(OrdiniTurno.KEY).entrySet()) {
           if (!op.nazioni().contains(e.getKey()) && !op.vettori().contains(e.getKey())) {
             continue;
           }
@@ -1072,8 +1076,7 @@ public final class Ingresso {
           }
         }
       }
-      final boolean waiting =
-          waited || (Direttive.ATTENDI.equals(strategic) && !launched);
+      final boolean waiting = waited || (Direttive.ATTENDI.equals(strategic) && !launched);
       if (!waiting) {
         break;
       }
@@ -1084,8 +1087,8 @@ public final class Ingresso {
 
   /**
    * LLM step 3: the national objectives of the alliance's nations (or of {@code nation} only) with
-   * their value in PUs that are met now or {@value #OBIETTIVI_MANCANTI_MAX} captures or fewer
-   * away: name, nation, PUs per turn, territories needed / held, territories still missing. Only
+   * their value in PUs that are met now or {@value #OBIETTIVI_MANCANTI_MAX} captures or fewer away:
+   * name, nation, PUs per turn, territories needed / held, territories still missing. Only
    * objectives defined by territory ownership; the other conditions (war, exclusions) are noted.
    */
   static JsonArray obiettiviNazionali(
@@ -1104,7 +1107,8 @@ public final class Ingresso {
         continue;
       }
       final List<games.strategy.triplea.attachments.RulesAttachment> rules =
-          new ArrayList<>(games.strategy.triplea.attachments.RulesAttachment.getNationalObjectives(p));
+          new ArrayList<>(
+              games.strategy.triplea.attachments.RulesAttachment.getNationalObjectives(p));
       rules.sort(Comparator.comparing(r -> r.getName()));
       for (final games.strategy.triplea.attachments.RulesAttachment ra : rules) {
         if (ra.getObjectiveValue() <= 0 || ra.getUses() == 0) {
@@ -1154,7 +1158,8 @@ public final class Ingresso {
 
   /** "objectiveAttachment_Germans_3_Control_Caucasus" -> "Control Caucasus". */
   static String readableName(final String attachment, final String nation) {
-    String n = attachment.replaceFirst("^objectiveAttachment_?", "").replaceFirst("^" + nation + "_?", "");
+    String n =
+        attachment.replaceFirst("^objectiveAttachment_?", "").replaceFirst("^" + nation + "_?", "");
     n = n.replaceFirst("^\\d+_", "");
     return n.replace('_', ' ').strip();
   }
@@ -1183,7 +1188,8 @@ public final class Ingresso {
     final JsonArray targets = new JsonArray();
     for (final JsonElement e : d.has("bersagli") ? d.getAsJsonArray("bersagli") : new JsonArray()) {
       final JsonObject t = e.getAsJsonObject();
-      if (!t.has("nazioni") || t.getAsJsonArray("nazioni").toString().contains("\"" + nation + "\"")) {
+      if (!t.has("nazioni")
+          || t.getAsJsonArray("nazioni").toString().contains("\"" + nation + "\"")) {
         targets.add(t);
       }
     }
@@ -1254,7 +1260,8 @@ public final class Ingresso {
       if (!t.isWater()) {
         continue;
       }
-      final List<Unit> ships = t.getMatches(u -> u.getOwner().equals(nation) && Matches.unitIsSea().test(u));
+      final List<Unit> ships =
+          t.getMatches(u -> u.getOwner().equals(nation) && Matches.unitIsSea().test(u));
       if (ships.isEmpty()) {
         continue;
       }
@@ -1264,7 +1271,8 @@ public final class Ingresso {
       o.addProperty("tuv", Math.round(tuvOf(ships)));
       o.addProperty("trasporti", transports.size());
       o.addProperty(
-          "trasporti_carichi", transports.stream().filter(u -> !u.getTransporting().isEmpty()).count());
+          "trasporti_carichi",
+          transports.stream().filter(u -> !u.getTransporting().isEmpty()).count());
       o.addProperty("forza_nemica", Math.round(enemyStrength(data, t)));
       list.add(o);
     }
@@ -1275,8 +1283,8 @@ public final class Ingresso {
   }
 
   /**
-   * Enemy land territories next to the nation's land units, best first (production and VC,
-   * against the defending TUV): territory, owner, production, VC, defending TUV.
+   * Enemy land territories next to the nation's land units, best first (production and VC, against
+   * the defending TUV): territory, owner, production, VC, defending TUV.
    */
   private static JsonArray nearTargets(
       final GameState data,
@@ -1307,7 +1315,8 @@ public final class Ingresso {
         o.addProperty("vc", vc(n));
         o.addProperty(
             "tuv_difesa",
-            Math.round(tuvWhere(n, u -> data.getRelationshipTracker().isAtWar(nation, u.getOwner()))));
+            Math.round(
+                tuvWhere(n, u -> data.getRelationshipTracker().isAtWar(nation, u.getOwner()))));
         found.put(n.getName(), o);
       }
     }
@@ -1374,8 +1383,8 @@ public final class Ingresso {
   }
 
   /**
-   * One calculator per input built (its costs are cached per player; a new one at each public
-   * entry point, so a change of production rules between two inputs is seen).
+   * One calculator per input built (its costs are cached per player; a new one at each public entry
+   * point, so a change of production rules between two inputs is seen).
    */
   private static final ThreadLocal<TuvCostsCalculator> CALC =
       ThreadLocal.withInitial(TuvCostsCalculator::new);

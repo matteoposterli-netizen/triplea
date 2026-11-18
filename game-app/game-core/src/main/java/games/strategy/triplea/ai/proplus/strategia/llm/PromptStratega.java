@@ -68,8 +68,8 @@ public final class PromptStratega {
   }
 
   /**
-   * The answer's JSON schema (strict structured output: every object closed and fully required,
-   * no numeric ranges; the ranges are guard rails checked by the game). Maps of the directives v1
+   * The answer's JSON schema (strict structured output: every object closed and fully required, no
+   * numeric ranges; the ranges are guard rails checked by the game). Maps of the directives v1
    * ({@code rischio}: nation/front/value, {@code ruoli}) are lists here, converted by {@link
    * UscitaLlm} (risk per nation = directives schema v1.1).
    */
@@ -96,8 +96,7 @@ public final class PromptStratega {
                         "territorio", string("territorio o zona di mare"),
                         "peso", type("number"),
                         "origine",
-                            enumOf(
-                                List.of(Direttive.ORIGINE_PIANO, Direttive.ORIGINE_CONTROMOSSA)),
+                            enumOf(List.of(Direttive.ORIGINE_PIANO, Direttive.ORIGINE_CONTROMOSSA)),
                         "critico", type("boolean"))),
             "tattiche",
                 array(
@@ -160,7 +159,8 @@ public final class PromptStratega {
     if (p.has("fasi")) {
       for (final JsonElement f : p.getAsJsonArray("fasi")) {
         final JsonObject phase = new JsonObject();
-        for (final String k : List.of("da_round", "a_round", "fronti", "obiettivi", "dichiarazioni")) {
+        for (final String k :
+            List.of("da_round", "a_round", "fronti", "obiettivi", "dichiarazioni")) {
           copy(f.getAsJsonObject(), phase, k);
         }
         phases.add(phase);

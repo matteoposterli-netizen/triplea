@@ -688,7 +688,9 @@ public final class Strategia {
           vittoria(o),
           Ritardo.parse(o.has("ritardo") ? o.getAsJsonObject("ritardo") : null),
           integer(o, "ampiezza_rischio", d.ampiezzaRischio()),
-          o.has("nazioni_senza_ordini") ? strings(o, "nazioni_senza_ordini") : d.nazioniSenzaOrdini());
+          o.has("nazioni_senza_ordini")
+              ? strings(o, "nazioni_senza_ordini")
+              : d.nazioniSenzaOrdini());
     }
 
     private static Map<String, Vittoria> vittoria(final JsonObject o) {

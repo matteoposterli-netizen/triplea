@@ -9,8 +9,8 @@ import java.nio.file.Path;
 import javax.annotation.Nullable;
 
 /**
- * Step R3a: the rows of the register of the commitment's decisions ({@code
- * impegno-decisioni.jsonl} in the diary), complete, for {@code ConfrontoR3a}.
+ * Step R3a: the rows of the register of the commitment's decisions ({@code impegno-decisioni.jsonl}
+ * in the diary), complete, for {@code ConfrontoR3a}.
  */
 final class RegistroLettura {
   private RegistroLettura() {}

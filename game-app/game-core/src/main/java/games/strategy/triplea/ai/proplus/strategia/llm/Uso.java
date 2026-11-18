@@ -28,7 +28,9 @@ public final class Uso {
   /** Level of a call: the turn orders of a nation. */
   public static final String ORDINI = "ordini";
 
-  /** The usage of the game so far: {chiamate, errori, json_non_validi, token, costo_usd, per_fonte}. */
+  /**
+   * The usage of the game so far: {chiamate, errori, json_non_validi, token, costo_usd, per_fonte}.
+   */
   public static JsonObject leggi(final GameProperties props) {
     if (props.get(KEY_USO) instanceof String s) {
       try {
@@ -116,7 +118,10 @@ public final class Uso {
     props.set(KEY_TETTO, Integer.valueOf(Math.max(0, cap)));
   }
 
-  /** The "Fantasia" level of {@code alliance}, 1-5 (default {@link PromptStratega#FANTASIA_DEFAULT}). */
+  /**
+   * The "Fantasia" level of {@code alliance}, 1-5 (default {@link
+   * PromptStratega#FANTASIA_DEFAULT}).
+   */
   public static int fantasia(final GameProperties props, final String alliance) {
     return props.get(FANTASIA_PREFIX + alliance) instanceof Integer i && i >= 1 && i <= 5
         ? i
@@ -168,7 +173,11 @@ public final class Uso {
             .append(", cache scritta ")
             .append(number(u, "token_cache_scrittura"))
             .append("), costo stimato $")
-            .append(String.format(Locale.ROOT, "%.4f", u.has("costo_usd") ? u.get("costo_usd").getAsDouble() : 0));
+            .append(
+                String.format(
+                    Locale.ROOT,
+                    "%.4f",
+                    u.has("costo_usd") ? u.get("costo_usd").getAsDouble() : 0));
     if (u.has("costo_abbonamento_usd")) {
       sb.append(
           String.format(

@@ -12,9 +12,9 @@ import org.triplea.proplus.autoplay.RiepilogoGenerale.Game;
 
 /**
  * Step CONFERMA: the statistics of the comparison against Hard. Written when "Hard / Hard" and at
- * least one configuration with a single non-Hard side are there. For every configuration: VC at
- * the end, final income and TUV lost per alliance with mean, standard deviation and standard
- * error; then the differences of the changed side's VC and income from Hard vs Hard and, for each
+ * least one configuration with a single non-Hard side are there. For every configuration: VC at the
+ * end, final income and TUV lost per alliance with mean, standard deviation and standard error;
+ * then the differences of the changed side's VC and income from Hard vs Hard and, for each
  * configuration with components off, from the same side with every component on ("Pro+ attuale"),
  * with a 95% confidence interval from Welch's t (unequal variances, Welch-Satterthwaite degrees of
  * freedom) and the seeds per configuration that an 80% power test would need for that difference.
@@ -23,7 +23,7 @@ final class ConfrontoConferma {
   private ConfrontoConferma() {}
 
   /** z of 97.5% + z of 80%: two-sided 5% test with 80% power. */
-  private static final double POWER_Z = 1.959964 + 0.841621;
+  private static final double POWER_Z = 1.959_964 + 0.841_621;
 
   static void write(
       final StringBuilder md,
@@ -76,9 +76,7 @@ final class ConfrontoConferma {
         .append(
             String.join(
                 " | ",
-                alliances.stream()
-                    .map(a -> "TUV perso " + Riepilogo.allianceLabel(a))
-                    .toList()))
+                alliances.stream().map(a -> "TUV perso " + Riepilogo.allianceLabel(a)).toList()))
         .append(" |\n|---|---|")
         .append("---|".repeat(alliances.size() * 3))
         .append('\n');
@@ -98,9 +96,13 @@ final class ConfrontoConferma {
           md.append(" |\n");
         });
     md.append(
-        "\nDifferenze del lato che cambia (A − B: positivo = A ha di piu'):\n\n"
-            + "| Differenza (A − B) | Lato | Valore | Δ | IC 95% (Welch) | Esito | Semi per l'80% |\n"
-            + "|---|---|---|---|---|---|---|\n");
+"""
+
+Differenze del lato che cambia (A − B: positivo = A ha di piu'):
+
+| Differenza (A − B) | Lato | Valore | Δ | IC 95% (Welch) | Esito | Semi per l'80% |
+|---|---|---|---|---|---|---|
+""");
     byConfig.forEach(
         (config, list) -> {
           final String side = ConfrontoHard.changedSide(list, alliances);
@@ -114,7 +116,8 @@ final class ConfrontoConferma {
           }
           baseline(byConfig, list.get(0), side, alliances)
               .ifPresent(
-                  base -> differences(md, base.getKey(), base.getValue(), config, list, side, last));
+                  base ->
+                      differences(md, base.getKey(), base.getValue(), config, list, side, last));
         });
   }
 
@@ -222,8 +225,7 @@ final class ConfrontoConferma {
           v1 + v2 == 0
               ? n1 + n2 - 2.0
               : (v1 + v2) * (v1 + v2) / (v1 * v1 / (n1 - 1) + v2 * v2 / (n2 - 1));
-      final double pooled =
-          Math.sqrt((a.sdValue() * a.sdValue() + b.sdValue() * b.sdValue()) / 2);
+      final double pooled = Math.sqrt((a.sdValue() * a.sdValue() + b.sdValue() * b.sdValue()) / 2);
       return new Welch(a.meanValue() - b.meanValue(), se, df, n1, n2, pooled);
     }
 
@@ -303,7 +305,7 @@ final class ConfrontoConferma {
     if (df < 3) {
       return 3.182;
     }
-    final double z = 1.959964;
+    final double z = 1.959_964;
     final double z3 = z * z * z;
     final double z5 = z3 * z * z;
     final double z7 = z5 * z * z;

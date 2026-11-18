@@ -29,10 +29,12 @@ final class ConfrontoP1 {
   static final Set<String> AEREI = Set.of("fighter", "tactical_bomber", "bomber");
   static final Set<String> RISPOSTE_MARE =
       Set.of("ATTACCO_FLOTTA", "SCORTA", "ACQUISTO_MARE", "CAMBIO_BERSAGLIO");
+
   /** The capitals of the directions and their coastal neighbours (first landing "toward"). */
   static final Map<String, List<String>> VERSO =
       Map.of(
-          "Southern Italy", List.of("Southern Italy", "Northern Italy"),
+          "Southern Italy",
+          List.of("Southern Italy", "Northern Italy"),
           // France: the capital and its coastal land neighbours
           "France",
           List.of(
@@ -89,7 +91,10 @@ final class ConfrontoP1 {
           "cambi_direzione",
           (int)
               dirs.asList().stream()
-                  .filter(e -> "DIREZIONE_CAMBIATA".equals(e.getAsJsonObject().get("codice").getAsString()))
+                  .filter(
+                      e ->
+                          "DIREZIONE_CAMBIATA"
+                              .equals(e.getAsJsonObject().get("codice").getAsString()))
                   .count());
     }
     // first landing of the task toward the direction's capital
@@ -209,8 +214,11 @@ final class ConfrontoP1 {
       }
     }
     final JsonObject battles = new JsonObject();
-    battles.addProperty("attaccate", decisioni(rows, "compito_battaglia").stream()
-        .filter(d -> "ATTACCO_FLOTTA".equals(ConfrontoR5.codice(d))).count());
+    battles.addProperty(
+        "attaccate",
+        decisioni(rows, "compito_battaglia").stream()
+            .filter(d -> "ATTACCO_FLOTTA".equals(ConfrontoR5.codice(d)))
+            .count());
     battles.addProperty("vinte", won);
     battles.addProperty("perse", lost);
     o.add("battaglie_navali_usa", battles);
@@ -291,9 +299,11 @@ final class ConfrontoP1 {
   static boolean applicabile(final List<Game> games) {
     return games.stream()
         .anyMatch(
-            g -> g.json() != null
-                && !RiepilogoGenerale.configuration(g.json(), alleanze(g.json())).isEmpty()
-                && RiepilogoGenerale.configuration(g.json(), alleanze(g.json())).contains(COMPITI));
+            g ->
+                g.json() != null
+                    && !RiepilogoGenerale.configuration(g.json(), alleanze(g.json())).isEmpty()
+                    && RiepilogoGenerale.configuration(g.json(), alleanze(g.json()))
+                        .contains(COMPITI));
   }
 
   private static List<String> alleanze(final JsonObject json) {
@@ -309,13 +319,19 @@ final class ConfrontoP1 {
         continue;
       }
       byConfig
-          .computeIfAbsent(RiepilogoGenerale.configuration(g.json(), alliances), k -> new ArrayList<>())
+          .computeIfAbsent(
+              RiepilogoGenerale.configuration(g.json(), alliances), k -> new ArrayList<>())
           .add(g.json());
     }
     if (byConfig.isEmpty()) {
       return;
     }
-    md.append("\n### P1\n\n");
+    md.append(
+"""
+
+### P1
+
+""");
     md.append(
         "Impianto \"compito\" degli USA (interruttore `compiti`). Ogni numero e' la media per partita"
             + " del blocco `p1` dei `riepilogo.json` (campo tra parentesi); le configurazioni senza"
@@ -323,8 +339,10 @@ final class ConfrontoP1 {
             + " non esistono: \"-\").\n\n");
     // wins
     md.append(
-        "| Configurazione | Partite | Asse | Alleati | Stalli | Quota Alleati [IC 95%] | Confronto | p"
-            + " (Fisher) |\n|---|---|---|---|---|---|---|---|\n");
+"""
+| Configurazione | Partite | Asse | Alleati | Stalli | Quota Alleati [IC 95%] | Confronto | p (Fisher) |
+|---|---|---|---|---|---|---|---|
+""");
     for (final var e : byConfig.entrySet()) {
       final List<JsonObject> list = e.getValue();
       final int n = list.size();
@@ -362,47 +380,87 @@ final class ConfrontoP1 {
     }
     // criteria
     md.append(
-        "\n| Configurazione | 1 R1 entro R6 (`r1_round`) | Direzione ITALIA/FRANCIA (`direzione`) |"
-            + " 2 turni MARE / con risposta / con acquisto o attacco (`turni_mare*`) | 3 navi+aerei"
-            + " dal R5 a round (`acquisti_usa_dal_r5`) | 3 trasporti comprati dal R5 | 3 trasporti"
-            + " inattivi R12 (`per_round.12.trasporti_inattivi`) | 4 primo sbarco verso la capitale"
-            + " entro R8 (`primo_sbarco_capitale_round`) | 4 SI o France attaccate dagli USA"
-            + " (`attacchi_usa`) | 5 ferme patria+base R12 (`per_round.12.ferme_patria_base`) | 6"
-            + " trasporti USA persi totale / carichi / vuoti (`trasporti_usa_persi`) | Battaglie"
-            + " navali vinte / perse (`battaglie_navali_usa`) |\n"
-            + "|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+"""
+
+| Configurazione | 1 R1 entro R6 (`r1_round`) | Direzione ITALIA/FRANCIA (`direzione`) | 2 turni MARE / con risposta / con acquisto o attacco (`turni_mare*`) | 3 navi+aerei dal R5 a round (`acquisti_usa_dal_r5`) | 3 trasporti comprati dal R5 | 3 trasporti inattivi R12 (`per_round.12.trasporti_inattivi`) | 4 primo sbarco verso la capitale entro R8 (`primo_sbarco_capitale_round`) | 4 SI o France attaccate dagli USA (`attacchi_usa`) | 5 ferme patria+base R12 (`per_round.12.ferme_patria_base`) | 6 trasporti USA persi totale / carichi / vuoti (`trasporti_usa_persi`) | Battaglie navali vinte / perse (`battaglie_navali_usa`) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+""");
     for (final var e : byConfig.entrySet()) {
       final List<JsonObject> list = e.getValue();
       final int n = list.size();
       final List<JsonObject> b = list.stream().map(j -> j.getAsJsonObject("p1")).toList();
       final boolean task = e.getKey().contains(COMPITI);
-      final long r1 = b.stream().filter(x -> x.has("r1_round") && x.get("r1_round").getAsInt() <= 6).count();
-      final long it = b.stream().filter(x -> x.has("direzione") && "ITALIA".equals(x.get("direzione").getAsString())).count();
-      final long fr = b.stream().filter(x -> x.has("direzione") && "FRANCIA".equals(x.get("direzione").getAsString())).count();
+      final long r1 =
+          b.stream().filter(x -> x.has("r1_round") && x.get("r1_round").getAsInt() <= 6).count();
+      final long it =
+          b.stream()
+              .filter(x -> x.has("direzione") && "ITALIA".equals(x.get("direzione").getAsString()))
+              .count();
+      final long fr =
+          b.stream()
+              .filter(x -> x.has("direzione") && "FRANCIA".equals(x.get("direzione").getAsString()))
+              .count();
       final double seaTurns = mean(b, x -> (double) x.get("turni_mare").getAsInt());
       final double seaAns = mean(b, x -> (double) x.get("turni_mare_con_risposta").getAsInt());
-      final double seaBuy = mean(b, x -> (double) x.get("turni_mare_con_acquisto_o_attacco").getAsInt());
+      final double seaBuy =
+          mean(b, x -> (double) x.get("turni_mare_con_acquisto_o_attacco").getAsInt());
       final double shipsPerRound =
           mean(
               b,
               x -> {
                 final JsonObject a = x.getAsJsonObject("acquisti_usa_dal_r5");
                 final int rr = a.get("round_dal_r5").getAsInt();
-                return rr <= 0 ? 0.0 : (a.get("navi_da_guerra").getAsInt() + a.get("aerei").getAsInt()) / (double) rr;
+                return rr <= 0
+                    ? 0.0
+                    : (a.get("navi_da_guerra").getAsInt() + a.get("aerei").getAsInt())
+                        / (double) rr;
               });
-      final double trBought = mean(b, x -> (double) x.getAsJsonObject("acquisti_usa_dal_r5").get("trasporti").getAsInt());
+      final double trBought =
+          mean(
+              b,
+              x -> (double) x.getAsJsonObject("acquisti_usa_dal_r5").get("trasporti").getAsInt());
       final double idle12 = meanRound(b, "12", "trasporti_inattivi");
       final long landing8 =
           task
-              ? b.stream().filter(x -> x.has("primo_sbarco_capitale_round") && x.get("primo_sbarco_capitale_round").getAsInt() <= 8).count()
-              : b.stream().filter(x -> x.getAsJsonObject("primo_sbarco_usa_verso").entrySet().stream().anyMatch(v -> v.getValue().getAsInt() <= 8)).count();
-      final long attacked = b.stream().filter(x -> x.has("attacchi_usa") && !x.getAsJsonObject("attacchi_usa").isEmpty()).count();
+              ? b.stream()
+                  .filter(
+                      x ->
+                          x.has("primo_sbarco_capitale_round")
+                              && x.get("primo_sbarco_capitale_round").getAsInt() <= 8)
+                  .count()
+              : b.stream()
+                  .filter(
+                      x ->
+                          x.getAsJsonObject("primo_sbarco_usa_verso").entrySet().stream()
+                              .anyMatch(v -> v.getValue().getAsInt() <= 8))
+                  .count();
+      final long attacked =
+          b.stream()
+              .filter(x -> x.has("attacchi_usa") && !x.getAsJsonObject("attacchi_usa").isEmpty())
+              .count();
       final double stuck12 = meanRound(b, "12", "ferme_patria_base");
-      final double lostTot = mean(b, x -> (double) x.getAsJsonObject("trasporti_usa_persi").get("totale").getAsInt());
-      final double lostLoaded = mean(b, x -> (double) x.getAsJsonObject("trasporti_usa_persi").get("carichi_attacchi_subiti").getAsInt());
-      final double lostEmpty = mean(b, x -> (double) x.getAsJsonObject("trasporti_usa_persi").get("vuoti_attacchi_subiti").getAsInt());
-      final double won = mean(b, x -> (double) x.getAsJsonObject("battaglie_navali_usa").get("vinte").getAsInt());
-      final double lostB = mean(b, x -> (double) x.getAsJsonObject("battaglie_navali_usa").get("perse").getAsInt());
+      final double lostTot =
+          mean(b, x -> (double) x.getAsJsonObject("trasporti_usa_persi").get("totale").getAsInt());
+      final double lostLoaded =
+          mean(
+              b,
+              x ->
+                  (double)
+                      x.getAsJsonObject("trasporti_usa_persi")
+                          .get("carichi_attacchi_subiti")
+                          .getAsInt());
+      final double lostEmpty =
+          mean(
+              b,
+              x ->
+                  (double)
+                      x.getAsJsonObject("trasporti_usa_persi")
+                          .get("vuoti_attacchi_subiti")
+                          .getAsInt());
+      final double won =
+          mean(b, x -> (double) x.getAsJsonObject("battaglie_navali_usa").get("vinte").getAsInt());
+      final double lostB =
+          mean(b, x -> (double) x.getAsJsonObject("battaglie_navali_usa").get("perse").getAsInt());
       md.append("| ")
           .append(e.getKey())
           .append(" | ")
@@ -498,17 +556,14 @@ final class ConfrontoP1 {
 
   private static double meanRound(final List<JsonObject> b, final String round, final String key) {
     final List<JsonObject> with =
-        b.stream()
-            .filter(x -> x.getAsJsonObject("per_round").has(round))
-            .toList();
-    return mean(with, x -> x.getAsJsonObject("per_round").getAsJsonObject(round).get(key).getAsDouble());
+        b.stream().filter(x -> x.getAsJsonObject("per_round").has(round)).toList();
+    return mean(
+        with, x -> x.getAsJsonObject("per_round").getAsJsonObject(round).get(key).getAsDouble());
   }
 
   private static double meanReg(final List<JsonObject> b, final String round, final String key) {
     final List<JsonObject> with =
-        b.stream()
-            .filter(x -> x.getAsJsonObject("per_round").has(round))
-            .toList();
+        b.stream().filter(x -> x.getAsJsonObject("per_round").has(round)).toList();
     return mean(
         with,
         x -> {

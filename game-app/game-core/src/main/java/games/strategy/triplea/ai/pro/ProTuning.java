@@ -349,8 +349,8 @@ public interface ProTuning {
   }
 
   /**
-   * Units the combat move never loads on a transport for an amphibious assault (Pro+, step R3a:
-   * the landing force held in preparation). None by default.
+   * Units the combat move never loads on a transport for an amphibious assault (Pro+, step R3a: the
+   * landing force held in preparation). None by default.
    */
   default Set<Unit> amphibiousHeldUnits(final ProData proData) {
     return Set.of();

@@ -134,7 +134,8 @@ class NudoHardTest extends AbstractClientSettingTestCase {
         .allMatch(
             m ->
                 m.startsWith("strategyCapPercent: ")
-                    || (m.startsWith("defenseLists: ") && m.contains("mustHold=[Germany]")
+                    || (m.startsWith("defenseLists: ")
+                        && m.contains("mustHold=[Germany]")
                         && m.contains("expendable=[]")));
   }
 

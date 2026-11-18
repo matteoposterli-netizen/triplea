@@ -87,8 +87,7 @@ class ConfrontoP1Test {
     assertThat(from5.get("trasporti").getAsInt()).isEqualTo(2);
     assertThat(b.getAsJsonObject("battaglie_navali_usa").get("vinte").getAsInt()).isEqualTo(1);
     assertThat(b.getAsJsonObject("trasporti_usa_persi").get("totale").getAsInt()).isEqualTo(1);
-    assertThat(
-            b.getAsJsonObject("trasporti_usa_persi").get("carichi_attacchi_subiti").getAsInt())
+    assertThat(b.getAsJsonObject("trasporti_usa_persi").get("carichi_attacchi_subiti").getAsInt())
         .isEqualTo(1);
     final JsonObject r8 = b.getAsJsonObject("per_round").getAsJsonObject("8");
     assertThat(r8.get("ferme_patria_base").getAsInt()).isEqualTo(5);

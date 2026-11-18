@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
@@ -44,9 +45,9 @@ import javax.annotation.Nullable;
 /**
  * Step P1 "COMPITO": one generic mechanism, driven by data ({@link Compito}, file {@code
  * compiti.json}), for the nations of an alliance with the switch {@link
- * StrategaInterruttori#COMPITI} on (on top of the commitment; in this step only one nation of the data file has
- * a task, the other nations of the alliance play as Hard). No class or branch knows a nation: the
- * list of results is data.
+ * StrategaInterruttori#COMPITI} on (on top of the commitment; in this step only one nation of the
+ * data file has a task, the other nations of the alliance play as Hard). No class or branch knows a
+ * nation: the list of results is data.
  *
  * <p>Every turn of the nation, on the current result: (a) is it obtainable this turn with the real
  * forces (battle calculator)? then it is done; (b) otherwise which OBSTACLES stop it, with numbers
@@ -63,7 +64,13 @@ public final class Compiti {
 
   public static final String KEY_STATO = "Pro+ compiti: ";
   public static final String KEY_ORDINE = "Pro+ compiti ordine: ";
-  public static final String KEY_TRASPORTI = "Pro+ compiti niente trasporti a Hard: ";
+
+  /**
+   * Step P2-bis (register only, no decision reads it): ids of the land units the task unloaded in
+   * the nation's turn ({@code {"round": n, "ids": [...]}}), so that the autoplay tells the task's
+   * landings from Hard's.
+   */
+  public static final String KEY_SCARICATE = "Pro+ compiti scaricate: ";
 
   // ============================================================================= switches
 
@@ -75,8 +82,8 @@ public final class Compiti {
   }
 
   /**
-   * With the switch on the alliance's commitment is replaced: its nations with a task play the task,
-   * the others play as Hard.
+   * With the switch on the alliance's commitment is replaced: its nations with a task play the
+   * task, the others play as Hard.
    */
   public static boolean escludeImpegno(final GameState data, final String alliance) {
     return acceso(data, alliance) && Compito.dati().nazioniAttive().containsKey(alliance);
@@ -100,7 +107,6 @@ public final class Compiti {
       final ProData proData, final ProOddsCalculator calc, final GamePlayer player) {
     final GameState data = proData.getData();
     clear(data.getProperties(), KEY_ORDINE + player.getName());
-    clear(data.getProperties(), KEY_TRASPORTI + player.getName());
     if (!attivo(data, player)) {
       return;
     }
@@ -172,15 +178,6 @@ public final class Compiti {
     }
   }
 
-  /** Hard buys no transport for the nation: the task decides the transports (capacity rule). */
-  public static boolean vietaTrasporti(final ProData proData) {
-    final GamePlayer player = proData.getPlayer();
-    return player != null
-        && proData.getData().getProperties().get(KEY_TRASPORTI + player.getName())
-            instanceof String s
-        && s.equals(String.valueOf(proData.getData().getSequence().getRound()));
-  }
-
   /** Combat move before Hard's: attack on an enemy force, landing, land attack. */
   public static Set<Unit> combattimento(
       final ProData proData,
@@ -190,11 +187,14 @@ public final class Compiti {
     if (!attivo(proData.getData(), player)) {
       return Set.of();
     }
+    final Set<String> before = scaricateOra(proData.getData(), player);
     try {
       return new Turno(proData, calc, player).combattimento(moveDel);
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Compito, combattimento: " + e);
       return Set.of();
+    } finally {
+      registraScaricate(proData.getData(), player, before);
     }
   }
 
@@ -207,11 +207,63 @@ public final class Compiti {
     if (!attivo(proData.getData(), player)) {
       return Set.of();
     }
+    final Set<String> before = scaricateOra(proData.getData(), player);
     try {
       return new Turno(proData, calc, player).nonCombattimento(moveDel);
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Compito, non combattimento: " + e);
       return Set.of();
+    } finally {
+      registraScaricate(proData.getData(), player, before);
+    }
+  }
+
+  /** Step P2-bis: the ids of the nation's land units unloaded from a transport this turn. */
+  static Set<String> scaricateOra(final GameState data, final GamePlayer player) {
+    final Set<String> out = new LinkedHashSet<>();
+    for (final Territory z : data.getMap().getTerritories()) {
+      if (!z.isWater()) {
+        continue;
+      }
+      for (final Unit tr : z.getMatches(Matches.unitIsSeaTransport())) {
+        for (final Unit u : tr.getUnloaded()) {
+          if (u.isOwnedBy(player)) {
+            out.add(u.getId().toString());
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Step P2-bis: adds to {@link #KEY_SCARICATE} the units unloaded since {@code before} (the task's
+   * part of the move phase: the task moves before Hard).
+   */
+  private static void registraScaricate(
+      final GameState data, final GamePlayer player, final Set<String> before) {
+    try {
+      final int round = data.getSequence().getRound();
+      final String key = KEY_SCARICATE + player.getName();
+      final JsonArray ids = new JsonArray();
+      if (data.getProperties().get(key) instanceof String s && !s.isBlank()) {
+        final JsonObject o = JsonParser.parseString(s).getAsJsonObject();
+        if (o.get("round").getAsInt() == round) {
+          o.getAsJsonArray("ids").forEach(ids::add);
+        }
+      }
+      for (final String id : scaricateOra(data, player)) {
+        if (!before.contains(id) && !ids.contains(new JsonPrimitive(id))) {
+          ids.add(id);
+        }
+      }
+      final JsonObject o = new JsonObject();
+      o.addProperty("round", round);
+      o.add("ids", ids);
+      data.getProperties().set(key, (Serializable) null);
+      data.getProperties().set(key, o.toString());
+    } catch (final RuntimeException e) {
+      ProLogger.warn("[Pro+] Compito, registro delle unita' scaricate: " + e);
     }
   }
 
@@ -322,7 +374,8 @@ public final class Compiti {
    */
   static Set<Unit> usate(final GameState data, final GamePlayer player, final Compito task) {
     final String alliance = ProPlusSettings.allianceOf(data, player).orElseThrow();
-    final JsonObject ns = obj(obj(stato(data.getProperties(), alliance), "nazioni"), player.getName());
+    final JsonObject ns =
+        obj(obj(stato(data.getProperties(), alliance), "nazioni"), player.getName());
     final JsonObject piano = ns.has("piano") ? ns.getAsJsonObject("piano") : null;
     final Set<Unit> out = new LinkedHashSet<>();
     if (piano == null
@@ -341,29 +394,21 @@ public final class Compiti {
         final boolean cargo = Matches.unitIsLand().test(u);
         if (uso.contains(Risposta.Uso.FLOTTA.name()) && !transport && !cargo) {
           out.add(u);
-        } else if (uso.contains(Risposta.Uso.SBARCO.name()) && (transport || cargo)) {
+        } else if (uso.contains(Risposta.Uso.SBARCO.name())
+            && (transport ? u.isTransporting() : cargo)) {
+          // step P2-bis: only the loaded transports and their cargo; the empty transports and the
+          // troops at home are Hard's (its own landings)
           out.add(u);
         }
       }
     }
-    if (uso.contains(Risposta.Uso.SBARCO.name())) {
-      for (final String f : task.fabbricheTruppe()) {
-        final Territory t = data.getMap().getTerritoryOrNull(f);
-        if (t != null) {
-          out.addAll(
-              t.getMatches(
-                  Matches.unitIsOwnedBy(player)
-                      .and(Matches.unitIsLand())
-                      .and(Matches.unitIsNotInfrastructure())
-                      .and(u -> u.getUnitAttachment().getTransportCost() > 0)));
-        }
-      }
-    }
     if (uso.contains(Risposta.Uso.TERRA_VICINA.name()) && piano.has("bersaglio")) {
-      final Territory target = data.getMap().getTerritoryOrNull(piano.get("bersaglio").getAsString());
+      final Territory target =
+          data.getMap().getTerritoryOrNull(piano.get("bersaglio").getAsString());
       if (target != null) {
         for (final Territory n : data.getMap().getNeighbors(target, Matches.territoryIsLand())) {
-          if (Matches.isTerritoryAllied(player).test(n) && !task.fabbricheTruppe().contains(n.getName())) {
+          if (Matches.isTerritoryAllied(player).test(n)
+              && !task.fabbricheTruppe().contains(n.getName())) {
             out.addAll(
                 n.getMatches(
                     Matches.unitIsOwnedBy(player)
@@ -393,25 +438,32 @@ public final class Compiti {
     final JsonObject ns;
     final Map<String, Integer> costi;
     final Programmi.Turno p;
+
     /**
      * Step P2: the nations whose forces the analyses count (the player alone, or the alliance's
      * task nations for the combined counts of {@link Alleanza}); moves are only ever the player's.
      */
     final List<GamePlayer> squadra;
+
     private final Map<String, Double> cache = new HashMap<>();
     private final Map<String, Risposta.Bersaglio> analisi = new HashMap<>();
     private final Map<String, JsonObject> dettagli = new HashMap<>();
     @Nullable private Map<Unit, Territory> luoghi;
     @Nullable private IMoveDelegate moveDel;
     private final Map<String, Integer> presidi = new HashMap<>();
+
     /** Step P2: the combined analysis of the round ({@link Alleanza#combinata}). */
     @Nullable Turno combinata;
+
     /** Step P2: the single-nation analyses of the other members ({@link Alleanza#turnoDi}). */
     final Map<String, Turno> altri = new HashMap<>();
+
     /** Step P2: the enemy's attack options per territory ({@link Alleanza#contrattacco}). */
     final Map<String, ProTerritoryManager> nemici = new HashMap<>();
+
     /** Step P2: this nation's part of the shared result this turn. */
     @Nullable JsonObject condivisoNazione;
+
     private final Map<String, List<Unit>> temporanee = new HashMap<>();
 
     Turno(final ProData proData, final ProOddsCalculator calc, final GamePlayer player) {
@@ -441,7 +493,8 @@ public final class Compiti {
               calc,
               player,
               alliance,
-              new CampagnaOmbra.Calcolo(proData, calc, player, alliance, CampagnaOmbra.Config.get()),
+              new CampagnaOmbra.Calcolo(
+                  proData, calc, player, alliance, CampagnaOmbra.Config.get()),
               lines);
     }
 
@@ -551,7 +604,10 @@ public final class Compiti {
                           .and(Matches.unitIsNotInfrastructure())
                           .and(u -> u.getUnitAttachment().getTransportCost() > 0)
                           // step P2: units that cannot attack (AA guns) are no landing force
-                          .and(u -> !Alleanza.ha(this) || Matches.unitCanMoveDuringCombatMove().test(u))));
+                          .and(
+                              u ->
+                                  !Alleanza.ha(this)
+                                      || Matches.unitCanMoveDuringCombatMove().test(u))));
           if (f.equals(mt.get().porto())) {
             // the strongest defenders stay as the garrison
             here.sort(
@@ -761,7 +817,8 @@ public final class Compiti {
       if (def.isEmpty()) {
         return 100;
       }
-      final String key = "v|" + t.getName() + "|" + chiave(att) + "|" + chiave(def) + "|" + chiave(bomb);
+      final String key =
+          "v|" + t.getName() + "|" + chiave(att) + "|" + chiave(def) + "|" + chiave(bomb);
       final Double c = cache.get(key);
       if (c != null) {
         return c;
@@ -792,8 +849,7 @@ public final class Compiti {
       }
       foreign.forEach(
           (type, n) -> {
-            final List<Unit> pool =
-                temporanee.computeIfAbsent(type, k -> new ArrayList<>());
+            final List<Unit> pool = temporanee.computeIfAbsent(type, k -> new ArrayList<>());
             while (pool.size() < n) {
               pool.addAll(temp(type, n - pool.size()));
               if (pool.isEmpty()) {
@@ -815,8 +871,8 @@ public final class Compiti {
 
     /**
      * A1 (the existing rule of the transports): the enemy's win in {@code z} at the end of the turn
-     * against the allied sea units there plus {@code arriving}, the planes on carriers and those that
-     * can scramble to it; every enemy unit in reach attacks.
+     * against the allied sea units there plus {@code arriving}, the planes on carriers and those
+     * that can scramble to it; every enemy unit in reach attacks.
      */
     TrasportiProtetti.Sicurezza sicurezza(final Territory z, final List<Unit> arriving) {
       return TrasportiProtetti.valuta(p, z, arriving, List.of());
@@ -967,8 +1023,13 @@ public final class Compiti {
      * the enemy force beaten, at most {@code max_passi_acquisto_mare} units or {@code budget} PUs.
      */
     record AcquistoMare(
-        Map<String, Integer> unita, int spesi, double prima, double dopo, double nemicaPrima,
-        double nemicaDopo, boolean basta) {}
+        Map<String, Integer> unita,
+        int spesi,
+        double prima,
+        double dopo,
+        double nemicaPrima,
+        double nemicaDopo,
+        boolean basta) {}
 
     AcquistoMare acquistoMare(
         final Territory z, final List<Unit> base, final boolean battaglia, final int budget) {
@@ -1073,7 +1134,9 @@ public final class Compiti {
     }
 
     int costoPortaerei(final List<Unit> planes) {
-      return planes.stream().mapToInt(u -> Math.max(0, u.getUnitAttachment().getCarrierCost())).sum();
+      return planes.stream()
+          .mapToInt(u -> Math.max(0, u.getUnitAttachment().getCarrierCost()))
+          .sum();
     }
 
     /**
@@ -1161,7 +1224,8 @@ public final class Compiti {
       all.addAll(planes);
       all.addAll(transports);
       for (final Territory z : zones) {
-        if (centre != null && turni(centre, z, fleet.isEmpty() ? transports : fleet) == Integer.MAX_VALUE) {
+        if (centre != null
+            && turni(centre, z, fleet.isEmpty() ? transports : fleet) == Integer.MAX_VALUE) {
           continue;
         }
         final boolean battle = z.anyUnitsMatch(Matches.enemyUnit(player));
@@ -1176,9 +1240,13 @@ public final class Compiti {
         det.addProperty("nessuna_zona_di_sbarco_raggiungibile", true);
         obs.add(
             new Ostacolo(
-                Ostacolo.Tipo.DISTANZA, t.getName(), par.maxTurniDistanza() * par.puPerTurnoDistanza(), -1,
+                Ostacolo.Tipo.DISTANZA,
+                t.getName(),
+                par.maxTurniDistanza() * par.puPerTurnoDistanza(),
+                -1,
                 det.deepCopy()));
-        final Risposta.Bersaglio b = new Risposta.Bersaglio(t.getName(), null, false, obs, null, -1);
+        final Risposta.Bersaglio b =
+            new Risposta.Bersaglio(t.getName(), null, false, obs, null, -1);
         analisi.put(key, b);
         return b;
       }
@@ -1188,7 +1256,8 @@ public final class Compiti {
       final JsonObject mare = new JsonObject();
       mare.addProperty("zona", z.getName());
       mare.add("nostre", TrasportiProtetti.perTipo(all));
-      mare.add("nemiche_in_zona", TrasportiProtetti.perTipo(z.getMatches(Matches.enemyUnit(player))));
+      mare.add(
+          "nemiche_in_zona", TrasportiProtetti.perTipo(z.getMatches(Matches.enemyUnit(player))));
       final TrasportiProtetti.Sicurezza sic = sicurezza(z, all);
       mare.add("attacco_nemico", TrasportiProtetti.perTipo(sic.attaccanti()));
       mare.addProperty("vittoria_nemica_fine_turno_pct", r1(enemyEnd));
@@ -1227,8 +1296,7 @@ public final class Compiti {
       final int free = transports.stream().mapToInt(this::liberi).sum();
       final int need = posti(ready) + terra.truppeNecessarie() * 2;
       final int cap = transports.isEmpty() ? 5 : capacita(transports.get(0));
-      final int missing =
-          Risposta.trasportiDaComprare(need, free, cap > 0 ? cap : 5);
+      final int missing = Risposta.trasportiDaComprare(need, free, cap > 0 ? cap : 5);
       final JsonObject cj = capacitaJson(transports, ready, loaded);
       cj.addProperty("posti_da_portare", need);
       cj.addProperty("trasporti_mancanti", missing);
@@ -1236,14 +1304,26 @@ public final class Compiti {
       if (missing > 0) {
         obs.add(
             new Ostacolo(
-                Ostacolo.Tipo.CAPACITA, task.porto(), missing * costo(par.tipoTrasporto()), -1, cj));
+                Ostacolo.Tipo.CAPACITA,
+                task.porto(),
+                missing * costo(par.tipoTrasporto()),
+                -1,
+                cj));
       }
       // DISTANZA: fleet and transports from where they are
       final int tf =
-          centre == null ? par.maxTurniDistanza() : Math.min(par.maxTurniDistanza(), turni(centre, z, fleet.isEmpty() ? transports : fleet));
+          centre == null
+              ? par.maxTurniDistanza()
+              : Math.min(
+                  par.maxTurniDistanza(), turni(centre, z, fleet.isEmpty() ? transports : fleet));
       int tt = 0;
       for (final Territory from : zoneDi(transports.isEmpty() ? fleet : transports)) {
-        tt = Math.max(tt, Math.min(par.maxTurniDistanza(), turni(from, z, transports.isEmpty() ? fleet : transports)));
+        tt =
+            Math.max(
+                tt,
+                Math.min(
+                    par.maxTurniDistanza(),
+                    turni(from, z, transports.isEmpty() ? fleet : transports)));
       }
       final int turns = Math.max(tf, Math.min(tt, par.maxTurniDistanza()));
       final JsonObject dj = new JsonObject();
@@ -1253,7 +1333,11 @@ public final class Compiti {
       if (turns > 1) {
         obs.add(
             new Ostacolo(
-                Ostacolo.Tipo.DISTANZA, z.getName(), (turns - 1) * par.puPerTurnoDistanza(), -1, dj));
+                Ostacolo.Tipo.DISTANZA,
+                z.getName(),
+                (turns - 1) * par.puPerTurnoDistanza(),
+                -1,
+                dj));
       }
       // obtainable now: zone free, loaded transports (and ready troops loadable at the port) that
       // reach the zone this turn, a win >= the threshold, the zone safe at the end of the turn
@@ -1322,8 +1406,8 @@ public final class Compiti {
     /**
      * Step P2: what the nation can land on {@code t} from zone {@code z} this turn (P1's "now"):
      * the loaded transports that reach the zone and the ready troops loadable at the port, the land
-     * units next to {@code t}, the carriers' planes, the warships that reach the zone (bombard), the
-     * win against the defenders, the zone safe at the end of the turn (A1).
+     * units next to {@code t}, the carriers' planes, the warships that reach the zone (bombard),
+     * the win against the defenders, the zone safe at the end of the turn (A1).
      */
     record ForzaOra(
         List<Unit> carico,
@@ -1337,8 +1421,8 @@ public final class Compiti {
         double nemicaFine,
         boolean sicura) {
       /**
-       * The force takes the territory this turn: a win >= {@code soglia} with a landing whose zone is
-       * safe, or by land alone (the units next to it).
+       * The force takes the territory this turn: a win >= {@code soglia} with a landing whose zone
+       * is safe, or by land alone (the units next to it).
        */
       boolean prende(final double soglia) {
         return !attaccanti.isEmpty()
@@ -1400,10 +1484,20 @@ public final class Compiti {
           cargoNow.isEmpty() && landAdj.isEmpty() ? 0 : vittoria(t, attNow, def, bomb);
       final double enemy = cargoNow.isEmpty() ? 100 : nemicaFine(z, arriving);
       final boolean safe =
-          !cargoNow.isEmpty() && !z.anyUnitsMatch(Matches.enemyUnit(player)) && enemy <= sogliaZona(z);
+          !cargoNow.isEmpty()
+              && !z.anyUnitsMatch(Matches.enemyUnit(player))
+              && enemy <= sogliaZona(z);
       return new ForzaOra(
-          List.copyOf(cargoNow), List.copyOf(landAdj), List.copyOf(planesNow), List.copyOf(fleetNow),
-          List.copyOf(trNow), List.copyOf(attNow), List.copyOf(bomb), win, enemy, safe);
+          List.copyOf(cargoNow),
+          List.copyOf(landAdj),
+          List.copyOf(planesNow),
+          List.copyOf(fleetNow),
+          List.copyOf(trNow),
+          List.copyOf(attNow),
+          List.copyOf(bomb),
+          win,
+          enemy,
+          safe);
     }
 
     /** Own land units next to {@code t} by land (they can attack it). */
@@ -1411,9 +1505,7 @@ public final class Compiti {
       final List<Unit> out = new ArrayList<>();
       for (final Territory n : data.getMap().getNeighbors(t, Matches.territoryIsLand())) {
         out.addAll(
-            n.getMatches(
-                (Unit u) -> squadra.contains(u.getOwner()))
-                .stream()
+            n.getMatches((Unit u) -> squadra.contains(u.getOwner())).stream()
                 .filter(Matches.unitIsLand().and(Matches.unitIsNotInfrastructure()))
                 .filter(u -> u.getUnitAttachment().getAttack(u.getOwner()) > 0)
                 .toList());
@@ -1442,7 +1534,8 @@ public final class Compiti {
 
     /**
      * An enemy force that makes the MARE obstacle of {@code z} (enemy ships in it, or among its
-     * attackers) that the warships in reach beat this turn with a win >= the threshold: [zone, win].
+     * attackers) that the warships in reach beat this turn with a win >= the threshold: [zone,
+     * win].
      */
     @Nullable
     String[] flottaBattibile(final Territory z, final List<Unit> attackers) {
@@ -1483,7 +1576,9 @@ public final class Compiti {
     /** Warships that reach {@code e} this turn, with the planes of the carriers among them. */
     List<Unit> attaccantiMare(final Territory e) {
       final List<Unit> ships =
-          raggiungono(flotta(), e, true).stream().filter(u -> u.getMovementLeft().signum() > 0 || dove(u).equals(e)).toList();
+          raggiungono(flotta(), e, true).stream()
+              .filter(u -> u.getMovementLeft().signum() > 0 || dove(u).equals(e))
+              .toList();
       final List<Unit> att = new ArrayList<>(ships);
       final List<Territory> carrierZones =
           zoneDi(ships.stream().filter(Matches.unitIsCarrier()).toList());
@@ -1496,7 +1591,8 @@ public final class Compiti {
       final Territory t = data.getMap().getTerritoryOrNull(r.territorio());
       final Territory z = data.getMap().getTerritoryOrNull(r.zona());
       if (t == null || z == null) {
-        return new Risposta.Bersaglio(String.valueOf(r.territorio()), null, false, List.of(), null, -1);
+        return new Risposta.Bersaglio(
+            String.valueOf(r.territorio()), null, false, List.of(), null, -1);
       }
       final List<Ostacolo> obs = new ArrayList<>();
       final JsonObject det = new JsonObject();
@@ -1524,7 +1620,8 @@ public final class Compiti {
       final JsonObject mare = new JsonObject();
       mare.addProperty("zona", z.getName());
       mare.add("nostre", TrasportiProtetti.perTipo(all));
-      mare.add("nemiche_in_zona", TrasportiProtetti.perTipo(z.getMatches(Matches.enemyUnit(player))));
+      mare.add(
+          "nemiche_in_zona", TrasportiProtetti.perTipo(z.getMatches(Matches.enemyUnit(player))));
       mare.add("attacco_nemico", TrasportiProtetti.perTipo(sic.attaccanti()));
       mare.addProperty("vittoria_nemica_fine_turno_pct", r1(enemyEnd));
       mare.addProperty("soglia_pct", soglia);
@@ -1551,7 +1648,11 @@ public final class Compiti {
       if (turns > 1) {
         obs.add(
             new Ostacolo(
-                Ostacolo.Tipo.DISTANZA, z.getName(), (turns - 1) * par.puPerTurnoDistanza(), -1, dj));
+                Ostacolo.Tipo.DISTANZA,
+                z.getName(),
+                (turns - 1) * par.puPerTurnoDistanza(),
+                -1,
+                dj));
       }
       final List<Unit> fleetNow = raggiungono(fleet, z, false);
       if (fleetNow.isEmpty() || battle) {
@@ -1568,7 +1669,8 @@ public final class Compiti {
         }
       }
       dettagli.put(t.getName(), det);
-      return new Risposta.Bersaglio(t.getName(), z.getName(), obtainable, List.copyOf(obs), beatable, beatWin);
+      return new Risposta.Bersaglio(
+          t.getName(), z.getName(), obtainable, List.copyOf(obs), beatable, beatWin);
     }
 
     /**
@@ -1581,7 +1683,8 @@ public final class Compiti {
       if (coastal) {
         out.add(sbarco(c));
       } else if (!terraConfinante(c).isEmpty()
-          || data.getMap().getNeighbors(c, Matches.territoryIsLand()).stream().anyMatch(this::alleato)) {
+          || data.getMap().getNeighbors(c, Matches.territoryIsLand()).stream()
+              .anyMatch(this::alleato)) {
         // an inland capital is a target only from a held neighbour (otherwise its bridgeheads are)
         out.add(viaTerra(c));
       }
@@ -1599,7 +1702,11 @@ public final class Compiti {
             terraCapitale(c).ifPresent(obs::add);
             out.add(
                 new Risposta.Bersaglio(
-                    b.nome(), b.zona(), b.ottenibile(), List.copyOf(obs), b.flottaBattibile(),
+                    b.nome(),
+                    b.zona(),
+                    b.ottenibile(),
+                    List.copyOf(obs),
+                    b.flottaBattibile(),
                     b.vittoriaFlotta()));
           } else {
             out.add(b);
@@ -1625,7 +1732,8 @@ public final class Compiti {
       tj.add("difensori", TrasportiProtetti.perTipo(def));
       tj.addProperty("vittoria_pct", r1(terra.vittoria()));
       tj.addProperty("truppe_mancanti", terra.truppeNecessarie());
-      return Optional.of(new Ostacolo(Ostacolo.Tipo.TERRA, c.getName(), terra.pu(), terra.vittoria(), tj));
+      return Optional.of(
+          new Ostacolo(Ostacolo.Tipo.TERRA, c.getName(), terra.pu(), terra.vittoria(), tj));
     }
 
     /** An inland target taken by land from own units next to it; the zone of a held bridgehead. */
@@ -1664,7 +1772,11 @@ public final class Compiti {
         tj.addProperty("nessuna_testa_di_ponte", true);
         obs.add(
             new Ostacolo(
-                Ostacolo.Tipo.DISTANZA, c.getName(), par.maxTurniDistanza() * par.puPerTurnoDistanza(), -1, tj));
+                Ostacolo.Tipo.DISTANZA,
+                c.getName(),
+                par.maxTurniDistanza() * par.puPerTurnoDistanza(),
+                -1,
+                tj));
       } else {
         terraCapitale(c).ifPresent(obs::add);
         if (zone != null && v < par.sogliaAttacco()) {
@@ -1680,7 +1792,11 @@ public final class Compiti {
           dj.addProperty("vittoria_con_le_forze_confinanti_pct", r1(v));
           obs.add(
               new Ostacolo(
-                  Ostacolo.Tipo.DISTANZA, zone.getName(), Math.max(1, turns) * par.puPerTurnoDistanza(), -1, dj));
+                  Ostacolo.Tipo.DISTANZA,
+                  zone.getName(),
+                  Math.max(1, turns) * par.puPerTurnoDistanza(),
+                  -1,
+                  dj));
         }
         if (zone != null) {
           final List<Unit> all = new ArrayList<>(flotta());
@@ -1699,7 +1815,12 @@ public final class Compiti {
       final boolean obtainable = inGuerraCon(c) && v >= par.sogliaAttacco();
       final Risposta.Bersaglio b =
           new Risposta.Bersaglio(
-              c.getName(), zone == null ? null : zone.getName(), obtainable, List.copyOf(obs), null, -1);
+              c.getName(),
+              zone == null ? null : zone.getName(),
+              obtainable,
+              List.copyOf(obs),
+              null,
+              -1);
       analisi.put(key, b);
       final JsonObject det = new JsonObject();
       det.add("terra", tj);
@@ -1746,7 +1867,8 @@ public final class Compiti {
           if (t == null || z == null || !alleato(t)) {
             return false;
           }
-          final List<Unit> ships = z.getMatches(Matches.unitIsOwnedBy(player).and(Compiti::daGuerra));
+          final List<Unit> ships =
+              z.getMatches(Matches.unitIsOwnedBy(player).and(Compiti::daGuerra));
           return !ships.isEmpty()
               && !z.anyUnitsMatch(Matches.enemyUnit(player))
               && nemicaFine(z, List.of()) <= sogliaZona(z);
@@ -1800,7 +1922,8 @@ public final class Compiti {
       for (int j = 0; j < i && j < task.risultati().size(); j++) {
         final Compito.Risultato r = task.risultati().get(j);
         if (!r.continuo() && r.mantieni() && !tenuto(r)) {
-          registraRisultato(r, "PERSO", "il risultato " + r.id() + " non e' piu' tenuto: torna in corso");
+          registraRisultato(
+              r, "PERSO", "il risultato " + r.id() + " non e' piu' tenuto: torna in corso");
           reached.remove(r.id());
           i = j;
           break;
@@ -1836,9 +1959,7 @@ public final class Compiti {
             && !(Compito.PRESA.equals(r.tipo()) && ns.has("primo_sbarco_capitale"))) {
           missed.addProperty(r.id(), round);
           registraRisultato(
-              r,
-              "MANCATO",
-              r.nome() + ": traguardo del round " + r.traguardo() + " mancato");
+              r, "MANCATO", r.nome() + ": traguardo del round " + r.traguardo() + " mancato");
         }
       }
     }
@@ -1867,7 +1988,8 @@ public final class Compiti {
       final JsonObject old = ns.has("direzione") ? ns.getAsJsonObject("direzione") : null;
       if (!first
           && old != null
-          && !Risposta.ricontrollaDirezione(round, old.get("dal_round").getAsInt(), r.tenutaRound())) {
+          && !Risposta.ricontrollaDirezione(
+              round, old.get("dal_round").getAsInt(), r.tenutaRound())) {
         return;
       }
       final Map<String, Double> sums = new LinkedHashMap<>();
@@ -1969,6 +2091,7 @@ public final class Compiti {
       int left;
       final Map<String, Integer> mix = new LinkedHashMap<>();
       final JsonArray righe = new JsonArray();
+
       /** Step P2 (C3, B): troops bought for a continuous result, placed at a given factory. */
       final Map<String, Map<String, Integer>> perFabbrica = new LinkedHashMap<>();
 
@@ -1990,8 +2113,8 @@ public final class Compiti {
               .getResources()
               .getQuantity(
                   data.getResourceList().getResourceOrThrow(games.strategy.triplea.Constants.PUS));
-      final boolean first = !task.risultati().isEmpty()
-          && obj(ns, "raggiunti").has(primoSequenziale());
+      final boolean first =
+          !task.risultati().isEmpty() && obj(ns, "raggiunti").has(primoSequenziale());
       final double prima = task.quotaPrima() == null ? par.quotaPrima() : task.quotaPrima();
       final double dopo = task.quotaDopo() == null ? par.quotaDopo() : task.quotaDopo();
       return new Cassa(pus, first ? dopo : prima);
@@ -2009,7 +2132,14 @@ public final class Compiti {
 
     void inizio() {
       lines.add("");
-      lines.add("=== R" + round + " " + player.getName() + " - Compito (step " + (Alleanza.ha(this) ? "P2" : "P1") + ") ===");
+      lines.add(
+          "=== R"
+              + round
+              + " "
+              + player.getName()
+              + " - Compito (step "
+              + (Alleanza.ha(this) ? "P2" : "P1")
+              + ") ===");
       esitiPrecedenti();
       final boolean livello = Alleanza.ha(this);
       if (livello) {
@@ -2076,8 +2206,13 @@ public final class Compiti {
         par0.add("risposte", new JsonArray());
         par0.addProperty("in_guerra", inGuerra());
         if (!tenute.isEmpty()) {
-          scrivi("compito_stato", new JsonArray(), "tenute", "OSTACOLI",
-              "solo i risultati continui (tenute)", par0);
+          scrivi(
+              "compito_stato",
+              new JsonArray(),
+              "tenute",
+              "OSTACOLI",
+              "solo i risultati continui (tenute)",
+              par0);
         }
         traccia();
         salva(data.getProperties(), alliance, st);
@@ -2106,7 +2241,8 @@ public final class Compiti {
           piano.addProperty("zona", b.zona());
         }
         piano.addProperty("ottenibile", b.ottenibile());
-        if (b.flottaBattibile() != null && scelta.risposte().contains(Risposta.Tipo.ATTACCO_FLOTTA)) {
+        if (b.flottaBattibile() != null
+            && scelta.risposte().contains(Risposta.Tipo.ATTACCO_FLOTTA)) {
           piano.addProperty("flotta_battibile", b.flottaBattibile());
         }
       }
@@ -2115,8 +2251,11 @@ public final class Compiti {
       piano.add("risposte", rs);
       // step P2 (D): what the task holds this turn; the rest goes back to Hard
       final Optional<JsonObject> shared =
-          Compito.TESTA_DI_PONTE.equals(r.tipo()) ? Alleanza.pianoCondiviso(this) : Optional.empty();
-      shared.ifPresent(x -> x.entrySet().forEach(e -> piano.add(e.getKey(), e.getValue().deepCopy())));
+          Compito.TESTA_DI_PONTE.equals(r.tipo())
+              ? Alleanza.pianoCondiviso(this)
+              : Optional.empty();
+      shared.ifPresent(
+          x -> x.entrySet().forEach(e -> piano.add(e.getKey(), e.getValue().deepCopy())));
       final Risposta.Condivisa dec =
           shared.isPresent() && shared.get().has("decisione")
               ? Risposta.Condivisa.valueOf(shared.get().get("decisione").getAsString())
@@ -2130,7 +2269,8 @@ public final class Compiti {
       }
       final int accCap =
           Risposta.roundDiAccumulo(
-              round, ns.has("accumulo_capitale_dal") ? ns.get("accumulo_capitale_dal").getAsInt() : 0);
+              round,
+              ns.has("accumulo_capitale_dal") ? ns.get("accumulo_capitale_dal").getAsInt() : 0);
       final boolean flag =
           Compito.CONTROLLO_E_FLOTTA.equals(r.tipo())
               ? r.territorio() != null
@@ -2244,7 +2384,13 @@ public final class Compiti {
         x.addProperty("regge", ok || !inGuerraConQualcuno());
         if (ok) {
           code = "TENUTO";
-          why = String.format(Locale.ROOT, "%s regge: attacco realistico %.0f%% <= %.0f%%", t.getName(), w, par.sogliaTenuta());
+          why =
+              String.format(
+                  Locale.ROOT,
+                  "%s regge: attacco realistico %.0f%% <= %.0f%%",
+                  t.getName(),
+                  w,
+                  par.sogliaTenuta());
           x.addProperty("azione", "NIENTE");
         } else {
           // the infantry missing for the defense
@@ -2267,7 +2413,11 @@ public final class Compiti {
               String.format(
                   Locale.ROOT,
                   "%s minacciato: attacco realistico %.0f%% > %.0f%%, mancano %d %s",
-                  t.getName(), w, par.sogliaTenuta(), n, type);
+                  t.getName(),
+                  w,
+                  par.sogliaTenuta(),
+                  n,
+                  type);
           if (!r.vincolo()) {
             compraTenuta(t, type, n, cassa, x);
           }
@@ -2285,11 +2435,22 @@ public final class Compiti {
         if (inGuerraCon(t) && terra.vittoria() >= par.sogliaAttacco() && !adj.isEmpty()) {
           x.addProperty("azione", "RIPRESA");
           code = "RIPRESA";
-          why = String.format(Locale.ROOT, "%s perso: ripreso via terra (vittoria %.0f%%)", t.getName(), terra.vittoria());
+          why =
+              String.format(
+                  Locale.ROOT,
+                  "%s perso: ripreso via terra (vittoria %.0f%%)",
+                  t.getName(),
+                  terra.vittoria());
         } else {
           x.addProperty("azione", "ACCUMULO");
           code = "ACCUMULO";
-          why = String.format(Locale.ROOT, "%s perso: vittoria %.0f%%, mancano %d truppe", t.getName(), terra.vittoria(), terra.truppeNecessarie());
+          why =
+              String.format(
+                  Locale.ROOT,
+                  "%s perso: vittoria %.0f%%, mancano %d truppe",
+                  t.getName(),
+                  terra.vittoria(),
+                  terra.truppeNecessarie());
           if (!r.vincolo() && terra.truppeNecessarie() > 0) {
             compraTenuta(t, par.tipiTruppe().get(0), terra.truppeNecessarie(), cassa, x);
           }
@@ -2326,7 +2487,8 @@ public final class Compiti {
       }
       if (factory == null) {
         x.addProperty("fabbrica", "");
-        x.addProperty("nota", "nessuna fabbrica propria nel territorio o accanto: PU a Hard (DISTANZA)");
+        x.addProperty(
+            "nota", "nessuna fabbrica propria nel territorio o accanto: PU a Hard (DISTANZA)");
         return;
       }
       final int c = costo(type);
@@ -2335,7 +2497,10 @@ public final class Compiti {
         return;
       }
       cassa.left -= k * c;
-      cassa.perFabbrica.computeIfAbsent(factory.getName(), q -> new LinkedHashMap<>()).merge(type, k, Integer::sum);
+      cassa
+          .perFabbrica
+          .computeIfAbsent(factory.getName(), q -> new LinkedHashMap<>())
+          .merge(type, k, Integer::sum);
       x.addProperty("fabbrica", factory.getName());
       final JsonObject bought = new JsonObject();
       bought.addProperty(type, k);
@@ -2356,8 +2521,8 @@ public final class Compiti {
     }
 
     /**
-     * The purchases of the turn against the obstacles of the chosen target, the biggest first:
-     * MARE one unit at a time (warships and carrier planes) until the zone can be held or the enemy
+     * The purchases of the turn against the obstacles of the chosen target, the biggest first: MARE
+     * one unit at a time (warships and carrier planes) until the zone can be held or the enemy
      * force beaten; TERRA troops; CAPACITA transports only if the owned ones (anywhere, also idle
      * and empty) cannot carry the ready troops. Share: 100% until the first result is reached, then
      * 80% (per nation in the data); the PUs the task cannot spend usefully go to Hard.
@@ -2404,7 +2569,10 @@ public final class Compiti {
               }
             }
             case TERRA -> {
-              final int n = o.numeri().has("truppe_mancanti") ? o.numeri().get("truppe_mancanti").getAsInt() : 0;
+              final int n =
+                  o.numeri().has("truppe_mancanti")
+                      ? o.numeri().get("truppe_mancanti").getAsInt()
+                      : 0;
               final Map<String, Integer> troops = new LinkedHashMap<>();
               int spent = 0;
               for (int k = 0; k < n; k++) {
@@ -2473,7 +2641,8 @@ public final class Compiti {
           } else if (b.ha(Ostacolo.Tipo.CAPACITA)) {
             x.add("comprato", new JsonObject());
             x.addProperty("pu", 0);
-            x.addProperty("nota", "trasporti posseduti sufficienti o PU finiti: nessun trasporto nuovo");
+            x.addProperty(
+                "nota", "trasporti posseduti sufficienti o PU finiti: nessun trasporto nuovo");
             out.add(x);
             registraAcquisto(r, x);
           }
@@ -2491,7 +2660,7 @@ public final class Compiti {
       }
     }
 
-    /** The order of the turn (the task's purchases) and the transports rule for Hard. */
+    /** The order of the turn (the task's purchases). */
     void ordina(final Cassa cassa, final String label) {
       final Map<String, Integer> mix = cassa.mix;
       final int spent = cassa.spesi();
@@ -2506,11 +2675,8 @@ public final class Compiti {
               cassa.budget,
               spent,
               all.isEmpty() ? "niente" : all.toString()));
-      // Hard buys no transport for the nation: the task decides them (when the task buys some,
-      // the purchase options must keep them for its orders)
-      if (!mix.containsKey(par.tipoTrasporto())) {
-        data.getProperties().set(KEY_TRASPORTI + player.getName(), String.valueOf(round));
-      }
+      // step P2-bis: no ban on Hard's transports any more (Hard buys and uses its own transports
+      // with the PUs the task leaves it; the task buys its own for the CAPACITA obstacle)
       if (!all.isEmpty()) {
         final JsonObject order = new JsonObject();
         order.addProperty("round", round);
@@ -2587,7 +2753,8 @@ public final class Compiti {
 
     int capienza(final Territory t) {
       try {
-        return Math.max(0, games.strategy.triplea.attachments.TerritoryAttachment.getUnitProduction(t));
+        return Math.max(
+            0, games.strategy.triplea.attachments.TerritoryAttachment.getUnitProduction(t));
       } catch (final RuntimeException e) {
         return 10;
       }
@@ -2602,7 +2769,10 @@ public final class Compiti {
           new JsonArray(),
           x.has("comprato") ? x.get("comprato").toString() : "niente",
           "ACQUISTO_" + x.get("ostacolo").getAsString(),
-          "acquisto contro l'ostacolo " + x.get("ostacolo").getAsString() + " in " + x.get("luogo").getAsString(),
+          "acquisto contro l'ostacolo "
+              + x.get("ostacolo").getAsString()
+              + " in "
+              + x.get("luogo").getAsString(),
           par0);
     }
 
@@ -2713,7 +2883,8 @@ public final class Compiti {
       }
       // 1 the enemy force that can be beaten
       if (piano.has("flotta_battibile")) {
-        final Territory e = data.getMap().getTerritoryOrNull(piano.get("flotta_battibile").getAsString());
+        final Territory e =
+            data.getMap().getTerritoryOrNull(piano.get("flotta_battibile").getAsString());
         if (e != null) {
           moved.addAll(attaccaFlotta(e));
         }
@@ -2725,10 +2896,13 @@ public final class Compiti {
         final Territory t = data.getMap().getTerritoryOrNull(piano.get("bersaglio").getAsString());
         if (t != null && !alleato(t) && inGuerraCon(t)) {
           final Territory z =
-              piano.has("zona") ? data.getMap().getTerritoryOrNull(piano.get("zona").getAsString()) : null;
-          moved.addAll(z == null || !data.getMap().getNeighbors(t).contains(z)
-              ? attaccoTerra(t)
-              : sbarca(t, z, moved));
+              piano.has("zona")
+                  ? data.getMap().getTerritoryOrNull(piano.get("zona").getAsString())
+                  : null;
+          moved.addAll(
+              z == null || !data.getMap().getNeighbors(t).contains(z)
+                  ? attaccoTerra(t)
+                  : sbarca(t, z, moved));
         }
       }
       salva(data.getProperties(), alliance, st);
@@ -2754,8 +2928,13 @@ public final class Compiti {
       par0.addProperty("vittoria_pct", r1(w));
       par0.addProperty("soglia_pct", par.sogliaAttacco());
       if (w < par.sogliaAttacco()) {
-        scrivi("compito_battaglia", new JsonArray(), "niente", "NON_ESEGUITO",
-            "sul tabellone reale la vittoria e' sotto la soglia", par0);
+        scrivi(
+            "compito_battaglia",
+            new JsonArray(),
+            "niente",
+            "NON_ESEGUITO",
+            "sul tabellone reale la vittoria e' sotto la soglia",
+            par0);
         return moved;
       }
       // ships by zone (carriers with their planes)
@@ -2785,8 +2964,17 @@ public final class Compiti {
       aggiorna();
       final String id = nuovoId("compito_battaglia");
       par0.add("mosse", TrasportiProtetti.perTipo(moved));
-      scrivi(id, "compito_battaglia", new JsonArray(), e.getName(), "ATTACCO_FLOTTA",
-          String.format(Locale.ROOT, "flotta nemica in %s attaccata con vittoria stimata %.1f%%", e.getName(), w),
+      scrivi(
+          id,
+          "compito_battaglia",
+          new JsonArray(),
+          e.getName(),
+          "ATTACCO_FLOTTA",
+          String.format(
+              Locale.ROOT,
+              "flotta nemica in %s attaccata con vittoria stimata %.1f%%",
+              e.getName(),
+              w),
           par0);
       final JsonObject pend = new JsonObject();
       pend.addProperty("id", id);
@@ -2796,7 +2984,13 @@ public final class Compiti {
       moved.forEach(u -> ids.add(u.getId().toString()));
       pend.add("unita", ids);
       ns.add("battaglia", pend);
-      lines.add(String.format(Locale.ROOT, "  ATTACCO FLOTTA in %s: %d unita', vittoria %.1f%%", e.getName(), moved.size(), w));
+      lines.add(
+          String.format(
+              Locale.ROOT,
+              "  ATTACCO FLOTTA in %s: %d unita', vittoria %.1f%%",
+              e.getName(),
+              moved.size(),
+              w));
       return moved;
     }
 
@@ -2815,8 +3009,7 @@ public final class Compiti {
       par0.addProperty("compito", true);
       final Territory capital = capitaleDirezione();
       final boolean towardCapital =
-          capital != null
-              && (capital.equals(t) || data.getMap().getNeighbors(capital).contains(t));
+          capital != null && (capital.equals(t) || data.getMap().getNeighbors(capital).contains(t));
       par0.addProperty("verso_capitale", towardCapital);
       par0.addProperty("capitale", capital == null ? "" : capital.getName());
       if (Alleanza.ha(this)) {
@@ -2824,15 +3017,27 @@ public final class Compiti {
         par0.addProperty("decisione_alleanza", Alleanza.decisioneDelRound(this));
         par0.addProperty(
             "condiviso",
-            ns.has("piano") && ns.getAsJsonObject("piano").has("condiviso_territorio")
-                && ns.getAsJsonObject("piano").get("condiviso_territorio").getAsString().equals(t.getName()));
+            ns.has("piano")
+                && ns.getAsJsonObject("piano").has("condiviso_territorio")
+                && ns.getAsJsonObject("piano")
+                    .get("condiviso_territorio")
+                    .getAsString()
+                    .equals(t.getName()));
       }
       if (z.anyUnitsMatch(Matches.enemyUnit(player))) {
-        scrivi("sbarco", new JsonArray(), "niente", "NON_ESEGUITO", "zona di sbarco occupata dal nemico", par0);
+        scrivi(
+            "sbarco",
+            new JsonArray(),
+            "niente",
+            "NON_ESEGUITO",
+            "zona di sbarco occupata dal nemico",
+            par0);
         return moved;
       }
       final List<Unit> transports =
-          raggiungono(trasporti(), z, true).stream().filter(u -> !alreadyMoved.contains(u)).toList();
+          raggiungono(trasporti(), z, true).stream()
+              .filter(u -> !alreadyMoved.contains(u))
+              .toList();
       final List<Unit> escort =
           raggiungono(flotta(), z, true).stream().filter(u -> !alreadyMoved.contains(u)).toList();
       // load the ready troops at the port on the empty places of the transports there
@@ -2876,7 +3081,8 @@ public final class Compiti {
           t.getMatches(Matches.enemyUnit(player).and(Matches.unitIsNotInfrastructure()));
       final double w = vittoria(t, att, def, bombardieri(escort, cargo.size()));
       final List<Unit> arriving = new ArrayList<>(escort);
-      arriving.addAll(transports.stream().filter(x -> x.isTransporting() || toLoad.containsKey(x)).toList());
+      arriving.addAll(
+          transports.stream().filter(x -> x.isTransporting() || toLoad.containsKey(x)).toList());
       arriving.addAll(planes);
       final TrasportiProtetti.Sicurezza sic = sicurezza(z, arriving);
       par0.add("attaccanti", TrasportiProtetti.perTipo(att));
@@ -2885,12 +3091,25 @@ public final class Compiti {
       par0.addProperty("vittoria_pct", r1(w));
       par0.add("sicurezza", sic.json());
       if (cargo.isEmpty() || w < par.sogliaAttacco() || !sic.sicura()) {
-        scrivi("sbarco", new JsonArray(), "niente", "NON_ESEGUITO",
-            cargo.isEmpty() ? "nessun carico" : w < par.sogliaAttacco()
-                ? "vittoria sotto la soglia sul tabellone reale"
-                : "zona di sbarco non sicura per i trasporti a fine turno",
+        scrivi(
+            "sbarco",
+            new JsonArray(),
+            "niente",
+            "NON_ESEGUITO",
+            cargo.isEmpty()
+                ? "nessun carico"
+                : w < par.sogliaAttacco()
+                    ? "vittoria sotto la soglia sul tabellone reale"
+                    : "zona di sbarco non sicura per i trasporti a fine turno",
             par0);
-        lines.add("  Sbarco su " + t.getName() + " NON eseguito (vittoria " + r1(w) + "%, zona " + (sic.sicura() ? "sicura" : "non sicura") + ")");
+        lines.add(
+            "  Sbarco su "
+                + t.getName()
+                + " NON eseguito (vittoria "
+                + r1(w)
+                + "%, zona "
+                + (sic.sicura() ? "sicura" : "non sicura")
+                + ")");
         return moved;
       }
       // load
@@ -2902,7 +3121,8 @@ public final class Compiti {
           }
           final Optional<String> err =
               moveDel.performMove(
-                  new MoveDescription(List.of(u), new Route(from, dove(e.getKey())), Map.of(u, e.getKey())));
+                  new MoveDescription(
+                      List.of(u), new Route(from, dove(e.getKey())), Map.of(u, e.getKey())));
           if (err.isPresent()) {
             ProLogger.warn("[Pro+] Compito: carico non riuscito " + err.get());
           }
@@ -2917,11 +3137,12 @@ public final class Compiti {
         }
         final List<Unit> ships = g.getValue();
         rottaMare(g.getKey(), z, ships, true)
-            .ifPresent(r -> {
-              if (moveDel.performMove(new MoveDescription(ships, r)).isEmpty()) {
-                moved.addAll(ships);
-              }
-            });
+            .ifPresent(
+                r -> {
+                  if (moveDel.performMove(new MoveDescription(ships, r)).isEmpty()) {
+                    moved.addAll(ships);
+                  }
+                });
       }
       aggiorna();
       int landed = 0;
@@ -2947,7 +3168,8 @@ public final class Compiti {
             continue;
           }
         }
-        final Optional<String> err = moveDel.performMove(new MoveDescription(load, new Route(z, t)));
+        final Optional<String> err =
+            moveDel.performMove(new MoveDescription(load, new Route(z, t)));
         if (err.isEmpty()) {
           landed += load.size();
           moved.addAll(load);
@@ -2972,7 +3194,8 @@ public final class Compiti {
             continue;
           }
           final Route r = data.getMap().getRoute(from, t, x -> true).orElse(null);
-          if (r != null && r.numberOfSteps() * 2 <= pl.getMovementLeft().intValue()
+          if (r != null
+              && r.numberOfSteps() * 2 <= pl.getMovementLeft().intValue()
               && moveDel.performMove(new MoveDescription(List.of(pl), r)).isEmpty()) {
             moved.add(pl);
           }
@@ -2981,7 +3204,12 @@ public final class Compiti {
       aggiorna();
       final String id = nuovoId("sbarco");
       par0.addProperty("unita_sbarcate", landed);
-      scrivi(id, "sbarco", new JsonArray(), t.getName(), landed > 0 ? "ESEGUITO" : "NON_ESEGUITO",
+      scrivi(
+          id,
+          "sbarco",
+          new JsonArray(),
+          t.getName(),
+          landed > 0 ? "ESEGUITO" : "NON_ESEGUITO",
           landed > 0
               ? "sbarco del compito: " + landed + " unita' su " + t.getName()
               : "mosse rifiutate dal motore",
@@ -2996,7 +3224,16 @@ public final class Compiti {
           ns.addProperty("primo_sbarco_capitale", round);
         }
       }
-      lines.add("  SBARCO su " + t.getName() + " da " + z.getName() + ": " + landed + " unita', vittoria " + r1(w) + "%");
+      lines.add(
+          "  SBARCO su "
+              + t.getName()
+              + " da "
+              + z.getName()
+              + ": "
+              + landed
+              + " unita', vittoria "
+              + r1(w)
+              + "%");
       return moved;
     }
 
@@ -3022,7 +3259,13 @@ public final class Compiti {
       final Territory capital = capitaleDirezione();
       par0.addProperty("verso_capitale", capital != null && capital.equals(t));
       if (w < par.sogliaAttacco()) {
-        scrivi("sbarco", new JsonArray(), "niente", "NON_ESEGUITO", "attacco via terra sotto la soglia", par0);
+        scrivi(
+            "sbarco",
+            new JsonArray(),
+            "niente",
+            "NON_ESEGUITO",
+            "attacco via terra sotto la soglia",
+            par0);
         return moved;
       }
       for (final Unit u : adj) {
@@ -3035,8 +3278,14 @@ public final class Compiti {
       aggiorna();
       final String id = nuovoId("sbarco");
       par0.addProperty("unita_attaccanti", moved.size());
-      scrivi(id, "sbarco", new JsonArray(), t.getName(), moved.isEmpty() ? "NON_ESEGUITO" : "ESEGUITO",
-          "attacco via terra del compito su " + t.getName(), par0);
+      scrivi(
+          id,
+          "sbarco",
+          new JsonArray(),
+          t.getName(),
+          moved.isEmpty() ? "NON_ESEGUITO" : "ESEGUITO",
+          "attacco via terra del compito su " + t.getName(),
+          par0);
       if (!moved.isEmpty()) {
         final JsonObject pend = new JsonObject();
         pend.addProperty("id", id);
@@ -3044,7 +3293,14 @@ public final class Compiti {
         pend.addProperty("unita", moved.size());
         ns.add("sbarco_in_corso", pend);
       }
-      lines.add("  ATTACCO VIA TERRA su " + t.getName() + ": " + moved.size() + " unita', vittoria " + r1(w) + "%");
+      lines.add(
+          "  ATTACCO VIA TERRA su "
+              + t.getName()
+              + ": "
+              + moved.size()
+              + " unita', vittoria "
+              + r1(w)
+              + "%");
       return moved;
     }
 
@@ -3102,7 +3358,8 @@ public final class Compiti {
         aggiorna();
         // 4 unload on a held bridgehead next to the target
         if (piano.has("bersaglio")) {
-          final Territory t = data.getMap().getTerritoryOrNull(piano.get("bersaglio").getAsString());
+          final Territory t =
+              data.getMap().getTerritoryOrNull(piano.get("bersaglio").getAsString());
           if (t != null) {
             moves.addProperty("scaricate_testa_di_ponte", scaricaTestaDiPonte(t));
             // step P2: the shared bridgehead taken this round is reinforced
@@ -3167,7 +3424,10 @@ public final class Compiti {
         held.addAll(aereiInMare());
       }
       if (landingUse) {
-        held.addAll(trasporti());
+        // step P2-bis: with the alliance level only the loaded transports (the empty ones are
+        // Hard's)
+        held.addAll(
+            livello ? trasporti().stream().filter(Unit::isTransporting).toList() : trasporti());
         held.addAll(caricate());
       }
       // the troops gathered on a held territory next to the target wait there for the attack
@@ -3193,8 +3453,8 @@ public final class Compiti {
         }
       }
       // the ready troops wait at the port only up to the free places of the owned transports;
-      // the others are Hard's
-      if (landingUse) {
+      // the others are Hard's (step P2-bis: with the alliance level all of them are Hard's)
+      if (landingUse && !livello) {
         int room = trasporti().stream().mapToInt(this::liberi).sum();
         for (final Unit u : pronte()) {
           final int c = u.getUnitAttachment().getTransportCost();
@@ -3278,8 +3538,15 @@ public final class Compiti {
         final JsonObject par0 = new JsonObject();
         par0.add("scarichi", done);
         par0.addProperty("round_a_bordo_max", par.roundABordoMax());
-        scrivi("compito_a_bordo", new JsonArray(), n + " unita'", "SCARICATE",
-            "truppe a bordo da " + par.roundABordoMax() + " round: scaricate su terra alleata (a Hard)", par0);
+        scrivi(
+            "compito_a_bordo",
+            new JsonArray(),
+            n + " unita'",
+            "SCARICATE",
+            "truppe a bordo da "
+                + par.roundABordoMax()
+                + " round: scaricate su terra alleata (a Hard)",
+            par0);
         lines.add("  A bordo da troppo: scaricate " + n + " unita'");
       }
       return n;
@@ -3295,7 +3562,8 @@ public final class Compiti {
       final JsonArray rows = new JsonArray();
       for (final JsonElement e : tenute) {
         final JsonObject x = e.getAsJsonObject();
-        if (!x.has("azione") || !"DIFESA".equals(x.get("azione").getAsString())
+        if (!x.has("azione")
+            || !"DIFESA".equals(x.get("azione").getAsString())
             || x.get("vincolo").getAsBoolean()) {
           continue;
         }
@@ -3305,7 +3573,8 @@ public final class Compiti {
         }
         aggiorna();
         final List<Unit> def =
-            new ArrayList<>(t.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsNotInfrastructure())));
+            new ArrayList<>(
+                t.getMatches(Matches.isUnitAllied(player).and(Matches.unitIsNotInfrastructure())));
         double w = contrattaccoProprio(t, def);
         final List<Unit> cand = new ArrayList<>();
         for (final Territory n : data.getMap().getNeighbors(t, Matches.territoryIsLand())) {
@@ -3363,7 +3632,14 @@ public final class Compiti {
         row.addProperty("vittoria_nemica_dopo_pct", r1(w));
         rows.add(row);
         if (k > 0) {
-          lines.add("  Difesa di " + t.getName() + ": " + k + " unita' mosse, attacco realistico " + r1(w) + "%");
+          lines.add(
+              "  Difesa di "
+                  + t.getName()
+                  + ": "
+                  + k
+                  + " unita' mosse, attacco realistico "
+                  + r1(w)
+                  + "%");
         }
       }
       moves.add("difesa_tenute", rows);
@@ -3384,18 +3660,26 @@ public final class Compiti {
             lost++;
           }
         }
-        final boolean won = e != null && !e.anyUnitsMatch(Matches.enemyUnit(player).and(Matches.unitIsSea()));
+        final boolean won =
+            e != null && !e.anyUnitsMatch(Matches.enemyUnit(player).and(Matches.unitIsSea()));
         final JsonObject x = new JsonObject();
         x.addProperty("zona", b.get("zona").getAsString());
         x.addProperty("vinta", won);
         x.addProperty("unita_nostre_perse", lost);
         x.addProperty("tuv_nemico_prima", b.get("tuv_nemico").getAsInt());
         x.addProperty(
-            "tuv_nemico_dopo",
-            e == null ? 0 : tuv(e.getMatches(Matches.enemyUnit(player))));
+            "tuv_nemico_dopo", e == null ? 0 : tuv(e.getMatches(Matches.enemyUnit(player))));
         RegistroDecisioni.scrivi(
-            data, RegistroDecisioni.esito(b.get("id").getAsString(), round, player.getName(), "compito_battaglia", x));
-        lines.add("  Esito battaglia in " + x.get("zona").getAsString() + ": " + (won ? "VINTA" : "PERSA") + ", perse " + lost);
+            data,
+            RegistroDecisioni.esito(
+                b.get("id").getAsString(), round, player.getName(), "compito_battaglia", x));
+        lines.add(
+            "  Esito battaglia in "
+                + x.get("zona").getAsString()
+                + ": "
+                + (won ? "VINTA" : "PERSA")
+                + ", perse "
+                + lost);
         ns.remove("battaglia");
       }
       if (ns.has("sbarco_in_corso")) {
@@ -3409,8 +3693,14 @@ public final class Compiti {
             "unita_nostre_rimaste",
             t == null ? 0 : t.getMatches(Matches.unitIsOwnedBy(player)).size());
         RegistroDecisioni.scrivi(
-            data, RegistroDecisioni.esito(s.get("id").getAsString(), round, player.getName(), "sbarco", x));
-        lines.add("  Esito su " + x.get("bersaglio").getAsString() + ": " + (x.get("preso").getAsBoolean() ? "PRESO" : "non preso"));
+            data,
+            RegistroDecisioni.esito(
+                s.get("id").getAsString(), round, player.getName(), "sbarco", x));
+        lines.add(
+            "  Esito su "
+                + x.get("bersaglio").getAsString()
+                + ": "
+                + (x.get("preso").getAsBoolean() ? "PRESO" : "non preso"));
         ns.remove("sbarco_in_corso");
       }
     }
@@ -3424,19 +3714,24 @@ public final class Compiti {
               .thenComparing(u -> u.getId().toString()));
       for (final Unit tr : trasporti()) {
         final Territory z = dove(tr);
-        if (z == null || !tr.getUnloaded().isEmpty() || tr.getMovementLeft().signum() <= 0 && tr.getAlreadyMoved().signum() != 0) {
+        if (z == null
+            || !tr.getUnloaded().isEmpty()
+            || tr.getMovementLeft().signum() <= 0 && tr.getAlreadyMoved().signum() != 0) {
           continue;
         }
         int room = liberi(tr);
         for (final Unit u : new ArrayList<>(ready)) {
           final int c = u.getUnitAttachment().getTransportCost();
           final Territory from = dove(u);
-          if (c > room || from == null || !data.getMap().getNeighbors(from).contains(z)
+          if (c > room
+              || from == null
+              || !data.getMap().getNeighbors(from).contains(z)
               || u.getMovementLeft().signum() <= 0) {
             continue;
           }
           final Optional<String> err =
-              moveDel.performMove(new MoveDescription(List.of(u), new Route(from, z), Map.of(u, tr)));
+              moveDel.performMove(
+                  new MoveDescription(List.of(u), new Route(from, z), Map.of(u, tr)));
           if (err.isEmpty()) {
             room -= c;
             ready.remove(u);
@@ -3451,17 +3746,20 @@ public final class Compiti {
     }
 
     /**
-     * The convoy toward {@code dest}: the main group of loaded transports (most cargo) and the whole
-     * fleet stop together in the farthest zone of the transports' route that both reach and that
-     * the fleet and the transports together can hold (A1). No such zone: the fleet goes toward the
-     * transports (to escort them the next turn) and the transports stay. Without loaded transports
-     * (or with them already at the destination) the fleet moves alone.
+     * The convoy toward {@code dest}: the main group of loaded transports (most cargo) and the
+     * whole fleet stop together in the farthest zone of the transports' route that both reach and
+     * that the fleet and the transports together can hold (A1). No such zone: the fleet goes toward
+     * the transports (to escort them the next turn) and the transports stay. Without loaded
+     * transports (or with them already at the destination) the fleet moves alone.
      */
     @Nullable
     Territory convoglio(final Territory dest, final JsonObject moves) {
-      final Map<Territory, List<Unit>> loaded = new TreeMap<>(Comparator.comparing(Territory::getName));
+      final Map<Territory, List<Unit>> loaded =
+          new TreeMap<>(Comparator.comparing(Territory::getName));
       for (final Unit tr : trasporti()) {
-        if (tr.isTransporting() && tr.getUnloaded().isEmpty() && tr.getMovementLeft().signum() > 0) {
+        if (tr.isTransporting()
+            && tr.getUnloaded().isEmpty()
+            && tr.getMovementLeft().signum() > 0) {
           final Territory at = dove(tr);
           if (at != null && !at.equals(dest)) {
             loaded.computeIfAbsent(at, k -> new ArrayList<>()).add(tr);
@@ -3473,14 +3771,17 @@ public final class Compiti {
       }
       final Territory main =
           loaded.entrySet().stream()
-              .max(Comparator.comparingInt(
-                  (Map.Entry<Territory, List<Unit>> e) ->
-                      e.getValue().stream().mapToInt(x -> x.getTransporting().size()).sum()))
+              .max(
+                  Comparator.comparingInt(
+                      (Map.Entry<Territory, List<Unit>> e) ->
+                          e.getValue().stream().mapToInt(x -> x.getTransporting().size()).sum()))
               .orElseThrow()
               .getKey();
       final List<Unit> group = loaded.get(main);
       final List<Unit> fleet =
-          flotta().stream().filter(u -> u.getMovementLeft().signum() > 0 || main.equals(dove(u))).toList();
+          flotta().stream()
+              .filter(u -> u.getMovementLeft().signum() > 0 || main.equals(dove(u)))
+              .toList();
       final Optional<Route> route = rottaMare(main, dest, group, false);
       final List<Territory> cand = new ArrayList<>();
       if (route.isPresent()) {
@@ -3503,7 +3804,8 @@ public final class Compiti {
         }
         final List<Unit> reach = raggiungono(fleet, c, false);
         final List<Unit> arriving = new ArrayList<>(reach);
-        arriving.addAll(raggiungono(trasporti().stream().filter(Unit::isTransporting).toList(), c, false));
+        arriving.addAll(
+            raggiungono(trasporti().stream().filter(Unit::isTransporting).toList(), c, false));
         final double e = nemicaFine(c, arriving);
         final JsonObject x = new JsonObject();
         x.addProperty("zona", c.getName());
@@ -3528,14 +3830,19 @@ public final class Compiti {
         escort = leastEscort;
         moves.addProperty(
             "convoglio_senza_sosta_sicura",
-            "flotta e trasporti insieme nella zona meno esposta " + stop.getName() + " (" + r1(least) + "%)");
+            "flotta e trasporti insieme nella zona meno esposta "
+                + stop.getName()
+                + " ("
+                + r1(least)
+                + "%)");
         lines.add(
             "  Convoglio: nessuna sosta sicura, insieme nella zona meno esposta " + stop.getName());
       }
       int ships = 0;
       for (final var g : perZona(escort).entrySet()) {
         if (!g.getKey().equals(stop)) {
-          ships += muoviGruppo(g.getKey(), stop, g.getValue().stream().filter(Compiti::nave).toList());
+          ships +=
+              muoviGruppo(g.getKey(), stop, g.getValue().stream().filter(Compiti::nave).toList());
         }
       }
       aggiorna();
@@ -3558,10 +3865,24 @@ public final class Compiti {
       }
       moves.addProperty(
           "convoglio",
-          "verso " + dest.getName() + ": sosta " + stop.getName() + ", navi " + ships + ", trasporti carichi " + trs);
+          "verso "
+              + dest.getName()
+              + ": sosta "
+              + stop.getName()
+              + ", navi "
+              + ships
+              + ", trasporti carichi "
+              + trs);
       lines.add(
-          "  Convoglio verso " + dest.getName() + ": sosta " + stop.getName() + " (" + ships
-              + " navi, " + trs + " trasporti carichi)");
+          "  Convoglio verso "
+              + dest.getName()
+              + ": sosta "
+              + stop.getName()
+              + " ("
+              + ships
+              + " navi, "
+              + trs
+              + " trasporti carichi)");
       return stop;
     }
 
@@ -3582,7 +3903,8 @@ public final class Compiti {
         return null;
       }
       final List<Unit> leaders = perZona(fleet).getOrDefault(centre, List.of());
-      final Optional<Route> route = rottaMare(centre, dest, leaders.isEmpty() ? fleet : leaders, false);
+      final Optional<Route> route =
+          rottaMare(centre, dest, leaders.isEmpty() ? fleet : leaders, false);
       Territory stop = null;
       final List<Unit> joining = new ArrayList<>(fleet);
       joining.addAll(trasporti().stream().filter(Unit::isTransporting).toList());
@@ -3590,7 +3912,8 @@ public final class Compiti {
       if (route.isPresent()) {
         final List<Territory> steps = new ArrayList<>(route.get().getSteps());
         final int range =
-            (leaders.isEmpty() ? fleet : leaders).stream().mapToInt(u -> portata(u, centre)).min().orElse(0);
+            (leaders.isEmpty() ? fleet : leaders)
+                .stream().mapToInt(u -> portata(u, centre)).min().orElse(0);
         for (int i = Math.min(range, steps.size()); i >= 1; i--) {
           final Territory z = steps.get(i - 1);
           final List<Unit> reach = raggiungono(joining, z, false);
@@ -3608,7 +3931,8 @@ public final class Compiti {
       moves.add("soste_provate", tried);
       if (stop == null) {
         if (nemicaFine(centre, List.of()) <= sogliaZona(centre)) {
-          moves.addProperty("flotta", "ferma in " + centre.getName() + " (nessuna sosta sicura piu' avanti)");
+          moves.addProperty(
+              "flotta", "ferma in " + centre.getName() + " (nessuna sosta sicura piu' avanti)");
           return centre;
         }
         // the safest zone the fleet reaches
@@ -3634,16 +3958,25 @@ public final class Compiti {
         final List<Unit> ships = g.getValue().stream().filter(Compiti::nave).toList();
         movedN += muoviGruppo(g.getKey(), stop, ships);
       }
-      moves.addProperty("flotta", "verso " + dest.getName() + ": sosta " + stop.getName() + ", navi mosse " + movedN);
-      lines.add("  Flotta verso " + dest.getName() + ": sosta " + stop.getName() + " (" + movedN + " navi mosse)");
+      moves.addProperty(
+          "flotta",
+          "verso " + dest.getName() + ": sosta " + stop.getName() + ", navi mosse " + movedN);
+      lines.add(
+          "  Flotta verso "
+              + dest.getName()
+              + ": sosta "
+              + stop.getName()
+              + " ("
+              + movedN
+              + " navi mosse)");
       return stop;
     }
 
     /**
      * Moves {@code ships} (and the planes on the carriers among them) as far as possible. The
-     * nation's transports that stay in {@code from} keep the minimum guard of warships (the strongest
-     * defenders first) that makes the zone holdable (A1): ships are never taken from transports the
-     * enemy would sink.
+     * nation's transports that stay in {@code from} keep the minimum guard of warships (the
+     * strongest defenders first) that makes the zone holdable (A1): ships are never taken from
+     * transports the enemy would sink.
      */
     int muoviGruppo(final Territory from, final Territory to, final List<Unit> ships0) {
       final List<Unit> ships = new ArrayList<>(ships0);
@@ -3656,12 +3989,14 @@ public final class Compiti {
       if (!staying.isEmpty() && from.isWater()) {
         final List<Unit> leaving = ships.stream().filter(Compiti::daGuerra).toList();
         if (!leaving.isEmpty()
-            && TrasportiProtetti.valuta(p, from, List.of(), leaving).vittoria() > sogliaZona(from)) {
+            && TrasportiProtetti.valuta(p, from, List.of(), leaving).vittoria()
+                > sogliaZona(from)) {
           final List<Unit> guard = new ArrayList<>();
           final List<Unit> pool =
               leaving.stream()
-                  .sorted(Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getDefense(player))
-                      .thenComparing(u -> u.getId().toString()))
+                  .sorted(
+                      Comparator.comparingInt((Unit u) -> -u.getUnitAttachment().getDefense(player))
+                          .thenComparing(u -> u.getId().toString()))
                   .toList();
           for (final Unit g : pool) {
             guard.add(g);
@@ -3672,7 +4007,14 @@ public final class Compiti {
             }
           }
           ships.removeAll(guard);
-          lines.add("  Guardia in " + from.getName() + " per " + staying.size() + " trasporti: " + guard.size() + " navi");
+          lines.add(
+              "  Guardia in "
+                  + from.getName()
+                  + " per "
+                  + staying.size()
+                  + " trasporti: "
+                  + guard.size()
+                  + " navi");
         }
       }
       if (ships.isEmpty()) {
@@ -3693,8 +4035,10 @@ public final class Compiti {
         if (moveDel.performMove(new MoveDescription(group, rr)).isEmpty()) {
           // the planes of the carriers follow
           if (ships.stream().anyMatch(Matches.unitIsCarrier())) {
-            for (final Unit pl : from.getMatches(Matches.unitIsOwnedBy(player).and(Matches.unitIsAir()))) {
-              final Route pr = data.getMap().getRoute(from, steps.get(i - 1), x -> true).orElse(null);
+            for (final Unit pl :
+                from.getMatches(Matches.unitIsOwnedBy(player).and(Matches.unitIsAir()))) {
+              final Route pr =
+                  data.getMap().getRoute(from, steps.get(i - 1), x -> true).orElse(null);
               if (pr != null) {
                 moveDel.performMove(new MoveDescription(List.of(pl), pr));
               }
@@ -3712,19 +4056,33 @@ public final class Compiti {
      * zone that cannot be held moves to the safest zone it reaches.
      */
     void muoviTrasporti(@Nullable final Territory target, final JsonObject moves) {
+      final boolean livello = Alleanza.ha(this);
       final List<Territory> port = zonePorto();
       int loadedMoved = 0;
       int emptyMoved = 0;
       for (final var g : perZona(trasporti()).entrySet()) {
         final Territory at = g.getKey();
         final List<Unit> loaded =
-            g.getValue().stream().filter(u -> u.isTransporting() && u.getMovementLeft().signum() > 0 && u.getUnloaded().isEmpty()).toList();
+            g.getValue().stream()
+                .filter(
+                    u ->
+                        u.isTransporting()
+                            && u.getMovementLeft().signum() > 0
+                            && u.getUnloaded().isEmpty())
+                .toList();
         final List<Unit> empty =
-            g.getValue().stream().filter(u -> !u.isTransporting() && u.getMovementLeft().signum() > 0 && u.getUnloaded().isEmpty()).toList();
+            g.getValue().stream()
+                .filter(
+                    u ->
+                        !u.isTransporting()
+                            && u.getMovementLeft().signum() > 0
+                            && u.getUnloaded().isEmpty())
+                .toList();
         if (!loaded.isEmpty() && target != null && !at.equals(target)) {
           loadedMoved += viaggio(at, target, loaded);
         }
-        if (!empty.isEmpty() && !port.isEmpty() && !port.contains(at)) {
+        // step P2-bis: with the alliance level the empty transports are Hard's
+        if (!livello && !empty.isEmpty() && !port.isEmpty() && !port.contains(at)) {
           // with troops waiting at a held bridgehead next to the zone the empties stay
           emptyMoved += viaggio(at, port.get(0), empty);
         }
@@ -3810,10 +4168,12 @@ public final class Compiti {
     int aereiAllaPortaerei() {
       int n = 0;
       final List<Unit> planes =
-          mie(u -> Matches.unitCanLandOnCarrier().test(u)
-              && dove(u) != null
-              && !dove(u).isWater()
-              && u.getMovementLeft().signum() > 0);
+          mie(
+              u ->
+                  Matches.unitCanLandOnCarrier().test(u)
+                      && dove(u) != null
+                      && !dove(u).isWater()
+                      && u.getMovementLeft().signum() > 0);
       for (final Unit pl : planes) {
         final Territory from = dove(pl);
         Territory best = null;
@@ -3828,7 +4188,9 @@ public final class Compiti {
             continue;
           }
           final Route r = data.getMap().getRoute(from, z, x -> true).orElse(null);
-          if (r != null && r.numberOfSteps() <= pl.getMovementLeft().intValue() && r.numberOfSteps() < bestSteps) {
+          if (r != null
+              && r.numberOfSteps() <= pl.getMovementLeft().intValue()
+              && r.numberOfSteps() < bestSteps) {
             best = z;
             bestSteps = r.numberOfSteps();
           }

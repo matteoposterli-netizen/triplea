@@ -348,10 +348,7 @@ public final class ProPlusTuning implements ProTuning {
   /** Step R3a: no transport for Hard while an idle empty usable one exists (USA, UK). */
   @Override
   public boolean buysSeaTransports(final ProData proData) {
-    // step P1: the task decides the nation's transports (capacity rule)
-    if (Compiti.vietaTrasporti(proData)) {
-      return operationAnswer(false);
-    }
+    // step P2-bis: the task no longer bans Hard's transports
     return !SbarcoCoordinato.tetto(proData);
   }
 

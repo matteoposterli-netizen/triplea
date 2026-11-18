@@ -30,10 +30,10 @@ import java.util.function.Predicate;
  *   <li>{@code capitale}: the capital taken: an enemy nation that loses it collects nothing (its
  *       production); an allied nation that gets it back collects again (the production of what it
  *       owns);
- *   <li>{@code obiettivi}: the national objectives of the map ({@code objectiveAttachment...}, their
- *       territory-ownership part) that stop for the enemy or start for the alliance;
- *   <li>{@code urgenza}: the cities of the enemy's victory condition (the map's victory triggers) on
- *       the direction that are in play (taken from the enemy, or allied and threatened), {@code
+ *   <li>{@code obiettivi}: the national objectives of the map ({@code objectiveAttachment...},
+ *       their territory-ownership part) that stop for the enemy or start for the alliance;
+ *   <li>{@code urgenza}: the cities of the enemy's victory condition (the map's victory triggers)
+ *       on the direction that are in play (taken from the enemy, or allied and threatened), {@code
  *       peso_urgenza_pu} each, divided by the cities the enemy still lacks to win.
  * </ul>
  */
@@ -77,7 +77,8 @@ final class ValoreDirezione {
     double capital = 0;
     final JsonObject cj = new JsonObject();
     for (final Territory t : taken) {
-      final Optional<String> of = TerritoryAttachment.get(t).flatMap(TerritoryAttachment::getCapital);
+      final Optional<String> of =
+          TerritoryAttachment.get(t).flatMap(TerritoryAttachment::getCapital);
       if (of.isEmpty()) {
         continue;
       }
@@ -108,8 +109,7 @@ final class ValoreDirezione {
           continue;
         }
         final Optional<RulesAttachment.OwnershipTest> ot = ra.getOwnershipTest();
-        if (ot.isEmpty()
-            || ot.get().territories().stream().noneMatch(taken::contains)) {
+        if (ot.isEmpty() || ot.get().territories().stream().noneMatch(taken::contains)) {
           continue;
         }
         final boolean before = attivo(data, ot.get(), Map.of());
@@ -127,7 +127,8 @@ final class ValoreDirezione {
         x.addProperty("obiettivo", ra.getName());
         x.addProperty("nazione", p.getName());
         x.addProperty("pu", v);
-        x.addProperty("effetto", nemico(player, p) ? "salta al nemico" : "si attiva per l'alleanza");
+        x.addProperty(
+            "effetto", nemico(player, p) ? "salta al nemico" : "si attiva per l'alleanza");
         x.addProperty("solo_proprieta", ot.get().ownershipOnly());
         oj.add(x);
       }

@@ -80,8 +80,7 @@ class ConvoglioItaliaTest extends AbstractClientSettingTestCase {
     clean();
     final Programmi.Turno p = turno(4, "Purchase");
     final JsonObject turn = new JsonObject();
-    Assedio.acquistiItalia(
-        data, italy(), 30, p, 0, turn, new JsonObject(), new ArrayList<>());
+    Assedio.acquistiItalia(data, italy(), 30, p, 0, turn, new JsonObject(), new ArrayList<>());
     assertThat(rows("italia_convoglio")).isEmpty();
     assertThat(rows("italia_africa")).isNotEmpty();
   }
@@ -109,7 +108,9 @@ class ConvoglioItaliaTest extends AbstractClientSettingTestCase {
     row = last("italia_convoglio");
     a = row.getAsJsonArray("alternative").get(0).getAsJsonObject();
     assertThat(a.get("stato").getAsString()).isIn(ConvoglioItalia.SBARCO, ConvoglioItalia.NESSUNA);
-    assertThat(row.toString()).doesNotContain("prima della guerra").doesNotContain("United Kingdom");
+    assertThat(row.toString())
+        .doesNotContain("prima della guerra")
+        .doesNotContain("United Kingdom");
     final ConvoglioItalia.Meta meta = ConvoglioItalia.meta(p, List.of());
     assertThat(meta.stato()).isEqualTo(ConvoglioItalia.SBARCO);
     assertThat(ConfigR4.get().italiaLivello1()).contains(meta.terra().getName());
@@ -154,12 +155,14 @@ class ConvoglioItaliaTest extends AbstractClientSettingTestCase {
     final List<Unit> transports = add(z96, "Italians", "transport", 1);
     add(territory("98 Sea Zone"), "British", "destroyer", 1);
     Programmi.Turno p = turno(4, "Non Combat Move");
-    final TrasportiProtetti.Sicurezza alone = TrasportiProtetti.valuta(p, z96, transports, List.of());
+    final TrasportiProtetti.Sicurezza alone =
+        TrasportiProtetti.valuta(p, z96, transports, List.of());
     // German fighters on a German carrier in the zone (no German unit is moved for this)
     add(z96, "Germans", "carrier", 1);
     final List<Unit> planes = add(z96, "Germans", "fighter", 2);
     p = turno(4, "Non Combat Move");
-    final TrasportiProtetti.Sicurezza with = TrasportiProtetti.valuta(p, z96, transports, List.of());
+    final TrasportiProtetti.Sicurezza with =
+        TrasportiProtetti.valuta(p, z96, transports, List.of());
     assertThat(with.difensori()).containsAll(planes);
     assertThat(with.vittoria()).isLessThan(alone.vittoria());
   }

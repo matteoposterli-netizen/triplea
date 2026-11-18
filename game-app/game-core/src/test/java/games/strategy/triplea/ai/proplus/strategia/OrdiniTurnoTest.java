@@ -99,7 +99,10 @@ class OrdiniTurnoTest extends AbstractClientSettingTestCase {
     System.clearProperty(DiarySettings.FOLDER_PROPERTY);
   }
 
-  /** A transport answering the strategist with {@code strategy} and the turn orders with {@code orders}. */
+  /**
+   * A transport answering the strategist with {@code strategy} and the turn orders with {@code
+   * orders}.
+   */
   private void llm(final String strategy, final Function<Richiesta, String> orders) {
     Decisori.set(data.getProperties(), "Allies", Modalita.CHIAVE_API.id(), "");
     Decisori.fabbricaLlm =
@@ -126,7 +129,16 @@ class OrdiniTurnoTest extends AbstractClientSettingTestCase {
                                 ? orders.apply(r)
                                 : strategy;
                         return new Risposta(
-                            text, "Haiku", "claude-haiku-5-5", 1000, 200, 3000, 0, 0.0005, false, 500);
+                            text,
+                            "Haiku",
+                            "claude-haiku-5-5",
+                            1000,
+                            200,
+                            3000,
+                            0,
+                            0.0005,
+                            false,
+                            500);
                       }
                     }));
   }
@@ -137,7 +149,10 @@ class OrdiniTurnoTest extends AbstractClientSettingTestCase {
             .orElseThrow()
             .storico()
             .get(
-                StatoMaggiore.getState(data.getProperties(), "Allies").orElseThrow().storico().size()
+                StatoMaggiore.getState(data.getProperties(), "Allies")
+                        .orElseThrow()
+                        .storico()
+                        .size()
                     - 1)
             .getAsJsonObject();
     return last.getAsJsonObject(OrdiniTurno.KEY)
@@ -158,7 +173,8 @@ class OrdiniTurnoTest extends AbstractClientSettingTestCase {
     assertThat(merged.get("piano").getAsString()).isEqualTo("1");
     assertThat(merged.get("postura").getAsString()).isEqualTo("CONTRASTO");
     assertThat(merged.getAsJsonArray("operazioni").toString())
-        .contains("\"id\":\"Overlord UK\",\"decisione\":\"lancia\",\"perdita_trasporti_accettata_max_TUV\":30.0");
+        .contains(
+            "\"id\":\"Overlord UK\",\"decisione\":\"lancia\",\"perdita_trasporti_accettata_max_TUV\":30.0");
     // not a British operation: ignored
     assertThat(merged.getAsJsonArray("operazioni").toString())
         .doesNotContain("\"id\":\"Overlord USA\",\"decisione\":\"annulla\"");
@@ -296,8 +312,11 @@ class OrdiniTurnoTest extends AbstractClientSettingTestCase {
     final Territory germany = data.getMap().getTerritoryOrThrow("Germany");
     germany.getUnitCollection().removeAll(germany.getUnits());
 
-    final JsonObject changes = OrdiniTurno.inizioTurno(data, british).orElseThrow().ingresso()
-        .getAsJsonObject("cambiamenti");
+    final JsonObject changes =
+        OrdiniTurno.inizioTurno(data, british)
+            .orElseThrow()
+            .ingresso()
+            .getAsJsonObject("cambiamenti");
 
     assertThat(changes.getAsJsonArray("conquiste").toString())
         .contains("\"territorio\":\"France\",\"da\":\"" + was + "\",\"a\":\"British\"");
@@ -343,7 +362,8 @@ class OrdiniTurnoTest extends AbstractClientSettingTestCase {
             });
     orders
         .getAsJsonArray("obiettivi_nazionali")
-        .forEach(e -> assertThat(e.getAsJsonObject().get("nazione").getAsString()).isEqualTo("British"));
+        .forEach(
+            e -> assertThat(e.getAsJsonObject().get("nazione").getAsString()).isEqualTo("British"));
     assertThat(Ingresso.readableName("objectiveAttachment_Germans_3_Control_Caucasus", "Germans"))
         .isEqualTo("Control Caucasus");
   }
@@ -421,7 +441,11 @@ class OrdiniTurnoTest extends AbstractClientSettingTestCase {
 
     assertThat(v.direttive().getAsJsonObject("rischio").get("Ovest").getAsInt()).isZero();
     assertThat(
-            v.direttive().getAsJsonObject("rischio").getAsJsonObject("British").get("Est").getAsInt())
+            v.direttive()
+                .getAsJsonObject("rischio")
+                .getAsJsonObject("British")
+                .get("Est")
+                .getAsInt())
         .isZero();
   }
 }

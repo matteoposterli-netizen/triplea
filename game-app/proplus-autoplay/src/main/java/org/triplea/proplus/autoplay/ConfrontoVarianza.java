@@ -17,8 +17,8 @@ import org.triplea.proplus.autoplay.ConfrontoHard.Stat;
 import org.triplea.proplus.autoplay.RiepilogoGenerale.Game;
 
 /**
- * Step VARIANZA: where the difference between runs comes from. Written only for games whose
- * folder carries a replica and a seed ({@code ...-r<replica>-seme<seed>}). Games are grouped by
+ * Step VARIANZA: where the difference between runs comes from. Written only for games whose folder
+ * carries a replica and a seed ({@code ...-r<replica>-seme<seed>}). Games are grouped by
  * configuration, group of seeds (below 100 or from 100) and replica; for each group the VC at the
  * end of the changed side with a 95% interval, the length of the game and of the side's turns; then
  * the seed-group effect, the difference from Hard vs Hard, the replica effect (same seeds played
@@ -91,7 +91,11 @@ final class ConfrontoVarianza {
         .append(label)
         .append(" | IC 95% | Durata partita (s) | Turno medio ")
         .append(label)
-        .append(" (s) |\n|---|---|---|---|---|---|---|---|\n");
+        .append(
+"""
+ (s) |
+|---|---|---|---|---|---|---|---|
+""");
     groups.forEach(
         (config, bySeeds) ->
             bySeeds.forEach(
@@ -119,8 +123,11 @@ final class ConfrontoVarianza {
                         })));
 
     md.append(
-        "\n| Differenza (A − B) | Δ VC | IC 95% (Welch) | Esito | Semi per l'80% |\n"
-            + "|---|---|---|---|---|\n");
+"""
+
+| Differenza (A − B) | Δ VC | IC 95% (Welch) | Esito | Semi per l'80% |
+|---|---|---|---|---|
+""");
     groups.forEach(
         (config, bySeeds) -> {
           // seed-group effect, replica 1
@@ -153,11 +160,7 @@ final class ConfrontoVarianza {
                   final List<JsonObject> mine = byReplica.get(1);
                   if (mine != null && !ref.isEmpty()) {
                     difference(
-                        md,
-                        config + " − " + reference + " (semi " + seeds + ")",
-                        mine,
-                        ref,
-                        vc);
+                        md, config + " − " + reference + " (semi " + seeds + ")", mine, ref, vc);
                   }
                 });
           }
@@ -264,7 +267,11 @@ final class ConfrontoVarianza {
                 .add(e.json()));
     md.append("\n| Macchina | ")
         .append(reference)
-        .append(": partite, VC | Altre configurazioni: partite, VC |\n|---|---|---|\n");
+        .append(
+"""
+: partite, VC | Altre configurazioni: partite, VC |
+|---|---|---|
+""");
     final java.util.Set<String> keys = new java.util.TreeSet<>(ref.keySet());
     keys.addAll(other.keySet());
     for (final String k : keys) {
@@ -334,8 +341,7 @@ final class ConfrontoVarianza {
     }
     final double half =
         ConfrontoConferma.tQuantile975(s.count() - 1.0) * s.sdValue() / Math.sqrt(s.count());
-    return String.format(
-        Locale.ROOT, "[%.2f, %.2f]", s.meanValue() - half, s.meanValue() + half);
+    return String.format(Locale.ROOT, "[%.2f, %.2f]", s.meanValue() - half, s.meanValue() + half);
   }
 
   /** "r 0.12 (IC 95% -0.30, 0.50, n 30)" with Fisher's z. */
@@ -361,7 +367,7 @@ final class ConfrontoVarianza {
     }
     final double r = sxy / Math.sqrt(sxx * syy);
     final double z = 0.5 * Math.log((1 + r) / (1 - r));
-    final double half = 1.959964 / Math.sqrt(n - 3.0);
+    final double half = 1.959_964 / Math.sqrt(n - 3.0);
     return String.format(
         Locale.ROOT,
         "r %.2f (IC 95%% %.2f, %.2f, n %d)",

@@ -6,14 +6,14 @@ import java.util.Locale;
 
 /**
  * Step P1: one obstacle between a task's result and the board, with its numbers. {@code pu} is its
- * size in PU-equivalents (what removing it costs, or {@code turni x pu_per_turno_di_distanza} for
- * a distance), so obstacles of different types can be added and compared.
+ * size in PU-equivalents (what removing it costs, or {@code turni x pu_per_turno_di_distanza} for a
+ * distance), so obstacles of different types can be added and compared.
  *
  * @param tipo the kind of obstacle
  * @param luogo the zone or territory
  * @param pu size in PU-equivalents (0 = no obstacle)
- * @param vittoria the relevant win% (MARE: enemy win on the zone at the end of the turn, or our
- *     win against the fleet in the zone; TERRA: our win on the target), -1 if none
+ * @param vittoria the relevant win% (MARE: enemy win on the zone at the end of the turn, or our win
+ *     against the fleet in the zone; TERRA: our win on the target), -1 if none
  * @param numeri the numbers (own forces, enemy forces, ...), for the register
  */
 public record Ostacolo(Tipo tipo, String luogo, double pu, double vittoria, JsonObject numeri) {

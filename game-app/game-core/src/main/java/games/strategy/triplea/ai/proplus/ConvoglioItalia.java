@@ -276,11 +276,14 @@ public final class ConvoglioItalia {
     }
     // E4: still not safe with the warships that lower the risk: the rest to warships anyway (the
     // fleet grows until the route is safe)
-    if (arrival != null && !TrasportiProtetti.sicura(after, TrasportiProtetti.Config.get().soglia())) {
+    if (arrival != null
+        && !TrasportiProtetti.sicura(after, TrasportiProtetti.Config.get().soglia())) {
       final int used = warships.values().stream().mapToInt(Integer::intValue).sum();
       final Map<String, Integer> more =
           Impegno.composizione(
-              pu - Impegno.costo(data, p.player, warships), ConfigR4.get().tipiFlottaItalia(), costs);
+              pu - Impegno.costo(data, p.player, warships),
+              ConfigR4.get().tipiFlottaItalia(),
+              costs);
       final Map<String, Integer> all = new LinkedHashMap<>(warships);
       int room = Math.max(0, places - used);
       for (final var e : more.entrySet()) {
@@ -296,7 +299,8 @@ public final class ConvoglioItalia {
     final int shipCost = Impegno.costo(data, p.player, warships);
     final int shipUnits = warships.values().stream().mapToInt(Integer::intValue).sum();
     // the route safe (or nothing to buy for it): complete pairs with the rest
-    final boolean safe = arrival != null && TrasportiProtetti.sicura(after, TrasportiProtetti.Config.get().soglia());
+    final boolean safe =
+        arrival != null && TrasportiProtetti.sicura(after, TrasportiProtetti.Config.get().soglia());
     Map<String, Integer> pairs = Map.of();
     if (safe) {
       pairs =
@@ -367,7 +371,8 @@ public final class ConvoglioItalia {
 
   /** The convoy's arrival zone: the meta's zone nearest to the port. */
   @Nullable
-  static Territory arrivo(final Programmi.Turno p, final Meta meta, final List<Territory> portZones) {
+  static Territory arrivo(
+      final Programmi.Turno p, final Meta meta, final List<Territory> portZones) {
     Territory best = null;
     int bestD = Integer.MAX_VALUE;
     for (final Territory z : meta.zone()) {
@@ -383,8 +388,8 @@ public final class ConvoglioItalia {
   // ======================================================================== non combat
 
   /**
-   * E1-E3 in Italy's non-combat move (instead of R4's shuttle): the empty transports come back
-   * with their escort to the port (safe stops); loading at the port; the loaded transports sail in
+   * E1-E3 in Italy's non-combat move (instead of R4's shuttle): the empty transports come back with
+   * their escort to the port (safe stops); loading at the port; the loaded transports sail in
    * convoy toward the arrival zone with the minimum escort (A1); arrived next to an Axis base they
    * unload there. Returns the units Hard leaves.
    */
@@ -416,7 +421,10 @@ public final class ConvoglioItalia {
     }
     final Set<String> escortIds = new HashSet<>();
     entries.forEach(
-        e -> e.getAsJsonObject().getAsJsonArray("scorta").forEach(x -> escortIds.add(x.getAsString())));
+        e ->
+            e.getAsJsonObject()
+                .getAsJsonArray("scorta")
+                .forEach(x -> escortIds.add(x.getAsString())));
     for (final var e : returning.entrySet()) {
       final List<Unit> group = new ArrayList<>(e.getValue());
       e.getKey()
@@ -649,7 +657,8 @@ public final class ConvoglioItalia {
             reach.add(c);
             continue;
           }
-          final Optional<Route> cr = p.data.getMap().getRouteForUnits(at, x, free, List.of(c), p.player);
+          final Optional<Route> cr =
+              p.data.getMap().getRouteForUnits(at, x, free, List.of(c), p.player);
           if (cr.isPresent() && cr.get().numberOfSteps() <= c.getMovementLeft().intValue()) {
             reach.add(c);
             own.put(c, cr.get());
@@ -770,8 +779,8 @@ public final class ConvoglioItalia {
 
   /**
    * E1 without an Axis base: in the combat move (before Hard's) the loaded convoy next to an enemy
-   * African target lands on the one of highest value with win >= {@code soglia_sbarco}. Returns
-   * the units moved.
+   * African target lands on the one of highest value with win >= {@code soglia_sbarco}. Returns the
+   * units moved.
    */
   public static Set<Unit> combattimento(
       final ProData proData,
@@ -793,7 +802,8 @@ public final class ConvoglioItalia {
               calc,
               player,
               alliance,
-              new CampagnaOmbra.Calcolo(proData, calc, player, alliance, CampagnaOmbra.Config.get()),
+              new CampagnaOmbra.Calcolo(
+                  proData, calc, player, alliance, CampagnaOmbra.Config.get()),
               lines);
       final Map<Territory, List<Unit>> loadedByZone = new LinkedHashMap<>();
       for (final Unit tr : trasporti(p)) {
@@ -867,7 +877,10 @@ public final class ConvoglioItalia {
     final Set<String> escorts = new HashSet<>();
     scorte(st)
         .forEach(
-            e -> e.getAsJsonObject().getAsJsonArray("scorta").forEach(x -> escorts.add(x.getAsString())));
+            e ->
+                e.getAsJsonObject()
+                    .getAsJsonArray("scorta")
+                    .forEach(x -> escorts.add(x.getAsString())));
     for (final Territory t : data.getMap().getTerritories()) {
       for (final Unit u : t.getUnitCollection()) {
         if (!u.isOwnedBy(player)) {
@@ -938,7 +951,8 @@ public final class ConvoglioItalia {
     final JsonObject par = new JsonObject();
     par.addProperty("soglia_trasporti", TrasportiProtetti.Config.get().soglia());
     par.addProperty("soglia_sbarco", Config.get().sogliaSbarco());
-    TrasportiProtetti.registra(p.data, st, p.player, "italia_convoglio", alt, choice, code, why, par);
+    TrasportiProtetti.registra(
+        p.data, st, p.player, "italia_convoglio", alt, choice, code, why, par);
     SbarcoCoordinato.salva(p.data.getProperties(), p.alliance, st);
   }
 }

@@ -477,7 +477,12 @@ public final class StimaUnica {
         impegno(proData.getData(), def.alleanza(), target, TipoBersaglio.of(def.id()));
     final Minaccia m = op.minaccia(target);
     return tenuta(
-        proData, calc, target, m, parte(op, target, m, imp.frazione()), op.alliedDefendersOf(target));
+        proData,
+        calc,
+        target,
+        m,
+        parte(op, target, m, imp.frazione()),
+        op.alliedDefendersOf(target));
   }
 
   /** The estimate of any operation of the strategist now (conquest before the take, else hold). */

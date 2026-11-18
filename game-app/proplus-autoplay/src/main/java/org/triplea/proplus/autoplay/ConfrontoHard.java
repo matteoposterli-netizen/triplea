@@ -12,12 +12,12 @@ import java.util.stream.Collectors;
 import org.triplea.proplus.autoplay.RiepilogoGenerale.Game;
 
 /**
- * Step CONFRONTO: Pro+ against the original Hard. Written only when the games include the
- * reference "Hard / Hard" and at least one configuration where one alliance is Pro+ and the other
- * Hard. For every configuration: VC at 1/3, 2/3 and end, wins, final PUs and income, TUV lost,
- * capitals lost, real landings (mean of the seeds); for the alliance that changes against Hard vs
- * Hard: the same values with min-max over the seeds, the difference from the reference and a
- * simple verdict on the final VC.
+ * Step CONFRONTO: Pro+ against the original Hard. Written only when the games include the reference
+ * "Hard / Hard" and at least one configuration where one alliance is Pro+ and the other Hard. For
+ * every configuration: VC at 1/3, 2/3 and end, wins, final PUs and income, TUV lost, capitals lost,
+ * real landings (mean of the seeds); for the alliance that changes against Hard vs Hard: the same
+ * values with min-max over the seeds, the difference from the reference and a simple verdict on the
+ * final VC.
  */
 final class ConfrontoHard {
   static final String HARD = "Hard";
@@ -42,7 +42,8 @@ final class ConfrontoHard {
                     .add(g.json()));
     final List<JsonObject> ref = byConfig.get(reference);
     if (ref == null
-        || byConfig.keySet().stream().noneMatch(c -> changedSide(byConfig.get(c), alliances) != null)) {
+        || byConfig.keySet().stream()
+            .noneMatch(c -> changedSide(byConfig.get(c), alliances) != null)) {
       return;
     }
     final String labels =
@@ -52,7 +53,8 @@ final class ConfrontoHard {
         .append(")\n\nMedia dei semi, ")
         .append(labels)
         .append("; VC tra parentesi min-max. PU = cassa a fine partita, reddito = produzione;")
-        .append(" TUV perso = somma delle perdite in tutte le battaglie.\n\n| Configurazione | Partite |");
+        .append(
+            " TUV perso = somma delle perdite in tutte le battaglie.\n\n| Configurazione | Partite |");
     vcRounds.forEach(r -> md.append(" VC R").append(r).append(" |"));
     md.append(
         " Vittorie | PU finali | Reddito finale | TUV perso | Capitali perse | Sbarchi veri |\n|---|---|");
@@ -63,8 +65,7 @@ final class ConfrontoHard {
           md.append("| ").append(config).append(" | ").append(list.size()).append(" |");
           for (final int r : vcRounds) {
             md.append(' ')
-                .append(
-                    join(alliances, a -> Stat.of(list, j -> vc(j, a, r)).meanAndRange()))
+                .append(join(alliances, a -> Stat.of(list, j -> vc(j, a, r)).meanAndRange()))
                 .append(" |");
           }
           md.append(' ')
@@ -141,10 +142,11 @@ final class ConfrontoHard {
         });
 
     md.append(
-        "\nRisposta (tutte le partite dello stesso tipo di AI per lato, piani insieme; verdetto"
-            + " sulle VC finali del lato: \"piu' forte\"/\"piu' debole\" se la differenza supera"
-            + " la deviazione standard media dei due gruppi e mezza VC, altrimenti \"non"
-            + " distinguibile\"; indice semplice, non un test statistico):\n\n");
+"""
+
+Risposta (tutte le partite dello stesso tipo di AI per lato, piani insieme; verdetto sulle VC finali del lato: "piu' forte"/"piu' debole" se la differenza supera la deviazione standard media dei due gruppi e mezza VC, altrimenti "non distinguibile"; indice semplice, non un test statistico):
+
+""");
     byKind.forEach(
         (key, list) -> {
           final String side = key.substring(0, key.indexOf('|'));
@@ -231,7 +233,10 @@ final class ConfrontoHard {
     final double d = value.meanValue() - reference.meanValue();
     final double threshold =
         Math.max(
-            0.5, Math.sqrt((value.sdValue() * value.sdValue() + reference.sdValue() * reference.sdValue()) / 2));
+            0.5,
+            Math.sqrt(
+                (value.sdValue() * value.sdValue() + reference.sdValue() * reference.sdValue())
+                    / 2));
     if (d > threshold) {
       return "piu' forte";
     }
@@ -269,7 +274,8 @@ final class ConfrontoHard {
   }
 
   /** TUV lost by the enemies of {@code alliance} / TUV lost by it (NaN when it lost nothing). */
-  static double tuvRatio(final JsonObject json, final String alliance, final List<String> alliances) {
+  static double tuvRatio(
+      final JsonObject json, final String alliance, final List<String> alliances) {
     final double own = lostTuv(json, alliance);
     final double enemy =
         alliances.stream()

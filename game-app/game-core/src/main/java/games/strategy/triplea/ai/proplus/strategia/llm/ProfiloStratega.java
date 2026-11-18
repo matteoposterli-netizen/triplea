@@ -123,8 +123,8 @@ public final class ProfiloStratega {
   private static final String KEY_COMPITI = "compiti";
 
   /**
-   * Step P1/P2: "Compiti (USA + Regno Unito)" for the Allies (turns on "impegno" and "compiti"). Off
-   * unless set.
+   * Step P1/P2: "Compiti (USA + Regno Unito)" for the Allies (turns on "impegno" and "compiti").
+   * Off unless set.
    */
   public boolean compiti() {
     return si(KEY_COMPITI);

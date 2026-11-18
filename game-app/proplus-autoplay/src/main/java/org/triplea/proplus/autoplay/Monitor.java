@@ -128,6 +128,7 @@ final class Monitor {
 
   /** Step R4: cities, factories, Moscow, Africa and the national objectives every round. */
   private final MonitorR4 r4;
+
   private final MonitorP1 p1;
   private final MonitorP2 p2;
 
@@ -229,6 +230,7 @@ final class Monitor {
     runningPlayer = Optional.ofNullable(step.getPlayerId()).map(GamePlayer::getName).orElse("-");
     r4.beforeStep(runningStep);
     p1.beforeStep(runningStep, runningPlayer);
+    p2.beforeStep(runningStep, runningPlayer);
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiPrima();
     }
@@ -273,6 +275,7 @@ final class Monitor {
     recordDelayTools(lastRound);
     r4.afterStep(runningStep, runningPlayer, lastRound);
     p1.afterStep(runningStep, runningPlayer, lastRound);
+    p2.afterStep(runningStep, runningPlayer, lastRound);
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiDopo(lastRound);
     }
@@ -582,6 +585,8 @@ final class Monitor {
       }
     }
     final Map<String, Integer> byTerritory = new TreeMap<>();
+    final Map<String, Integer> byTask = new TreeMap<>();
+    final Set<String> taskIds = MonitorP2.scaricateDalCompito(data, runningPlayer, round);
     final Map<String, String> phase = new HashMap<>();
     for (final Territory z : data.getMap().getTerritories()) {
       if (!z.isWater()) {
@@ -601,6 +606,10 @@ final class Monitor {
           }
           landedCounted.add(u);
           byTerritory.merge(at.getName(), 1, Integer::sum);
+          // step P2-bis: unloaded by the task (it moves before Hard) or by Hard
+          if (taskIds.contains(u.getId().toString())) {
+            byTask.merge(at.getName(), 1, Integer::sum);
+          }
           phase.put(at.getName(), u.getWasUnloadedInCombatPhase() ? "combattimento" : "movimento");
         }
       }
@@ -613,6 +622,7 @@ final class Monitor {
           l.addProperty("alleanza", allianceOf(runningPlayer));
           l.addProperty("territorio", territory);
           l.addProperty("unita", units);
+          l.addProperty("unita_compito", byTask.getOrDefault(territory, 0));
           l.addProperty("fase", phase.get(territory));
           landings.add(l);
         });
@@ -689,7 +699,8 @@ final class Monitor {
       if (!fought.contains(z) && attLost.isEmpty() && defLost.isEmpty()) {
         continue;
       }
-      final List<Unit> mine = def.stream().filter(u -> nation.equals(u.getOwner().getName())).toList();
+      final List<Unit> mine =
+          def.stream().filter(u -> nation.equals(u.getOwner().getName())).toList();
       final List<Unit> mineLost =
           defLost.stream().filter(u -> nation.equals(u.getOwner().getName())).toList();
       int loadedLost = 0;

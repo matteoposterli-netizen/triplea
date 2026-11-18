@@ -16,13 +16,13 @@ import java.util.Optional;
 import lombok.experimental.UtilityClass;
 
 /**
- * LLM step, second level: the TURN ORDERS of a nation. At the start of the turn of each Pro+
- * nation with PUs (not those in {@code nazioni_senza_ordini} of the data file: Europe 1940 the
- * French), when its alliance uses an LLM mode, a short call gives only targets, operation
- * decisions and delay tools of the nation ({@link Direttive#applicaOrdini}); plan, posture and risk
- * stay those of the strategist of the round. Input: {@link Ingresso#ordiniTurno} (the strategic
- * directives, what changed since the alliance's last decision, the nation's compact state). Any
- * error = the nation plays the strategic directives (same fallback as the strategist).
+ * LLM step, second level: the TURN ORDERS of a nation. At the start of the turn of each Pro+ nation
+ * with PUs (not those in {@code nazioni_senza_ordini} of the data file: Europe 1940 the French),
+ * when its alliance uses an LLM mode, a short call gives only targets, operation decisions and
+ * delay tools of the nation ({@link Direttive#applicaOrdini}); plan, posture and risk stay those of
+ * the strategist of the round. Input: {@link Ingresso#ordiniTurno} (the strategic directives, what
+ * changed since the alliance's last decision, the nation's compact state). Any error = the nation
+ * plays the strategic directives (same fallback as the strategist).
  *
  * <p>The result is kept in the history entry of the round, key {@value #KEY}: {nation: {ordini,
  * direttive (merged), decisore}}; {@link PianoAttivo} reads the merged directives for that nation.

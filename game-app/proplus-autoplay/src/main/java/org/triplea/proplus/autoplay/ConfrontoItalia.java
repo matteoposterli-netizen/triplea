@@ -66,8 +66,10 @@ final class ConfrontoItalia {
             + ". Vittorie con IC 95% di Wilson; p = Fisher a due code sulle vittorie dell'Asse:"
             + " convoglio contro la stessa configurazione senza convoglio.\n\n");
     md.append(
-        "| Configurazione | Partite | Asse | Alleati | Stalli | Quota Asse | Confronto | p | Round"
-            + " vittoria mediana |\n|---|---|---|---|---|---|---|---|---|\n");
+"""
+| Configurazione | Partite | Asse | Alleati | Stalli | Quota Asse | Confronto | p | Round vittoria mediana |
+|---|---|---|---|---|---|---|---|---|
+""");
     for (final String c : configs) {
       final List<JsonObject> list = byConfig.get(c);
       final int n = list.size();
@@ -79,9 +81,7 @@ final class ConfrontoItalia {
         final String base = senzaConvoglio(c);
         if (byConfig.containsKey(base)) {
           final List<JsonObject> o = byConfig.get(base);
-          p =
-              ConfrontoR5.pText(
-                  ConfrontoR4.fisher(axis, n, ConfrontoR4.wins(o, "Axis"), o.size()));
+          p = ConfrontoR5.pText(ConfrontoR4.fisher(axis, n, ConfrontoR4.wins(o, "Axis"), o.size()));
           vs = "contro senza convoglio";
         }
       }
@@ -121,11 +121,11 @@ final class ConfrontoItalia {
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig) {
     md.append(
-        "\nItalia, medie a partita: unita' portate in Africa via mare (monitor, scaricate da"
-            + " trasporti in territori africani) per banda e totale; turni con la rotta sicura /"
-            + " turni di acquisto del convoglio; acquisti della quota per tipo (registro"
-            + " italia_africa); trasporti italiani a R8/R16 e persi; partenze rinunciate (convoglio"
-            + " FERMO); truppe ferme al porto dopo il carico (media per turno).\n\n");
+"""
+
+Italia, medie a partita: unita' portate in Africa via mare (monitor, scaricate da trasporti in territori africani) per banda e totale; turni con la rotta sicura / turni di acquisto del convoglio; acquisti della quota per tipo (registro italia_africa); trasporti italiani a R8/R16 e persi; partenze rinunciate (convoglio FERMO); truppe ferme al porto dopo il carico (media per turno).
+
+""");
     final List<String> bands = ConfrontoR6b.BANDE;
     md.append("| Configurazione |");
     bands.forEach(b -> md.append(" Africa ").append(b).append(" |"));
@@ -162,11 +162,15 @@ final class ConfrontoItalia {
             safe += a.has("rotta_sicura") && a.get("rotta_sicura").getAsBoolean() ? 1 : 0;
           } else if ("movimento".equals(a.get("fase").getAsString())) {
             moveTurns++;
-            left += a.has("truppe_rimaste_al_porto") ? a.get("truppe_rimaste_al_porto").getAsDouble() : 0;
+            left +=
+                a.has("truppe_rimaste_al_porto")
+                    ? a.get("truppe_rimaste_al_porto").getAsDouble()
+                    : 0;
           }
         }
         for (final JsonObject d : ConfrontoR5.decisioni(j, "trasporti_sicurezza")) {
-          if ("Italians".equals(d.get("nazione").getAsString()) && "FERMO".equals(ConfrontoR5.codice(d))) {
+          if ("Italians".equals(d.get("nazione").getAsString())
+              && "FERMO".equals(ConfrontoR5.codice(d))) {
             stopped++;
           }
         }
@@ -197,12 +201,14 @@ final class ConfrontoItalia {
           .append(
               ConfrontoR5.num1(
                   ConfrontoR5.mean(
-                      ConfrontoR5.values(list, j -> ConfrontoR5.nazione(j, 8, "Italians", "trasporti")))))
+                      ConfrontoR5.values(
+                          list, j -> ConfrontoR5.nazione(j, 8, "Italians", "trasporti")))))
           .append(" / ")
           .append(
               ConfrontoR5.num1(
                   ConfrontoR5.mean(
-                      ConfrontoR5.values(list, j -> ConfrontoR5.nazione(j, 16, "Italians", "trasporti")))))
+                      ConfrontoR5.values(
+                          list, j -> ConfrontoR5.nazione(j, 16, "Italians", "trasporti")))))
           .append(" | ")
           .append(
               ConfrontoR5.num1(
@@ -244,7 +250,9 @@ final class ConfrontoItalia {
                                     + ConfrontoR5.r4(j, r, "africa_asse_livello2", null)))));
       }
       md.append(" | ")
-          .append(ConfrontoR5.num1(ConfrontoR5.mean(ConfrontoR5.values(list, ConfrontoItalia::nordAfrica))));
+          .append(
+              ConfrontoR5.num1(
+                  ConfrontoR5.mean(ConfrontoR5.values(list, ConfrontoItalia::nordAfrica))));
       for (final int r : ROUNDS) {
         int axis = 0;
         int seen = 0;
@@ -262,7 +270,8 @@ final class ConfrontoItalia {
             .append(
                 ConfrontoR5.num1(
                     ConfrontoR5.mean(
-                        ConfrontoR5.values(list, j -> ConfrontoR5.nazione(j, r, "Italians", "reddito")))))
+                        ConfrontoR5.values(
+                            list, j -> ConfrontoR5.nazione(j, r, "Italians", "reddito")))))
             .append(" / ")
             .append(ConfrontoR5.num1(ConfrontoR5.mean(ConfrontoR5.values(list, j -> bonus(j, r)))));
       }
@@ -297,7 +306,8 @@ final class ConfrontoItalia {
     if (r == null || !r.has("r4") || !r.getAsJsonObject("r4").has("obiettivi")) {
       return Double.NaN;
     }
-    final JsonObject it = r.getAsJsonObject("r4").getAsJsonObject("obiettivi").getAsJsonObject("Italians");
+    final JsonObject it =
+        r.getAsJsonObject("r4").getAsJsonObject("obiettivi").getAsJsonObject("Italians");
     if (it == null) {
       return Double.NaN;
     }
@@ -315,12 +325,13 @@ final class ConfrontoItalia {
       final List<String> configs,
       final Map<String, List<JsonObject>> byConfig) {
     md.append(
-        "\nAttacchi subiti dalle navi italiane (registro attacco_subito del monitor), per"
-            + " attaccante: attacchi a partita, attaccanti e difensori medi per attacco, perdite"
-            + " italiane medie, trasporti italiani persi carichi / vuoti (somma a partita). Le zone"
-            + " piu' colpite.\n\n| Configurazione | Attaccante | Attacchi a partita | Zone |"
-            + " Attaccanti | Difensori | Perdite italiane | Trasporti persi carichi / vuoti |\n"
-            + "|---|---|---|---|---|---|---|---|\n");
+"""
+
+Attacchi subiti dalle navi italiane (registro attacco_subito del monitor), per attaccante: attacchi a partita, attaccanti e difensori medi per attacco, perdite italiane medie, trasporti italiani persi carichi / vuoti (somma a partita). Le zone piu' colpite.
+
+| Configurazione | Attaccante | Attacchi a partita | Zone | Attaccanti | Difensori | Perdite italiane | Trasporti persi carichi / vuoti |
+|---|---|---|---|---|---|---|---|
+""");
     for (final String c : configs) {
       final List<JsonObject> list = byConfig.get(c);
       final Map<String, List<JsonObject>> byAttacker = new TreeMap<>();
@@ -342,8 +353,10 @@ final class ConfrontoItalia {
         double empty = 0;
         for (final JsonObject a : rows) {
           zones.merge(a.get("zona").getAsString(), 1, Integer::sum);
-          loaded += a.has("trasporti_persi_carichi") ? a.get("trasporti_persi_carichi").getAsDouble() : 0;
-          empty += a.has("trasporti_persi_vuoti") ? a.get("trasporti_persi_vuoti").getAsDouble() : 0;
+          loaded +=
+              a.has("trasporti_persi_carichi") ? a.get("trasporti_persi_carichi").getAsDouble() : 0;
+          empty +=
+              a.has("trasporti_persi_vuoti") ? a.get("trasporti_persi_vuoti").getAsDouble() : 0;
         }
         final List<String> top = new ArrayList<>();
         zones.entrySet().stream()

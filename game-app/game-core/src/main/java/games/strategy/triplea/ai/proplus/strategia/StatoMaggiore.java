@@ -156,7 +156,9 @@ public final class StatoMaggiore {
    * added to the entry of the round). Nothing without a fixed plan or history.
    */
   public static void aggiornaUltimo(
-      final GameState data, final String alliance, final java.util.function.Consumer<JsonObject> change) {
+      final GameState data,
+      final String alliance,
+      final java.util.function.Consumer<JsonObject> change) {
     final GameProperties props = data.getProperties();
     getState(props, alliance)
         .filter(state -> !state.storico().isEmpty())

@@ -20,9 +20,9 @@ import javax.annotation.Nullable;
 
 /**
  * Step P1: what the block {@code p1} of {@code riepilogo.json} needs, for every configuration (Hard
- * included, to compare): the units the USA buy per round and type (new ids after their place
- * step), the rounds the USA attack and take Southern Italy and France, and per round the US land
- * units by region with Gibraltar as the base and the US transports.
+ * included, to compare): the units the USA buy per round and type (new ids after their place step),
+ * the rounds the USA attack and take Southern Italy and France, and per round the US land units by
+ * region with Gibraltar as the base and the US transports.
  */
 final class MonitorP1 {
   static final String USA = "Americans";
@@ -31,10 +31,13 @@ final class MonitorP1 {
 
   private final GameData data;
   private final Set<String> beforePlace = new HashSet<>();
+
   /** Round → type → units bought by the USA. */
   private final Map<Integer, Map<String, Integer>> acquisti = new TreeMap<>();
+
   /** Territory → rounds of US attacks on it. */
   private final Map<String, JsonArray> attacchi = new TreeMap<>();
+
   /** Territory → first round it was owned by the USA. */
   private final JsonObject prese = new JsonObject();
 

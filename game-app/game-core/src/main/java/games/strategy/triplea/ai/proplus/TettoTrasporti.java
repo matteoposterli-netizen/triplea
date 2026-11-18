@@ -17,10 +17,10 @@ import lombok.experimental.UtilityClass;
  * Direttive#PERDITA_TRASPORTI_MAX} TUV per ALLIANCE per round, summing every landing of every
  * nation of the alliance in the round (before: the cap held for each landing alone).
  *
- * <p>Saved in the game ({@code "Pro+ perdite trasporti accettate: <alliance>"} = JSON {round,
- * voci: {"nation|target": loss}}): a nation that plays later in the round sees what the earlier
- * ones used. One entry per nation and target, so the combat planning that checks the same landing
- * again does not count it twice; a landing accepted and later dropped by another rule still counts
+ * <p>Saved in the game ({@code "Pro+ perdite trasporti accettate: <alliance>"} = JSON {round, voci:
+ * {"nation|target": loss}}): a nation that plays later in the round sees what the earlier ones
+ * used. One entry per nation and target, so the combat planning that checks the same landing again
+ * does not count it twice; a landing accepted and later dropped by another rule still counts
  * (conservative).
  */
 @UtilityClass

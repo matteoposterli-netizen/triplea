@@ -48,8 +48,8 @@ public final class Risposta {
    * @param zona the zone the force goes to (landing zone, base zone), may be null
    * @param ottenibile obtainable in this turn with the real forces
    * @param ostacoli the obstacles with their numbers
-   * @param flottaBattibile a zone with an enemy force behind a MARE obstacle that the forces in reach
-   *     beat with a win >= the threshold, null if none
+   * @param flottaBattibile a zone with an enemy force behind a MARE obstacle that the forces in
+   *     reach beat with a win >= the threshold, null if none
    * @param vittoriaFlotta our win% against that force (-1 if none)
    */
   public record Bersaglio(
@@ -185,9 +185,9 @@ public final class Risposta {
   }
 
   /**
-   * CAPACITA: new transports only if the owned ones (anywhere, also empty and idle) cannot carry the
-   * troops ready to go: {@code ceil((posti da portare - posti liberi posseduti) / capacita)}, never
-   * negative.
+   * CAPACITA: new transports only if the owned ones (anywhere, also empty and idle) cannot carry
+   * the troops ready to go: {@code ceil((posti da portare - posti liberi posseduti) / capacita)},
+   * never negative.
    */
   public static int trasportiDaComprare(
       final int postiDaPortare, final int postiLiberiPosseduti, final int capacitaTrasporto) {
@@ -199,7 +199,8 @@ public final class Risposta {
   }
 
   /** R2: the direction is chosen again when none is chosen or it has been held {@code tenuta}. */
-  public static boolean ricontrollaDirezione(final int round, final int dalRound, final int tenuta) {
+  public static boolean ricontrollaDirezione(
+      final int round, final int dalRound, final int tenuta) {
     return dalRound <= 0 || round - dalRound >= tenuta;
   }
 
@@ -283,7 +284,9 @@ public final class Risposta {
   public enum Condivisa {
     /** Obtainable: the nations land together on the same territory this round. */
     CONGIUNTO,
-    /** Not obtainable: the nations gather forces (troops; no new transports if the owned suffice). */
+    /**
+     * Not obtainable: the nations gather forces (troops; no new transports if the owned suffice).
+     */
     ACCUMULO,
     /** Not obtainable after the gathering rounds: land where the exchange of losses is best. */
     LOGORAMENTO,
@@ -293,9 +296,9 @@ public final class Risposta {
 
   /**
    * Step P2, the rule of the shared result: obtainable ⇒ CONGIUNTO; otherwise after {@code
-   * maxAccumulo} rounds of gathering ⇒ LOGORAMENTO (if a target can be taken at all, else
-   * NESSUNO); otherwise ACCUMULO if there is a target to gather for, else NESSUNO. No long waits:
-   * the gathering never lasts more than {@code maxAccumulo} rounds.
+   * maxAccumulo} rounds of gathering ⇒ LOGORAMENTO (if a target can be taken at all, else NESSUNO);
+   * otherwise ACCUMULO if there is a target to gather for, else NESSUNO. No long waits: the
+   * gathering never lasts more than {@code maxAccumulo} rounds.
    */
   public static Condivisa decidiCondiviso(
       final boolean ottenibile,
@@ -335,9 +338,9 @@ public final class Risposta {
   /**
    * Step P2 (D): the units the task holds this turn. The current result's kind decides: a base with
    * a fleet holds the fleet (and the landing force if the territory must be taken: {@code
-   * ottenibile} = landing needed); the shared result holds the landing force while landing or gathering
-   * (never while nothing can be done); the capital holds the landing force and, while the gathering
-   * has lasted at most {@code maxAccumulo} rounds, the troops next to it.
+   * ottenibile} = landing needed); the shared result holds the landing force while landing or
+   * gathering (never while nothing can be done); the capital holds the landing force and, while the
+   * gathering has lasted at most {@code maxAccumulo} rounds, the troops next to it.
    */
   public static Set<Uso> uso(
       final String tipoRisultato,
@@ -346,7 +349,8 @@ public final class Risposta {
       final int roundDiAccumulo,
       final int maxAccumulo) {
     return switch (tipoRisultato) {
-      case Compito.CONTROLLO_E_FLOTTA -> ottenibile ? Set.of(Uso.FLOTTA, Uso.SBARCO) : Set.of(Uso.FLOTTA);
+      case Compito.CONTROLLO_E_FLOTTA ->
+          ottenibile ? Set.of(Uso.FLOTTA, Uso.SBARCO) : Set.of(Uso.FLOTTA);
       case Compito.TESTA_DI_PONTE ->
           decisione == null || decisione == Condivisa.NESSUNO
               ? Set.of()

@@ -48,8 +48,8 @@ public record Compito(
   public static final String DIREZIONE_ALLEANZA = "direzione_alleanza";
 
   /**
-   * Step P2: shared result "testa di ponte tenuta": a territory of the direction's theatre taken and
-   * still allied at the end of the next round; several nations contribute.
+   * Step P2: shared result "testa di ponte tenuta": a territory of the direction's theatre taken
+   * and still allied at the end of the next round; several nations contribute.
    */
   public static final String TESTA_DI_PONTE = "testa_di_ponte";
 
@@ -99,8 +99,18 @@ public record Compito(
         final int traguardo,
         final boolean mantieni) {
       this(
-          id, nome, tipo, territorio, zona, opzioni, tenutaRound, territorioDa, traguardo,
-          mantieni, false, List.of());
+          id,
+          nome,
+          tipo,
+          territorio,
+          zona,
+          opzioni,
+          tenutaRound,
+          territorioDa,
+          traguardo,
+          mantieni,
+          false,
+          List.of());
     }
 
     /** A continuous result (served every turn, not in the list's order). */
@@ -278,7 +288,9 @@ public record Compito(
   private static Risultato risultato(final JsonObject r) {
     final Map<String, String> options = new LinkedHashMap<>();
     if (r.has("opzioni")) {
-      r.getAsJsonObject("opzioni").entrySet().forEach(e -> options.put(e.getKey(), e.getValue().getAsString()));
+      r.getAsJsonObject("opzioni")
+          .entrySet()
+          .forEach(e -> options.put(e.getKey(), e.getValue().getAsString()));
     }
     final String tipo = r.get("tipo").getAsString();
     if (!TIPI.contains(tipo)) {

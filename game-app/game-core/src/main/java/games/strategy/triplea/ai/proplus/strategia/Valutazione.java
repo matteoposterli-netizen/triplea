@@ -232,7 +232,8 @@ public final class Valutazione {
     checked.avvisi().forEach(a -> text.append("  Avviso del contratto: ").append(a).append('\n'));
     text.append(Direttive.testo(directives, decider.nome(), checked.ripiego()));
     text.append(strategistLine(source, directives));
-    final JsonObject effective = rischioEffettivo(data, alliance.get(), strategia.get(), directives);
+    final JsonObject effective =
+        rischioEffettivo(data, alliance.get(), strategia.get(), directives);
     entry.add("rischio_effettivo", effective);
     text.append(riskTable(data, alliance.get(), effective));
     if (Decisore.LLM.equals(decider.nome())) {
@@ -296,8 +297,8 @@ public final class Valutazione {
 
   /**
    * LLM step: the effective risk level (1-5) of each nation of the alliance on each front: the
-   * alliance's slider moved by the offset of the directives for that nation and front (schema
-   * v1.1, else the alliance's), then -1 in DIFENSIVA, as {@link PianoAttivo#livelloFronte}.
+   * alliance's slider moved by the offset of the directives for that nation and front (schema v1.1,
+   * else the alliance's), then -1 in DIFENSIVA, as {@link PianoAttivo#livelloFronte}.
    */
   static JsonObject rischioEffettivo(
       final GameState data,
@@ -325,12 +326,12 @@ public final class Valutazione {
   /** Diary: "Rischio effettivo (base 3 Equilibrato): Germans Ovest 4, Est 2 | Italians ...". */
   static String riskTable(final GameState data, final String alliance, final JsonObject effective) {
     final RiskLevel base = ProPlusSettings.getRiskLevel(data.getProperties(), alliance);
-    final List<String> rows = new java.util.ArrayList<>();
+    final List<String> rows = new ArrayList<>();
     effective
         .entrySet()
         .forEach(
             e -> {
-              final List<String> cells = new java.util.ArrayList<>();
+              final List<String> cells = new ArrayList<>();
               e.getValue()
                   .getAsJsonObject()
                   .entrySet()

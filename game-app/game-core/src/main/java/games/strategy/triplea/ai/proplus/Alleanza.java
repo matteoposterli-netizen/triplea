@@ -38,8 +38,8 @@ import javax.annotation.Nullable;
  *       the urgency of the enemy's victory cities) and chooses the best ratio value / obstacles;
  *       kept {@code tenuta_direzione_round} rounds. Row {@code alleanza_direzione}.
  *   <li>Shared result "testa di ponte tenuta": a territory of the direction's theatre taken and
- *       still allied at the end of the next round. Obtainable = a contributor in turn order takes it
- *       (win >= {@code soglia_attacco}, landing zone safe) and the survivors plus what the later
+ *       still allied at the end of the next round. Obtainable = a contributor in turn order takes
+ *       it (win >= {@code soglia_attacco}, landing zone safe) and the survivors plus what the later
  *       contributors land the same round hold against the enemy's realistic counterattack (win <=
  *       {@code soglia_tenuta}). Not obtainable: the nations gather troops (TERRA), at most {@code
  *       round_accumulo_max} rounds, then they land anyway where the exchange of losses is best
@@ -214,7 +214,8 @@ final class Alleanza {
     if (!inGuerraConNemici(t, t.player)) {
       // a nation not yet at war sees no enemy (and its AI data count every non-ally as one): the
       // next task nation of the round, at war, counts for the alliance
-      t.lines.add("  Alleanza: " + t.player.getName() + " non e' in guerra, conta la prossima nazione");
+      t.lines.add(
+          "  Alleanza: " + t.player.getName() + " non e' in guerra, conta la prossima nazione");
       return;
     }
     al.addProperty("round", t.round);
@@ -223,7 +224,11 @@ final class Alleanza {
       scegliDirezione(t, al);
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Alleanza, inizio round: " + e);
-      t.lines.add("  Alleanza, inizio round: errore " + e + " " + java.util.Arrays.toString(e.getStackTrace()).substring(0, 600));
+      t.lines.add(
+          "  Alleanza, inizio round: errore "
+              + e
+              + " "
+              + java.util.Arrays.toString(e.getStackTrace()).substring(0, 600));
     }
   }
 
@@ -326,7 +331,9 @@ final class Alleanza {
       cand.addAll(c.presa(capital.get()));
       final Risposta.Bersaglio best =
           cand.stream()
-              .min(Comparator.comparingDouble(Risposta.Bersaglio::somma).thenComparing(Risposta.Bersaglio::nome))
+              .min(
+                  Comparator.comparingDouble(Risposta.Bersaglio::somma)
+                      .thenComparing(Risposta.Bersaglio::nome))
               .orElse(null);
       final double obstacles = best == null ? 1e9 : best.somma();
       final List<Territory> taken = new ArrayList<>();
@@ -338,19 +345,15 @@ final class Alleanza {
       }
       final ValoreDirezione.Conto v =
           ValoreDirezione.valore(
-              c.data,
-              c.player,
-              taken,
-              theatre,
-              c.par.pesoUrgenzaPu(),
-              x -> minacciata(c, x));
+              c.data, c.player, taken, theatre, c.par.pesoUrgenzaPu(), x -> minacciata(c, x));
       final Risposta.ContoDirezione conto =
           new Risposta.ContoDirezione(d.nome(), v.valore(), obstacles);
       conti.add(conto);
       a.addProperty("capitale", capital.get().getName());
       a.addProperty("valore", Compiti.r1(v.valore()));
       a.addProperty("ostacoli", Compiti.r1(obstacles));
-      a.addProperty("rapporto", Math.round(conto.rapporto(c.par.ostacoliMinimiPu()) * 1000) / 1000.0);
+      a.addProperty(
+          "rapporto", Math.round(conto.rapporto(c.par.ostacoliMinimiPu()) * 1000) / 1000.0);
       a.add("voci_valore", v.voci());
       if (best != null) {
         a.add("bersaglio", best.json());
@@ -359,7 +362,8 @@ final class Alleanza {
       final JsonObject cj = new JsonObject();
       cj.addProperty("valore", Compiti.r1(v.valore()));
       cj.addProperty("ostacoli", Compiti.r1(Math.min(obstacles, 1e9)));
-      cj.addProperty("rapporto", Math.round(conto.rapporto(c.par.ostacoliMinimiPu()) * 1000) / 1000.0);
+      cj.addProperty(
+          "rapporto", Math.round(conto.rapporto(c.par.ostacoliMinimiPu()) * 1000) / 1000.0);
       cj.addProperty("bersaglio", best == null ? "" : best.nome());
       contiJ.add(d.nome(), cj);
     }
@@ -498,7 +502,9 @@ final class Alleanza {
                   t.data,
                   t.alliance,
                   x,
-                  conquistato ? StimaUnica.TipoBersaglio.CONQUISTA : StimaUnica.TipoBersaglio.TENUTA)
+                  conquistato
+                      ? StimaUnica.TipoBersaglio.CONQUISTA
+                      : StimaUnica.TipoBersaglio.TENUTA)
               .frazione();
       final double total = t.tuv(all);
       final List<Unit> counter = new ArrayList<>();
@@ -570,7 +576,9 @@ final class Alleanza {
     final int accDal =
         old != null
                 && old.has("accumulo_dal")
-                && dir.get().nome().equals(old.has("direzione") ? old.get("direzione").getAsString() : "")
+                && dir.get()
+                    .nome()
+                    .equals(old.has("direzione") ? old.get("direzione").getAsString() : "")
             ? old.get("accumulo_dal").getAsInt()
             : 0;
     final int roundsAcc = Risposta.roundDiAccumulo(t.round, accDal);
@@ -592,13 +600,15 @@ final class Alleanza {
         switch (dec) {
           case CONGIUNTO ->
               obtainable.stream()
-                  .min(Comparator.comparingDouble(Valutazione::contrattacco)
-                      .thenComparing(v -> v.territorio().getName()))
+                  .min(
+                      Comparator.comparingDouble(Valutazione::contrattacco)
+                          .thenComparing(v -> v.territorio().getName()))
                   .orElseThrow();
           case LOGORAMENTO ->
               attrition.stream()
-                  .max(Comparator.comparingDouble(Valutazione::scambio)
-                      .thenComparing(v -> v.territorio().getName(), Comparator.reverseOrder()))
+                  .max(
+                      Comparator.comparingDouble(Valutazione::scambio)
+                          .thenComparing(v -> v.territorio().getName(), Comparator.reverseOrder()))
                   .orElseThrow();
           case ACCUMULO -> {
             final String prev =
@@ -609,9 +619,10 @@ final class Alleanza {
                 .orElseGet(
                     () ->
                         gatherable.stream()
-                            .min(Comparator.comparingInt(Valutazione::truppeMancanti)
-                                .thenComparingDouble(Valutazione::contrattacco)
-                                .thenComparing(v -> v.territorio().getName()))
+                            .min(
+                                Comparator.comparingInt(Valutazione::truppeMancanti)
+                                    .thenComparingDouble(Valutazione::contrattacco)
+                                    .thenComparing(v -> v.territorio().getName()))
                             .orElseThrow());
           }
           case NESSUNO -> null;
@@ -620,7 +631,8 @@ final class Alleanza {
     cv.addProperty("round", t.round);
     cv.addProperty("direzione", dir.get().nome());
     cv.addProperty("decisione", dec.name());
-    cv.addProperty("accumulo_dal", dec == Risposta.Condivisa.ACCUMULO ? (accDal > 0 ? accDal : t.round) : 0);
+    cv.addProperty(
+        "accumulo_dal", dec == Risposta.Condivisa.ACCUMULO ? (accDal > 0 ? accDal : t.round) : 0);
     cv.addProperty("round_di_accumulo", roundsAcc);
     final JsonArray cj = new JsonArray();
     contributors.forEach(p -> cj.add(p.getName()));
@@ -701,9 +713,9 @@ final class Alleanza {
   }
 
   /**
-   * One bridgehead {@code x}: the landing zone of the combined analysis, what every contributor
-   * can land this round, who takes it (the first in turn order whose landing wins >= the threshold
-   * with a safe zone), the survivors plus the later contributors' landings against the realistic
+   * One bridgehead {@code x}: the landing zone of the combined analysis, what every contributor can
+   * land this round, who takes it (the first in turn order whose landing wins >= the threshold with
+   * a safe zone), the survivors plus the later contributors' landings against the realistic
    * counterattack, the troops missing to hold, the exchange of losses (attrition).
    */
   static Valutazione valuta(
@@ -746,7 +758,11 @@ final class Alleanza {
           x.getMatches(Matches.enemyUnit(taker).and(Matches.unitIsNotInfrastructure()));
       final ProBattleResult r =
           tm.calc.calculateBattleResults(
-              tm.proData, x, tm.propri(takerForce.attaccanti()), def, tm.propri(takerForce.bombardieri()));
+              tm.proData,
+              x,
+              tm.propri(takerForce.attaccanti()),
+              def,
+              tm.propri(takerForce.bombardieri()));
       takeWin = r.getWinPercentage();
       takeSwing = r.getTuvSwing();
       hold.addAll(superstiti(takerForce.attaccanti(), r));
@@ -758,8 +774,7 @@ final class Alleanza {
         }
         if (after && e.getValue().sicura()) {
           hold.addAll(e.getValue().carico());
-          hold.addAll(
-              e.getValue().terraVicina().stream().filter(u -> !hold.contains(u)).toList());
+          hold.addAll(e.getValue().terraVicina().stream().filter(u -> !hold.contains(u)).toList());
         }
       }
       j.addProperty("presa_da", taker.getName());
@@ -833,9 +848,9 @@ final class Alleanza {
 
   /**
    * The nation's target for the shared result this turn: the alliance's decision checked again on
-   * the real board ({@link Compiti.Turno#condivisoNazione}). A bridgehead already allied
-   * (taken this round by an earlier contributor) is reinforced in the non-combat move; an enemy
-   * one is taken if this nation's landing wins (CONGIUNTO: and holds; LOGORAMENTO: anyway).
+   * the real board ({@link Compiti.Turno#condivisoNazione}). A bridgehead already allied (taken
+   * this round by an earlier contributor) is reinforced in the non-combat move; an enemy one is
+   * taken if this nation's landing wins (CONGIUNTO: and holds; LOGORAMENTO: anyway).
    */
   static Optional<Risposta.Bersaglio> bersaglio(final Compiti.Turno t) {
     final JsonObject plan = new JsonObject();
@@ -868,7 +883,12 @@ final class Alleanza {
     if (t.alleato(x)) {
       // taken this round (or before) by an ally: this nation reinforces it in the non-combat move
       reinforce = f.sicura() && !f.carico().isEmpty();
-      hold = new ArrayList<>(x.getMatches(Matches.isUnitAllied(t.player).and(Matches.unitIsLand()).and(Matches.unitIsNotInfrastructure())));
+      hold =
+          new ArrayList<>(
+              x.getMatches(
+                  Matches.isUnitAllied(t.player)
+                      .and(Matches.unitIsLand())
+                      .and(Matches.unitIsNotInfrastructure())));
       if (reinforce) {
         hold.addAll(f.carico());
       }
@@ -886,12 +906,13 @@ final class Alleanza {
         // the later contributors of the round reinforce it
         final List<GamePlayer> contributors = new ArrayList<>();
         cv.getAsJsonArray("contributori")
-            .forEach(e -> {
-              final GamePlayer p = t.data.getPlayerList().getPlayerId(e.getAsString());
-              if (p != null) {
-                contributors.add(p);
-              }
-            });
+            .forEach(
+                e -> {
+                  final GamePlayer p = t.data.getPlayerList().getPlayerId(e.getAsString());
+                  if (p != null) {
+                    contributors.add(p);
+                  }
+                });
         boolean after = false;
         for (final GamePlayer m : contributors) {
           if (m.equals(t.player)) {
@@ -930,8 +951,11 @@ final class Alleanza {
     if (missing > 0) {
       final JsonObject tj = new JsonObject();
       tj.addProperty("truppe_mancanti", missing);
-      tj.addProperty("contrattacco_pct", cv.has("contrattacco_pct") ? cv.get("contrattacco_pct").getAsDouble() : -1);
-      tj.addProperty("nota", "truppe che mancano per tenere la testa di ponte (decisione dell'alleanza)");
+      tj.addProperty(
+          "contrattacco_pct",
+          cv.has("contrattacco_pct") ? cv.get("contrattacco_pct").getAsDouble() : -1);
+      tj.addProperty(
+          "nota", "truppe che mancano per tenere la testa di ponte (decisione dell'alleanza)");
       int pu = 0;
       for (int k = 0; k < missing; k++) {
         pu += t.costo(t.par.tipiTruppe().get(k % t.par.tipiTruppe().size()));

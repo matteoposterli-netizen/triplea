@@ -152,7 +152,10 @@ public final class DecisoreLlm implements Decisore {
     final int fantasia = Uso.fantasia(props, contesto.alleanza());
     final Richiesta request =
         new Richiesta(
-            sistema(contesto), PromptStratega.utente(stato, fantasia), PromptStratega.schema(), fantasia);
+            sistema(contesto),
+            PromptStratega.utente(stato, fantasia),
+            PromptStratega.schema(),
+            fantasia);
     final JsonObject answer =
         chiedi(request, props, Uso.STRATEGA, contesto.alleanza() + " R" + contesto.round());
     return Optional.of(UscitaLlm.direttive(answer, contesto.round(), contesto.alleanza()));

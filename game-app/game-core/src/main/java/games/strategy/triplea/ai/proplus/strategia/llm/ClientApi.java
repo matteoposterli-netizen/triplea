@@ -93,7 +93,8 @@ public final class ClientApi {
         }
         break;
       } catch (final HttpTimeoutException e) {
-        failure = "nessuna risposta da " + provider.etichetta() + " entro " + TIMEOUT.toSeconds() + " s";
+        failure =
+            "nessuna risposta da " + provider.etichetta() + " entro " + TIMEOUT.toSeconds() + " s";
       } catch (final IOException e) {
         failure = "rete non raggiungibile (" + mask(String.valueOf(e.getMessage()), key) + ")";
       } catch (final InterruptedException e) {
@@ -172,8 +173,7 @@ public final class ClientApi {
         text.append(block.get("text").getAsString());
       }
     }
-    final JsonObject usage =
-        json.has("usage") ? json.getAsJsonObject("usage") : new JsonObject();
+    final JsonObject usage = json.has("usage") ? json.getAsJsonObject("usage") : new JsonObject();
     final long in = number(usage, "input_tokens");
     final long out = number(usage, "output_tokens");
     final long read = number(usage, "cache_read_input_tokens");
@@ -232,8 +232,7 @@ public final class ClientApi {
     }
     final JsonElement content = choice.getAsJsonObject("message").get("content");
     final String text = content == null || content.isJsonNull() ? "" : content.getAsString();
-    final JsonObject usage =
-        json.has("usage") ? json.getAsJsonObject("usage") : new JsonObject();
+    final JsonObject usage = json.has("usage") ? json.getAsJsonObject("usage") : new JsonObject();
     final long prompt = number(usage, "prompt_tokens");
     long cached = number(usage, "prompt_cache_hit_tokens");
     if (cached == 0 && usage.has("prompt_tokens_details")) {

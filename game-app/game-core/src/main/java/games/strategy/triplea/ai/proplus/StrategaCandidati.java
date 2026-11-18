@@ -1106,8 +1106,7 @@ public final class StrategaCandidati {
     // step COERENZA STIME: proportional to the value, the LLM may ask another cap up to a maximum;
     // step R1 (B6): to the value in PU (as the alliance value), not to the old index
     o.addProperty(
-        "tetto_perdita",
-        Math.round(cfg.tettoPerdita(o.get("valore").getAsDouble(), tettoPerdita)));
+        "tetto_perdita", Math.round(cfg.tettoPerdita(o.get("valore").getAsDouble(), tettoPerdita)));
     o.addProperty("tolleranza_difensori", cfg.tolleranzaDifensori());
     o.addProperty("soglia_chiusura", cfg.sogliaChiusura());
     o.addProperty("max_rinvii", cfg.maxRinvii());

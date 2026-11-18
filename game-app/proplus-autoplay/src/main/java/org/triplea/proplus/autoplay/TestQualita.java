@@ -32,9 +32,9 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Offline quality test of the LLM strategist: {@code qualita <folder> [--n 30] [--output DIR]
- * [--fornitore anthropic] [--fantasia 2] [--livello stratega|ordini]}. With {@code --livello ordini}
- * the inputs are the turn orders' ({@code ordini-ingresso-R*-*.json}) and the prompt and the check
- * are those of the turn orders. Takes N strategic states ({@code stato-R*-*.json}, eg
+ * [--fornitore anthropic] [--fantasia 2] [--livello stratega|ordini]}. With {@code --livello
+ * ordini} the inputs are the turn orders' ({@code ordini-ingresso-R*-*.json}) and the prompt and
+ * the check are those of the turn orders. Takes N strategic states ({@code stato-R*-*.json}, eg
  * from the autoplay diaries; spread evenly over the sorted list) and asks the provider for each,
  * with the real prompt. Reports: valid JSON at the first try (parsed and usable: plan admitted,
  * known posture), directives the guard rails would limit, mean latency, total cost, 5 example
@@ -152,9 +152,11 @@ final class TestQualita {
       final JsonObject state =
           JsonParser.parseString(Files.readString(p, StandardCharsets.UTF_8)).getAsJsonObject();
       final JsonObject c = new JsonObject();
-      c.addProperty("file", p.getParent().getParent() == null
-          ? p.getFileName().toString()
-          : p.getParent().getFileName() + "/" + p.getFileName());
+      c.addProperty(
+          "file",
+          p.getParent().getParent() == null
+              ? p.getFileName().toString()
+              : p.getParent().getFileName() + "/" + p.getFileName());
       try {
         final Risposta r =
             call.apply(
@@ -180,8 +182,7 @@ final class TestQualita {
                 ? state.get("nazione").getAsString()
                 : state.has("alleanza") ? state.get("alleanza").getAsString() : "";
         final JsonObject answer = UscitaLlm.leggi(r.testo());
-        final JsonObject d =
-            orders ? answer : UscitaLlm.direttive(answer, round, alliance);
+        final JsonObject d = orders ? answer : UscitaLlm.direttive(answer, round, alliance);
         final UscitaLlm.Controllo check =
             orders ? UscitaLlm.controllaOrdini(answer, state) : UscitaLlm.controlla(d, state);
         c.addProperty("json_valido", check.valido());
@@ -256,11 +257,22 @@ final class TestQualita {
         .append(r.get("fantasia").getAsInt())
         .append(", token totali ")
         .append(r.get("token_totali").getAsLong())
-        .append("\n- JSON valido = risposta letta, piano ammesso, postura nota (altrimenti nel gioco"
-            + " decidono le regole); limitata = almeno un valore tagliato o ignorato dai paletti.\n\n");
+        .append(
+"""
+
+- JSON valido = risposta letta, piano ammesso, postura nota (altrimenti nel gioco decidono le regole); limitata = almeno un valore tagliato o ignorato dai paletti.
+
+""");
     md.append("## 5 motivazioni\n\n");
-    r.getAsJsonArray("motivazioni").forEach(m -> md.append("- ").append(m.getAsString()).append('\n'));
-    md.append("\n## Casi\n\n| Stato | Valido | Piano | Postura | Limitazioni / errore | ms | Token | $ |\n");
+    r.getAsJsonArray("motivazioni")
+        .forEach(m -> md.append("- ").append(m.getAsString()).append('\n'));
+    md.append(
+"""
+
+## Casi
+
+| Stato | Valido | Piano | Postura | Limitazioni / errore | ms | Token | $ |
+""");
     md.append("|---|---|---|---|---|---|---|---|\n");
     r.getAsJsonArray("casi")
         .forEach(
@@ -270,8 +282,7 @@ final class TestQualita {
                   c.has("errore")
                       ? c.get("errore").getAsString()
                       : String.join(
-                          "; ",
-                          concat(c.getAsJsonArray("errori"), c.getAsJsonArray("limitati")));
+                          "; ", concat(c.getAsJsonArray("errori"), c.getAsJsonArray("limitati")));
               md.append("| ")
                   .append(c.get("file").getAsString())
                   .append(" | ")
@@ -311,7 +322,8 @@ final class TestQualita {
   }
 
   private static JsonObject strategy() throws IOException {
-    try (InputStream in = TestQualita.class.getClassLoader().getResourceAsStream(STRATEGY_RESOURCE)) {
+    try (InputStream in =
+        TestQualita.class.getClassLoader().getResourceAsStream(STRATEGY_RESOURCE)) {
       if (in == null) {
         throw new IOException("manca " + STRATEGY_RESOURCE);
       }

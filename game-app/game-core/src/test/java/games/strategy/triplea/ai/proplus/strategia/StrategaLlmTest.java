@@ -86,7 +86,8 @@ class StrategaLlmTest extends AbstractClientSettingTestCase {
         Optional.empty(),
         r -> {
           asked.add(r);
-          return new Risposta(text, name, "claude-haiku-5-5", 3000, 400, 5000, 0, 0.0012, false, 900);
+          return new Risposta(
+              text, name, "claude-haiku-5-5", 3000, 400, 5000, 0, 0.0012, false, 900);
         });
   }
 
@@ -176,7 +177,8 @@ class StrategaLlmTest extends AbstractClientSettingTestCase {
     assertThat(who.getAsJsonArray("avvisi").toString())
         .contains("stratega non disponibile (Haiku: nessuna risposta da Haiku entro 45 s");
     assertThat(r.testo()).contains("Stratega: regole - postura ");
-    assertThat(r.storico().getAsJsonObject(Valutazione.KEY_DIRETTIVE).get("motivazione").getAsString())
+    assertThat(
+            r.storico().getAsJsonObject(Valutazione.KEY_DIRETTIVE).get("motivazione").getAsString())
         .startsWith("Regole: ");
     assertThat(Uso.leggi(data.getProperties()).get("errori").getAsInt()).isEqualTo(1);
   }
@@ -197,7 +199,9 @@ class StrategaLlmTest extends AbstractClientSettingTestCase {
 
   @Test
   void aPlanNotAdmittedMakesTheDirectivesInvalid() {
-    llm(Modalita.CHIAVE_API, answering("Haiku", ANSWER.replace("\"piano\": \"1\"", "\"piano\": \"X\"")));
+    llm(
+        Modalita.CHIAVE_API,
+        answering("Haiku", ANSWER.replace("\"piano\": \"1\"", "\"piano\": \"X\"")));
 
     final Valutazione.Risultato r = Valutazione.inizioRound(data, british).orElseThrow();
 

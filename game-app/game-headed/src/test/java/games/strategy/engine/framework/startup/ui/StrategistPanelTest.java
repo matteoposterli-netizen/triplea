@@ -104,7 +104,9 @@ class StrategistPanelTest {
   void theDetectedStateSaysWhatWillBeUsed() {
     final ProfiloStratega none = ProfiloStratega.carica();
     final ClaudeCode.Stato missing = new ClaudeCode.Stato(null, false, "Claude Code non trovato");
-    assertThat(StrategistPanel.detectedText(new ClaudeCode.Stato(Path.of("claude"), true, ""), none, Fornitore.ANTHROPIC))
+    assertThat(
+            StrategistPanel.detectedText(
+                new ClaudeCode.Stato(Path.of("claude"), true, ""), none, Fornitore.ANTHROPIC))
         .isEqualTo("✓ Claude Code trovato");
     assertThat(StrategistPanel.detectedText(missing, none, Fornitore.ANTHROPIC))
         .isEqualTo("✗ Claude non trovato, nessuna chiave – uso le regole");

@@ -25,9 +25,9 @@ import net.bytebuddy.asm.Advice;
  * the same purchase can buy different units: both the random number and the order of the options
  * change. Inside {@link #with}, the method (redefined once in the test JVM with a Byte Buddy
  * advice) draws from a {@link Random} with the given seed and walks the options sorted by
- * production rule: same weights as the original (option chance = efficiency / total), but the
- * same inputs always give the same choice. Outside {@link #with}, and on any other thread, the
- * original method runs unchanged.
+ * production rule: same weights as the original (option chance = efficiency / total), but the same
+ * inputs always give the same choice. Outside {@link #with}, and on any other thread, the original
+ * method runs unchanged.
  */
 public final class SeededPurchaseChoice {
   private static final ThreadLocal<Random> CURRENT = new ThreadLocal<>();
@@ -74,8 +74,8 @@ public final class SeededPurchaseChoice {
   }
 
   /**
-   * The seeded choice, or null (the original method runs) when the thread has no seed. Same rule
-   * as the original: cumulative chances in percent, the first option whose bound is at least the
+   * The seeded choice, or null (the original method runs) when the thread has no seed. Same rule as
+   * the original: cumulative chances in percent, the first option whose bound is at least the
    * random number, any option if none (rounding).
    */
   @Nullable
@@ -94,7 +94,8 @@ public final class SeededPurchaseChoice {
         new ArrayList<>(efficiencies.entrySet());
     options.sort(
         Comparator.comparing(
-                (Map.Entry<ProPurchaseOption, Double> e) -> e.getKey().getProductionRule().getName())
+                (Map.Entry<ProPurchaseOption, Double> e) ->
+                    e.getKey().getProductionRule().getName())
             .thenComparing(e -> e.getKey().getUnitType().getName()));
     final double number = random.nextDouble() * 100;
     double upperBound = 0;

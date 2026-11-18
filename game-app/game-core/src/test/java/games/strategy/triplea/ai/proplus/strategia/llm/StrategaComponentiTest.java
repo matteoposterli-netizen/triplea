@@ -63,14 +63,18 @@ class StrategaComponentiTest {
     final JsonObject system = body.getAsJsonArray("system").get(0).getAsJsonObject();
     assertThat(system.get("text").getAsString()).isEqualTo("PARTE FISSA");
     assertThat(system.getAsJsonObject("cache_control").get("ttl").getAsString()).isEqualTo("1h");
-    assertThat(body.getAsJsonObject("output_config").getAsJsonObject("format").get("type").getAsString())
+    assertThat(
+            body.getAsJsonObject("output_config")
+                .getAsJsonObject("format")
+                .get("type")
+                .getAsString())
         .isEqualTo("json_schema");
     assertThat(headers.get(0)).containsEntry("x-api-key", KEY).containsKey("anthropic-version");
     assertThat(r.testo()).isEqualTo("{\"piano\": \"1\"}");
     assertThat(r.fonte()).isEqualTo("Haiku");
     assertThat(r.cacheLettura()).isEqualTo(6000);
     // 2000 x 0.10 + 500 x 0.50 + 6000 x 0.01 per million
-    assertThat(r.costoUsd()).isCloseTo(0.00051, org.assertj.core.data.Offset.offset(1e-9));
+    assertThat(r.costoUsd()).isCloseTo(0.000_51, org.assertj.core.data.Offset.offset(1e-9));
   }
 
   @Test
@@ -94,7 +98,8 @@ class StrategaComponentiTest {
     final Risposta r = client.chiama(Fornitore.GROQ, "gsk_chiave", request());
 
     final JsonObject body = JsonParser.parseString(bodies.get(0)).getAsJsonObject();
-    assertThat(body.get("temperature").getAsDouble()).isCloseTo(0.6, org.assertj.core.data.Offset.offset(1e-9));
+    assertThat(body.get("temperature").getAsDouble())
+        .isCloseTo(0.6, org.assertj.core.data.Offset.offset(1e-9));
     assertThat(body.getAsJsonObject("response_format").get("type").getAsString())
         .isEqualTo("json_object");
     assertThat(r.ingresso()).isEqualTo(1000);
@@ -158,7 +163,8 @@ class StrategaComponentiTest {
     assertThat(
             ClientApi.errore(
                 Fornitore.ANTHROPIC,
-                new Http.Esito(400, "{\"error\": {\"message\": \"Your credit balance is too low\"}}"),
+                new Http.Esito(
+                    400, "{\"error\": {\"message\": \"Your credit balance is too low\"}}"),
                 KEY))
         .startsWith("credito esaurito su Haiku");
     assertThat(ClientApi.errore(Fornitore.GROQ, new Http.Esito(429, ""), KEY))
@@ -169,8 +175,7 @@ class StrategaComponentiTest {
 
   @Test
   void claudeCodeIsFoundOnThePathOrInTheNativeInstallFolder() {
-    final Set<Path> files =
-        Set.of(Path.of("C:\\Users\\Mario", ".local", "bin", "claude.exe"));
+    final Set<Path> files = Set.of(Path.of("C:\\Users\\Mario", ".local", "bin", "claude.exe"));
     final ClaudeCode cc =
         new ClaudeCode(
             (c, in, t) -> null,
@@ -180,7 +185,8 @@ class StrategaComponentiTest {
 
     assertThat(cc.trova()).contains(Path.of("C:\\Users\\Mario", ".local", "bin", "claude.exe"));
 
-    final ClaudeCode none = new ClaudeCode((c, in, t) -> null, Map.<String, String>of()::get, p -> false, true);
+    final ClaudeCode none =
+        new ClaudeCode((c, in, t) -> null, Map.<String, String>of()::get, p -> false, true);
     assertThat(none.verifica().descrizione()).isEqualTo("Claude Code non trovato");
   }
 
@@ -190,7 +196,10 @@ class StrategaComponentiTest {
         new ClaudeCode(
             (c, in, t) ->
                 new ClaudeCode.Processo.Esito(
-                    1, "{\"type\":\"result\",\"is_error\":true,\"result\":\"Not logged in · Please run /login\"}", "", false),
+                    1,
+                    "{\"type\":\"result\",\"is_error\":true,\"result\":\"Not logged in · Please run /login\"}",
+                    "",
+                    false),
             Map.of("PATH", "/usr/bin")::get,
             p -> p.equals(Path.of("/usr/bin", "claude")),
             false);
@@ -281,7 +290,12 @@ class StrategaComponentiTest {
   @Test
   void theKeyFileNextToTheGameIsImportedOnce() throws IOException {
     final Path game = Files.createDirectories(dir.resolve("gioco"));
-    Files.writeString(game.resolve(ProfiloStratega.FILE_DA_IMPORTARE), "# la mia chiave\ngsk_abc123456\n");
+    Files.writeString(
+        game.resolve(ProfiloStratega.FILE_DA_IMPORTARE),
+"""
+# la mia chiave
+gsk_abc123456
+""");
     final Path file = dir.resolve("profilo").resolve(ProfiloStratega.FILE_NAME);
     final ProfiloStratega p = new ProfiloStratega(file, k -> null);
 
@@ -349,13 +363,10 @@ class StrategaComponentiTest {
     final JsonObject d =
         UscitaLlm.direttive(
             UscitaLlm.leggi(
-                "```json\n"
-                    + "{\"piano\": \"1\", \"postura\": \"OFFENSIVA\","
-                    + " \"rischio\": [{\"fronte\": \"Ovest\", \"valore\": 1}],"
-                    + " \"tattiche\": [{\"strumento\": \"ritirata_combattuta\", \"nazione\": \"Russians\","
-                    + " \"fronte\": \"\", \"attiva\": true}],"
-                    + " \"ruoli\": [{\"nazione\": \"British\", \"ruolo\": \"Egitto\"}],"
-                    + " \"motivazione\": \"Avanti.\"}\n```"),
+"""
+```json
+{"piano": "1", "postura": "OFFENSIVA", "rischio": [{"fronte": "Ovest", "valore": 1}], "tattiche": [{"strumento": "ritirata_combattuta", "nazione": "Russians", "fronte": "", "attiva": true}], "ruoli": [{"nazione": "British", "ruolo": "Egitto"}], "motivazione": "Avanti."}
+```"""),
             3,
             "Allies");
 
@@ -366,14 +377,18 @@ class StrategaComponentiTest {
     final JsonObject tool = d.getAsJsonArray("tattiche").get(0).getAsJsonObject();
     assertThat(tool.has("fronte")).isFalse();
     assertThatThrownBy(() -> UscitaLlm.leggi("nessun json")).hasMessage("risposta senza JSON");
-    assertThatThrownBy(() -> UscitaLlm.leggi("{piano: }")).hasMessage("JSON non valido nella risposta");
+    assertThatThrownBy(() -> UscitaLlm.leggi("{piano: }"))
+        .hasMessage("JSON non valido nella risposta");
   }
 
   @Test
   void theOfflineCheckFindsErrorsAndLimits() throws IOException {
     final JsonObject state;
-    try (InputStream in = Files.newInputStream(Path.of("../../proplus/strategia/esempi/stato-R2-Allies.json"))) {
-      state = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
+    try (InputStream in =
+        Files.newInputStream(Path.of("../../proplus/strategia/esempi/stato-R2-Allies.json"))) {
+      state =
+          JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8))
+              .getAsJsonObject();
     }
     final JsonObject ok =
         JsonParser.parseString(
@@ -407,7 +422,8 @@ class StrategaComponentiTest {
   void usageTextAddsCallsTokensAndCost() {
     final JsonObject u = new JsonObject();
     final var props = new games.strategy.engine.data.properties.GameProperties(null);
-    Uso.registra(props, new Risposta("{}", "Haiku", "m", 1000, 200, 5000, 6000, 0.0025, false, 800));
+    Uso.registra(
+        props, new Risposta("{}", "Haiku", "m", 1000, 200, 5000, 6000, 0.0025, false, 800));
     Uso.registraErrore(props, "Haiku");
     assertThat(Uso.chiamate(props)).isEqualTo(2);
     assertThat(Uso.testo(Uso.leggi(props)))
@@ -447,7 +463,11 @@ class StrategaComponentiTest {
         .contains("\"tattiche\"");
     assertThat(system.length()).isLessThan(PromptStratega.sistema(strategyOrEmpty()).length());
     assertStrict(PromptOrdini.schema());
-    assertThat(PromptOrdini.utente(JsonParser.parseString("{\"nazione\": \"British\", \"round\": 3}").getAsJsonObject(), 4))
+    assertThat(
+            PromptOrdini.utente(
+                JsonParser.parseString("{\"nazione\": \"British\", \"round\": 3}")
+                    .getAsJsonObject(),
+                4))
         .contains("4/5")
         .contains("ordini del turno di British, round 3");
     assertThat(PromptStratega.sistema(strategyOrEmpty()))
@@ -508,7 +528,8 @@ class StrategaComponentiTest {
 
   @Test
   void thePromptsV3DefineAttendiAsADeliberateDelayAndHaveTheDoctrine() {
-    for (final String system : List.of(PromptStratega.sistema(strategyOrEmpty()), PromptOrdini.sistema())) {
+    for (final String system :
+        List.of(PromptStratega.sistema(strategyOrEmpty()), PromptOrdini.sistema())) {
       assertThat(system)
           .contains("RINVIO DELIBERATO")
           .contains("in attesa da N round")
@@ -560,7 +581,8 @@ class StrategaComponentiTest {
         StrategaComponentiTest.class
             .getClassLoader()
             .getResourceAsStream("proplus/strategia/ww2eur40_2nd_edition.json")) {
-      return JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
+      return JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8))
+          .getAsJsonObject();
     }
   }
 }

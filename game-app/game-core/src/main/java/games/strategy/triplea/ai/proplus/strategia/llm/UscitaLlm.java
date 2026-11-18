@@ -15,9 +15,9 @@ import lombok.experimental.UtilityClass;
 
 /**
  * The strategist's answer: text -> JSON object ({@link #leggi}) -> directives v1 ({@link
- * #direttive}); {@link #controlla} checks them against the strategic state alone (no game data:
- * the offline quality test). In the game the directives are then checked by {@link
- * Direttive#valida} with the guard rails.
+ * #direttive}); {@link #controlla} checks them against the strategic state alone (no game data: the
+ * offline quality test). In the game the directives are then checked by {@link Direttive#valida}
+ * with the guard rails.
  */
 @UtilityClass
 public final class UscitaLlm {
@@ -280,7 +280,8 @@ public final class UscitaLlm {
       }
     }
     final Set<String> ops = new HashSet<>();
-    array(ingresso, "operazioni").forEach(x -> ops.add(x.getAsJsonObject().get("id").getAsString()));
+    array(ingresso, "operazioni")
+        .forEach(x -> ops.add(x.getAsJsonObject().get("id").getAsString()));
     double loss = 0;
     for (final JsonElement e : array(o, "operazioni")) {
       final JsonObject x = e.getAsJsonObject();

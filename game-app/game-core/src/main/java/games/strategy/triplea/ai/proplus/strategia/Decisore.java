@@ -28,8 +28,8 @@ public interface Decisore {
   String nome();
 
   /**
-   * Who actually decided the last time (diary "Stratega: ..."): "regole", "file", or the LLM
-   * source ("Claude Code", "Haiku", "DeepSeek", "Groq").
+   * Who actually decided the last time (diary "Stratega: ..."): "regole", "file", or the LLM source
+   * ("Claude Code", "Haiku", "DeepSeek", "Groq").
    */
   default String etichetta() {
     return nome();

@@ -36,7 +36,8 @@ public interface Http {
                   .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
           headers.forEach(request::header);
           final HttpResponse<String> response =
-              client.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+              client.send(
+                  request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
           return new Esito(response.statusCode(), response.body());
         }
       };

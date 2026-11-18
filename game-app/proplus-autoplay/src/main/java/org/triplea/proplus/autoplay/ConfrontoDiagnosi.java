@@ -59,7 +59,12 @@ final class ConfrontoDiagnosi {
       return;
     }
     final int last = vcRounds.get(vcRounds.size() - 1);
-    md.append("\n## Diagnosi Stratega (R0)\n\n");
+    md.append(
+"""
+
+## Diagnosi Stratega (R0)
+
+""");
     md.append(
         "Lato dello Stratega contro Hard. VC R"
             + last
@@ -80,13 +85,19 @@ final class ConfrontoDiagnosi {
     rows.forEach((config, side) -> row(md, config, side, byConfig.get(config), last));
 
     md.append(
-        "\nDifferenze (A − B, lato dello Stratega; positivo = A ha di piu'):\n\n"
-            + "| Differenza (A − B) | Lato | Valore | Δ | IC 95% (Welch) | Esito | Semi per"
-            + " l'80% |\n|---|---|---|---|---|---|---|\n");
+"""
+
+Differenze (A − B, lato dello Stratega; positivo = A ha di piu'):
+
+| Differenza (A − B) | Lato | Valore | Δ | IC 95% (Welch) | Esito | Semi per l'80% |
+|---|---|---|---|---|---|---|
+""");
     strategist.forEach(
         (config, side) -> {
           differences(md, config, byConfig.get(config), reference, ref, side, last);
-          if ((config.contains("[senza ") || config.contains("[con ") || config.contains("[regole]"))
+          if ((config.contains("[senza ")
+                  || config.contains("[con ")
+                  || config.contains("[regole]"))
               && !config.contains(SENZA_CHIAVE)) {
             final String full = full(config);
             if (byConfig.containsKey(full) && side.equals(strategist.get(full))) {
@@ -102,11 +113,13 @@ final class ConfrontoDiagnosi {
         strategist.keySet().stream().filter(c -> c.contains(SENZA_CHIAVE)).toList();
     if (!noKey.isEmpty()) {
       md.append(
-          "\nControllo contro Hard dello Stratega senza chiave (`ControlloTuning`: domande del"
-              + " tuning con risposta diversa da Hard; \"operazione\" = risposte marcate come"
-              + " dell'operazione/strategia, es. il tetto della strategia):\n\n"
-              + "| Configurazione | Partite | Domande | Differenze | Risposte \"operazione\""
-              + " diverse | Esempi |\n|---|---|---|---|---|---|\n");
+"""
+
+Controllo contro Hard dello Stratega senza chiave (`ControlloTuning`: domande del tuning con risposta diversa da Hard; "operazione" = risposte marcate come dell'operazione/strategia, es. il tetto della strategia):
+
+| Configurazione | Partite | Domande | Differenze | Risposte "operazione" diverse | Esempi |
+|---|---|---|---|---|---|
+""");
       for (final String config : noKey) {
         final List<JsonObject> list = byConfig.get(config);
         final long[] c = check(list, strategist.get(config));
@@ -128,23 +141,23 @@ final class ConfrontoDiagnosi {
   }
 
   /**
-   * Step R1: the strategist's counters per configuration (summed over the games): rounds decided
-   * by the LLM and without it, failed attempts retried (A7), rounds with an empty menu of
-   * candidates, units counted by step 1 and not moved (A2), Hard's combat plans dropped (A1),
-   * operations started per type.
+   * Step R1: the strategist's counters per configuration (summed over the games): rounds decided by
+   * the LLM and without it, failed attempts retried (A7), rounds with an empty menu of candidates,
+   * units counted by step 1 and not moved (A2), Hard's combat plans dropped (A1), operations
+   * started per type.
    */
   private static void strategistCounts(
       final StringBuilder md,
       final Map<String, List<JsonObject>> byConfig,
       final Map<String, String> strategist) {
     md.append(
-        "\nContatori dello Stratega (somma sulle partite): round decisi dall'LLM / senza LLM,"
-            + " tentativi falliti e ripetuti, round con il menu dei candidati VUOTO (non e' un"
-            + " errore), unita' contate dalla tappa 1 e non mosse, piani d'attacco di Hard"
-            + " ricalcolati dopo le operazioni, operazioni avviate per tipo:\n\n"
-            + "| Configurazione | Round decisi | Senza LLM | Tentativi falliti | Menu vuoto |"
-            + " Contate non mosse | Piani di Hard ricalcolati | Avviate (tipo: n) |\n"
-            + "|---|---|---|---|---|---|---|---|\n");
+"""
+
+Contatori dello Stratega (somma sulle partite): round decisi dall'LLM / senza LLM, tentativi falliti e ripetuti, round con il menu dei candidati VUOTO (non e' un errore), unita' contate dalla tappa 1 e non mosse, piani d'attacco di Hard ricalcolati dopo le operazioni, operazioni avviate per tipo:
+
+| Configurazione | Round decisi | Senza LLM | Tentativi falliti | Menu vuoto | Contate non mosse | Piani di Hard ricalcolati | Avviate (tipo: n) |
+|---|---|---|---|---|---|---|---|
+""");
     strategist.forEach(
         (config, side) -> {
           final long[] n = new long[6];

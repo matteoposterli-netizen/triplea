@@ -238,7 +238,9 @@ class StrategaLlmCompletoTest extends AbstractClientSettingTestCase {
       assertThat(parsed.roundMin()).isGreaterThanOrEqualTo(c.roundMinimo());
       assertThat(parsed.tettoPerdita())
           .isEqualTo(
-              (double) Math.round(StrategaConfig.get().tettoPerdita(def.get("valore").getAsDouble(), 0)));
+              (double)
+                  Math.round(
+                      StrategaConfig.get().tettoPerdita(def.get("valore").getAsDouble(), 0)));
       assertThat(c.json().has("stima_motore")).isTrue();
       assertThat(c.json().has("tenuta_50_con_rinforzi_pct")).isFalse();
       assertThat(parsed.riserve().values())
