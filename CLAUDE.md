@@ -3072,7 +3072,7 @@ Autoplay `--stratega-acceso Allies=impegno+compiti+regno_unito_p3`, etichetta "[
 "Regno Unito: Il Cairo e ponte" (accende anche Compiti e Impegno). Codice generico `ai/proplus/CittaPonte` (nessun nome di
 nazione o territorio: test). Dati `compiti.json` `p3`: per nazione `citta` (Egypt) e `sostituisce` (U1, U2: il compito non
 li esegue piu'; U0 resta); parametri `peso_ponte_attacco` 20, `forza_ponte_rinforzo` 0,5, `vittoria_attacco_minaccia` 70,
-`max_turni_fabbrica` 4, `raggio_trasporti_nemici` 3, `tipo_truppa` infantry; soglie esistenti `soglia_tenuta` 40 e
+`max_turni_fabbrica` 4, `raggio_trasporti_nemici` 3, `tipo_truppa` infantry, `margine_riserva_pct` 50; soglie esistenti `soglia_tenuta` 40 e
 `soglia_attacco` 70.
 - **A, peso del ponte** (al turno della nazione, `CittaPonte.ponte` all'acquisto): teste di ponte del round = territori
   del continente (almeno un vicino di terra) dove un'ALTRA nazione attiva dell'alleanza (`nazioni_attive`: gli USA) ha
@@ -3087,7 +3087,7 @@ li esegue piu'; U0 resta); parametri `peso_ponte_attacco` 20, `forza_ponte_rinfo
   attacco realistico esistente (`Alleanza.contrattacco`) con lo **schermo navale**: la parte che arriva per mare conta per
   la probabilita' che lo schermo cada (zone accanto alla citta' raggiungibili da un trasporto nemico entro 3; nessuna nave
   da guerra alleata = 0; con navi = 1 - vittoria nemica A1 nella zona). B1 riserva minima: unita' proprie nella citta' e
-  nei territori alleati accanto (la capitale esclusa), le piu' forti in difesa prima, finche' la minaccia <= 40% (tutte se
+  nei territori alleati accanto (la capitale esclusa), le piu' forti in difesa prima, finche' la minaccia <= 20% (`margine_riserva_pct` 50% della soglia; tutte se
   non basta): fuori dal combattimento di Hard (`Compiti.trattenute`), quelle nella citta' ferme anche nel non
   combattimento; eccezione: attacco alla fonte della minaccia (terra nemica o zona di mare con i trasporti) con vittoria
   >= 70 e citta' che regge dopo, solo con la citta' minacciata (eseguito dal compito prima di Hard). B2 non combattimento:
@@ -3143,7 +3143,12 @@ li esegue piu'; U0 resta); parametri `peso_ponte_attacco` 20, `forza_ponte_rinfo
    unita' da Egypt e svuotato i vicini (via di terra aperta: solo terra 7% → 38%) e spostato la flotta. Hard muove dopo il
    compito, quindi il minimo calcolato prima delle sue mosse non regge. Scartato: ricalcolare la minaccia su un tabellone
    ipotetico (costoso, il gestore delle opzioni nemiche andrebbe ricostruito per ogni prova).
-9. **Teste di ponte solo su territori dell'altra alleanza** (alla fotografia del round, o ora se attaccati): nella prima
+9. **Riserva minima con margine: attacco realistico entro il 50% della soglia (20%), `margine_riserva_pct`**: nella seconda
+    e terza prova Egypt e' caduto a fine R3 con la riserva calcolata al 40%: all'acquisto 7% (tutte le unita'), riserva al
+    limite (39%), poi Hard ha mosso le unita' libere di Egypt e dei vicini e a fine turno l'attacco era al 97%. Il minimo
+    calcolato prima delle mosse di Hard non tiene conto di quelle mosse. Scartato: riservare sempre tutte le unita' in Egypt
+    (toglierebbe a Hard l'offensiva in Libia anche senza minaccia).
+10. **Teste di ponte solo su territori dell'altra alleanza** (alla fotografia del round, o ora se attaccati): nella prima
    prova contavano anche i neutrali presi dagli USA (Venezuela, Colombia, Spagna...).
 
 ## Come configurare lo stratega
@@ -6049,4 +6054,11 @@ quanto serve).
   consegna via mare partita al R5); R6 ripreso (99%, 4 via terra + 1 via mare); R7-R12 tenuto. Egypt dell'Asse 3 round su 12.
   Sbarchi USA 18, con britannici a fine round 1; britannici mandati da Hard sulle teste di ponte 15 (6 via mare), quasi tutti
   su Spagna/Portogallo. Trasporti UK R12 9, United Kingdom mai perso. 0 eccezioni.
+  Prova 3 (con la correzione degli aerei, commit 7c7014b): R1 minacciato 45% → 7%, tenuto (6 britannici a fine R1); R2
+  tenuto; R3 7% all'acquisto, riserva al limite (39%), 97% a fine turno ⇒ perso (Hard ha mosso le unita' libere) ⇒ scelta 9
+  (margine: riserva fino al 20%); R4 ripreso (100%: 3 via terra, 8 via mare da Somalia britannica e altre coste); R5-R12
+  tenuto. Egypt dell'Asse 1 round su 12. Ponte: Normandy Bordeaux attaccata dagli USA al R6 (Hard britannico ci attacca, 4
+  unita'), presa al R7 (Hard ci manda 12 unita' via mare), R11 9, R12 4; sbarchi USA 7, con britannici a fine round 4 (57%),
+  3 su 3 ancora alleati il round dopo; britanniche sulle teste di ponte 35 (27 via mare). Trasporti UK R12 12. La CI gira con
+  la riserva al 20% (commit successivo a 7c7014b; la run di 7c7014b e' annullata dal push nuovo).
 - CI: `[completa]` = e2, p1, p3 x semi 1461-1500 (risultati: da aggiungere dopo la run).

@@ -123,7 +123,8 @@
       "vittoria_attacco_minaccia": {"valore": 70, "origine": "richiesta dello step P3 (= soglia_attacco)"},
       "max_turni_fabbrica": {"valore": 4, "origine": "scelto: oltre 4 turni di viaggio le truppe arrivano troppo tardi; PU a Hard"},
       "raggio_trasporti_nemici": {"valore": 3, "origine": "scelto: movimento del trasporto (2) + base navale (1); una zona accanto alla citta' e' usabile per lo sbarco nemico se un trasporto nemico e' entro 3 zone"},
-      "tipo_truppa": {"valore": "infantry", "origine": "come tipi_difesa: miglior difesa per PU della mappa"}
+      "tipo_truppa": {"valore": "infantry", "origine": "come tipi_difesa: miglior difesa per PU della mappa"},
+      "margine_riserva_pct": {"valore": 50, "origine": "scelto dopo le prove locali (seme 1461, 2 su 3 con Egypt perso a fine R3): la riserva minima e' calcolata all'acquisto, prima delle mosse di Hard che cambiano le vie del nemico; si riserva il minimo che tiene l'attacco realistico entro il 50% della soglia_tenuta (20%)"}
     },
     "nazioni": {
       "British": {

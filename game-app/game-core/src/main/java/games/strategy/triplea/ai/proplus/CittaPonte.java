@@ -84,6 +84,7 @@ public final class CittaPonte {
       int maxTurniFabbrica,
       int raggioTrasportiNemici,
       String tipoTruppa,
+      double margineRiservaPct,
       Map<String, Nazione> nazioni) {
 
     private static @Nullable Config cache;
@@ -108,7 +109,7 @@ public final class CittaPonte {
 
     static Config parse(final JsonObject root) {
       if (!root.has("p3")) {
-        return new Config(false, 0, 0, 70, 0, 3, "infantry", Map.of());
+        return new Config(false, 0, 0, 70, 0, 3, "infantry", 50, Map.of());
       }
       final JsonObject o = root.getAsJsonObject("p3");
       final JsonObject p = o.getAsJsonObject("parametri");
@@ -127,6 +128,7 @@ public final class CittaPonte {
           v(p, "max_turni_fabbrica").getAsInt(),
           v(p, "raggio_trasporti_nemici").getAsInt(),
           v(p, "tipo_truppa").getAsString(),
+          p.has("margine_riserva_pct") ? v(p, "margine_riserva_pct").getAsDouble() : 100,
           Map.copyOf(nations));
     }
 
@@ -1009,7 +1011,12 @@ public final class CittaPonte {
       // B1: the minimum of the own units in the city and next to it
       final List<Unit> cand = new ArrayList<>(own);
       cand.addAll(vicineTerra(t, c, false));
-      final List<Unit> res = riservaMinima(base, cand, k::minacciaDi, soglia);
+      // the reserve is computed before Hard's combat and non-combat moves, which change the
+      // enemy's ways (a neighbour emptied, a fleet gone): the minimum that keeps the threat
+      // within half the threshold (margine_riserva_pct of the data)
+      final double target = soglia * k.cfg.margineRiservaPct() / 100.0;
+      x.addProperty("obiettivo_riserva_pct", target);
+      final List<Unit> res = riservaMinima(base, cand, k::minacciaDi, target);
       final List<Unit> defRes = new ArrayList<>(base);
       defRes.addAll(res);
       double after = k.minacciaDi(defRes);
