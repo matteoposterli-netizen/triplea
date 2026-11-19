@@ -6516,3 +6516,31 @@ invariata (nessun aggancio nuovo in `ProTuning`).
     1584 R3 4 fanterie, alleata a fine R3/R4/R6, trasporto perso; navi e trasporti britannici persi entro R4 5 + 5.
   - 0 eccezioni, 0 avvisi `[Pro+] P6` nei log.
 - CI: `[completa]` = e2, s1, s2, s3, s4 x semi 1581-1620.
+
+#### Autoplay in CI (run 44585482987, commit 9af2f42, tutto verde al 1° tentativo, 200/200 partite [completa] senza chiave, semi 1581-1620, costo API 0)
+0 errori del calcolatore e 0 eccezioni nei log; **1 stallo** al tetto di 60 round (e2 seme 1614, Alleati di Hard), 199 con un vincitore. Asse
+impegno+assedio (quota 70). Numeri dalla sezione "P6" di `riepilogo-generale.md` (blocco `p6` dei `riepilogo.json`, campo tra parentesi).
+
+| Config | Alleati vince [IC 95%] | Fisher | Mosca oltre R14 (`mosca_oltre_r14`) | Fisher |
+|---|---|---|---|---|
+| e2 Alleati Hard | 14/40 35% [22; 50] (1 stallo) | - | 14/40 35% | - |
+| s1 usa_proporzione | 10/40 25% [14; 40] | -4 vs e2, p 0,47 | 12/40 30% | p 0,81 |
+| s2 + sbarco_concentrato | 19/40 48% [33; 63] | +5 vs e2 p 0,36; **+9 vs s1 p 0,062** | 18/40 45% | vs e2 p 0,49; vs s1 p 0,25 |
+| s3 norvegia_presto+norvegia_esposta | 12/40 30% [18; 45] | -2 vs e2, p 0,81 | 14/40 35% | p 1,00 |
+| s4 tutte e quattro | 18/40 45% [31; 60] | +4 vs e2, p 0,49 | 23/40 58% | +9 vs e2, p 0,072 |
+
+- Nessuna configurazione 5+ vittorie sotto e2; nessuna differenza con p < 0,05.
+- Criterio 1 (s2): primo sbarco USA >= 6 mediana **R5** (`round_primo_sbarco_usa_6`; e2 R9, s1 R8): SI'; sbarchi >= 6 entro R8 2,9 a partita
+  (`sbarchi_usa_6_entro_r8`; s1 1,0): SI'; sbarcate cumulate R6 22,8 (>= 12: SI'), R8 38,1 (>= 24: SI') (`usa_sbarcate_cumulate`; s1 6,8 / 19,6);
+  turni con truppe a bordo oltre un round (`registro.sc_turni_oltre_un_round`) **6 turni (16 trasporti) in 40 partite: NO**; trasporti USA persi
+  entro R8 (`usa_trasporti_persi_r8`) **7,5 a partita, oltre 5** (s1 2,3, e2 0,4), in tutta la partita 15,3 (s1 7,5). Registro: 504 sbarchi in forza
+  (5373 unita', 10,7 per sbarco), 9 dopo l'attesa, presi 466 su 509, ancora alleati un round dopo 261 su 490, 474 trasporti persi nel turno nemico
+  dopo lo sbarco. Dove entro R10: Holland Belgium 303, Southern France 299, Spain 255, Morocco 242, Normandy Bordeaux 239, Southern Italy 234.
+- Criterio 2 (s2 / s1 / e2): tedeschi in Europa occidentale R6 / R8 / R10 24,7 / 34,7 / 40,1 contro 22,8 / 32,4 / 40,5 e 21,6 / 35,7 / 39,3 (quasi
+  uguali); esercito russo (TUV) R8 / R10 174,8 / 143,6 contro 167,5 / 114,0 e 151,2 / 120,9; Roma cade 26/40 (s1 13, e2 18), Berlino 20/40 (10, 16).
+- Criterio 3 (s3): Norway alleata a fine R4 **23/40 (>= 24: NO, di uno)** (e2 6); reddito tedesco R4 / R6 45,4 / 48,7 contro 45,9 / 48,2;
+  trasporti / navi da guerra UK persi entro R4 1,6 / 5,6 contro 1,0 / 5,9; UK perso 0 = e2. Registro B: 39 sbarchi esposti (30 presi, 82 unita'),
+  scorta che basta 0, 9 tenuti ma non eseguiti da Hard, trasporti persi nel turno dopo 30 su 42.
+- Criterio 4 (s4): primo >= 6 mediana R4, >= 6 entro R8 3,4, sbarcate R6 / R8 24,7 / 41,8, trasporti USA persi R8 7,3; Norway R4 22/40; Mosca oltre
+  R14 23/40; esercito russo R8 / R10 176,8 / 147,9.
+- Criterio 5: 1 stallo (e2: NO), 0 errori del calcolatore.
