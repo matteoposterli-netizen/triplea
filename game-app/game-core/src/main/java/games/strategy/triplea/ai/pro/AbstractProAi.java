@@ -119,6 +119,15 @@ public abstract class AbstractProAi extends AbstractAi {
     storedCombatMoveMap = null;
   }
 
+  /**
+   * Forgets the factory moves planned at the purchase (on a copy of the game): the next non-combat
+   * move plans them again. Never called by Hard (Pro+ step P4: a purchase planned on a copy with
+   * the relationships of a war to come).
+   */
+  protected void forgetStoredFactoryMove() {
+    storedFactoryMoveMap = null;
+  }
+
   /** True if a combat move planned at the purchase is waiting to be executed. */
   protected boolean hasStoredCombatMove() {
     return storedCombatMoveMap != null;

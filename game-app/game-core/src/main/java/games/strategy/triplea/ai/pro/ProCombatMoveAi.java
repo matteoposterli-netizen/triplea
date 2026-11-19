@@ -384,7 +384,9 @@ public class ProCombatMoveAi {
       if (attackValue <= 0
           || (isDefensive
               && attackValue - victoryCityPart - planPart <= 8
-              && data.getMap().getDistance(proData.getMyCapital(), t) <= 3)) {
+              && data.getMap().getDistance(proData.getMyCapital(), t) <= 3
+              // Pro+ step P4: a variant may keep it (Hard: never)
+              && !proData.getTuning().keepsAttackInDefensiveStance(proData, patd))) {
         proData
             .getRecorder()
             .attackDropped(proData, patd, attackValue <= 0 ? "negative_value" : "defensive_stance");

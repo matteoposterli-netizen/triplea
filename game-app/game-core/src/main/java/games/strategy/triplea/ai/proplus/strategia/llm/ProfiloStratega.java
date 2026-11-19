@@ -134,6 +134,37 @@ public final class ProfiloStratega {
     values.setProperty(KEY_COMPITI, on ? "si" : "no");
   }
 
+  private static final String KEY_USA_PRONTI = "usa_pronti";
+  private static final String KEY_NORVEGIA_PRESTO = "norvegia_presto";
+  private static final String KEY_RUSSIA_FRONTE = "russia_fronte";
+
+  /** Step P4: "USA pronti prima della guerra" for the Allies. Off unless set. */
+  public boolean usaPronti() {
+    return si(KEY_USA_PRONTI);
+  }
+
+  public void setUsaPronti(final boolean on) {
+    values.setProperty(KEY_USA_PRONTI, on ? "si" : "no");
+  }
+
+  /** Step P4: "Norvegia presto" for the Allies. Off unless set. */
+  public boolean norvegiaPresto() {
+    return si(KEY_NORVEGIA_PRESTO);
+  }
+
+  public void setNorvegiaPresto(final boolean on) {
+    values.setProperty(KEY_NORVEGIA_PRESTO, on ? "si" : "no");
+  }
+
+  /** Step P4: "Fronte russo" for the Allies. Off unless set. */
+  public boolean russiaFronte() {
+    return si(KEY_RUSSIA_FRONTE);
+  }
+
+  public void setRussiaFronte(final boolean on) {
+    values.setProperty(KEY_RUSSIA_FRONTE, on ? "si" : "no");
+  }
+
   private static final String KEY_REGNO_UNITO_P3 = "regno_unito_p3";
 
   /**

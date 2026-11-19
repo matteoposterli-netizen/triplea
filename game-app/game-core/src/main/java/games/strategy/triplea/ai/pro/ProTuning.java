@@ -367,4 +367,39 @@ public interface ProTuning {
       final ProData proData,
       final ProOddsCalculator calc,
       final Map<Territory, ProTerritory> attackMap) {}
+
+  /**
+   * Strategic value the purchase gives the place territory {@code t} (Pro+ step P4: a neutral
+   * nation's sea zone valued by the coasts of its future enemies). Hard's {@code value} by default.
+   */
+  default double placeTerritoryValue(final ProData proData, final Territory t, final double value) {
+    return value;
+  }
+
+  /**
+   * Damage points of {@code factory} the purchase repairs, {@code damage} being its whole damage
+   * and {@code pusRemaining} the PUs not spent yet (Pro+ step P4: only what the turn's placement
+   * needs). The whole damage by default.
+   */
+  default int repairDamage(
+      final ProData proData, final Unit factory, final int damage, final int pusRemaining) {
+    return damage;
+  }
+
+  /**
+   * Whether the combat move keeps the attack on {@code patd} although the defensive stance would
+   * drop it (Pro+ step P4: a favorable counterattack at home while the capital holds). Never by
+   * default.
+   */
+  default boolean keepsAttackInDefensiveStance(final ProData proData, final ProTerritory patd) {
+    return false;
+  }
+
+  /**
+   * Points the non-combat move adds to the defense priority of {@code t} (Pro+ step P4: own
+   * factories at the front). 0 by default.
+   */
+  default double defensePriorityBonus(final ProData proData, final Territory t) {
+    return 0;
+  }
 }

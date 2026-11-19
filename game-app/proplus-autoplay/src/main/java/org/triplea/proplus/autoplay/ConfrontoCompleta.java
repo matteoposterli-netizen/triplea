@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P4: the three indications to Hard
+    if (ConfrontoP4.applicabile(games)) {
+      try {
+        ConfrontoP4.write(md, games, alliances);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P4 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step R6c / R6b-bis: Italy's shuttle in convoy
     if (ConfrontoItalia.applicabile(games)) {
       try {

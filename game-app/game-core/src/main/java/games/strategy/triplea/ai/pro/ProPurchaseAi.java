@@ -133,7 +133,13 @@ class ProPurchaseAi {
               .test(unitsThatCanProduceNeedingRepair.get(fixUnit))) {
             continue;
           }
-          final int diff = fixUnit.getUnitDamage();
+          // Pro+ step P4: a variant may repair less than the whole damage (Hard: all of it)
+          final int diff =
+              Math.min(
+                  fixUnit.getUnitDamage(),
+                  proData
+                      .getTuning()
+                      .repairDamage(proData, fixUnit, fixUnit.getUnitDamage(), pusRemaining));
           if (diff > 0) {
             final IntegerMap<RepairRule> repairMap = new IntegerMap<>();
             repairMap.add(repairRule, diff);
@@ -513,7 +519,12 @@ class ProPurchaseAi {
             proData, player, List.of(), List.of(), territoriesToCheck);
     for (final Territory t : purchaseTerritories.keySet()) {
       for (final ProPlaceTerritory ppt : purchaseTerritories.get(t).getCanPlaceTerritories()) {
-        ppt.setStrategicValue(territoryValueMap.get(ppt.getTerritory()));
+        // Pro+ step P4: a variant may value a place territory differently (Hard: its own value)
+        ppt.setStrategicValue(
+            proData
+                .getTuning()
+                .placeTerritoryValue(
+                    proData, ppt.getTerritory(), territoryValueMap.get(ppt.getTerritory())));
         ProLogger.debug(
             ppt.getTerritory() + ", strategicValue=" + territoryValueMap.get(ppt.getTerritory()));
       }

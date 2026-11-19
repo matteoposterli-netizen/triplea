@@ -86,11 +86,21 @@ public final class RegistroDecisioni {
           "compito_a_bordo",
           // step P3
           "ponte_peso",
-          "cairo_tenuta");
+          "cairo_tenuta",
+          // step P4
+          "usa_pronti",
+          "norvegia_presto",
+          "russia_fronte");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P4
+          "ACQUISTO_NEUTRALE",
+          "PRIMO_TURNO_DI_GUERRA",
+          "ACQUISTO_VALORE_MARE",
+          "PESO_ATTIVO",
+          "FRONTE",
           // step P3
           "PERSO",
           "NESSUNA_TESTA",

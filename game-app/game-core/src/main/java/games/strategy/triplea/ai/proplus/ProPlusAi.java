@@ -136,7 +136,30 @@ public class ProPlusAi extends ProAi {
         ProLogger.warn(LOG_PREFIX + "Joint operation update failed: " + e);
       }
     }
-    super.purchase(purchaseForBid, pusToSpend, purchaseDelegate, data, player);
+    // step P4: the three indications (switches off: nothing, Hard's own purchase)
+    final java.util.Optional<GuerraVicina.Vista> view =
+        purchaseForBid ? java.util.Optional.empty() : startIndications(data, player);
+    if (view.isPresent()
+        && ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning p4tuning) {
+      purchaseInWarView(pusToSpend, purchaseDelegate, data, player, view.get(), p4tuning);
+    } else if (!purchaseForBid
+        && GuerraVicina.soloValoreMare(data, player)
+        && ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning p4tuning) {
+      // step P4 (A): the first war turns, only the sea zones' value
+      p4tuning.p4().soloValoreMare = true;
+      try {
+        super.purchase(purchaseForBid, pusToSpend, purchaseDelegate, data, player);
+      } finally {
+        p4tuning.p4().soloValoreMare = false;
+      }
+      try {
+        GuerraVicina.registraValoreMare(data, player, p4tuning.p4());
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P4 register failed: " + e);
+      }
+    } else {
+      super.purchase(purchaseForBid, pusToSpend, purchaseDelegate, data, player);
+    }
     if (!purchaseForBid && Stratega.gioca(data, player)) {
       try {
         Difesa.registraBudget(data, player);
@@ -169,6 +192,7 @@ public class ProPlusAi extends ProAi {
     super.move(nonCombat, moveDel, data, player);
     if (nonCombat) {
       registerCityAndBridgehead(data, player);
+      registerIndications(data, player);
     }
     saveCheck(data, player);
   }
@@ -277,6 +301,96 @@ public class ProPlusAi extends ProAi {
       }
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "Commitment non-combat move failed: " + e);
+    }
+  }
+
+  /**
+   * Step P4, at the start of the purchase: the turn's state, the watched targets (B), the
+   * counterattack targets (C2) and the first war turn's row (A). The war view of A, if any.
+   */
+  private java.util.Optional<GuerraVicina.Vista> startIndications(
+      final GameData data, final GamePlayer player) {
+    final boolean a = IndicazioniP4.attivo(data, player, StrategaInterruttori.USA_PRONTI);
+    final boolean b = IndicazioniP4.attivo(data, player, StrategaInterruttori.NORVEGIA_PRESTO);
+    final boolean c = FronteCasa.attivo(data, player);
+    if (!(a || b || c)
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return java.util.Optional.empty();
+    }
+    final IndicazioniP4.Stato st = tuning.p4();
+    final int round = data.getSequence().getRound();
+    st.inizio(round);
+    IndicazioniP4.tap(getProData(), st);
+    try {
+      if (b) {
+        IndicazioniP4.bersagliDelRound(player.getName(), round)
+            .forEach(x -> st.osservatiB.add(x.territorio()));
+      }
+      if (c) {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        FronteCasa.inizioTurno(getProData(), getCalc(), st);
+      }
+      if (a) {
+        GuerraVicina.registraPrimoTurno(data, player);
+        return GuerraVicina.vista(data, player);
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P4 start failed: " + e);
+    }
+    return java.util.Optional.empty();
+  }
+
+  /**
+   * Step P4 (A): Hard's purchase planned on the copy with the relationships of the war to come; the
+   * purchase goes to the real delegate, the moves planned on the copy are forgotten.
+   */
+  private void purchaseInWarView(
+      final int pusToSpend,
+      final IPurchaseDelegate purchaseDelegate,
+      final GameData data,
+      final GamePlayer player,
+      final GuerraVicina.Vista view,
+      final ProPlusTuning tuning) {
+    final IndicazioniP4.Stato st = tuning.p4();
+    st.vista = view;
+    try {
+      // the diary's turn is opened on the real game (the copy would open a new diary)
+      getProData().getRecorder().phaseStart(data, player, "purchase");
+      super.purchase(
+          false,
+          pusToSpend,
+          GuerraVicina.delegato(purchaseDelegate, data, player),
+          view.data(),
+          view.player());
+    } finally {
+      st.vista = null;
+      forgetStoredCombatMove();
+      forgetStoredFactoryMove();
+    }
+    try {
+      GuerraVicina.registraAcquisto(data, player, st, view.guerra());
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P4 register failed: " + e);
+    }
+  }
+
+  /** Step P4: the rows of B and C after Hard's non-combat move (the battles are over). */
+  private void registerIndications(final GameData data, final GamePlayer player) {
+    if (!(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      if (IndicazioniP4.attivo(data, player, StrategaInterruttori.NORVEGIA_PRESTO)) {
+        IndicazioniP4.registraBersagli(data, player, tuning.p4());
+      }
+      if (FronteCasa.attivo(data, player)) {
+        FronteCasa.registra(data, player, tuning.p4());
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P4 register failed: " + e);
     }
   }
 
@@ -562,7 +676,8 @@ public class ProPlusAi extends ProAi {
         }
       }
       tuning.hold(data, player, held);
-      if (getProData().getRecorder() instanceof DiaryRecorder diary && !reports.isEmpty()) {
+      if (IndicazioniP4.interno(getProData().getRecorder()) instanceof DiaryRecorder diary
+          && !reports.isEmpty()) {
         diary.amphibiousOperations(
             getProData(),
             reports,
@@ -681,7 +796,7 @@ public class ProPlusAi extends ProAi {
                 .count();
     final StrumentiRitardo.Perdite lost = StrumentiRitardo.registra(data, player, result, hunted);
     result.azioni().forEach(a -> ProLogger.info(LOG_PREFIX + a.testo()));
-    if (getProData().getRecorder() instanceof DiaryRecorder diary) {
+    if (IndicazioniP4.interno(getProData().getRecorder()) instanceof DiaryRecorder diary) {
       return () -> diary.delayTools(getProData(), result, hunted, sunk, lost);
     }
     return () -> {};

@@ -762,7 +762,9 @@ class ProNonCombatMoveAi {
                   + 0.5 * neighborValue)
               * (1 + 10.0 * isMyCapital)
               * (1 + 4.0 * isCapital);
-      proTerritory.setValue(territoryValue);
+      // Pro+ step P4: a variant may raise the priority of a territory (Hard: 0)
+      final double bonus = proData.getTuning().defensePriorityBonus(proData, t);
+      proTerritory.setValue(bonus == 0 ? territoryValue : territoryValue + bonus);
     }
 
     // Sort attack territories by value

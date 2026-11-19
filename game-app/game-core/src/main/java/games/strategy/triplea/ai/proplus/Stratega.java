@@ -155,6 +155,16 @@ public final class Stratega {
       wanted.add(StrategaInterruttori.COMPITI);
       wanted.add(StrategaInterruttori.REGNO_UNITO_P3);
     }
+    // step P4: three indications to Hard (Allies), each on its own (no commitment, no tasks)
+    if ("Allies".equals(alliance.get()) && profile.usaPronti()) {
+      wanted.add(StrategaInterruttori.USA_PRONTI);
+    }
+    if ("Allies".equals(alliance.get()) && profile.norvegiaPresto()) {
+      wanted.add(StrategaInterruttori.NORVEGIA_PRESTO);
+    }
+    if ("Allies".equals(alliance.get()) && profile.russiaFronte()) {
+      wanted.add(StrategaInterruttori.RUSSIA_FRONTE);
+    }
     final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
     boolean changed = false;
     for (final StrategaInterruttori w : wanted) {

@@ -140,6 +140,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p3", err);
     }
+    // step P4: the three indications (also for the Allies of Hard)
+    try {
+      json.add("p4", ConfrontoP4.blocco(json));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p4", err);
+    }
     return json;
   }
 

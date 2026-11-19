@@ -1,0 +1,50 @@
+{
+  "nota": "Step P4: tre indicazioni a Hard per gli Alleati dello Stratega, ognuna con il suo interruttore (default spento). Hard continua a decidere: qui ci sono solo valori, soglie e punti ciechi tolti. Nessun nome di nazione o territorio nel codice: stanno qui.",
+  "usa_pronti": {
+    "nota": "A. Nei round in cui la nazione e' neutrale ma la guerra e' certa per regola della mappa (trigger 'triggerAttachment_Americans_War_Japanese': dopo il piazzamento del round 3), la pianificazione di Hard per acquisto e piazzamento vede le relazioni come saranno a guerra iniziata (nemici in guerra, futuri alleati alleati) e le zone di mare dove puo' piazzare valgono le coste nemiche raggiungibili. I movimenti restano quelli della nazione neutrale.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P4 (default spento)"},
+    "parametri": {
+      "raggio_zone_mare": {"valore": 6, "origine": "scelto: 3 turni di trasporto (movimento 2); il valore di Hard guarda solo 3 zone, troppo poco per attraversare l'oceano"},
+      "fattore_costa": {"valore": 0.1, "origine": "come Hard (findWaterValue: valore delle terre vicine / 10), con dimezzamento per ogni zona di distanza"},
+      "turni_di_guerra_con_valore_mare": {"valore": 1, "origine": "scelto dopo la prova locale (seme 1501): con il solo valore nei round neutrali Hard compra scorta (portaerei, cacciatorpediniere, caccia) fino a R3 e al primo turno di guerra il valore della zona torna 0 (stesso punto cieco), tutto in bombardieri; il valore della zona (non la vista di guerra) resta anche nel primo turno di guerra"}
+    },
+    "nazioni": {
+      "Americans": {
+        "guerra_dopo_il_round": 3,
+        "relazioni": {
+          "Germans": "War",
+          "Italians": "War",
+          "British": "Allied",
+          "French": "Allied",
+          "Neutral_Allies": "Friendly_Neutral",
+          "Neutral_Axis": "Unfriendly_Neutral"
+        },
+        "nemici": ["Germans", "Italians"],
+        "origine": "copiate dal trigger della mappa ww2eur40_2nd_edition.xml (relationshipChange, rounds 3, after:americansPlace)"
+      }
+    }
+  },
+  "norvegia_presto": {
+    "nota": "B. Per Hard della nazione, nei round indicati, il bersaglio ha un peso alzato nella priorita' d'attacco (stesso tipo di leva di attackPriorityPlanBonus dei piani e del ponte di P3). Hard decide con le sue regole e soglie se e quando attaccare.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P4 (default spento)"},
+    "nazioni": {
+      "British": [
+        {"territorio": "Norway", "peso": 20, "dal_round": 1, "al_round": 4,
+         "origine": "peso 20 = il peso piu' alto degli obiettivi dei piani esistenti e il peso del ponte di P3; round 1-4 dalla richiesta"}
+      ]
+    }
+  },
+  "russia_fronte": {
+    "nota": "C. C1 fabbriche proprie non capitale nei territori d'origine (trovate dalla mappa): priorita' di difesa e di ripresa alzate. C2 contrattacchi contro unita' nemiche dentro o accanto ai territori d'origine con scambio stimato favorevole: soglie piu' basse e niente scarto per defensive_stance se la capitale regge comunque l'attacco realistico. C3 riparazioni: solo il danno che serve a piazzare le unita' che la nazione puo' permettersi.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P4 (default spento)"},
+    "parametri": {
+      "peso_difesa_fabbrica": {"valore": 20, "origine": "scelto = peso degli obiettivi dei piani; aggiunto alla priorita' di difesa del non combattimento di Hard (una fabbrica minore vale gia' circa 20-30, la capitale x11)"},
+      "peso_ripresa_fabbrica": {"valore": 20, "origine": "scelto = peso degli obiettivi dei piani, come il ponte di P3 (attackPriorityPlanBonus)"},
+      "soglia_desiderata_contrattacco": {"valore": 80, "origine": "scelto prudente: Hard 90; 10 punti sotto"},
+      "soglia_minima_contrattacco": {"valore": 55, "origine": "scelto prudente: Hard 65; 10 punti sotto, e solo con scambio stimato favorevole"},
+      "soglia_tenuta_capitale": {"valore": 40, "origine": "soglia esistente (soglia_tenuta di compiti.json): la capitale regge se l'attacco realistico del nemico vince al massimo il 40%"},
+      "scambio_minimo": {"valore": 0, "origine": "richiesta: TUV swing stimato > 0"}
+    },
+    "nazioni": ["Russians"]
+  }
+}

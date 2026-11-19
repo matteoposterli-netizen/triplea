@@ -79,6 +79,12 @@ final class StrategistPanel {
   /** Step P3: "Regno Unito: Il Cairo e ponte" (with the tasks and the commitment). */
   @Getter private final javax.swing.JCheckBox regnoUnitoP3 = new javax.swing.JCheckBox();
 
+  /** Step P4: three indications to Hard for the Allies (each on its own). */
+  @Getter private final javax.swing.JCheckBox usaPronti = new javax.swing.JCheckBox();
+
+  @Getter private final javax.swing.JCheckBox norvegiaPresto = new javax.swing.JCheckBox();
+  @Getter private final javax.swing.JCheckBox russiaFronte = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -189,6 +195,23 @@ final class StrategistPanel {
             + " sulle teste di ponte alleate del round (step P3, sperimentale); accende anche"
             + " Compiti e Impegno per gli Alleati; vale per le partite nuove</html>");
     panel.add(row("Regno Unito: Il Cairo e ponte:", regnoUnitoP3));
+    usaPronti.setSelected(profile.usaPronti());
+    usaPronti.setText(
+        "<html>Alleati: da neutrali gli USA pianificano gli acquisti come a guerra iniziata e"
+            + " danno valore alle coste nemiche raggiungibili (step P4, sperimentale); vale per le"
+            + " partite nuove</html>");
+    panel.add(row("USA pronti prima della guerra:", usaPronti));
+    norvegiaPresto.setSelected(profile.norvegiaPresto());
+    norvegiaPresto.setText(
+        "<html>Alleati: nei round 1-4 la Norvegia vale di piu' come bersaglio per il Regno Unito"
+            + " (step P4, sperimentale); vale per le partite nuove</html>");
+    panel.add(row("Norvegia presto:", norvegiaPresto));
+    russiaFronte.setSelected(profile.russiaFronte());
+    russiaFronte.setText(
+        "<html>Alleati: la Russia difende e riprende le fabbriche al fronte, contrattacca con"
+            + " soglie piu' basse se lo scambio conviene e ripara solo il necessario (step P4,"
+            + " sperimentale); vale per le partite nuove</html>");
+    panel.add(row("Fronte russo:", russiaFronte));
     panel.add(
         row(
             "",
@@ -214,6 +237,9 @@ final class StrategistPanel {
     profile.setItaliaConvoglio(italiaConvoglio.isSelected());
     profile.setCompiti(compiti.isSelected());
     profile.setRegnoUnitoP3(regnoUnitoP3.isSelected());
+    profile.setUsaPronti(usaPronti.isSelected());
+    profile.setNorvegiaPresto(norvegiaPresto.isSelected());
+    profile.setRussiaFronte(russiaFronte.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

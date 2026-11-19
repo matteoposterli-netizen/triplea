@@ -98,6 +98,14 @@ public final class ProPlusTuning implements ProTuning {
    */
   private @Nullable ProData owner;
 
+  /** Step P4: the turn's state of the three indications (one AI = one nation). */
+  private final IndicazioniP4.Stato p4 = new IndicazioniP4.Stato();
+
+  /** Step P4: the turn's state of the three indications. */
+  public IndicazioniP4.Stato p4() {
+    return p4;
+  }
+
   /**
    * Step PROVA DI VALORE: set when the last answer came from a joint operation ({@link
    * OperazioniCongiunte}), read and cleared by the check against Hard ({@link ControlloTuning}).
@@ -199,10 +207,14 @@ public final class ProPlusTuning implements ProTuning {
   @Override
   public double targetAttackWinPercentage(
       final ProData proData, final Territory target, final double attackWinPercentage) {
-    if (!on(proData, Ablazione.Componente.SOGLIE_RISCHIO)) {
-      return attackWinPercentage;
-    }
-    return desiredWinPercentage(proData, target);
+    final double value =
+        on(proData, Ablazione.Componente.SOGLIE_RISCHIO)
+            ? desiredWinPercentage(proData, target)
+            : attackWinPercentage;
+    // step P4 (C2): a favorable counterattack at home, a lower desired win% (switch off: none)
+    return FronteCasa.attivo(proData.getData(), proData.getPlayer())
+        ? FronteCasa.sogliaDesiderata(p4, target, value)
+        : value;
   }
 
   /** See {@link #targetAttackWinPercentage}. */
@@ -224,6 +236,15 @@ public final class ProPlusTuning implements ProTuning {
 
   @Override
   public double targetAttackMinWinPercentage(
+      final ProData proData, final Territory target, final double attackMinWinPercentage) {
+    final double value = targetAttackMinWinPercentageBase(proData, target, attackMinWinPercentage);
+    // step P4 (C2): a favorable counterattack at home, a lower minimum win% (switch off: none)
+    return FronteCasa.attivo(proData.getData(), proData.getPlayer())
+        ? FronteCasa.sogliaMinima(p4, target, value)
+        : value;
+  }
+
+  private double targetAttackMinWinPercentageBase(
       final ProData proData, final Territory target, final double attackMinWinPercentage) {
     // step PROVA DI VALORE: the target of an approved second step, down to the closing threshold
     if (OperazioniCongiunte.forzaBersaglio(proData, target)) {
@@ -288,6 +309,15 @@ public final class ProPlusTuning implements ProTuning {
   /** The plan's objective weight for {@code target} (never for neutrals); 0 without a plan. */
   @Override
   public double attackPriorityPlanBonus(final ProData proData, final Territory target) {
+    final double base = attackPriorityPlanBonusBase(proData, target);
+    // step P4 (B, C1): a target weighted in its rounds, an own front factory to take back
+    final double p4Bonus =
+        Math.max(
+            IndicazioniP4.pesoBersaglio(proData, target), FronteCasa.bonusRipresa(proData, target));
+    return p4Bonus > base ? p4Bonus : base;
+  }
+
+  private double attackPriorityPlanBonusBase(final ProData proData, final Territory target) {
     if (ProUtils.isNeutralLand(target)) {
       return 0;
     }
@@ -372,6 +402,8 @@ public final class ProPlusTuning implements ProTuning {
       final ProData proData,
       final ProOddsCalculator calc,
       final Map<Territory, games.strategy.triplea.ai.pro.data.ProTerritory> attackMap) {
+    // step P4: Hard's attacks on the watched targets, for the register (read only)
+    IndicazioniP4.attacchiDiHard(p4, attackMap);
     Impegno.rivedi(proData, calc, attackMap);
     // step R4 (A3): the raid on Moscow's factory (switch "assedio")
     Assedio.bombarda(proData, attackMap);
@@ -1393,5 +1425,38 @@ public final class ProPlusTuning implements ProTuning {
 
   static boolean isLowLuck(final GameState data) {
     return Properties.getLowLuck(data.getProperties());
+  }
+
+  // ============================================================================ step P4
+
+  /** Step P4 (A): in the war view, the place sea zones valued by the enemy coasts in reach. */
+  @Override
+  public double placeTerritoryValue(final ProData proData, final Territory t, final double value) {
+    if ((p4.vista == null && !p4.soloValoreMare) || !t.isWater()) {
+      return value;
+    }
+    final double sea = GuerraVicina.valoreMare(proData, t);
+    p4.valoriMare.put(t.getName(), Math.max(value, sea));
+    return Math.max(value, sea);
+  }
+
+  /** Step P4 (C3): only the repair the turn's placement needs. */
+  @Override
+  public int repairDamage(
+      final ProData proData, final Unit factory, final int damage, final int pusRemaining) {
+    return FronteCasa.ripara(proData, p4, factory, damage, pusRemaining);
+  }
+
+  /** Step P4 (C2): a favorable counterattack at home while the capital holds. */
+  @Override
+  public boolean keepsAttackInDefensiveStance(final ProData proData, final ProTerritory patd) {
+    return FronteCasa.attivo(proData.getData(), proData.getPlayer())
+        && FronteCasa.tieneInDifensiva(p4, patd);
+  }
+
+  /** Step P4 (C1): an own front factory defended first. */
+  @Override
+  public double defensePriorityBonus(final ProData proData, final Territory t) {
+    return FronteCasa.bonusDifesa(proData, t);
   }
 }

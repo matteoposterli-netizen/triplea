@@ -246,6 +246,14 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   senza il ramo compiti) e via il sequestro dei trasporti vuoti e delle truppe in patria (`Compiti.usate`, `nonCombattimento`,
   `muoviTrasporti`); registro `Compiti.KEY_SCARICATE` (solo per l'autoplay); autoplay `MonitorP2` (trasporti piazzati),
   `Monitor` (`sbarchi[].unita_compito`), `ConfrontoP2.p2bis` (blocco `p2.p2bis`, tabella "P2-bis"). Vedi "Step P2-bis".
+- Step P4 TRE INDICAZIONI: `ai/proplus/IndicazioniP4` (dati `proplus/strategia/p4.json`, attivazione, stato del turno per AI,
+  rubinetto sul registratore del diario, righe del registro), `GuerraVicina` (A `usa_pronti`: vista di guerra sulla copia,
+  valore delle zone di mare, delegato d'acquisto tradotto), `FronteCasa` (C `russia_fronte`: fabbriche al fronte, contrattacchi,
+  tenuta della capitale, riparazioni); B `norvegia_presto` in `IndicazioniP4.pesoBersaglio`. Agganci NUOVI in `ProTuning` (default =
+  Hard): `placeTerritoryValue` (ProPurchaseAi.purchase), `repairDamage` (ProPurchaseAi.repair), `keepsAttackInDefensiveStance`
+  (ProCombatMoveAi, scarto defensive_stance), `defensePriorityBonus` (ProNonCombatMoveAi, priorita' di difesa);
+  `AbstractProAi.forgetStoredFactoryMove()`. Interruttori `StrategaInterruttori.USA_PRONTI/NORVEGIA_PRESTO/RUSSIA_FRONTE`; caselle
+  del pannello; autoplay `MonitorP4`, `ConfrontoP4` (blocco `p4`, sezione "P4"). Vedi "Tre indicazioni a Hard (step P4)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -538,6 +546,9 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   `Hard-vs-Alleati-squadra` (`Allies=impegno+squadra_gibilterra`), e2 `Asse-impegno-assedio-vs-Hard` (quota 70), f3
   `Asse-assedio-vs-Alleati-squadra`, g `Asse-assedio-quota80-vs-Hard` (campo `quota` della matrice ⇒ `--quota-operazione Axis=80`);
   sottosezione "R6" (`ConfrontoR6`).
+  **Dallo step P4** `[completa]` = 5 configurazioni x 40 semi 1501-1540 = 200 partite senza chiave, Asse sempre impegno+assedio
+  (quota 70): e2 Alleati Hard, q1 `Allies=usa_pronti`, q2 `Allies=norvegia_presto`, q3 `Allies=russia_fronte`, q4 tutte e tre;
+  sezione "P4" (`ConfrontoP4`, riferimento = la configurazione con gli Alleati di Hard).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -3150,6 +3161,86 @@ li esegue piu'; U0 resta); parametri `peso_ponte_attacco` 20, `forza_ponte_rinfo
     (toglierebbe a Hard l'offensiva in Libia anche senza minaccia).
 10. **Teste di ponte solo su territori dell'altra alleanza** (alla fotografia del round, o ora se attaccati): nella prima
    prova contavano anche i neutrali presi dagli USA (Venezuela, Colombia, Spagna...).
+
+### Tre indicazioni a Hard (step P4)
+
+Regola uscita da P1-P3: per gli Alleati funziona solo cio' che si AGGIUNGE a Hard (niente divieti, tetti, sequestri, ricette).
+Tre indicazioni indipendenti, ognuna col suo interruttore lato Alleati dello Stratega (default spento, dal file `p4.json`),
+indipendenti da `impegno` e `compiti`: autoplay `--stratega-acceso Allies=usa_pronti` (`norvegia_presto`, `russia_fronte`,
+combinabili con `+`), pannello: caselle "USA pronti prima della guerra", "Norvegia presto", "Fronte russo" (accendono solo il loro
+interruttore). Con i tre spenti lo Stratega senza chiave = Hard (`NudoHardTest`, test `IndicazioniP4Test`: ogni aggancio risponde
+come `ProTuning.DEFAULT`). Nessun nome di nazione o territorio nel codice (test sul sorgente): nazioni, round, territori e
+relazioni stanno in `p4.json`.
+- **Diagnosi A** (log di Hard con `ProLogger` su stderr, partite Hard vs Hard semi 1501-1502, R1-R7): (1) da neutrali gli USA
+  contano come nemico ogni giocatore NON alleato (`ProUtils.getEnemyPlayers` = non alleati): i britannici (relazione
+  "Neutrality") sono gli attaccanti contro cui il passo `defend_land` compra difensori ("Eastern United States ... enemyAttackers
+  = armour/artillery/bomber/infantry owned by British"), il passo `land` vede la costa come fronte (enemyDistance 1, Canada) e
+  la zona 101 "needDefenders" per la flotta britannica: 35 PU in fanteria/artiglieria a R1-R3. (2) In guerra (R4) TUTTI i
+  territori di piazzamento USA hanno `strategicValue` 0 (`findWaterValue`: solo nemici entro 3 zone e capitali/fabbriche nemiche
+  per rotta marittima; `findLandValue`: nessun nemico per terra): i passi `land` e `sea` non comprano, tutto va a `remaining`
+  (5 bombardieri a R4); i trasporti partono a R5 quando il valore della zona 101 diventa appena positivo (0,0097: 8 trasporti).
+  Quindi l'ipotesi del prompt ("nessun bersaglio raggiungibile") e' giusta per la guerra, ma da neutrali il blocco e' piu' grave
+  (gli alleati futuri visti come nemici); la sola "vista di guerra" porta Hard a comprare bombardieri come a R4 (prova locale).
+- **A `usa_pronti`** (`GuerraVicina`): nei round fino a `guerra_dopo_il_round` (3) in cui la nazione non e' ancora in guerra con
+  TUTTI i futuri nemici (la condizione della mappa; una dichiarazione anticipata dell'Italia a R2 lascia la guerra incompleta), Hard
+  pianifica acquisto e piazzamento su una COPIA della partita con le relazioni del trigger della mappa (dati: Germans/Italians War,
+  British/French Allied, Neutral_Allies Friendly_Neutral, Neutral_Axis Unfriendly_Neutral): `ProPlusAi.purchaseInWarView` chiama
+  `AbstractProAi.purchase` con la copia e il giocatore della copia; il delegato d'acquisto reale riceve le regole tradotte per nome
+  (`GuerraVicina.delegato`; riparazioni per id); il turno del diario e' aperto prima sul dato reale; dopo, il piano d'attacco e le
+  mosse di fabbrica pianificati sulla copia sono dimenticati (`forgetStoredCombatMove`, `forgetStoredFactoryMove`): i movimenti
+  restano quelli della nazione neutrale. In piu' le zone di mare di piazzamento valgono le coste nemiche entro `raggio_zone_mare`
+  (6) zone, produzione dimezzata per zona x `fattore_costa` (0,1, la scala di Hard), se piu' del valore di Hard
+  (`placeTerritoryValue`); questo SOLO valore (senza vista di guerra) anche nei `turni_di_guerra_con_valore_mare` (1) turni dopo
+  (scelta 2). Hard decide il mix (scorta per la superiorita' navale locale, trasporti, truppe).
+- **B `norvegia_presto`**: per la nazione dei dati (British) nei round `dal_round`-`al_round` (1-4) il territorio (Norway) ha
+  `peso` 20 nella priorita' d'attacco di Hard (`attackPriorityPlanBonus`, come piani e ponte di P3; il massimo tra i pesi).
+- **C `russia_fronte`** (`FronteCasa`): C1 fabbriche proprie non capitale nei territori d'origine (proprietario originale =
+  la nazione, fabbrica, non capitale: trovate dalla mappa) +20 alla priorita' di difesa del non combattimento se proprie
+  (`defensePriorityBonus`), +20 alla priorita' d'attacco se di un nemico in guerra. C2 all'inizio del turno (acquisto: Hard pianifica
+  il combattimento sulla copia all'acquisto) i bersagli con unita' nemiche dentro o accanto a un territorio d'origine con scambio
+  stimato (`estimateAttackBattleResults` con il massimo delle unita') > 0: soglie desiderata 80 / minima 55 (Hard 90 / 65,
+  `targetAttack(Min)WinPercentage`); non scartati per `defensive_stance` se l'attacco realistico del nemico sulla capitale, tolte
+  le unita' che possono partire per l'attacco, vince <= 40% (`keepsAttackInDefensiveStance`). C3 riparazioni: il minimo `r` per cui
+  la capacita' `max(0, piena - (danno - r))` basta alle unita' comprabili con i PU restanti (`(pu - r) / costo minimo per unita'`,
+  1 PU per punto riparato) (`repairDamage`).
+- **Registro** (`impegno-decisioni.jsonl`): `usa_pronti` (ACQUISTO_NEUTRALE: acquisti per passo di Hard, valore delle zone,
+  posseduti; PRIMO_TURNO_DI_GUERRA: trasporti, navi da guerra, truppe a bordo e caricabili; ACQUISTO_VALORE_MARE), `norvegia_presto`
+  (PESO_ATTIVO: priorita' di Hard, candidato, scartato con motivo, attacco con unita'/vittoria stimata, proprietario a fine turno),
+  `russia_fronte` (FRONTE: fabbriche al fronte e proprietari, contrattacchi candidati con vittoria/scambio stimati, capitale regge,
+  priorita' e scarto di Hard, tenuti in difensiva, attacco e esito, riparazioni con danno/riparato/risparmiato). Priorita' e scarti
+  letti da un rubinetto sul registratore (`IndicazioniP4.tap`, solo con un interruttore acceso), gli attacchi da `reviewAttacks`.
+- **Autoplay**: `MonitorP4` (`round[].p4`: proprietari di Norway, Novgorod, Ukraine, Volgograd, Russia, Southern Italy, Germany;
+  esercito di terra in TUV di Russia e Germania; attacchi russi del round = unita' russe nelle battaglie dopo il combattimento russo e
+  unita' nemiche uccise nelle battaglie russe). Blocco `p4` (`ConfrontoP4.blocco`): `usa_sbarcate_cumulate.{5,6,8,10}.{nord,
+  mediterraneo,totale}` (Mediterraneo = regioni R5 italia_isole + nord_africa), `round_primo_sbarco_usa_6` (stesso territorio e
+  round, -1 = mai), `trasporti_usa`/`navi_da_guerra_usa` `{3,4,5}` (da `round[].p1`), `norway_alleata {3,4,6}`, `reddito_tedesco
+  {4,6}`, `russe_fine_round.<territorio>.{4,5,6,8}`, `attacchi_russi.{3..8}`, `pu_riparazioni_russe` per round, `esercito_tuv
+  {6,8,10}`, `cadute` (mosca, roma, berlino), `mosca_oltre_r14`, `regno_unito_perso`, `registro` (conteggi delle righe). Sezione
+  "P4" (vittorie e Mosca oltre R14 con Wilson e Fisher contro il riferimento; tabelle A, B, C).
+- Test: `IndicazioniP4Test` (11), `ConfrontoP4Test` (2).
+
+### Scelte di P4 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **A = vista di guerra sulla copia + valore delle zone di mare**: la diagnosi mostra due blocchi; la sola vista porta Hard a
+   comprare bombardieri (prova locale seme 1501: R1-R3 `remaining` bombardieri e caccia, valore della zona 101 = 0). Il valore delle
+   coste nemiche entro 6 zone (3 turni di trasporto) toglie il secondo punto cieco con la scala di Hard (/10, dimezzato per zona).
+   Scartato: una lista o quota di trasporti (ricetta, vietata) e cambiare le relazioni della partita vera (stato reale, rete).
+2. **Il solo valore della zona anche nel primo turno di guerra** (`turni_di_guerra_con_valore_mare` 1): nella seconda prova
+   (seme 1501) con il valore solo da neutrali Hard ha comprato scorta R1-R3 e a R4 il valore e' tornato 0 (stesso punto cieco della
+   diagnosi): tutto in bombardieri. La vista di guerra resta solo nei round neutrali, come chiesto. Scartato: estendere oltre (il
+   prompt dice neutralita').
+3. **"Neutrale" = non ancora in guerra con TUTTI i futuri nemici** (la condizione della mappa
+   `conditionAttachmentAmericansNotYetAtWarWithAll`): nella prima prova l'Italia ha dichiarato guerra agli USA a R2 e con
+   "nessuna guerra" la vista spariva a R3 con i britannici ancora non alleati.
+4. **Pesi 20** (B e C1): il peso piu' alto dei piani e quello del ponte di P3; sposta la scelta senza rendere vincibile un attacco
+   perso. Scartato: 30-50 (un peso che domina la priorita' e' quasi un ordine).
+5. **Soglie C2 80 / 55** (Hard 90 / 65): 10 punti sotto, solo con scambio stimato > 0 e solo vicino ai territori d'origine;
+   prudenti perche' la Russia non deve svuotarsi. Scartato: 70 / 50 (la soglia minima 50 accetterebbe attacchi a moneta).
+6. **Capitale regge = attacco realistico <= 40% tolte TUTTE le unita' della capitale che possono partecipare all'attacco**
+   (stima prudente: Hard ne usa di solito meno). Impegno del nemico sulla capitale = 1 (`StimaUnica`, capitale).
+7. **Riparazione: 1 PU per punto e costo minimo per unita' di terra** (fanteria 3): la regola della mappa; ogni fabbrica per conto
+   suo (PU restanti dopo le riparazioni precedenti). Prima versione sbagliata (capacita' calcolata dalla capacita' gia' azzerata:
+   a Mosca con danno 17 riparava 5 e restava a 0): corretta dopo la prova locale.
 
 ## Come configurare lo stratega
 
@@ -6096,3 +6187,40 @@ Numeri dal blocco `p3` (e `p2`) dei `riepilogo.json` (campi tra parentesi).
   significativo). La leva A sposta poco: i britannici arrivano sulle teste di ponte (45,8 unita' a partita) ma a fine round sono
   con gli USA solo nel 19% degli sbarchi (molti sbarchi USA sono su neutrali o fuori dai territori che il Regno Unito raggiunge
   nello stesso round). Mosca cade in 33/40 (e2 29): il costo della direzione MEDITERRANEO di P2 resta.
+
+### Step P4 — tre indicazioni a Hard: USA pronti prima, Norvegia, fronte russo (2026-11-19)
+
+Vedi "Tre indicazioni a Hard (step P4)" e "Scelte di P4". Tre interruttori lato Alleati dello Stratega (`usa_pronti`,
+`norvegia_presto`, `russia_fronte`), indipendenti da `compiti` (spento in questa run), default spenti; ProAi (Hard) invariata
+(4 agganci nuovi in `ProTuning` con default = Hard, `AbstractProAi.forgetStoredFactoryMove` mai chiamato da Hard).
+- File nuovi: `ai/proplus/IndicazioniP4`, `GuerraVicina`, `FronteCasa`, risorsa `proplus/strategia/p4.json`, test
+  `IndicazioniP4Test` (11); autoplay `MonitorP4`, `ConfrontoP4`, test `ConfrontoP4Test` (2). Modificati: `ProTuning`,
+  `ProPurchaseAi`, `ProCombatMoveAi`, `ProNonCombatMoveAi`, `AbstractProAi`, `ProPlusAi` (inizio indicazioni, acquisto nella vista
+  di guerra, registro dopo il non combattimento; `IndicazioniP4.interno` al posto di `instanceof DiaryRecorder`), `ProPlusTuning`,
+  `RegistroDecisioni` (tipi e codici P4), `StrategaInterruttori`, `Stratega`, `ProfiloStratega`, `StrategistPanel` (3 caselle);
+  autoplay `Monitor` (`round[].p4`), `Riepilogo` (blocco `p4`), `ConfrontoCompleta` (sezione "P4"); workflow `[completa]` = e2,
+  q1-q4 x semi 1501-1540 (200 partite, costo API 0).
+- Test locali: AI di game-core 672 (1 saltato; golden Hard, `NudoHardTest`, `DiaryNeutralityTest`, `CampagnaOmbraTest`,
+  `IndicazioniP4Test`), `:ai:test` 13, `:proplus-autoplay:test` 54 + `ConfrontoP4Test` 2, `:game-headed:test` 94: verdi. JDK 25
+  Temurin 25.0.1 da GitHub; Maven Central 429 ritentato.
+- Diagnosi A: log di Hard (patch locale temporanea a `ProLogger` per stamparlo su stderr, NON committata), partite Hard vs Hard
+  semi 1501 (4 round) e 1502 (7 round): vedi "Tre indicazioni a Hard".
+- Prove locali, Asse impegno+assedio (quota 70), seme 1501, 12 round (le simulazioni dell'AI restano casuali: partite diverse
+  anche a parita' di seme; una partita per configurazione NON e' una misura):
+  - A prima versione (solo vista di guerra): USA R1-R3 `remaining` bombardieri/caccia, valore zona 101 = 0 ⇒ aggiunto il valore
+    delle coste (scelta 1). Seconda: R1-R2 `sea` portaerei+cacciatorpediniere+caccia, R3 senza vista (l'Italia aveva dichiarato
+    guerra a R2) ⇒ scelta 3; R4 tutto bombardieri (valore 0) ⇒ scelta 2. Versione finale q1: acquisti USA R1 / R2 / R3 / R4 =
+    portaerei+cacciatorpediniere / portaerei+cacciatorpediniere+2 caccia / portaerei+2 caccia / 6 caccia (passo `sea`: Hard compra
+    la superiorita' navale locale prima dei trasporti); trasporti R3 / R4 / R5 = 1 / 1 / 0, navi da guerra 6 / 6 / 9; 6 trasporti a
+    R6; nessuno sbarco USA >= 6 unita' entro R12; sbarcate cumulate R6 / R8 / R10 = 2 / 10 / 27; Mosca non caduta entro R12. Nella
+    q4 (tutte e tre): R4 6 trasporti + 6 truppe, trasporti R4 / R5 = 7 / 12, primo sbarco >= 6 a R6, sbarcate R6 / R8 / R10 = 10 /
+    23 / 33; Mosca caduta a R9.
+  - B (prima versione): Norway candidata di Hard britannico a R1 e R3 con priorita' 23,1 e 24,6 (peso 20 compreso), mai attaccata
+    (Hard non raggiunge le sue soglie); a R2 e R4 non e' tra i bersagli possibili. Norway alleata solo a R6 nella q1 e q4 (presa da
+    Hard senza il peso, R6). Nessuna correzione: e' la regola (Hard decide).
+  - C prima versione: contrattacchi candidati e fatti (Romania, Bessarabia, Eastern Poland, Belarus...), Mosca tenuta fino a R12;
+    BUG delle riparazioni (scelta 7) ⇒ corretto. Versione finale q3: 37 candidati, 9 fatti, 8 presi, 1 tenuto in difensiva, 0
+    attacchi sotto la soglia standard 65 (le vittorie stimate dei contrattacchi fatti sono 87-100%: la soglia minima piu' bassa non
+    e' servita in questa partita, la desiderata 80 riduce le unita' mandate); PU riparati 28, risparmiati 47; Mosca caduta a R10.
+  - 0 eccezioni, 0 avvisi `[Pro+] P4` nei log.
+- CI: `[completa]` = e2, q1, q2, q3, q4 x semi 1501-1540.

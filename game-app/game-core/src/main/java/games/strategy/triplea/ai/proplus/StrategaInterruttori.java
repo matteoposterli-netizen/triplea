@@ -39,6 +39,9 @@ import java.util.Optional;
  *       alliance: the nations with a task play it, the others play as Hard.
  *   <li>{@link #REGNO_UNITO_P3} (step P3, default from {@code compiti.json} {@code p3}: OFF), on
  *       top of {@link #COMPITI}: the city to hold and the bridgehead weight ({@link CittaPonte}).
+ *   <li>{@link #USA_PRONTI}, {@link #NORVEGIA_PRESTO}, {@link #RUSSIA_FRONTE} (step P4, defaults
+ *       from {@code p4.json}: OFF), independent of {@link #COMPITI} and {@link #IMPEGNO}: three
+ *       indications to Hard ({@link IndicazioniP4}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -52,7 +55,10 @@ public enum StrategaInterruttori {
   SQUADRA_GIBILTERRA("squadra_gibilterra", false),
   ITALIA_CONVOGLIO("italia_convoglio", false),
   COMPITI("compiti", false),
-  REGNO_UNITO_P3("regno_unito_p3", false);
+  REGNO_UNITO_P3("regno_unito_p3", false),
+  USA_PRONTI("usa_pronti", false),
+  NORVEGIA_PRESTO("norvegia_presto", false),
+  RUSSIA_FRONTE("russia_fronte", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -94,6 +100,15 @@ public enum StrategaInterruttori {
     }
     if (this == REGNO_UNITO_P3) {
       return CittaPonte.Config.get().accesoDiDefault();
+    }
+    if (this == USA_PRONTI) {
+      return IndicazioniP4.Config.get().usaDiDefault();
+    }
+    if (this == NORVEGIA_PRESTO) {
+      return IndicazioniP4.Config.get().norvegiaDiDefault();
+    }
+    if (this == RUSSIA_FRONTE) {
+      return IndicazioniP4.Config.get().fronteDiDefault();
     }
     return predefinito;
   }
@@ -157,7 +172,8 @@ public enum StrategaInterruttori {
                                         + x
                                         + " (liste, tenute, ombra, impegno, assedio, alleati_r4,"
                                         + " alleati_r5, squadra_gibilterra, italia_convoglio,"
-                                        + " compiti, regno_unito_p3)"))
+                                        + " compiti, regno_unito_p3, usa_pronti,"
+                                        + " norvegia_presto, russia_fronte)"))
                         .id())
             .distinct()
             .toList();
