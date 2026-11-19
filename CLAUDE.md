@@ -3442,10 +3442,15 @@ britanniche pronte". Tutti spenti = decisioni identiche a P6 (agganci nuovi con 
 - **B `ponte_uk`** (Regno Unito, nel suo turno; gli USA giocano prima nello stesso round): T = territori con almeno 6 unita' USA
   sbarcate in questo round dal registro di `sbarco_concentrato` (SBARCO_IN_FORZA, SBARCO_DOPO_ATTESA, sommati per territorio).
   - T dell'Asse: **peso 40** (`peso_attacco`) nella priorita' degli attacchi di Hard (massimo con i pesi di P4/P6); soglie e
-    controllo dei trasporti esposti di Hard invariati (Hard conta gia' le navi alleate nella zona di scarico).
+    controllo dei trasporti esposti di Hard invariati (Hard conta gia' le navi alleate nella zona di scarico). Gli sbarchi del
+    round si leggono a inizio acquisto sul gioco reale (`IndicazioniP7.inizioTurno`, stato `ProPlusTuning.p7b`): Hard pianifica
+    il combattimento su una copia della partita, dove il registro (in memoria per oggetto partita) e' vuoto.
   - T alleato: nel non combattimento, DOPO il combattimento di Hard e prima del suo non combattimento, i trasporti britannici
     che arrivano in una zona accanto a T (rotta senza nemici entro il movimento) portano in T le truppe britanniche gia' a bordo o
-    caricabili ora dalle terre accanto alla loro zona (scelte da `ProTransportUtils.getUnitsToTransportFromTerritories`); dalla
+    caricabili lungo la rotta (partenza -> zona di carico -> zona di scarico entro il movimento; truppe delle terre accanto alla
+    zona di carico, scelte da `ProTransportUtils.getUnitsToTransportFromTerritories`); zona di scarico: la meno minacciata (TUV
+    nemico in portata - copertura alleata) tra quelle raggiungibili; se una zona risulta esposta i suoi trasporti provano le
+    altre zone accanto a T (fino a 3 passate); dalla
     capitale e dalle fabbriche esce un'unita' solo finche' l'attacco realistico nemico vi vince al massimo 100 - win% di Hard.
     Controllo dei trasporti esposti come Hard: escluso se 0,75 x TUV che il nemico distrugge nella zona (contro trasporti + navi
     alleate presenti, USA comprese) > TUV sbarcato + produzione di T x (1 + 3 x capitale). Registro PONTE_RINFORZO,
@@ -3469,12 +3474,20 @@ britanniche pronte". Tutti spenti = decisioni identiche a P6 (agganci nuovi con 
    cancellato), non trattiene unita' e non aspetta; Hard ha tutto il resto. Scartati: peso in `defensePriorityBonus` (inerte nei
    casi tipici), lista "da tenere" (`defenseLists`, cambia la difesa di tutto il resto).
 2. **Peso d'attacco 40** con T dell'Asse: il doppio del peso di Norway (20), che Hard vedeva senza sceglierlo.
-3. **Carico solo dalla zona di partenza** (non lungo la rotta): piu' semplice, la flotta britannica di casa sta accanto alla patria.
+3. **Carico lungo la rotta e zona meno minacciata** (dopo il giro 2 della prova breve: su 37 casi del registro, 13 "non
+   raggiungibile" con trasporti che arrivavano ma senza truppe accanto alla zona di partenza, 14 "esposti" con un'altra zona
+   accanto a T piu' sicura). Il controllo dell'esposizione resta quello di Hard, applicato a ogni zona usata.
 4. **Registro solo sul gioco reale**: una riga scritta su una copia della simulazione apriva una cartella di diario nuova (visto
    nella prima prova locale: 5 cartelle in piu' in una partita; `prune` poteva togliere la cartella vera).
 5. **CI in gruppi di 5 partite per job** (216 job): non ho potuto leggere la documentazione dei limiti (host bloccato dalla
    sandbox) e "256 job per workflow run" puo' voler dire per matrice o per run; con 216 job va bene in entrambi i casi.
-6. **F3 "raggiungibile"** = trasporti britannici che arrivano in una zona accanto a T entro il loro movimento passando per zone
+6. **Peso letto a inizio turno** (giro 2: 0 righe PONTE_PESO_ATTACCO su 7 sbarchi USA falliti): il combattimento di Hard e'
+   pianificato sulla copia della simulazione d'acquisto, dove il registro e' vuoto.
+7. **Teste di ponte e F3 solo su territorio nemico**: il monitor vede anche i trasferimenti USA verso le basi (Gibilterra, Central
+   America), che nel giro 2 erano un terzo degli "sbarchi >= 6"; restano nella tabella F1 con proprietario "alleato".
+8. **Attacchi ai neutrali solo in guerra con loro**: truppe britanniche entrate in un neutrale divenuto amico (dopo la guerra
+   dell'Asse ai neutrali) non sono un attacco.
+9. **F3 "raggiungibile"** = trasporti britannici che arrivano in una zona accanto a T entro il loro movimento passando per zone
    senza navi nemiche; "caricabili" = truppe nelle terre accanto alle zone da cui il trasporto parte o passa, riempiendo i posti
    per costo di trasporto crescente (approssimazione di sola lettura, i canali non sono controllati).
 
