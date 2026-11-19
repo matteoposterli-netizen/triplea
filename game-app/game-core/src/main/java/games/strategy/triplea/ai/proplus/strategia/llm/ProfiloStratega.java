@@ -207,6 +207,37 @@ public final class ProfiloStratega {
     values.setProperty(KEY_NORVEGIA_ESPOSTA, on ? "si" : "no");
   }
 
+  private static final String KEY_NIENTE_NEUTRALI = "niente_neutrali";
+  private static final String KEY_PONTE_UK = "ponte_uk";
+  private static final String KEY_PONTE_PRONTI = "ponte_pronti";
+
+  /** Step P7: "Niente neutrali" for the Allies. Off unless set. */
+  public boolean nienteNeutrali() {
+    return si(KEY_NIENTE_NEUTRALI);
+  }
+
+  public void setNienteNeutrali(final boolean on) {
+    values.setProperty(KEY_NIENTE_NEUTRALI, on ? "si" : "no");
+  }
+
+  /** Step P7: "Ponte del Regno Unito" for the Allies. Off unless set. */
+  public boolean ponteUk() {
+    return si(KEY_PONTE_UK);
+  }
+
+  public void setPonteUk(final boolean on) {
+    values.setProperty(KEY_PONTE_UK, on ? "si" : "no");
+  }
+
+  /** Step P7: "Truppe britanniche pronte" for the Allies. Off unless set. */
+  public boolean pontePronti() {
+    return si(KEY_PONTE_PRONTI);
+  }
+
+  public void setPontePronti(final boolean on) {
+    values.setProperty(KEY_PONTE_PRONTI, on ? "si" : "no");
+  }
+
   private static final String KEY_REGNO_UNITO_P3 = "regno_unito_p3";
 
   /**

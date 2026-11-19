@@ -95,6 +95,13 @@ final class StrategistPanel {
 
   @Getter private final javax.swing.JCheckBox norvegiaEsposta = new javax.swing.JCheckBox();
 
+  /** Step P7: three levers for the Allies (each on its own). */
+  @Getter private final javax.swing.JCheckBox nienteNeutrali = new javax.swing.JCheckBox();
+
+  @Getter private final javax.swing.JCheckBox ponteUk = new javax.swing.JCheckBox();
+
+  @Getter private final javax.swing.JCheckBox pontePronti = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -249,6 +256,25 @@ final class StrategistPanel {
             + " svuotare le acque di casa; accende anche Norvegia presto (step P6, sperimentale);"
             + " vale per le partite nuove</html>");
     panel.add(row("Norvegia anche esposta:", norvegiaEsposta));
+    nienteNeutrali.setSelected(profile.nienteNeutrali());
+    nienteNeutrali.setText(
+        "<html>Alleati: USA, Regno Unito, Francia e Russia non dichiarano mai guerra ai neutrali"
+            + " veri e non attaccano i loro territori (restano attaccabili gli ex neutrali presi"
+            + " dall'Asse) (step P7, sperimentale); vale per le partite nuove</html>");
+    panel.add(row("Niente neutrali:", nienteNeutrali));
+    ponteUk.setSelected(profile.ponteUk());
+    ponteUk.setText(
+        "<html>Alleati: quando gli USA sbarcano almeno 6 unita' in un territorio, nello stesso"
+            + " round il Regno Unito ci porta le truppe che i suoi trasporti raggiungono (se il"
+            + " territorio e' ancora dell'Asse lo preferisce come bersaglio), senza svuotare la"
+            + " difesa di casa (step P7, sperimentale); vale per le partite nuove</html>");
+    panel.add(row("Ponte del Regno Unito:", ponteUk));
+    pontePronti.setSelected(profile.pontePronti());
+    pontePronti.setText(
+        "<html>Alleati: con gli USA in guerra il Regno Unito spende almeno il 40% dei PU rimasti"
+            + " dopo la difesa in truppe di terra in patria, finche' i suoi trasporti accanto"
+            + " bastano a portarle (step P7, sperimentale); vale per le partite nuove</html>");
+    panel.add(row("Truppe britanniche pronte:", pontePronti));
     panel.add(
         row(
             "",
@@ -281,6 +307,9 @@ final class StrategistPanel {
     profile.setNorvegiaScorta(norvegiaScorta.isSelected());
     profile.setSbarcoConcentrato(sbarcoConcentrato.isSelected());
     profile.setNorvegiaEsposta(norvegiaEsposta.isSelected());
+    profile.setNienteNeutrali(nienteNeutrali.isSelected());
+    profile.setPonteUk(ponteUk.isSelected());
+    profile.setPontePronti(pontePronti.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

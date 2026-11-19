@@ -285,6 +285,24 @@ public interface ProTuning {
   }
 
   /**
+   * Whether the politics phase may choose {@code action} (Pro+ step P7: no war on the true
+   * neutrals). Always by default: Hard and Hard Beta choose among every valid action.
+   */
+  default boolean allowsPoliticalAction(
+      final ProData proData,
+      final games.strategy.triplea.attachments.PoliticalActionAttachment action) {
+    return true;
+  }
+
+  /**
+   * Whether the combat move leaves {@code target} out of its attack options (Pro+ step P7: the land
+   * of the true neutrals). Never by default.
+   */
+  default boolean excludesAttackTarget(final ProData proData, final Territory target) {
+    return false;
+  }
+
+  /**
    * Own territories that keep at least this many land units after the non-combat move (territory
    * name → units). None by default.
    */

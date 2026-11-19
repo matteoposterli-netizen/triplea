@@ -465,6 +465,18 @@ public class ProPlusAi extends ProAi {
         ProLogger.warn(LOG_PREFIX + "P6 non-combat failed: " + e);
       }
     }
+    // step P7 (B): the UK reinforces the ally's bridgehead of the round (after Hard's combat)
+    if (IndicazioniP7.attivo(data, player, StrategaInterruttori.PONTE_UK)) {
+      try {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        PonteRegnoUnito.nonCombattimento(getProData(), getCalc(), moveDel);
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P7 bridgehead failed: " + e);
+      }
+    }
     if (!held.isEmpty()) {
       tuning.holdForOperation(data, player, held);
     }

@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P7: no neutrals, the UK's bridgehead, the UK's troops ready (every configuration)
+    if (ConfrontoP7.applicabile(games)) {
+      try {
+        ConfrontoP7.write(md, games);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P7 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step P6: the concentrated US landing, Norway with exposed transports
     if (ConfrontoP6.applicabile(games)) {
       try {

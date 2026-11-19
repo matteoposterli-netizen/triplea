@@ -164,6 +164,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p6", err);
     }
+    // step P7: the three levers and the diagnostics F1-F4 (every configuration)
+    try {
+      json.add("p7", ConfrontoP7.blocco(json));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p7", err);
+    }
     return json;
   }
 

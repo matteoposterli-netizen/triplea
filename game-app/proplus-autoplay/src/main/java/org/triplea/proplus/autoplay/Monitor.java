@@ -134,6 +134,7 @@ final class Monitor {
   private final MonitorP4 p4;
   private final MonitorP5 p5;
   private final MonitorP6 p6;
+  private final MonitorP7 p7;
 
   private int lastRound;
 
@@ -197,6 +198,7 @@ final class Monitor {
     this.p4 = new MonitorP4(data, this::costs);
     this.p5 = new MonitorP5(data, this::costs);
     this.p6 = new MonitorP6(data);
+    this.p7 = new MonitorP7(data, this::costs);
     // reverse name order: Axis before Allies, as in the plans (Asse / Alleati)
     final List<String> names = new ArrayList<>(ProPlusSettings.configurableAlliances(data));
     names.sort(Comparator.reverseOrder());
@@ -238,6 +240,7 @@ final class Monitor {
     p1.beforeStep(runningStep, runningPlayer);
     p2.beforeStep(runningStep, runningPlayer);
     p5.beforeStep(runningStep, runningPlayer);
+    p7.beforeStep(runningStep, runningPlayer, data.getSequence().getRound());
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiPrima();
     }
@@ -286,6 +289,7 @@ final class Monitor {
     p4.afterStep(runningStep, runningPlayer, lastRound);
     p5.afterStep(runningStep, runningPlayer, lastRound);
     p6.afterStep(runningStep, runningPlayer, lastRound);
+    p7.afterStep(runningStep, runningPlayer, lastRound);
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiDopo(lastRound);
     }
@@ -390,6 +394,8 @@ final class Monitor {
     json.add("stratega_llm", games.strategy.triplea.ai.proplus.Stratega.riepilogoPartita(data));
     // step P1: US purchases by type, US attacks and captures of Southern Italy and France
     json.add("p1", p1.toJson());
+    // step P7: landings with the owner before, attacks on the true neutrals, captures
+    json.add("p7_eventi", p7.toJson());
     return json;
   }
 
@@ -982,6 +988,8 @@ final class Monitor {
       json.add("p5", p5.snapshot(round));
       // step P6: German land units (Western Europe), US troops long on board, UK transports lost
       json.add("p6", p6.snapshot(round));
+      // step P7: ex-neutral land of the Axis, captured neutrals, the UK per round
+      json.add("p7", p7.snapshot(round));
     }
     if (complete) {
       rounds.put(round, json);

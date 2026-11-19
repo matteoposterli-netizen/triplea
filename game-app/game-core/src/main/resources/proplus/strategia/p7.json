@@ -1,0 +1,30 @@
+{
+  "nota": "Step P7: tre leve indipendenti per gli Alleati dello Stratega, ognuna con il suo interruttore (default spento). Si aggiungono a Hard: nessun divieto di acquisto, nessuna riserva, nessuna attesa. Nessun nome di nazione o territorio nel codice: stanno qui.",
+  "niente_neutrali": {
+    "nota": "A. Per le nazioni indicate: mai l'azione politica che porta alla guerra con il neutrale indicato; mai un suo territorio come bersaglio d'attacco. I territori ex neutrali posseduti dall'Asse restano attaccabili (il proprietario non e' piu' il neutrale). Nessun'altra regola.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P7 (default spento)"},
+    "nazioni": {"valore": ["Americans", "British", "French", "Russians"], "origine": "richiesta dello step P7"},
+    "neutrale": {"valore": "Neutral_True", "origine": "richiesta dello step P7 (i neutrali veri della mappa)"}
+  },
+  "ponte_uk": {
+    "nota": "B. Solo la nazione indicata, solo nel suo turno. Fatto di partenza: in questo round l'alleato indicato ha sbarcato almeno unita_minime_sbarco unita' di terra in un territorio T (registro di sbarco_concentrato). T alleato: nel non combattimento, prima di Hard e dopo i suoi attacchi, i trasporti propri che arrivano in una zona accanto a T in questo turno ci portano le truppe proprie caricabili ora (mai sotto la soglia di difesa di Hard nella capitale e nelle fabbriche), se i trasporti non sono esposti (controllo di Hard: 0,75 x TUV che il nemico distrugge nella zona di scarico > valore; le navi alleate presenti contano come difesa). T dell'Asse: peso_attacco nella priorita' degli attacchi di Hard (le soglie di vittoria non cambiano).",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P7 (default spento)"},
+    "nazioni": {"valore": ["British"], "origine": "richiesta dello step P7 (solo Regno Unito)"},
+    "alleato_sbarco": {"valore": "Americans", "origine": "richiesta dello step P7 (sbarchi USA)"},
+    "parametri": {
+      "unita_minime_sbarco": {"valore": 6, "origine": "richiesta dello step P7: sbarco USA di almeno 6 unita' di terra"},
+      "peso_attacco": {"valore": 40, "origine": "scelto: il doppio del peso di Norway (20, p4.json/p6.json), che Hard vedeva ma non sceglieva; si somma alla priorita' di Hard"},
+      "fattore_esposizione": {"valore": 0.75, "origine": "come Hard (removeTerritoriesWhereTransportsAreExposed): trasporti esposti se 0,75 x TUV nemico > valore"}
+    }
+  },
+  "ponte_pronti": {
+    "nota": "C. Solo acquisti della nazione indicata, come indicazione (stesso meccanismo di usa_proporzione): quando l'alleato indicato e' in guerra, dopo gli acquisti di difesa di Hard, quota_pct dei PU restanti in unita' di terra piazzate in patria, finche' le unita' di terra in patria (posti di trasporto) non superano la capacita' dei trasporti propri nelle zone di mare accanto. Il resto a Hard.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P7 (default spento)"},
+    "nazioni": {"valore": ["British"], "origine": "richiesta dello step P7 (solo Regno Unito)"},
+    "alleato_in_guerra": {"valore": "Americans", "origine": "richiesta dello step P7 (quando gli USA sono in guerra)"},
+    "patria": {"valore": "United Kingdom", "origine": "richiesta dello step P7"},
+    "parametri": {
+      "quota_pct": {"valore": 40, "origine": "richiesta dello step P7: almeno il 40% dei PU restanti dopo la difesa"}
+    }
+  }
+}

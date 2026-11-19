@@ -53,6 +53,8 @@ class ProPoliticsAi {
             actionChoicesTowardsWar,
             Matches.abstractUserActionAttachmentCanBeAttempted(
                 politicsDelegate.getTestedConditions()));
+    // Pro+ step P7: a variant may leave some actions out (Hard: none)
+    validWarActions.removeIf(a -> !proData.getTuning().allowsPoliticalAction(proData, a));
     ProLogger.trace("Valid War options: " + validWarActions);
 
     // Divide war actions into enemy and neutral
@@ -182,6 +184,8 @@ class ProPoliticsAi {
       final List<PoliticalActionAttachment> actionChoicesOther =
           AiPoliticalUtils.getPoliticalActionsOther(
               player, politicsDelegate.getTestedConditions(), data);
+      // Pro+ step P7: a variant may leave some actions out (Hard: none)
+      actionChoicesOther.removeIf(a -> !proData.getTuning().allowsPoliticalAction(proData, a));
       if (!actionChoicesOther.isEmpty()) {
         Collections.shuffle(actionChoicesOther);
         final double random = Math.random();

@@ -338,7 +338,10 @@ public final class ProPlusTuning implements ProTuning {
                 IndicazioniP4.pesoBersaglio(proData, target),
                 FronteCasa.bonusRipresa(proData, target)),
             // step P6 (B): the weighted target in its longer rounds
-            IndicazioniP6.pesoAttacco(proData, target));
+            Math.max(
+                IndicazioniP6.pesoAttacco(proData, target),
+                // step P7 (B): the ally's bridgehead of the round, still the enemy's
+                IndicazioniP7.pesoAttacco(proData, target)));
     return p4Bonus > base ? p4Bonus : base;
   }
 
@@ -370,6 +373,11 @@ public final class ProPlusTuning implements ProTuning {
     final Optional<ProPurchaseOrders> force = ForzaSbarco.ordini(proData, p5a);
     if (force.isPresent()) {
       return force;
+    }
+    // step P7 (C): the UK's land units at home (switch "ponte_pronti")
+    final Optional<ProPurchaseOrders> ready = IndicazioniP7.ordini(proData);
+    if (ready.isPresent()) {
+      return ready;
     }
     // step PROVA DI VALORE: the joint operation's reserves (only with its switch on)
     final Optional<ProPurchaseOrders> reserves = OperazioniCongiunte.ordiniAcquisto(proData);
@@ -653,6 +661,10 @@ public final class ProPlusTuning implements ProTuning {
     }
     // step P5 (A): with the landing force's orders the share of the orders reserves the PUs too
     if (ForzaSbarco.ordini(proData, p5a).isPresent()) {
+      return java.util.OptionalDouble.empty();
+    }
+    // step P7 (C): the share of the indication is of every PU left after Hard's defense
+    if (IndicazioniP7.ordini(proData).isPresent()) {
       return java.util.OptionalDouble.empty();
     }
     return ProPlusSettings.allianceOf(proData.getData(), player)
@@ -1503,6 +1515,20 @@ public final class ProPlusTuning implements ProTuning {
   public boolean keepsAttackInDefensiveStance(final ProData proData, final ProTerritory patd) {
     return FronteCasa.attivo(proData.getData(), proData.getPlayer())
         && FronteCasa.tieneInDifensiva(p4, patd);
+  }
+
+  /** Step P7 (A): no war on the true neutrals (switch "niente_neutrali"). */
+  @Override
+  public boolean allowsPoliticalAction(
+      final ProData proData,
+      final games.strategy.triplea.attachments.PoliticalActionAttachment action) {
+    return IndicazioniP7.consente(proData, action);
+  }
+
+  /** Step P7 (A): no attack on the land of the true neutrals (switch "niente_neutrali"). */
+  @Override
+  public boolean excludesAttackTarget(final ProData proData, final Territory target) {
+    return IndicazioniP7.escluso(proData, target);
   }
 
   /** Step P4 (C1): an own front factory defended first. */

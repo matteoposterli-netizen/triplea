@@ -96,11 +96,25 @@ public final class RegistroDecisioni {
           "norvegia_scorta",
           // step P6
           "sbarco_concentrato",
-          "norvegia_esposta");
+          "norvegia_esposta",
+          // step P7
+          "niente_neutrali",
+          "ponte_uk",
+          "ponte_pronti");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P7
+          "GUERRA_NEUTRALI_ESCLUSA",
+          "BERSAGLIO_NEUTRALE_ESCLUSO",
+          "PONTE_RINFORZO",
+          "PONTE_NON_RAGGIUNGIBILE",
+          "PONTE_ESPOSTO",
+          "PONTE_PESO_ATTACCO",
+          "PONTE_ESITO",
+          "PRONTI_INDICAZIONE",
+          "PRONTI_OLTRE_CAPACITA",
           // step P6
           "SBARCO_IN_FORZA",
           "ATTESA",

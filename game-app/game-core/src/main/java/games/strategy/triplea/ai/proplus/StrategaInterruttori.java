@@ -49,6 +49,10 @@ import java.util.Optional;
  *       p6.json}: OFF): the loaded US transports land together on Axis land ({@link
  *       SbarcoConcentrato}); the UK lands on its weighted target also with exposed transports
  *       ({@link ScortaSbarco}, with {@link #NORVEGIA_PRESTO}).
+ *   <li>{@link #NIENTE_NEUTRALI}, {@link #PONTE_UK}, {@link #PONTE_PRONTI} (step P7, defaults from
+ *       {@code p7.json}: OFF): no war on the true neutrals and no attack on their land; the UK's
+ *       weight on the US bridgehead of the round; the UK's land purchase at home ({@link
+ *       IndicazioniP7}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -69,7 +73,10 @@ public enum StrategaInterruttori {
   USA_PROPORZIONE("usa_proporzione", false),
   NORVEGIA_SCORTA("norvegia_scorta", false),
   SBARCO_CONCENTRATO("sbarco_concentrato", false),
-  NORVEGIA_ESPOSTA("norvegia_esposta", false);
+  NORVEGIA_ESPOSTA("norvegia_esposta", false),
+  NIENTE_NEUTRALI("niente_neutrali", false),
+  PONTE_UK("ponte_uk", false),
+  PONTE_PRONTI("ponte_pronti", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -132,6 +139,15 @@ public enum StrategaInterruttori {
     }
     if (this == NORVEGIA_ESPOSTA) {
       return IndicazioniP6.Config.get().espostaDiDefault();
+    }
+    if (this == NIENTE_NEUTRALI) {
+      return IndicazioniP7.Config.get().neutraliDiDefault();
+    }
+    if (this == PONTE_UK) {
+      return IndicazioniP7.Config.get().ponteDiDefault();
+    }
+    if (this == PONTE_PRONTI) {
+      return IndicazioniP7.Config.get().prontiDiDefault();
     }
     return predefinito;
   }
@@ -198,7 +214,8 @@ public enum StrategaInterruttori {
                                         + " compiti, regno_unito_p3, usa_pronti,"
                                         + " norvegia_presto, russia_fronte, usa_proporzione,"
                                         + " norvegia_scorta, sbarco_concentrato,"
-                                        + " norvegia_esposta)"))
+                                        + " norvegia_esposta, niente_neutrali, ponte_uk,"
+                                        + " ponte_pronti)"))
                         .id())
             .distinct()
             .toList();

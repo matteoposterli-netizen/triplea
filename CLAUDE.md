@@ -270,6 +270,14 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   (non combattimento), `startLevers` (seguito degli sbarchi). Interruttori `StrategaInterruttori.SBARCO_CONCENTRATO/
   NORVEGIA_ESPOSTA`; 2 caselle del pannello; autoplay `MonitorP6`, `ConfrontoP6` (blocco `p6`, sezione "P6"). Vedi "Due leve
   (step P6)".
+- Step P7 TRE LEVE: `ai/proplus/IndicazioniP7` (dati `proplus/strategia/p7.json`, attivazione, regole di A, peso di B,
+  indicazione di C, righe del registro), `PonteRegnoUnito` (B nel non combattimento). Agganci NUOVI in `ProTuning` con default =
+  Hard: `allowsPoliticalAction` (filtro in `ProPoliticsAi`, azioni di guerra e "altre") e `excludesAttackTarget` (filtro in
+  `ProCombatMoveAi` subito dopo `removeTerritoriesThatCantBeConquered`, anche dalla mappa degli attacchi). `ProPlusTuning`
+  (`attackPriorityPlanBonus` + peso di B, `purchaseOrders` con C dopo `usa_proporzione`, `strategyCapPercent` vuoto con C);
+  `ProPlusAi.playLevers` (B, dopo il combattimento di Hard). `ForzaSbarco.opzioniTruppe/opzioneTrasporto` ora package-private.
+  Interruttori `NIENTE_NEUTRALI/PONTE_UK/PONTE_PRONTI`; 3 caselle; autoplay `MonitorP7` (`round[].p7`, `p7_eventi`), `ConfrontoP7`
+  (blocco `p7`, sezione "P7"). Vedi "Tre leve (step P7)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -568,6 +576,13 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   **Dallo step P6** `[completa]` = 5 configurazioni x 40 semi 1581-1620 = 200 partite senza chiave, Asse impegno+assedio (quota
   70): e2 Alleati Hard, s1 `usa_proporzione`, s2 `usa_proporzione+sbarco_concentrato`, s3 `norvegia_presto+norvegia_esposta`, s4
   tutte e quattro; sezione "P6" (`ConfrontoP6`, riferimento = gli Alleati di Hard; s2 anche contro s1).
+  **Dallo step P7** `[completa]` = 9 configurazioni x 120 semi 1621-1740 = 1080 partite senza chiave, Asse impegno+assedio (quota
+  70): e2, s1, s2 (Base = `usa_proporzione+sbarco_concentrato`), s5 Base+`niente_neutrali`, c1 Base+`ponte_uk`, c2 c1+`ponte_pronti`,
+  c3 Base+`niente_neutrali`+`ponte_uk`, c4 c3+`ponte_pronti`, c5 c4+`norvegia_presto+norvegia_esposta`. **Ogni job gioca 5 partite di
+  fila** (216 job, sotto il limite di 256 job di una matrice comunque lo si conti; budget del job 340 minuti, ogni partita al massimo
+  120 o meno se il budget finisce), in ordine di seme (1621-1700 prima). L'elenco completo e' in `autoplay-kit/partite.json` (1080
+  voci non stanno in una variabile d'ambiente); l'uscita `gruppi` sostituisce `matrix`. `[prova7]` = s5, c1, c2 x semi 1621-1625 (15
+  partite, una per job): la prova breve. Sezione "P7" (`ConfrontoP7`: i sette confronti, F1-F4).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -3413,6 +3428,55 @@ Allies=usa_proporzione+sbarco_concentrato` (`norvegia_presto+norvegia_esposta`),
    capitale (Hard: produzione x (1 + 3 x capitale)).
 7. **Raduno in una sola zona** per tutta la forza a bordo, scelta per numero di trasporti che ci arrivano ora; chi non arriva si
    avvicina lungo la rotta. Scartato: un raduno per gruppo (la forza si disperde, contro il prompt).
+
+### Tre leve (step P7)
+
+Tre interruttori indipendenti lato Alleati dello Stratega, default spenti (`p7.json`): autoplay `--stratega-acceso
+Allies=...+niente_neutrali+ponte_uk+ponte_pronti`, pannello: caselle "Niente neutrali", "Ponte del Regno Unito", "Truppe
+britanniche pronte". Tutti spenti = decisioni identiche a P6 (agganci nuovi con default = Hard; `IndicazioniP7Test`,
+`NudoHardTest`). Nessun nome nel codice (test sul sorgente). `compiti` resta spento e intoccato.
+- **A `niente_neutrali`** (USA, Regno Unito, Francia, Russia): `ProPlusTuning.allowsPoliticalAction` toglie ogni azione politica
+  che porta a guerra con `Neutral_True` (anche dalle azioni "altre"); `excludesAttackTarget` toglie dai bersagli d'attacco ogni
+  territorio di terra il cui proprietario e' `Neutral_True`. Gli ex neutrali dell'Asse restano bersagli. Registro
+  GUERRA_NEUTRALI_ESCLUSA, BERSAGLIO_NEUTRALE_ESCLUSO (solo sul gioco reale, mai sulle copie della simulazione).
+- **B `ponte_uk`** (Regno Unito, nel suo turno; gli USA giocano prima nello stesso round): T = territori con almeno 6 unita' USA
+  sbarcate in questo round dal registro di `sbarco_concentrato` (SBARCO_IN_FORZA, SBARCO_DOPO_ATTESA, sommati per territorio).
+  - T dell'Asse: **peso 40** (`peso_attacco`) nella priorita' degli attacchi di Hard (massimo con i pesi di P4/P6); soglie e
+    controllo dei trasporti esposti di Hard invariati (Hard conta gia' le navi alleate nella zona di scarico).
+  - T alleato: nel non combattimento, DOPO il combattimento di Hard e prima del suo non combattimento, i trasporti britannici
+    che arrivano in una zona accanto a T (rotta senza nemici entro il movimento) portano in T le truppe britanniche gia' a bordo o
+    caricabili ora dalle terre accanto alla loro zona (scelte da `ProTransportUtils.getUnitsToTransportFromTerritories`); dalla
+    capitale e dalle fabbriche esce un'unita' solo finche' l'attacco realistico nemico vi vince al massimo 100 - win% di Hard.
+    Controllo dei trasporti esposti come Hard: escluso se 0,75 x TUV che il nemico distrugge nella zona (contro trasporti + navi
+    alleate presenti, USA comprese) > TUV sbarcato + produzione di T x (1 + 3 x capitale). Registro PONTE_RINFORZO,
+    PONTE_ESPOSTO, PONTE_NON_RAGGIUNGIBILE, PONTE_PESO_ATTACCO, PONTE_ESITO.
+- **C `ponte_pronti`** (acquisti del Regno Unito, con gli USA in guerra con l'altra alleanza): ordine d'acquisto senza obbligati,
+  mix "40% dei PU rimasti dopo la difesa di Hard" (categoria unica, tipi = il carico di un trasporto per efficienza anfibia di
+  Hard), piazzamento preferito United Kingdom, `minimumShare` 0 e nessun tetto della strategia; solo finche' i posti di trasporto
+  delle truppe di terra in patria non superano la capacita' dei trasporti britannici nelle zone accanto. Registro
+  PRONTI_INDICAZIONE, PRONTI_OLTRE_CAPACITA.
+- **Diagnostica** (sola lettura, tutte le configurazioni): `MonitorP7` registra ogni arrivo via mare di truppe USA e britanniche
+  (unita' che a inizio passo di movimento era in mare, o arriva dove non poteva arrivare via terra) per round, nazione, territorio,
+  con proprietario a inizio turno, presa, zone di scarico, navi alleate, trasporti USA persi prima del turno USA dopo, alleato a fine
+  round dopo; per gli sbarchi USA >= 6 la raggiungibilita' britannica a inizio turno britannico; attacchi alleati ai neutrali; ex
+  neutrali dell'Asse; neutrali catturati; il Regno Unito per round. `ConfrontoP7` ne fa il blocco `p7` e le tabelle F1-F4.
+
+### Scelte di P7 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **B con T alleato = rinforzo eseguito dalla leva, non un peso nella difesa di Hard**: il non combattimento di Hard toglie dalla
+   difesa i territori che non puo' tenere, senza fabbrica o "gia' tenuti" (`prioritizeDefendOptions`), quindi un peso li' non
+   avrebbe portato il rinforzo "nella maggior parte dei casi" come chiede il prompt. La leva muove dopo gli attacchi di Hard (nulla
+   cancellato), non trattiene unita' e non aspetta; Hard ha tutto il resto. Scartati: peso in `defensePriorityBonus` (inerte nei
+   casi tipici), lista "da tenere" (`defenseLists`, cambia la difesa di tutto il resto).
+2. **Peso d'attacco 40** con T dell'Asse: il doppio del peso di Norway (20), che Hard vedeva senza sceglierlo.
+3. **Carico solo dalla zona di partenza** (non lungo la rotta): piu' semplice, la flotta britannica di casa sta accanto alla patria.
+4. **Registro solo sul gioco reale**: una riga scritta su una copia della simulazione apriva una cartella di diario nuova (visto
+   nella prima prova locale: 5 cartelle in piu' in una partita; `prune` poteva togliere la cartella vera).
+5. **CI in gruppi di 5 partite per job** (216 job): non ho potuto leggere la documentazione dei limiti (host bloccato dalla
+   sandbox) e "256 job per workflow run" puo' voler dire per matrice o per run; con 216 job va bene in entrambi i casi.
+6. **F3 "raggiungibile"** = trasporti britannici che arrivano in una zona accanto a T entro il loro movimento passando per zone
+   senza navi nemiche; "caricabili" = truppe nelle terre accanto alle zone da cui il trasporto parte o passa, riempiendo i posti
+   per costo di trasporto crescente (approssimazione di sola lettura, i canali non sono controllati).
 
 ## Come configurare lo stratega
 

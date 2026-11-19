@@ -104,6 +104,14 @@ public class ProCombatMoveAi {
     // Remove territories that aren't worth attacking and prioritize the remaining ones
     final List<ProTerritory> attackOptions =
         territoryManager.removeTerritoriesThatCantBeConquered();
+    // Pro+ step P7: a variant may leave some targets out (Hard: none)
+    for (final Iterator<ProTerritory> it = attackOptions.iterator(); it.hasNext(); ) {
+      final Territory t = it.next().getTerritory();
+      if (proData.getTuning().excludesAttackTarget(proData, t)) {
+        it.remove();
+        territoryManager.getAttackOptions().getTerritoryMap().remove(t);
+      }
+    }
     recorder.attackCandidates(
         proData, territoryManager.getAttackOptions().getTerritoryMap().values(), attackOptions);
     final List<Territory> clearedTerritories = new ArrayList<>();

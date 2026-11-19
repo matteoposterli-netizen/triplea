@@ -1000,7 +1000,7 @@ public final class ForzaSbarco {
     return out;
   }
 
-  private static Optional<ProPurchaseOption> opzioneTrasporto(final ProData proData) {
+  static Optional<ProPurchaseOption> opzioneTrasporto(final ProData proData) {
     if (proData.getPurchaseOptions() == null) {
       return Optional.empty();
     }
@@ -1013,7 +1013,7 @@ public final class ForzaSbarco {
                 .thenComparing(o -> o.getUnitType().getName()));
   }
 
-  private static List<Opzione> opzioniTruppe(final ProData proData) {
+  static List<Opzione> opzioniTruppe(final ProData proData) {
     final List<Opzione> out = new ArrayList<>();
     if (proData.getPurchaseOptions() == null) {
       return out;

@@ -181,6 +181,16 @@ public final class Stratega {
       wanted.add(StrategaInterruttori.NORVEGIA_PRESTO);
       wanted.add(StrategaInterruttori.NORVEGIA_ESPOSTA);
     }
+    // step P7: no war on the true neutrals; the UK's bridgehead; the UK's troops ready at home
+    if ("Allies".equals(alliance.get()) && profile.nienteNeutrali()) {
+      wanted.add(StrategaInterruttori.NIENTE_NEUTRALI);
+    }
+    if ("Allies".equals(alliance.get()) && profile.ponteUk()) {
+      wanted.add(StrategaInterruttori.PONTE_UK);
+    }
+    if ("Allies".equals(alliance.get()) && profile.pontePronti()) {
+      wanted.add(StrategaInterruttori.PONTE_PRONTI);
+    }
     final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
     boolean changed = false;
     for (final StrategaInterruttori w : wanted) {
