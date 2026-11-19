@@ -6061,4 +6061,38 @@ quanto serve).
   unita'), presa al R7 (Hard ci manda 12 unita' via mare), R11 9, R12 4; sbarchi USA 7, con britannici a fine round 4 (57%),
   3 su 3 ancora alleati il round dopo; britanniche sulle teste di ponte 35 (27 via mare). Trasporti UK R12 12. La CI gira con
   la riserva al 20% (commit successivo a 7c7014b; la run di 7c7014b e' annullata dal push nuovo).
-- CI: `[completa]` = e2, p1, p3 x semi 1461-1500 (risultati: da aggiungere dopo la run).
+- CI: `[completa]` = e2, p1, p3 x semi 1461-1500.
+
+#### Autoplay in CI (run 44415347045, commit 3103101, 119/120 partite [completa] senza chiave, semi 1461-1500, costo API 0)
+**Step FALLITO** per il criterio 4: p3 7/40 vittorie alleate contro e2 13/40 (-6, soglia -5; Fisher p 0,20, con e2 su 39 partite
+valide p 0,13: non e' una conclusione statistica, ma la regola decisa prima e' "-5 o piu' = fallito"). Criterio 1 RAGGIUNTO.
+1 partita fallita: e2 seme 1464 al R3, "Can't calculate while operation is still running!" (calcolatore; Asse Stratega contro
+Alleati Hard: P3 non attivo). 0 stalli nelle 119 complete. Release `proplus-latest` e `autoplay-latest` su 3103101.
+Numeri dal blocco `p3` (e `p2`) dei `riepilogo.json` (campi tra parentesi).
+
+| Configurazione | Asse / Alleati | Quota Alleati [IC 95% Wilson] | Fisher |
+|---|---|---|---|
+| e2 Asse impegno+assedio / Hard | 26 / 13 (+1 errore) | 33% [20; 48] | - |
+| p1 Asse / Alleati compiti | 32 / 8 | 20% [10; 35] | contro e2 0,31 |
+| p3 Asse / Alleati compiti + regno_unito_p3 | 33 / 7 | 18% [9; 32] | contro e2 0,20; contro p1 1,00 |
+
+1. Egypt dell'Asse a fine R1 / R2 / R3 / R4 (`egitto_asse_fine_round`): p3 **11** / 17 / 24 / 22 su 40 (criterio <= 15 a R1: SI');
+   p1 28 / 32 / 34 / 32, e2 28 / 33 / 36 / 31. Quota dei round (`round_egitto_asse`/`round_con_fotografia`): p3 **27%**, e2 43%,
+   p1 50% (criterio >= 10 punti sotto e2: SI', -16). Britannici in Egypt a fine R1 (`uk_in_egitto_r1`): 4,2 / 0,7 / 1,1.
+2. Sbarchi USA con britannici a fine round (`sbarchi_alleati_con_britannici`/`sbarchi_alleati`): p3 133/703 = **19%** (criterio
+   50%: NO), p1 15%, e2 12%; di questi ancora alleati un round dopo (`..._ancora_alleati`/`..._noti_round_dopo`): p3 87/128 =
+   **68%** (criterio 70%: NO), p1 68%, e2 84%. Britanniche mandate da Hard sulle teste di ponte (`uk_mandate_teste_di_ponte`):
+   45,8 a partita (26,0 via mare).
+3. Unita' sbarcate USA+UK (`unita_sbarcate_usa_uk`): p3 158,6 contro p1 145,3 = 109% (>= 90%: SI'), e2 135,9; trasporti UK R12
+   (`trasporti_uk_r12`) 10,9 (>= 8: SI'), p1 8,5, e2 11,5; United Kingdom perso (`regno_unito_perso`) p3 0, e2 0, p1 1 (SI').
+4. Vittorie: sopra. FALLITO.
+5. Cadute (`p2.cadute`): Southern Italy p3 18 / p1 18 / e2 16; Germany 7 / 8 / 14; Russia 33 / 32 / 29. Reddito italiano R8 / R12
+   (`p2.per_round.N.reddito_italia`): p3 17,3 / 15,6, p1 22,0 / 21,2, e2 17,1 / 14,1. Esercito R12 (`p3.esercito_r12`): tedesco
+   123,0 / 119,0 / 120,3, russo 18,4 / 20,3 / 27,3. Direzione prevalente (`p2.direzione_prevalente`) p3 MED 26 / FR 14, p1 MED
+   25 / FR 15. Il Cairo (p3): portate in Egypt mare / terra / aria 9,8 / 3,8 / 2,3 a partita, 70 riprese, 13 attacchi alla
+   minaccia, 39,1 PU a partita.
+- Lettura: la leva B funziona sull'obiettivo locale (Egypt dell'Asse a R1 da 28 a 11 partite, quota dei round da 43% a 27%,
+  reddito italiano R12 15,6 contro 21,2 di p1) ma non si traduce in vittorie: p3 = p1 (7 contro 8), entrambi sotto e2 (non
+  significativo). La leva A sposta poco: i britannici arrivano sulle teste di ponte (45,8 unita' a partita) ma a fine round sono
+  con gli USA solo nel 19% degli sbarchi (molti sbarchi USA sono su neutrali o fuori dai territori che il Regno Unito raggiunge
+  nello stesso round). Mosca cade in 33/40 (e2 29): il costo della direzione MEDITERRANEO di P2 resta.
