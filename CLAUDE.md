@@ -6224,3 +6224,26 @@ Vedi "Tre indicazioni a Hard (step P4)" e "Scelte di P4". Tre interruttori lato 
     e' servita in questa partita, la desiderata 80 riduce le unita' mandate); PU riparati 28, risparmiati 47; Mosca caduta a R10.
   - 0 eccezioni, 0 avvisi `[Pro+] P4` nei log.
 - CI: `[completa]` = e2, q1, q2, q3, q4 x semi 1501-1540.
+
+#### Autoplay in CI (run 44484486164, commit aa6ed3c, tutto verde, 200/200 partite [completa] senza chiave, semi 1501-1540, costo API 0)
+0 errori del calcolatore (log), 0 stalli, 200/200 con un vincitore. Asse sempre impegno+assedio (quota 70). Numeri dalla sezione "P4" di
+`riepilogo-generale.md` (blocco `p4` dei `riepilogo.json`, campo tra parentesi).
+
+| Config | Alleati vince [IC 95%] | Fisher vs e2 | Mosca oltre R14 (`mosca_oltre_r14`) | Fisher |
+|---|---|---|---|---|
+| e2 Alleati Hard | 17/40 43% [29; 58] | - | 18/40 45% | - |
+| q1 usa_pronti | 20/40 50% [35; 65] | 0,65 | 21/40 53% | 0,66 |
+| q2 norvegia_presto | 23/40 58% [42; 71] | 0,26 | 20/40 50% | 0,82 |
+| q3 russia_fronte | 17/40 43% [29; 58] | 1,00 | 16/40 40% | 0,82 |
+| q4 tutte e tre | 15/40 38% [24; 53] | 0,82 | 23/40 58% | 0,37 |
+
+- Nessuna configurazione 5+ vittorie sotto e2; nessuna differenza con p < 0,05.
+- Criterio 1 (q1): primo sbarco USA >= 6 mediana R9 (`round_primo_sbarco_usa_6`, e2 R9): NO; sbarcate cumulate R6 6,9 (>= 10: NO),
+  R8 15,1 (>= 22: NO) contro e2 2,7 / 12,2; trasporti USA R4 4,2 (>= 5: NO; e2 1,7); navi da guerra R3/R4/R5 5,2/6,8/7,9 (e2 1,0/1,6/3,4).
+- Criterio 2 (q2): Norway alleata a fine R4 16/40 (>= 24: NO; e2 13), R6 33/40 (e2 30); UK perso 0 (= e2: SI'). Norway attaccata da
+  Hard col peso in 10 turni su 160.
+- Criterio 3 (q3): Ukraine russa a fine R6 10/40 (>= 16: NO; e2 11); riparazioni R4-R6 15,7 PU (sotto e2 15,5: NO), R1-R12 39,3 contro
+  43,9; esercito russo R8 175,7 contro 176,9 (-1,2: di poco sotto, NO). Contrattacchi candidati 2750, fatti 1093, sotto la soglia
+  standard 4, presi 984; tenuti in difensiva 120; PU risparmiati 1917.
+- Criterio 4 (q4): nessun indicatore raggiunto (sbarcate R6/R8 4,5/12,7, trasporti R4 3,0, Norway R4 13, Ukraine R6 11, esercito russo R8 160,1).
+- Lettura: q1 compra navi da guerra prima (portaerei, caccia) ma i trasporti arrivano comunque tardi; B e C cambiano poco le partite.
