@@ -186,6 +186,27 @@ public final class ProfiloStratega {
     values.setProperty(KEY_NORVEGIA_SCORTA, on ? "si" : "no");
   }
 
+  private static final String KEY_SBARCO_CONCENTRATO = "sbarco_concentrato";
+  private static final String KEY_NORVEGIA_ESPOSTA = "norvegia_esposta";
+
+  /** Step P6: "Sbarco USA concentrato" for the Allies. Off unless set. */
+  public boolean sbarcoConcentrato() {
+    return si(KEY_SBARCO_CONCENTRATO);
+  }
+
+  public void setSbarcoConcentrato(final boolean on) {
+    values.setProperty(KEY_SBARCO_CONCENTRATO, on ? "si" : "no");
+  }
+
+  /** Step P6: "Norvegia anche esposta" for the Allies (turns on "norvegia_presto" too). */
+  public boolean norvegiaEsposta() {
+    return si(KEY_NORVEGIA_ESPOSTA);
+  }
+
+  public void setNorvegiaEsposta(final boolean on) {
+    values.setProperty(KEY_NORVEGIA_ESPOSTA, on ? "si" : "no");
+  }
+
   private static final String KEY_REGNO_UNITO_P3 = "regno_unito_p3";
 
   /**

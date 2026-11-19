@@ -173,6 +173,14 @@ public final class Stratega {
       wanted.add(StrategaInterruttori.NORVEGIA_PRESTO);
       wanted.add(StrategaInterruttori.NORVEGIA_SCORTA);
     }
+    // step P6: the concentrated US landing; Norway also with exposed transports (with its weight)
+    if ("Allies".equals(alliance.get()) && profile.sbarcoConcentrato()) {
+      wanted.add(StrategaInterruttori.SBARCO_CONCENTRATO);
+    }
+    if ("Allies".equals(alliance.get()) && profile.norvegiaEsposta()) {
+      wanted.add(StrategaInterruttori.NORVEGIA_PRESTO);
+      wanted.add(StrategaInterruttori.NORVEGIA_ESPOSTA);
+    }
     final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
     boolean changed = false;
     for (final StrategaInterruttori w : wanted) {

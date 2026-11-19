@@ -156,6 +156,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p5", err);
     }
+    // step P6: the concentrated landing and Norway with exposed transports (every configuration)
+    try {
+      json.add("p6", ConfrontoP6.blocco(json));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p6", err);
+    }
     return json;
   }
 

@@ -1,0 +1,31 @@
+{
+  "nota": "Step P6: due leve indipendenti per gli Alleati dello Stratega, ognuna con il suo interruttore (default spento). Nessun bersaglio scritto a mano per A: i bersagli validi sono i territori di terra controllati da un nemico in guerra, trovati dalla mappa e dallo stato reale. Nessun nome di nazione o territorio nel codice: stanno qui.",
+  "sbarco_concentrato": {
+    "nota": "A. Per la nazione indicata, tutta la partita, sui suoi trasporti CARICHI all'inizio del combattimento: se in questo turno il carico che puo' arrivare su un territorio dell'Asse vince insieme almeno con soglia_vittoria, sbarca tutto li' (tra piu' bersagli il valore di Hard: produzione, fabbrica, citta' della vittoria, capitale). Altrimenti la forza si avvicina e resta a bordo per un round al massimo (si raduna in una zona da cui un bersaglio e' raggiungibile il turno dopo, con la scorta); dopo un round di attesa sbarca comunque sul bersaglio con lo scambio migliore (valore x vittoria + TUV nemici distrutti - TUV propri persi - perdita attesa dei trasporti esposti). I trasporti vuoti e gli acquisti restano a Hard.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P6 (default spento)"},
+    "nazioni": {"valore": ["Americans"], "origine": "richiesta dello step P6 (USA)"},
+    "parametri": {
+      "soglia_vittoria": {"valore": 70, "origine": "richiesta dello step P6: tutto il carico insieme vince con almeno il 70%"},
+      "round_di_attesa": {"valore": 1, "origine": "richiesta dello step P6: le truppe non restano a bordo oltre un round"},
+      "soglia_scorta": {"valore": 40, "origine": "soglia esistente (soglia_trasporti di p5.json e impegno.r6b): i trasporti reggono se l'attacco realistico del nemico vince al massimo il 40%"},
+      "valore_citta_vittoria": {"valore": 5, "origine": "valore di Hard Beta per una citta' della vittoria (ProTuning.victoryCityValue), moltiplicato per 3 come in findTerritoryAttackValue"},
+      "moltiplicatore_capitale": {"valore": 3, "origine": "come Hard nel combattimento: produzione x (1 + 3 x capitale)"},
+      "zone_raduno_valutate": {"valore": 5, "origine": "scelto: limite di calcolo (passi del calcolatore) delle zone di raduno di cui si stima la minaccia"},
+      "raggio_avvicinamento": {"valore": 14, "origine": "scelto: zone di mare cercate per trovare la zona di raduno (l'Atlantico si attraversa in 3-4 turni)"}
+    }
+  },
+  "norvegia_esposta": {
+    "nota": "B. Con norvegia_presto: per i bersagli di questa lista nei loro round, lo scarto di Hard per trasporti esposti non si applica (se le truppe sbarcate vincono con le soglie di Hard, lo sbarco si fa); scorta minima se basta, presa dalle navi che arrivano fuori dalle zone di mare della capitale; se nemmeno con tutte basta, nessuna scorta (si rischiano i trasporti, non la flotta). Quando il territorio e' alleato vale anche per tenerlo (priorita' di difesa del non combattimento di Hard).",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P6 (default spento)"},
+    "parametri": {
+      "soglia_scorta": {"valore": 40, "origine": "soglia esistente (soglia_trasporti di p5.json)"}
+    },
+    "nazioni": {
+      "British": [
+        {"territorio": "Norway", "peso_attacco": 20, "attacco_dal_round": 1, "attacco_al_round": 8,
+         "peso_tenuta": 20, "tenuta_al_round": 10,
+         "origine": "peso 20 = norvegia_presto (p4.json); round 1-8 finche' e' dell'Asse e tenuta fino al round 10 dalla richiesta dello step P6"}
+      ]
+    }
+  }
+}

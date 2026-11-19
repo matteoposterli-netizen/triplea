@@ -203,6 +203,7 @@ public class ProPlusAi extends ProAi {
     } else {
       playCoordinatedLanding(moveDel, data, player);
       playTask(false, moveDel, data, player);
+      playConcentratedLanding(moveDel, data, player);
     }
     if (nonCombat) {
       playLevers(moveDel, data, player);
@@ -407,6 +408,10 @@ public class ProPlusAi extends ProAi {
       if (ScortaSbarco.attivo(data, player)) {
         ScortaSbarco.inizioTurno(data, player, tuning.p5b());
       }
+      // step P6 (A): last round's landings after the enemy's turn
+      if (SbarcoConcentrato.attivo(data, player)) {
+        SbarcoConcentrato.inizioTurno(data, player, tuning.p6a());
+      }
       final java.util.Optional<ForzaSbarco.Fase> phase = ForzaSbarco.fase(data, player);
       if (phase.isPresent()) {
         initializeData();
@@ -446,6 +451,19 @@ public class ProPlusAi extends ProAi {
       }
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "P5 escort failed: " + e);
+    }
+    // step P6 (A): the landings' outcome and escort, the force on board gathers
+    if (SbarcoConcentrato.attivo(data, player)) {
+      try {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        held.addAll(
+            SbarcoConcentrato.nonCombattimento(getProData(), getCalc(), moveDel, tuning.p6a()));
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P6 non-combat failed: " + e);
+      }
     }
     if (!held.isEmpty()) {
       tuning.holdForOperation(data, player, held);
@@ -565,6 +583,40 @@ public class ProPlusAi extends ProAi {
       }
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "Coordinated landing failed: " + e);
+    }
+  }
+
+  /**
+   * Step P6 (A): the loaded transports land together before Hard's combat move, or wait on board;
+   * Hard then plans its combat move again without them. Nothing with the switch off.
+   */
+  private void playConcentratedLanding(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (!SbarcoConcentrato.attivo(data, player)
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      attendiCalcolatore(data, player);
+      initializeData();
+      final java.util.Set<games.strategy.engine.data.Unit> moved =
+          SbarcoConcentrato.combattimento(getProData(), getCalc(), moveDel, tuning.p6a());
+      if (moved.isEmpty()) {
+        return;
+      }
+      initializeData();
+      final java.util.Set<games.strategy.engine.data.Unit> keep =
+          new java.util.LinkedHashSet<>(tuning.combatHeldUnits(getProData()));
+      keep.removeIf(u -> !u.isOwnedBy(player) || !data.getUnits().getUnits().contains(u));
+      keep.addAll(moved);
+      tuning.holdCombat(data, player, keep);
+      if (hasStoredCombatMove()) {
+        forgetStoredCombatMove();
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P6 concentrated landing failed: " + e);
     }
   }
 

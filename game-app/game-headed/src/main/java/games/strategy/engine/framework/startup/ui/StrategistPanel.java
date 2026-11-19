@@ -90,6 +90,11 @@ final class StrategistPanel {
 
   @Getter private final javax.swing.JCheckBox norvegiaScorta = new javax.swing.JCheckBox();
 
+  /** Step P6: two levers for the Allies (each on its own). */
+  @Getter private final javax.swing.JCheckBox sbarcoConcentrato = new javax.swing.JCheckBox();
+
+  @Getter private final javax.swing.JCheckBox norvegiaEsposta = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -230,6 +235,20 @@ final class StrategistPanel {
             + " le navi che arrivano, invece di annullarlo; accende anche Norvegia presto (step"
             + " P5, sperimentale); vale per le partite nuove</html>");
     panel.add(row("Norvegia scortata:", norvegiaScorta));
+    sbarcoConcentrato.setSelected(profile.sbarcoConcentrato());
+    sbarcoConcentrato.setText(
+        "<html>Alleati: i trasporti USA carichi sbarcano tutti insieme su un territorio dell'Asse"
+            + " dove vincono (almeno 70%); se nessuno e' vincibile si radunano a bordo per un"
+            + " round al massimo e poi sbarcano dove lo scambio e' migliore (step P6,"
+            + " sperimentale); vale per le partite nuove</html>");
+    panel.add(row("Sbarco USA concentrato:", sbarcoConcentrato));
+    norvegiaEsposta.setSelected(profile.norvegiaEsposta());
+    norvegiaEsposta.setText(
+        "<html>Alleati: in Norvegia il Regno Unito sbarca anche con i trasporti esposti (round"
+            + " 1-8, poi la tiene fino al round 10), con la scorta minima se basta e senza"
+            + " svuotare le acque di casa; accende anche Norvegia presto (step P6, sperimentale);"
+            + " vale per le partite nuove</html>");
+    panel.add(row("Norvegia anche esposta:", norvegiaEsposta));
     panel.add(
         row(
             "",
@@ -260,6 +279,8 @@ final class StrategistPanel {
     profile.setRussiaFronte(russiaFronte.isSelected());
     profile.setUsaProporzione(usaProporzione.isSelected());
     profile.setNorvegiaScorta(norvegiaScorta.isSelected());
+    profile.setSbarcoConcentrato(sbarcoConcentrato.isSelected());
+    profile.setNorvegiaEsposta(norvegiaEsposta.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

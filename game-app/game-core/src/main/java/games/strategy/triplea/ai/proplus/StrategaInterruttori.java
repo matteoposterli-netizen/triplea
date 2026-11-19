@@ -45,6 +45,10 @@ import java.util.Optional;
  *   <li>{@link #USA_PROPORZIONE}, {@link #NORVEGIA_SCORTA} (step P5, defaults from {@code p5.json}:
  *       OFF): the USA's landing force in proportion in the neutral rounds ({@link ForzaSbarco}) and
  *       the escorted landing of the UK ({@link ScortaSbarco}, with {@link #NORVEGIA_PRESTO}).
+ *   <li>{@link #SBARCO_CONCENTRATO}, {@link #NORVEGIA_ESPOSTA} (step P6, defaults from {@code
+ *       p6.json}: OFF): the loaded US transports land together on Axis land ({@link
+ *       SbarcoConcentrato}); the UK lands on its weighted target also with exposed transports
+ *       ({@link ScortaSbarco}, with {@link #NORVEGIA_PRESTO}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -63,7 +67,9 @@ public enum StrategaInterruttori {
   NORVEGIA_PRESTO("norvegia_presto", false),
   RUSSIA_FRONTE("russia_fronte", false),
   USA_PROPORZIONE("usa_proporzione", false),
-  NORVEGIA_SCORTA("norvegia_scorta", false);
+  NORVEGIA_SCORTA("norvegia_scorta", false),
+  SBARCO_CONCENTRATO("sbarco_concentrato", false),
+  NORVEGIA_ESPOSTA("norvegia_esposta", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -120,6 +126,12 @@ public enum StrategaInterruttori {
     }
     if (this == NORVEGIA_SCORTA) {
       return IndicazioniP5.Config.get().scortaDiDefault();
+    }
+    if (this == SBARCO_CONCENTRATO) {
+      return IndicazioniP6.Config.get().sbarcoDiDefault();
+    }
+    if (this == NORVEGIA_ESPOSTA) {
+      return IndicazioniP6.Config.get().espostaDiDefault();
     }
     return predefinito;
   }
@@ -185,7 +197,8 @@ public enum StrategaInterruttori {
                                         + " alleati_r5, squadra_gibilterra, italia_convoglio,"
                                         + " compiti, regno_unito_p3, usa_pronti,"
                                         + " norvegia_presto, russia_fronte, usa_proporzione,"
-                                        + " norvegia_scorta)"))
+                                        + " norvegia_scorta, sbarco_concentrato,"
+                                        + " norvegia_esposta)"))
                         .id())
             .distinct()
             .toList();

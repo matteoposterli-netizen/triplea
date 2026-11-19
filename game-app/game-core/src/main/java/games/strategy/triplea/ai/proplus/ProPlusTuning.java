@@ -120,6 +120,13 @@ public final class ProPlusTuning implements ProTuning {
     return p5b;
   }
 
+  /** Step P6 (A): the concentrated landing's state (the waits, last turn's landings). */
+  private final SbarcoConcentrato.Stato p6a = new SbarcoConcentrato.Stato();
+
+  public SbarcoConcentrato.Stato p6a() {
+    return p6a;
+  }
+
   /**
    * Step PROVA DI VALORE: set when the last answer came from a joint operation ({@link
    * OperazioniCongiunte}), read and cleared by the check against Hard ({@link ControlloTuning}).
@@ -327,7 +334,11 @@ public final class ProPlusTuning implements ProTuning {
     // step P4 (B, C1): a target weighted in its rounds, an own front factory to take back
     final double p4Bonus =
         Math.max(
-            IndicazioniP4.pesoBersaglio(proData, target), FronteCasa.bonusRipresa(proData, target));
+            Math.max(
+                IndicazioniP4.pesoBersaglio(proData, target),
+                FronteCasa.bonusRipresa(proData, target)),
+            // step P6 (B): the weighted target in its longer rounds
+            IndicazioniP6.pesoAttacco(proData, target));
     return p4Bonus > base ? p4Bonus : base;
   }
 
@@ -1497,6 +1508,7 @@ public final class ProPlusTuning implements ProTuning {
   /** Step P4 (C1): an own front factory defended first. */
   @Override
   public double defensePriorityBonus(final ProData proData, final Territory t) {
-    return FronteCasa.bonusDifesa(proData, t);
+    // step P6 (B): the weighted target, once allied, is held too (up to its round)
+    return Math.max(FronteCasa.bonusDifesa(proData, t), IndicazioniP6.pesoTenuta(proData, t));
   }
 }

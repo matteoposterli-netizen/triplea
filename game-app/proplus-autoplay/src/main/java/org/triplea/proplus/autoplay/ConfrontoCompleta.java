@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P6: the concentrated US landing, Norway with exposed transports
+    if (ConfrontoP6.applicabile(games)) {
+      try {
+        ConfrontoP6.write(md, games, alliances);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P6 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step P5: the two levers (USA in proportion, escorted Norway)
     if (ConfrontoP5.applicabile(games)) {
       try {

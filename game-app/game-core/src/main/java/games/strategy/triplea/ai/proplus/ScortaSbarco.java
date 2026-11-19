@@ -50,6 +50,11 @@ public final class ScortaSbarco {
   static final String TIPO = "norvegia_scorta";
   static final String KEPT = "p5_scorta";
 
+  /** Step P6 (B, {@code norvegia_esposta}): the register type and the answer that keeps. */
+  static final String TIPO_ESPOSTA = "norvegia_esposta";
+
+  static final String KEPT_ESPOSTA = "p6_esposta";
+
   // ======================================================================== activation
 
   /** The switch is on (with {@code norvegia_presto}) and {@code target} is weighted this round. */
@@ -64,7 +69,20 @@ public final class ScortaSbarco {
 
   static boolean attivo(final GameState data, final GamePlayer player) {
     return IndicazioniP4.attivo(data, player, StrategaInterruttori.NORVEGIA_SCORTA)
-        && IndicazioniP4.attivo(data, player, StrategaInterruttori.NORVEGIA_PRESTO);
+            && IndicazioniP4.attivo(data, player, StrategaInterruttori.NORVEGIA_PRESTO)
+        || espostaAttiva(data, player);
+  }
+
+  /** Step P6 (B): the switch {@code norvegia_esposta} is on (with {@code norvegia_presto}). */
+  static boolean espostaAttiva(final GameState data, final GamePlayer player) {
+    return IndicazioniP6.attivo(data, player, StrategaInterruttori.NORVEGIA_ESPOSTA);
+  }
+
+  /** Step P6 (B): {@code target} has B's attack weight this round (the exposed rule applies). */
+  static boolean esposta(final ProData proData, final Territory target) {
+    return proData.getPlayer() != null
+        && proData.getData() != null
+        && IndicazioniP6.pesoAttacco(proData, target) > 0;
   }
 
   // ======================================================================== pure rule
@@ -157,7 +175,18 @@ public final class ScortaSbarco {
       Map<String, List<String>> scorta,
       Set<String> trasporti,
       boolean eseguito,
-      JsonObject riga) {}
+      JsonObject riga,
+      boolean esposta) {
+
+    Piano(
+        final String bersaglio,
+        final Map<String, List<String>> scorta,
+        final Set<String> trasporti,
+        final boolean eseguito,
+        final JsonObject riga) {
+      this(bersaglio, scorta, trasporti, eseguito, riga, false);
+    }
+  }
 
   /** The state of one AI's turn (one AI = one nation). */
   public static final class Stato {
@@ -172,6 +201,11 @@ public final class ScortaSbarco {
 
     int roundScorte = -1;
     @Nullable String bersaglioScorte;
+
+    /** Step P6 (B): the transports of last turn's exposed landing (ids) and the row's mode. */
+    final Set<String> trasportiEsposti = new LinkedHashSet<>();
+
+    boolean scorteEsposte;
 
     void inizio(final int r) {
       if (r != round) {
@@ -191,7 +225,7 @@ public final class ScortaSbarco {
       final Map<Territory, List<Unit>> zones,
       final ProOtherMoveOptions enemy,
       final Collection<Unit> moving) {
-    if (!attivo(proData, landing.getTerritory())) {
+    if (!attivo(proData, landing.getTerritory()) && !esposta(proData, landing.getTerritory())) {
       return;
     }
     st.inizio(proData.getData().getSequence().getRound());
@@ -218,6 +252,18 @@ public final class ScortaSbarco {
       final double winPercentage,
       final double enemyTuvSwing,
       final double attackValue) {
+    // step P6 (B): on a weighted target the exposed transports do not drop the landing
+    if (esposta(proData, target)
+        && st.ultimo != null
+        && st.ultimo.bersaglio().equals(target.getName())) {
+      try {
+        return Optional.of(
+            decidiEsposta(proData, st, st.ultimo, winPercentage, enemyTuvSwing, attackValue));
+      } catch (final RuntimeException e) {
+        ProLogger.warn("[Pro+] P6 esposta: " + e);
+        return Optional.of(KEPT_ESPOSTA);
+      }
+    }
     if (!attivo(proData, target)
         || st.ultimo == null
         || !st.ultimo.bersaglio().equals(target.getName())) {
@@ -302,6 +348,109 @@ public final class ScortaSbarco {
     row.addProperty("eseguito", ok);
     st.piani.put(c.bersaglio(), new Piano(c.bersaglio(), escortIds, transports, ok, row));
     return ok ? Optional.of(KEPT) : Optional.empty();
+  }
+
+  /**
+   * Step P6 (B): the landing is kept whatever the exposure; the escort is the smallest that is
+   * enough among the warships that arrive from outside the capital's sea zones (the home waters are
+   * not emptied), none if not even every one of them is enough (the transports are risked, not the
+   * fleet).
+   */
+  static String decidiEsposta(
+      final ProData proData,
+      final Stato st,
+      final Contesto c,
+      final double winPercentage,
+      final double enemyTuvSwing,
+      final double attackValue) {
+    final GameData data = proData.getData();
+    final GamePlayer player = proData.getPlayer();
+    final double soglia = IndicazioniP6.Config.get().sogliaScortaEsposta();
+    final Set<Territory> home = zoneCapitale(data, player);
+    final Set<Unit> taken = new HashSet<>();
+    final Map<String, List<String>> escortIds = new LinkedHashMap<>();
+    final JsonArray zonesJson = new JsonArray();
+    final Set<String> transports = new LinkedHashSet<>();
+    for (final var e :
+        c.zone().entrySet().stream()
+            .sorted(Comparator.comparing(x -> x.getKey().getName()))
+            .toList()) {
+      final Territory z = e.getKey();
+      e.getValue().stream()
+          .filter(Matches.unitIsSeaTransport())
+          .forEach(u -> transports.add(u.getId().toString()));
+      final ProTerritory max = c.nemico().getMax(z);
+      final List<Unit> att = max == null ? List.of() : new ArrayList<>(max.getMaxUnits());
+      final List<Unit> base = base(data, player, z, e.getValue(), c.muovono());
+      final List<List<Unit>> cand = candidatiFuoriCasa(data, player, z, c.muovono(), taken, home);
+      final List<Double> costs = new ArrayList<>();
+      cand.forEach(g -> costs.add((double) tuv(proData, g)));
+      final Scelta s =
+          scortaMinima(
+              costs,
+              idx -> {
+                final List<Unit> def = new ArrayList<>(base);
+                idx.forEach(i -> def.addAll(cand.get(i)));
+                return vittoria(proData, c.calc(), z, att, def);
+              },
+              soglia);
+      final JsonObject zj = new JsonObject();
+      zj.addProperty("zona", z.getName());
+      zj.add("minaccia", TrasportiProtetti.perTipo(att));
+      zj.addProperty("minaccia_tuv", tuv(proData, att));
+      zj.add("difensori_senza_scorta", TrasportiProtetti.perTipo(base));
+      final List<Unit> allCand = new ArrayList<>();
+      cand.forEach(allCand::addAll);
+      zj.add("scorta_disponibile", TrasportiProtetti.perTipo(allCand));
+      zj.addProperty("vittoria_nemica_prima", AlleatiR5.round1(s.prima()));
+      zj.addProperty("vittoria_nemica_con_tutta_la_scorta", AlleatiR5.round1(s.conTutti()));
+      final List<Unit> chosen = new ArrayList<>();
+      if (s.basta()) {
+        s.scelti().forEach(i -> chosen.addAll(cand.get(i)));
+        taken.addAll(chosen);
+        escortIds.put(z.getName(), chosen.stream().map(u -> u.getId().toString()).toList());
+      }
+      zj.add("scorta", TrasportiProtetti.perTipo(chosen));
+      zj.addProperty("scorta_basta", s.basta());
+      zj.addProperty("vittoria_nemica_dopo", AlleatiR5.round1(s.basta() ? s.dopo() : s.prima()));
+      zonesJson.add(zj);
+    }
+    final JsonObject row = new JsonObject();
+    row.addProperty("bersaglio", c.bersaglio());
+    row.addProperty("vittoria_sbarco_pct", AlleatiR5.round1(winPercentage));
+    row.addProperty("scambio_nemico_trasporti", AlleatiR5.round1(enemyTuvSwing));
+    row.addProperty("valore_attacco", AlleatiR5.round1(attackValue));
+    row.addProperty("soglia_scorta", soglia);
+    row.add("zone", zonesJson);
+    row.addProperty("eseguito", true);
+    st.piani.put(c.bersaglio(), new Piano(c.bersaglio(), escortIds, transports, true, row, true));
+    return KEPT_ESPOSTA;
+  }
+
+  /** Step P6 (B): the sea zones next to the player's capitals (the home waters). */
+  static Set<Territory> zoneCapitale(final GameState data, final GamePlayer player) {
+    final Set<Territory> out = new HashSet<>();
+    for (final Territory cap :
+        games.strategy.triplea.attachments.TerritoryAttachment.getAllCapitals(
+            player, data.getMap())) {
+      out.addAll(data.getMap().getNeighbors(cap, Matches.territoryIsWater()));
+    }
+    return out;
+  }
+
+  /** Step P6 (B): {@link #candidati} without the ships that are in {@code home}. */
+  static List<List<Unit>> candidatiFuoriCasa(
+      final GameState data,
+      final GamePlayer player,
+      final Territory z,
+      final Set<Unit> moving,
+      final Set<Unit> taken,
+      final Set<Territory> home) {
+    final Set<Unit> atHome = new HashSet<>(taken);
+    for (final Territory h : home) {
+      atHome.addAll(h.getMatches(Matches.unitIsOwnedBy(player)));
+    }
+    return candidati(data, player, z, moving, atHome);
   }
 
   /**
@@ -480,35 +629,48 @@ public final class ScortaSbarco {
   // ===================================================================== the moves
 
   /**
-   * At the start of the turn (purchase, real board): the losses of last turn's escort (the enemy's
-   * turn is over) and a new turn's state.
+   * At the start of the turn (purchase, real board): the losses of last turn's escort and, for an
+   * exposed landing (step P6), of its transports (the enemy's turn is over); a new turn's state.
    */
   static void inizioTurno(final GameState data, final GamePlayer player, final Stato st) {
     final int round = data.getSequence().getRound();
-    if (!st.scorteMosse.isEmpty() && st.roundScorte < round) {
+    final boolean pending =
+        (!st.scorteMosse.isEmpty() || !st.trasportiEsposti.isEmpty()) && st.roundScorte < round;
+    if (pending) {
       final Set<String> alive = new HashSet<>();
       for (final Territory t : data.getMap().getTerritories()) {
         t.getMatches(Matches.unitIsOwnedBy(player)).forEach(u -> alive.add(u.getId().toString()));
       }
-      int lost = 0;
-      for (final String id : st.scorteMosse) {
-        if (!alive.contains(id)) {
-          lost++;
-        }
-      }
+      final long lost = st.scorteMosse.stream().filter(id -> !alive.contains(id)).count();
       final JsonObject row = new JsonObject();
       row.addProperty("round_scorta", st.roundScorte);
       row.addProperty("bersaglio", st.bersaglioScorte);
       row.addProperty("navi_scorta", st.scorteMosse.size());
       row.addProperty("navi_scorta_perse", lost);
-      IndicazioniP5.registra(
-          data,
-          player,
-          TIPO,
-          "PERDITE_SCORTA",
-          "unita' di scorta perse nel turno nemico dopo lo sbarco scortato",
-          row);
+      if (st.scorteEsposte) {
+        row.addProperty("trasporti", st.trasportiEsposti.size());
+        row.addProperty(
+            "trasporti_persi",
+            st.trasportiEsposti.stream().filter(id -> !alive.contains(id)).count());
+        IndicazioniP6.registra(
+            data,
+            player,
+            TIPO_ESPOSTA,
+            "PERDITE_ESPOSTO",
+            "trasporti e navi di scorta persi nel turno nemico dopo lo sbarco esposto",
+            row);
+      } else {
+        IndicazioniP5.registra(
+            data,
+            player,
+            TIPO,
+            "PERDITE_SCORTA",
+            "unita' di scorta perse nel turno nemico dopo lo sbarco scortato",
+            row);
+      }
       st.scorteMosse.clear();
+      st.trasportiEsposti.clear();
+      st.scorteEsposte = false;
       st.roundScorte = -1;
     }
     st.inizio(round);
@@ -562,6 +724,17 @@ public final class ScortaSbarco {
         }
       }
       row.addProperty("truppe_sbarcate", landed);
+      if (p.esposta() && landed == 0) {
+        // step P6 (B): kept in the plan, but Hard did not land (no escort moved)
+        IndicazioniP6.registra(
+            data,
+            player,
+            TIPO_ESPOSTA,
+            "ESITO_ESPOSTO",
+            "sbarco esposto tenuto nel piano ma non eseguito da Hard",
+            row);
+        continue;
+      }
       for (final var e : p.scorta().entrySet()) {
         final Territory z = data.getMap().getTerritoryOrNull(e.getKey());
         if (z == null) {
@@ -621,6 +794,26 @@ public final class ScortaSbarco {
       row.add("scorta_non_mossa", nm);
       st.roundScorte = data.getSequence().getRound();
       st.bersaglioScorte = p.bersaglio();
+      if (p.esposta()) {
+        // step P6 (B): the landing's transports for the losses of the enemy's turn
+        for (final String id : p.trasporti()) {
+          final Unit tr = byId.get(id);
+          if (tr != null && !tr.getUnloaded().isEmpty()) {
+            st.trasportiEsposti.add(id);
+          }
+        }
+        st.scorteEsposte = true;
+        row.addProperty("trasporti_sbarco", st.trasportiEsposti.size());
+        IndicazioniP6.registra(
+            data,
+            player,
+            TIPO_ESPOSTA,
+            "SBARCO_ESPOSTO",
+            "sbarco con i trasporti esposti eseguito (scarto di Hard non applicato), scorta"
+                + " minima se basta",
+            row);
+        continue;
+      }
       IndicazioniP5.registra(
           data,
           player,

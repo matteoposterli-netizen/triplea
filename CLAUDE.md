@@ -261,6 +261,15 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `keepsLandingWithExposedTransports` (B tiene lo sbarco scortato); `ProPlusAi.startLevers` (acquisto) e `playLevers` (non
   combattimento, prima di Hard). Interruttori `StrategaInterruttori.USA_PROPORZIONE/NORVEGIA_SCORTA`; 2 caselle del pannello;
   autoplay `MonitorP5`, `ConfrontoP5` (blocco `p5`, sezione "P5"). Vedi "Due leve (step P5)".
+- Step P6 DUE LEVE: `ai/proplus/IndicazioniP6` (dati `proplus/strategia/p6.json`, attivazione, pesi di B, righe del registro),
+  `SbarcoConcentrato` (A `sbarco_concentrato`: trasporti USA carichi e forza alle basi, sbarco in forza / attesa / sbarco dopo
+  l'attesa, raduno con scorta, seguito), `ScortaSbarco` in modalita' "esposta" (B `norvegia_esposta`: lo scarto per trasporti
+  esposti non si applica ai bersagli col peso, scorta minima fuori dalle acque della capitale). Agganci: `ProPlusTuning`
+  (`attackPriorityPlanBonus` con il peso di attacco di B nei round 1-8, `defensePriorityBonus` con il peso di tenuta fino al
+  round 10, stato `p6a`); `ProPlusAi.playConcentratedLanding` (combattimento, dopo le operazioni e prima di Hard), `playLevers`
+  (non combattimento), `startLevers` (seguito degli sbarchi). Interruttori `StrategaInterruttori.SBARCO_CONCENTRATO/
+  NORVEGIA_ESPOSTA`; 2 caselle del pannello; autoplay `MonitorP6`, `ConfrontoP6` (blocco `p6`, sezione "P6"). Vedi "Due leve
+  (step P6)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -556,6 +565,9 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   **Dallo step P4** `[completa]` = 5 configurazioni x 40 semi 1501-1540 = 200 partite senza chiave, Asse sempre impegno+assedio
   (quota 70): e2 Alleati Hard, q1 `Allies=usa_pronti`, q2 `Allies=norvegia_presto`, q3 `Allies=russia_fronte`, q4 tutte e tre;
   sezione "P4" (`ConfrontoP4`, riferimento = la configurazione con gli Alleati di Hard).
+  **Dallo step P6** `[completa]` = 5 configurazioni x 40 semi 1581-1620 = 200 partite senza chiave, Asse impegno+assedio (quota
+  70): e2 Alleati Hard, s1 `usa_proporzione`, s2 `usa_proporzione+sbarco_concentrato`, s3 `norvegia_presto+norvegia_esposta`, s4
+  tutte e quattro; sezione "P6" (`ConfrontoP6`, riferimento = gli Alleati di Hard; s2 anche contro s1).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -3328,6 +3340,79 @@ sorgente).
 7. **Passo 2 anche quando la scorta non basta** (nessuna regola nel prompt): si compra un'unita' alla volta finche' ci sono PU o
    nessuna abbassa la vittoria; se la scorta non arriva al 40% il registro lo dice (`convoglio_regge` false). Scartato: saltare la
    scorta se irraggiungibile (sarebbe una regola nuova).
+
+### Due leve (step P6)
+
+Due leve indipendenti lato Alleati dello Stratega, default spenti (`p6.json`): autoplay `--stratega-acceso
+Allies=usa_proporzione+sbarco_concentrato` (`norvegia_presto+norvegia_esposta`), pannello: caselle "Sbarco USA concentrato" e
+"Norvegia anche esposta" (la seconda accende anche `norvegia_presto`). Con tutto spento lo Stratega senza chiave = Hard
+(`NudoHardTest`, `IndicazioniP6Test.withTheSwitchesOffNothingActs`). Nessun nome nel codice (test sul sorgente).
+- **A `sbarco_concentrato`** (`SbarcoConcentrato`, nazioni dei dati: Americans, tutta la partita), nel combattimento prima di Hard:
+  - **Forza** = trasporti propri CARICHI (solo truppe proprie a bordo) + **forza alle basi** (estensione decisa con Matteo dopo la
+    prima prova locale, scelta 1): truppe proprie trasportabili in una base amica (terra propria o alleata, non una capitale propria,
+    nessun confine di terra con un bersaglio valido) con trasporti propri vuoti e non ancora mossi in una zona accanto senza nemici;
+    carico pianificato (costo di trasporto decrescente, poi attacco), caricato e sbarcato nello stesso combattimento.
+  - **Bersagli validi** (`bersaglioValido`): terra di un nemico in guerra della ALTRA alleanza configurabile (mai i neutrali, nemmeno
+    in guerra come Neutral_Axis; mai basi amiche). Raggiungibili = zona di scarico senza nemici accanto al bersaglio, rotta senza
+    nemici entro il movimento (`getRouteForUnits`, canali compresi).
+  - **SBARCO_IN_FORZA**: per ogni bersaglio il carico di tutti i trasporti che ci arrivano contro i difensori (calcolatore di Hard);
+    tra quelli con vittoria >= `soglia_vittoria` 70 il valore piu' alto (`valore`: 3 x produzione con obiettivi nazionali x (1 +
+    fabbrica nemica) + 3 x VC x 5 + 3 x produzione x 3 se capitale), a parita' la vittoria; tutto il carico sbarca li'; ripetuto per i
+    trasporti rimasti.
+  - **ATTESA** / **AVVICINAMENTO**: nessun bersaglio vinto ⇒ i trasporti in portata aspettano (`attese`: trasporto, o "base:<nome>"
+    per la forza alle basi), quelli fuori portata si avvicinano; nel non combattimento (prima di Hard) i trasporti carichi rimasti si
+    radunano in UNA zona (`raduno`: posizioni d'attacco = zone senza nemici da cui una zona di scarico di un bersaglio e' entro il
+    movimento; prima quelle che piu' trasporti raggiungono ora, poi la distanza totale, poi il valore del bersaglio vicino; delle
+    prime `zone_raduno_valutate` 5 la prima che regge con tutta la scorta <= `soglia_scorta` 40, altrimenti la meno esposta), con la
+    scorta minima che basta o, se non basta, tutta quella che arriva; le truppe alla base restano li' (fuori dalle mosse di Hard).
+  - **SBARCO_DOPO_ATTESA**: dopo `round_di_attesa` 1 round lo scambio migliore (`Stima.scambio` = vittoria x valore + TUV swing -
+    rischio dei trasporti; rischio = vittoria nemica nella zona di scarico con trasporti + tutta la scorta che arriva x TUV dei
+    trasporti), anche negativo per i trasporti carichi; per la forza ancora alla base con scambio negativo: truppe a Hard (scelta 2).
+  - **Dopo lo sbarco**: scorta minima ai trasporti vuoti nella zona di scarico solo se basta (scelta 3), poi i trasporti sono di Hard;
+    acquisti: di Hard (con `usa_proporzione` quelli di P5 nei round neutrali e nel primo di guerra).
+- **B `norvegia_esposta`** (con `norvegia_presto`): per i bersagli di `p6.json` (British: Norway) peso d'attacco 20 nei round 1-8 se
+  di un nemico in guerra (`IndicazioniP6.pesoAttacco`, nel massimo dei pesi di `attackPriorityPlanBonus`), peso di tenuta 20 fino al
+  round 10 se proprio o alleato (`pesoTenuta` in `defensePriorityBonus`). Quando Hard scarterebbe lo sbarco per "transports_exposed"
+  (`keepsLandingWithExposedTransports`, contesto da `checksLandingTransports`), `ScortaSbarco.decidiEsposta` lo tiene SEMPRE
+  (`KEPT_ESPOSTA`): scorta minima che basta (<= 40) tra le navi che arrivano escluse quelle nelle zone di mare accanto alle capitali
+  proprie (`zoneCapitale`, `candidatiFuoriCasa`); se nemmeno tutte bastano, nessuna scorta (scelta 4). La scorta si muove nel non
+  combattimento prima di Hard (come P5). `norvegia_scorta` resta nel codice, spento.
+- **Registro**: `sbarco_concentrato` (SBARCO_IN_FORZA, ATTESA, AVVICINAMENTO, SBARCO_DOPO_ATTESA con carico a bordo e alle basi,
+  bersagli con vittoria/valore/scambio, bersaglio e perche', unita' sbarcate, zone di scarico, `oltre_un_round`; ESITO_SBARCO preso,
+  superstiti, scorta e minaccia nelle zone; RADUNO zona, arrivati/in viaggio, scorta; SEGUITO_SBARCO al turno dopo: trasporti persi,
+  territorio ancora alleato), `norvegia_esposta` (SBARCO_ESPOSTO zone, minaccia, scorta, sbarcate, preso; ESITO_ESPOSTO tenuto ma
+  non eseguito da Hard; PERDITE_ESPOSTO trasporti e navi persi nel turno nemico dopo).
+- **Autoplay**: `MonitorP6` (`round[].p6`: unita' di terra tedesche in tutto e in Europa occidentale - France, Normandy Bordeaux,
+  Holland Belgium, Western Germany, Southern France, Northern Italy, Southern Italy -, unita' USA a bordo da 3+ fine round, trasporti
+  britannici persi del round). Blocco `p6` (`ConfrontoP6.blocco`): `sbarchi_usa_per_round` e `sbarchi_usa_taglie_r8` (1-2, 3-5, 6-9,
+  10+; uno sbarco = un territorio in un round), `sbarchi_usa_6_entro_r8`, `round_primo_sbarco_usa_6`, `usa_sbarcate_cumulate.{5,6,8,
+  10}.{totale,dove}`, `usa_trasporti_persi_r8`/`_totale`, `uk_perse_r4.{trasporti,navi_da_guerra}`, `usa_a_bordo_3_round_max`,
+  `tedeschi.{6,8,10}.{totale,ovest}`, `esercito_tuv.{6,8,10}`, `norway_alleata.{2,3,4,6,8}`, `norway_sbarchi_uk`,
+  `reddito_tedesco.{4,6,8}`, `cadute`, `mosca_oltre_r14`, `regno_unito_perso`, `registro` (sc_* e es_*). Sezione "P6".
+- Test: `IndicazioniP6Test` (14), `ConfrontoP6Test` (2).
+
+### Scelte di P6 (fatte da solo o concordate, con il perche' e l'alternativa scartata)
+
+1. **Forza alle basi (concordata con Matteo durante lo step)**: nella prima prova locale (seme 1581, 8 round) i trasporti USA erano
+   carichi a inizio turno solo a R4 (l'ondata caricata da `usa_proporzione`): Hard porta le truppe USA alle basi nel non
+   combattimento scaricandole nello stesso turno e poi le sbarca a gocce caricandole dalla base nel combattimento; a fine round non
+   ci sono mai truppe a bordo. Alla lettera la leva agiva quasi solo sulla prima ondata. Scelta: la forza alla base conta come
+   caricata (stesse regole). Scartate: la lettura letterale (effetto quasi nullo) e un aggancio nuovo in ProAi per vietare a Hard lo
+   scarico in base (invasivo).
+2. **Forza alla base con scambio negativo dopo l'attesa = truppe a Hard** (non uno sbarco suicida): per i trasporti carichi la
+   regola del prompt resta letterale (sbarcano comunque, le truppe non possono restare a bordo); per le truppe a terra in una base lo
+   sbarco a perdita non serve alla regola "non restare a bordo". Scartato: sbarco comunque anche dalla base.
+3. **Scorta dei trasporti vuoti dopo lo sbarco solo se basta**: i trasporti scarichi non possono piu' muoversi nel turno; mandare
+   navi in una zona che non regge aggiunge perdite. Nel raduno a bordo (truppe sui trasporti) invece tutta la scorta che arriva se la
+   minima non basta.
+4. **B senza scorta quando nemmeno tutta basta** e mai dalle acque della capitale: si rischiano i trasporti (accettato dal prompt),
+   non la flotta di casa.
+5. **Neutrali esclusi con la regola delle alleanze configurabili**: nella seconda prova locale gli USA sbarcavano in Cile (Neutral_Axis
+   in guerra con loro): la sola "guerra" non basta. Scartato: elenco di territori (vietato).
+6. **Valore = scala di Hard**: 3 x produzione x (1 + fabbrica) + 3 x VC x 5 (valore VC di Hard Beta) + 3 x produzione x 3 per la
+   capitale (Hard: produzione x (1 + 3 x capitale)).
+7. **Raduno in una sola zona** per tutta la forza a bordo, scelta per numero di trasporti che ci arrivano ora; chi non arriva si
+   avvicina lungo la rotta. Scartato: un raduno per gruppo (la forza si disperde, contro il prompt).
 
 ## Come configurare lo stratega
 
@@ -6395,3 +6480,39 @@ dei `riepilogo.json` (campo tra parentesi).
   19,5; Norway R4 14/40, R6 33/40 (e2 29); B: 1 sbarco scortato (2 navi) e preso, 31 con scorta mancante.
 - Forza USA R4 / R5 / R6 (medie, patria / a bordo / trasporti): e2 36,5/0/1,2, 37,1/0,1/6,0, 28,6/0,1/11,4; r1 13,2/5,5/12,4, 8,3/5,0/14,4,
   11,3/4,1/17,1. Dove sbarcano entro R10 (r1, somma): Western Germany 370, Normandy Bordeaux 199, Holland Belgium 136, Morocco 71.
+
+### Step P6 — USA: sbarco concentrato; Norvegia anche con i trasporti esposti (2026-11-19)
+
+Vedi "Due leve (step P6)" e "Scelte di P6". Motivo (run P5 44521293874): `usa_proporzione` porta la forza ma Hard la usa a gocce
+(entro R8 2,4 sbarchi USA da 1-2 unita', 1,0 da almeno 6; primo >= 6 al round mediano 8); `norvegia_scorta` 0 sbarchi su 36 (la scorta
+non arriva mai al 40% contro l'aviazione tedesca, Hard annulla per "transports_exposed"). Due leve nuove, default spente;
+`compiti`, `regno_unito_p3`, `usa_pronti`, `russia_fronte`, `norvegia_scorta` spenti nelle run; Asse non toccato; ProAi (Hard)
+invariata (nessun aggancio nuovo in `ProTuning`).
+- File nuovi: `ai/proplus/IndicazioniP6`, `SbarcoConcentrato`, risorsa `proplus/strategia/p6.json`, test `IndicazioniP6Test` (14);
+  autoplay `MonitorP6`, `ConfrontoP6`, test `ConfrontoP6Test` (2). Modificati: `ScortaSbarco` (modalita' esposta, perdite dei
+  trasporti), `ProPlusTuning` (pesi di B, stato `p6a`), `ProPlusAi` (`playConcentratedLanding`, `playLevers`, `startLevers`),
+  `RegistroDecisioni` (tipi e codici P6), `StrategaInterruttori`, `Stratega`, `ProfiloStratega`, `StrategistPanel` (2 caselle);
+  autoplay `Monitor` (`round[].p6`), `Riepilogo` (blocco `p6`), `ConfrontoCompleta` (sezione "P6"); workflow `[completa]` = e2,
+  s1-s4 x semi 1581-1620 (200 partite, costo API 0).
+- Test locali: AI di game-core + `:ai` + `:proplus-autoplay` + `:game-headed` 860 (1 saltato, 0 falliti: golden Hard, `NudoHardTest`,
+  `DiaryNeutralityTest`, `CampagnaOmbraTest`, test di P4 e P5), poi `IndicazioniP6Test` 14, `ConfrontoP6Test` 2, `NudoHardTest` 3,
+  `IndicazioniP5Test` 9 dopo l'ultima correzione. JDK 25 Temurin 25.0.1 da GitHub; Maven Central 429 ritentato.
+- Prove locali (Asse impegno+assedio quota 70, Alleati Stratega senza chiave; una partita per configurazione NON e' una misura):
+  - A prima versione (solo trasporti carichi, seme 1581, 8 round): un solo intervento (R4, Morocco, 6 unita' dell'ondata di P5);
+    poi nessun trasporto carico a inizio turno (Hard carica e scarica alle basi nello stesso turno) ⇒ domanda a Matteo ⇒ forza alle
+    basi (scelta 1).
+  - A con le basi (seme 1581, 10 round): R4 Normandy Bordeaux 6 unita' da Gibilterra (vittoria 98,9%, presa, persa nel turno
+    tedesco), R5 Southern France 7 (presa, persa, 5 trasporti vuoti affondati), R7 Norway 9 (tenuta), R9 Western Germany 12 (presa,
+    persa), R10 Chile 6 (neutrale filo-Asse: BUG ⇒ scelta 5). Germania, unita' di terra in Europa occidentale R3 / R4 / R6 / R8 / R10
+    = 13 / 24 / 48 / 36 / 52 (totale 75 / 82 / 89 / 89 / 86); esercito russo (TUV) R6 / R8 / R10 = 180 / 135 / 96. Hard sbarca ancora
+    a gocce dalle sue basi: Holland 4 (R8), Normandy 2 (R9), Sardinia 2 (R10).
+  - A versione finale (seme 1582, 10 round): R5-R7 trasporti carichi in avvicinamento/raduno (71 SZ, poi 91 SZ), R6 Holland Belgium 8
+    (presa, persa), R7 Denmark 6 (tenuta), R8 Normandy Bordeaux 11 da Gibilterra (presa, persa), R9 Poland 5 dalla Norvegia (presa,
+    persa, 3 trasporti persi), R10 Holland Belgium 13 (presa); 0 turni oltre un round; 0 sbarchi su neutrali; trasporti USA persi 8.
+    Germania in Europa occidentale R6 / R8 / R10 = 17 / 54 / 49 (totale 115 / 119 / 120); esercito russo 213 / 144 / 105.
+  - B (`norvegia_presto+norvegia_esposta`, semi 1581-1584, 6 round): Norway mai candidata in 1581 (presa dalla Russia a R6); 1582 sbarco
+    esposto R3 (2 meccanizzate, vittoria 100%, nessuna scorta che basta), Norway britannica R3-R6, trasporto perso nel turno tedesco;
+    1583 R1 4 fanterie (minaccia 135 TUV, nessuna scorta disponibile), persa a R2, ripresa a R4 (Hard col peso) e tenuta fino a R6;
+    1584 R3 4 fanterie, alleata a fine R3/R4/R6, trasporto perso; navi e trasporti britannici persi entro R4 5 + 5.
+  - 0 eccezioni, 0 avvisi `[Pro+] P6` nei log.
+- CI: `[completa]` = e2, s1, s2, s3, s4 x semi 1581-1620.

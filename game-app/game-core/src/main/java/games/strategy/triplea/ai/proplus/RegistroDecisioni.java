@@ -93,11 +93,25 @@ public final class RegistroDecisioni {
           "russia_fronte",
           // step P5
           "usa_proporzione",
-          "norvegia_scorta");
+          "norvegia_scorta",
+          // step P6
+          "sbarco_concentrato",
+          "norvegia_esposta");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P6
+          "SBARCO_IN_FORZA",
+          "ATTESA",
+          "SBARCO_DOPO_ATTESA",
+          "AVVICINAMENTO",
+          "RADUNO",
+          "ESITO_SBARCO",
+          "SEGUITO_SBARCO",
+          "SBARCO_ESPOSTO",
+          "ESITO_ESPOSTO",
+          "PERDITE_ESPOSTO",
           // step P5
           "PIANO_NEUTRALE",
           "PIANO_PRIMO_TURNO",
