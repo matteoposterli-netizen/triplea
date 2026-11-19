@@ -6370,3 +6370,28 @@ sbarco 43 volte per "transports_exposed". Due leve nuove, default spente; `usa_p
   - 0 eccezioni, 0 avvisi `[Pro+] P5` nei log.
 - CI: `[completa]` = e2, r1, r2, r3 x semi 1541-1580.
 
+
+#### Autoplay in CI (run 44521293874, commit 6d75380, tutto verde al 1° tentativo, 160/160 partite [completa] senza chiave, semi 1541-1580, costo API 0)
+0 errori del calcolatore e 0 eccezioni nei log, 0 stalli, 160/160 con un vincitore. Asse impegno+assedio (quota 70). Numeri dal blocco `p5`
+dei `riepilogo.json` (campo tra parentesi).
+
+| Config | Alleati vince [IC 95%] | Fisher vs e2 | Mosca oltre R14 (`mosca_oltre_r14`) | Fisher |
+|---|---|---|---|---|
+| e2 Alleati Hard | 13/40 33% [20; 48] | - | 16/40 40% | - |
+| r1 usa_proporzione | 17/40 43% [29; 58] | 0,49 | 21/40 53% | 0,37 |
+| r2 norvegia_presto+norvegia_scorta | 18/40 45% [31; 60] | 0,36 | 17/40 43% | 1,00 |
+| r3 tutte e tre | 15/40 38% [24; 53] | 0,82 | 15/40 38% | 1,00 |
+
+- Nessuna configurazione 5+ vittorie sotto e2; nessuna differenza con p < 0,05.
+- Criterio 1 (r1): fine R3 >= 6 trasporti USA e truppe a bordo 36/40 (SI'; trasporti `usa_forza.3.trasporti` 8,9 contro e2 1,0, a bordo
+  5,7); R4 terra in patria + a bordo (`usa_forza.4.terra_patria_o_bordo`) 18,7 media, >= 20 in 18/40 (NO; e2 36,5 tutta in patria); primo
+  sbarco >= 6 mediana R8 (NO; e2 R9); sbarcate cumulate R6 6,4 (NO), R8 19,7 (NO) contro e2 2,8 / 11,1; trasporti USA persi entro R8 1,2
+  (SI'). Acquisti USA R1-R3 (`usa_acquisti_pu`, terra/trasporti/navi/aerei) 7/28/0/0, 10/17/7/1, 16/11/9/1 (e2 35/0/0/0 a R1-R2: difesa
+  contro i britannici); registro A: 157 turni di piano, 1645 PU trasporti, 1098 PU scorta, 228 carichi, convoglio regge 113/157, 221 truppe
+  caricate nell'ultimo turno neutrale.
+- Criterio 2 (r2): Norway alleata a fine R4 13/40 (>= 24: NO; e2 13); navi da guerra UK perse entro R4 6,3 contro 6,0 (<= e2+1: SI'); UK
+  perso 0 (SI'). Registro B: 36 sbarchi su Norway scartati da Hard e scorta insufficiente, 0 scortati.
+- r3: R3 >= 6 trasporti e truppe a bordo 40/40; R4 patria+bordo 19,6 (>= 20 in 22/40); primo sbarco >= 6 mediana R7; sbarcate R6/R8 9,0 /
+  19,5; Norway R4 14/40, R6 33/40 (e2 29); B: 1 sbarco scortato (2 navi) e preso, 31 con scorta mancante.
+- Forza USA R4 / R5 / R6 (medie, patria / a bordo / trasporti): e2 36,5/0/1,2, 37,1/0,1/6,0, 28,6/0,1/11,4; r1 13,2/5,5/12,4, 8,3/5,0/14,4,
+  11,3/4,1/17,1. Dove sbarcano entro R10 (r1, somma): Western Germany 370, Normandy Bordeaux 199, Holland Belgium 136, Morocco 71.
