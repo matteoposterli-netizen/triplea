@@ -528,7 +528,7 @@ jobs:
           print("matrix=" + json.dumps({"include": include}))
           print(f"round={rounds}")
           EOF
-          # step P7: the games in groups, one job each ([completa]: 5 games of consecutive seeds,
+          # step P7: the games in groups, one job each (short test: 3 rounds of fixes, run 44636391561) ([completa]: 5 games of consecutive seeds,
           # 1080 games = 216 jobs, under 256 however the limit is counted; else 1 game per job)
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json, os
