@@ -416,6 +416,10 @@ public class ProPlusAi extends ProAi {
       if (SbarcoConcentrato.attivo(data, player)) {
         SbarcoConcentrato.inizioTurno(data, player, tuning.p6a());
       }
+      // step P7 (B): the ally's landings of this round (the weight acts on Hard's copy too)
+      if (IndicazioniP7.attivo(data, player, StrategaInterruttori.PONTE_UK)) {
+        IndicazioniP7.inizioTurno(data, player, tuning.p7b());
+      }
       final java.util.Optional<ForzaSbarco.Fase> phase = ForzaSbarco.fase(data, player);
       if (phase.isPresent()) {
         initializeData();

@@ -490,6 +490,11 @@ final class MonitorP7 {
 
   private void attacksOnNeutrals(final String player, final int round) {
     final GamePlayer me = p(player);
+    final GamePlayer neutral = p(NEUTRALE);
+    // an attack only at war with the neutral (units in a friendly neutral's land are not one)
+    if (me == null || neutral == null || !me.isAtWar(neutral)) {
+      return;
+    }
     for (final Territory t : data.getMap().getTerritories()) {
       if (!t.isWater()
           && NEUTRALE.equals(t.getOwner().getName())

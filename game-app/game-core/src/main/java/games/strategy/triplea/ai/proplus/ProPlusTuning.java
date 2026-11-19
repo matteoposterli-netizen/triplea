@@ -120,6 +120,13 @@ public final class ProPlusTuning implements ProTuning {
     return p5b;
   }
 
+  /** Step P7 (B): the ally's landings of the round, read at the start of the turn. */
+  private final IndicazioniP7.Ponte p7b = new IndicazioniP7.Ponte();
+
+  public IndicazioniP7.Ponte p7b() {
+    return p7b;
+  }
+
   /** Step P6 (A): the concentrated landing's state (the waits, last turn's landings). */
   private final SbarcoConcentrato.Stato p6a = new SbarcoConcentrato.Stato();
 
@@ -341,7 +348,7 @@ public final class ProPlusTuning implements ProTuning {
             Math.max(
                 IndicazioniP6.pesoAttacco(proData, target),
                 // step P7 (B): the ally's bridgehead of the round, still the enemy's
-                IndicazioniP7.pesoAttacco(proData, target)));
+                IndicazioniP7.pesoAttacco(proData, target, p7b)));
     return p4Bonus > base ? p4Bonus : base;
   }
 

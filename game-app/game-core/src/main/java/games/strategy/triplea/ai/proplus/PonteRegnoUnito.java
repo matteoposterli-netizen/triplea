@@ -53,7 +53,16 @@ final class PonteRegnoUnito {
   private static final class Viaggio {
     final Unit trasporto;
     final Territory da;
+
+    /** Start → the sea zone where it loads (empty route if it loads where it is). */
     final Route rotta;
+
+    /** The sea zone where it loads. */
+    final Territory sosta;
+
+    /** The loading zone → the unload zone. */
+    final Route rotta2;
+
     final Territory zona;
     final List<Unit> carico;
 
@@ -64,11 +73,15 @@ final class PonteRegnoUnito {
         final Unit trasporto,
         final Territory da,
         final Route rotta,
+        final Territory sosta,
+        final Route rotta2,
         final Territory zona,
         final List<Unit> carico) {
       this.trasporto = trasporto;
       this.da = da;
       this.rotta = rotta;
+      this.sosta = sosta;
+      this.rotta2 = rotta2;
       this.zona = zona;
       this.carico = new ArrayList<>(carico);
     }
@@ -152,79 +165,41 @@ final class PonteRegnoUnito {
     for (final Territory x : data.getMap().getTerritories()) {
       x.getUnits().forEach(u -> where.put(u, x));
     }
+    final Set<GamePlayer> enemies = new LinkedHashSet<>();
+    for (final GamePlayer p : data.getPlayerList().getPlayers()) {
+      if (!p.equals(player) && player.isAtWar(p)) {
+        enemies.add(p);
+      }
+    }
+    // the unload zones, the least threatened first (enemy TUV in reach - allied cover there)
+    final ProTerritoryManager tmz = new ProTerritoryManager(calc, proData);
+    if (!zones.isEmpty()) {
+      tmz.populateEnemyAttackOptionsOfEveryEnemy(zones, zones);
+    }
+    final Map<Territory, Integer> risk = new HashMap<>();
+    for (final Territory z : zones) {
+      risk.put(
+          z,
+          tuv(proData, ForzaSbarco.minaccia(tmz, z, enemies)) - tuv(proData, copertura(player, z)));
+    }
+    final List<Territory> ordered = new ArrayList<>(zones);
+    ordered.sort(
+        java.util.Comparator.comparingInt((Territory z) -> risk.get(z))
+            .thenComparing(Territory::getName));
     final List<Viaggio> trips = new ArrayList<>();
-    int reach = 0;
+    final Set<Unit> reached = new LinkedHashSet<>();
     for (final Unit tr : ForzaSbarco.trasporti(data, player)) {
       if (zones.isEmpty() || used.contains(tr) || !tr.getUnloaded().isEmpty()) {
         continue;
       }
-      final Territory from = where.get(tr);
-      final int mv = tr.getMovementLeft().intValue();
-      if (from == null || mv < 0) {
-        continue;
+      final Viaggio v = pianifica(data, player, tr, where, ordered, Set.of(), used, t, reached);
+      if (v != null) {
+        used.add(tr);
+        used.addAll(v.carico);
+        trips.add(v);
       }
-      final List<Unit> cargo = new ArrayList<>(tr.getTransporting());
-      if (!cargo.stream().allMatch(u -> u.isOwnedBy(player))) {
-        continue;
-      }
-      final List<Unit> moving = new ArrayList<>(List.of(tr));
-      moving.addAll(cargo);
-      Route best = null;
-      Territory bestZone = null;
-      for (final Territory z : zones) {
-        final Route r;
-        if (z.equals(from)) {
-          r = new Route(from);
-        } else {
-          final Optional<Route> o = data.getMap().getRouteForUnits(from, z, free, moving, player);
-          if (o.isEmpty() || o.get().numberOfSteps() > mv) {
-            continue;
-          }
-          r = o.get();
-        }
-        if (best == null || r.numberOfSteps() < best.numberOfSteps()) {
-          best = r;
-          bestZone = z;
-        }
-      }
-      if (best == null) {
-        continue;
-      }
-      reach++;
-      final Viaggio v = new Viaggio(tr, from, best, bestZone, cargo);
-      if (cargo.isEmpty()) {
-        if (!ProMatches.transportCanLoad().test(tr)) {
-          continue;
-        }
-        final Set<Territory> sources = new LinkedHashSet<>();
-        for (final Territory l : data.getMap().getNeighbors(from, Matches.territoryIsLand())) {
-          if (!l.equals(t) && (l.isOwnedBy(player) || player.isAllied(l.getOwner()))) {
-            sources.add(l);
-          }
-        }
-        final List<Unit> load =
-            ProTransportUtils.getUnitsToTransportFromTerritories(
-                player,
-                tr,
-                sources,
-                used,
-                ProMatches.unitIsOwnedTransportableUnitAndCanBeLoaded(player, tr, false));
-        for (final Unit u : load) {
-          final Territory src = where.get(u);
-          if (src != null && !src.isWater()) {
-            v.carico.add(u);
-            v.caricoDa.computeIfAbsent(src, k -> new ArrayList<>()).add(u);
-          }
-        }
-      }
-      if (v.carico.isEmpty()) {
-        continue;
-      }
-      used.add(tr);
-      used.addAll(v.carico);
-      trips.add(v);
     }
-    row.addProperty("trasporti_che_arrivano", reach);
+    row.addProperty("trasporti_che_arrivano", reached.size());
     if (trips.isEmpty()) {
       row.addProperty("unita_caricabili", 0);
       IndicazioniP7.registra(
@@ -237,12 +212,6 @@ final class PonteRegnoUnito {
       return;
     }
     // the enemy's realistic attacks on the sources at risk and on the unload zones
-    final Set<GamePlayer> enemies = new LinkedHashSet<>();
-    for (final GamePlayer p : data.getPlayerList().getPlayers()) {
-      if (!p.equals(player) && player.isAtWar(p)) {
-        enemies.add(p);
-      }
-    }
     final Set<Territory> guarded = new LinkedHashSet<>();
     for (final Viaggio v : trips) {
       for (final Territory src : v.caricoDa.keySet()) {
@@ -291,52 +260,53 @@ final class PonteRegnoUnito {
     }
     trips.removeIf(v -> v.carico.isEmpty());
     row.addProperty("rimaste_per_la_difesa", keptHome);
-    // Hard's check of exposed transports, per unload zone
+    // Hard's check of exposed transports, per unload zone; the trips of an exposed zone try the
+    // other zones next to T (up to three passes), the check itself is never skipped
     final ProCombatMoveAi.ProductionAndIsCapital pc = ProCombatMoveAi.getProductionAndIsCapital(t);
-    final Map<Territory, List<Viaggio>> byZone = new LinkedHashMap<>();
-    trips.forEach(v -> byZone.computeIfAbsent(v.zona, k -> new ArrayList<>()).add(v));
-    final List<Viaggio> go = new ArrayList<>();
-    final com.google.gson.JsonArray zj = new com.google.gson.JsonArray();
-    for (final var e : byZone.entrySet()) {
-      final Territory z = e.getKey();
-      final List<Unit> def = new ArrayList<>();
-      final List<Unit> cargo = new ArrayList<>();
-      for (final Viaggio v : e.getValue()) {
-        def.add(v.trasporto);
-        cargo.addAll(v.carico);
-      }
-      for (final Unit u : z.getUnits()) {
-        if (!def.contains(u)
-            && player.isAllied(u.getOwner())
-            && Matches.unitIsSea().test(u)
-            && (Matches.unitIsSeaTransportButNotCombatSeaTransport().test(u)
-                || ForzaSbarco.copre(u.getUnitAttachment()))) {
-          def.add(u);
+    final Set<Territory> bad = new LinkedHashSet<>();
+    com.google.gson.JsonArray zj = new com.google.gson.JsonArray();
+    for (int pass = 0; pass < 3; pass++) {
+      zj = new com.google.gson.JsonArray();
+      final Map<Territory, List<Viaggio>> byZone = new LinkedHashMap<>();
+      trips.forEach(v -> byZone.computeIfAbsent(v.zona, k -> new ArrayList<>()).add(v));
+      final Set<Territory> exposedNow = new LinkedHashSet<>();
+      for (final var e : byZone.entrySet()) {
+        final JsonObject zo =
+            esposizione(proData, calc, tmz, enemies, e.getKey(), e.getValue(), pc, cfg);
+        zj.add(zo);
+        if (zo.get("esposti").getAsBoolean()) {
+          exposedNow.add(e.getKey());
         }
       }
-      final List<Unit> att = ForzaSbarco.minaccia(tm, z, enemies);
-      double swing = 0;
-      double win = 0;
-      if (!att.isEmpty()) {
-        final ProBattleResult r = calc.calculateBattleResults(proData, z, att, def, List.of());
-        swing = Math.max(0, r.getTuvSwing());
-        win = r.getWinPercentage();
+      if (exposedNow.isEmpty()) {
+        break;
       }
-      final double value = valore(tuv(proData, cargo), pc.production, pc.isCapital == 1);
-      final boolean exposed = esposti(swing, value, cfg.fattoreEsposizione());
-      final JsonObject zo = new JsonObject();
-      zo.addProperty("zona", z.getName());
-      zo.addProperty("trasporti", e.getValue().size());
-      zo.addProperty("unita", cargo.size());
-      zo.addProperty("navi_alleate_altrui", def.stream().filter(u -> !u.isOwnedBy(player)).count());
-      zo.addProperty("minaccia_tuv", tuv(proData, att));
-      zo.addProperty("vittoria_nemica", AlleatiR5.round1(win));
-      zo.addProperty("tuv_nemico", AlleatiR5.round1(swing));
-      zo.addProperty("valore", AlleatiR5.round1(value));
-      zo.addProperty("esposti", exposed);
-      zj.add(zo);
-      if (!exposed) {
-        go.addAll(e.getValue());
+      bad.addAll(exposedNow);
+      final List<Viaggio> moved = new ArrayList<>();
+      for (final java.util.Iterator<Viaggio> it = trips.iterator(); it.hasNext(); ) {
+        final Viaggio v = it.next();
+        if (bad.contains(v.zona)) {
+          it.remove();
+          used.removeAll(v.carico);
+          final Viaggio again =
+              pianifica(data, player, v.trasporto, where, ordered, bad, used, t, new HashSet<>());
+          if (again != null) {
+            used.addAll(again.carico);
+            moved.add(again);
+          } else {
+            used.remove(v.trasporto);
+          }
+        }
+      }
+      if (moved.isEmpty()) {
+        break;
+      }
+      trips.addAll(moved);
+    }
+    final List<Viaggio> go = new ArrayList<>();
+    for (final Viaggio v : trips) {
+      if (!bad.contains(v.zona)) {
+        go.add(v);
       }
     }
     row.add("zone", zj);
@@ -372,9 +342,180 @@ final class PonteRegnoUnito {
         row);
   }
 
+  /**
+   * One transport's best trip to T avoiding {@code excluded} zones: the least threatened unload
+   * zone it reaches (with its own cargo, or with the units it loads in a sea zone on the way: start
+   * → loading zone → unload zone within its movement), null if none. {@code reached} gets it if it
+   * reaches any zone.
+   */
+  private static @javax.annotation.Nullable Viaggio pianifica(
+      final GameData data,
+      final GamePlayer player,
+      final Unit tr,
+      final Map<Unit, Territory> where,
+      final List<Territory> ordered,
+      final Set<Territory> excluded,
+      final Set<Unit> used,
+      final Territory t,
+      final Set<Unit> reached) {
+    final Predicate<Territory> free = SbarcoConcentrato.libera(player);
+    final Territory from = where.get(tr);
+    final int mv = tr.getMovementLeft().intValue();
+    if (from == null || mv < 0) {
+      return null;
+    }
+    final List<Unit> cargo = new ArrayList<>(tr.getTransporting());
+    if (!cargo.stream().allMatch(u -> u.isOwnedBy(player))) {
+      return null;
+    }
+    final Map<Territory, Integer> fromStart =
+        SbarcoConcentrato.distanze(data, List.of(from), mv, free);
+    final boolean canLoad = cargo.isEmpty() && ProMatches.transportCanLoad().test(tr);
+    for (final Territory z : ordered) {
+      if (excluded.contains(z)) {
+        continue;
+      }
+      final Map<Territory, Integer> toZone = SbarcoConcentrato.distanze(data, List.of(z), mv, free);
+      Viaggio best = null;
+      for (final var e : fromStart.entrySet()) {
+        final Territory y = e.getKey();
+        final Integer back = toZone.get(y);
+        if (back == null || e.getValue() + back > mv) {
+          continue;
+        }
+        reached.add(tr);
+        if (!cargo.isEmpty() && !y.equals(from)) {
+          continue;
+        }
+        final List<Unit> load = new ArrayList<>();
+        final Map<Territory, List<Unit>> loadFrom = new LinkedHashMap<>();
+        if (canLoad) {
+          final Set<Territory> sources = new LinkedHashSet<>();
+          for (final Territory l : data.getMap().getNeighbors(y, Matches.territoryIsLand())) {
+            if (!l.equals(t) && (l.isOwnedBy(player) || player.isAllied(l.getOwner()))) {
+              sources.add(l);
+            }
+          }
+          for (final Unit u :
+              ProTransportUtils.getUnitsToTransportFromTerritories(
+                  player,
+                  tr,
+                  sources,
+                  used,
+                  ProMatches.unitIsOwnedTransportableUnitAndCanBeLoaded(player, tr, false))) {
+            final Territory src = where.get(u);
+            if (src != null && !src.isWater()) {
+              load.add(u);
+              loadFrom.computeIfAbsent(src, k -> new ArrayList<>()).add(u);
+            }
+          }
+        }
+        final int n = cargo.size() + load.size();
+        if (n == 0 || (best != null && n <= best.carico.size())) {
+          continue;
+        }
+        final List<Unit> moving = new ArrayList<>(List.of(tr));
+        moving.addAll(cargo);
+        final Optional<Route> r1 =
+            y.equals(from)
+                ? Optional.of(new Route(from))
+                : data.getMap().getRouteForUnits(from, y, free, moving, player);
+        moving.addAll(load);
+        final Optional<Route> r2 =
+            y.equals(z)
+                ? Optional.of(new Route(y))
+                : data.getMap().getRouteForUnits(y, z, free, moving, player);
+        if (r1.isEmpty()
+            || r2.isEmpty()
+            || r1.get().numberOfSteps() + r2.get().numberOfSteps() > mv) {
+          continue;
+        }
+        final List<Unit> all = new ArrayList<>(cargo);
+        all.addAll(load);
+        best = new Viaggio(tr, from, r1.get(), y, r2.get(), z, all);
+        best.caricoDa.putAll(loadFrom);
+      }
+      if (best != null) {
+        return best;
+      }
+    }
+    return null;
+  }
+
+  /** Allied sea units in {@code z} that cover transports (warships, transports). */
+  private static List<Unit> copertura(final GamePlayer player, final Territory z) {
+    final List<Unit> out = new ArrayList<>();
+    for (final Unit u : z.getUnits()) {
+      if (player.isAllied(u.getOwner())
+          && Matches.unitIsSea().test(u)
+          && !Matches.unitIsSeaTransportButNotCombatSeaTransport().test(u)
+          && ForzaSbarco.copre(u.getUnitAttachment())) {
+        out.add(u);
+      }
+    }
+    return out;
+  }
+
+  /** Hard's check of exposed transports in {@code z} for {@code trips} (a row of the register). */
+  private static JsonObject esposizione(
+      final ProData proData,
+      final ProOddsCalculator calc,
+      final ProTerritoryManager tm,
+      final Set<GamePlayer> enemies,
+      final Territory z,
+      final List<Viaggio> trips,
+      final ProCombatMoveAi.ProductionAndIsCapital pc,
+      final IndicazioniP7.Config cfg) {
+    final GamePlayer player = proData.getPlayer();
+    final List<Unit> def = new ArrayList<>();
+    final List<Unit> cargo = new ArrayList<>();
+    for (final Viaggio v : trips) {
+      def.add(v.trasporto);
+      cargo.addAll(v.carico);
+    }
+    for (final Unit u : z.getUnits()) {
+      if (!def.contains(u)
+          && player.isAllied(u.getOwner())
+          && Matches.unitIsSea().test(u)
+          && (Matches.unitIsSeaTransportButNotCombatSeaTransport().test(u)
+              || ForzaSbarco.copre(u.getUnitAttachment()))) {
+        def.add(u);
+      }
+    }
+    final List<Unit> att = ForzaSbarco.minaccia(tm, z, enemies);
+    double swing = 0;
+    double win = 0;
+    if (!att.isEmpty()) {
+      final ProBattleResult r = calc.calculateBattleResults(proData, z, att, def, List.of());
+      swing = Math.max(0, r.getTuvSwing());
+      win = r.getWinPercentage();
+    }
+    final double value = valore(tuv(proData, cargo), pc.production, pc.isCapital == 1);
+    final JsonObject zo = new JsonObject();
+    zo.addProperty("zona", z.getName());
+    zo.addProperty("trasporti", trips.size());
+    zo.addProperty("unita", cargo.size());
+    zo.addProperty("navi_alleate_altrui", def.stream().filter(u -> !u.isOwnedBy(player)).count());
+    zo.addProperty("minaccia_tuv", tuv(proData, att));
+    zo.addProperty("vittoria_nemica", AlleatiR5.round1(win));
+    zo.addProperty("tuv_nemico", AlleatiR5.round1(swing));
+    zo.addProperty("valore", AlleatiR5.round1(value));
+    zo.addProperty("esposti", esposti(swing, value, cfg.fattoreEsposizione()));
+    return zo;
+  }
+
   /** Load (if needed), move, unload; returns the units ashore in {@code t}. */
   private static int esegui(final IMoveDelegate del, final Viaggio v, final Territory t) {
     final List<Unit> aboard = new ArrayList<>(v.trasporto.getTransporting());
+    if (v.rotta.numberOfSteps() > 0) {
+      final List<Unit> units = new ArrayList<>(List.of(v.trasporto));
+      units.addAll(aboard);
+      final Optional<String> err = del.performMove(new MoveDescription(units, v.rotta));
+      if (err.isPresent()) {
+        ProLogger.warn("[Pro+] P7 ponte: rotta verso il carico non riuscita " + err.get());
+        return 0;
+      }
+    }
     for (final var e : v.caricoDa.entrySet()) {
       if (e.getValue().isEmpty()) {
         continue;
@@ -382,7 +523,7 @@ final class PonteRegnoUnito {
       final Map<Unit, Unit> map = new HashMap<>();
       e.getValue().forEach(u -> map.put(u, v.trasporto));
       final Optional<String> err =
-          del.performMove(new MoveDescription(e.getValue(), new Route(e.getKey(), v.da), map));
+          del.performMove(new MoveDescription(e.getValue(), new Route(e.getKey(), v.sosta), map));
       if (err.isPresent()) {
         ProLogger.warn("[Pro+] P7 ponte: carico non riuscito " + err.get());
         continue;
@@ -392,10 +533,10 @@ final class PonteRegnoUnito {
     if (aboard.isEmpty()) {
       return 0;
     }
-    if (v.rotta.numberOfSteps() > 0) {
+    if (v.rotta2.numberOfSteps() > 0) {
       final List<Unit> units = new ArrayList<>(List.of(v.trasporto));
       units.addAll(aboard);
-      final Optional<String> err = del.performMove(new MoveDescription(units, v.rotta));
+      final Optional<String> err = del.performMove(new MoveDescription(units, v.rotta2));
       if (err.isPresent()) {
         ProLogger.warn("[Pro+] P7 ponte: rotta non riuscita " + err.get());
         return 0;

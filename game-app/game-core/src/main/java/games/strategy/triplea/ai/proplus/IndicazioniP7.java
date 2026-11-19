@@ -284,27 +284,41 @@ public final class IndicazioniP7 {
         c.unitaMinime());
   }
 
-  /** B: the attack weight of {@code target} (the ally's landing failed: still the enemy's). */
-  static double pesoAttacco(final ProData proData, final Territory target) {
-    final GamePlayer player = proData.getPlayer();
-    final GameState data = proData.getData();
-    if (player == null
-        || target.isWater()
-        || target.getOwner().isNull()
-        || !player.isAtWar(target.getOwner())) {
-      return 0;
+  /**
+   * B: the ally's landings of the round, kept by the tuning at the start of the turn (read on the
+   * real game: Hard plans its combat move on a copy, whose register is empty).
+   */
+  public static final class Ponte {
+    private int round = -1;
+    private Map<String, Integer> sbarchi = Map.of();
+
+    Map<String, Integer> di(final int r) {
+      return r == round ? sbarchi : Map.of();
     }
-    final Map<String, Integer> landed = sbarchiDelRound(data, player);
-    if (!landed.containsKey(target.getName())) {
-      return 0;
+
+    void imposta(final int r, final Map<String, Integer> landed) {
+      round = r;
+      sbarchi = Map.copyOf(landed);
     }
+  }
+
+  /**
+   * B, at the start of the turn (real game): the round's landings into {@code st}, and a row for
+   * each one still the enemy's (the weight acts in Hard's combat move).
+   */
+  static void inizioTurno(final GameState data, final GamePlayer player, final Ponte st) {
     final int round = data.getSequence().getRound();
-    if (!proData.isSimulation()
-        && SCRITTE.add(round + "|" + player.getName() + "|B|" + target.getName())) {
+    final Map<String, Integer> landed = sbarchiDelRound(data, player);
+    st.imposta(round, landed);
+    for (final var e : landed.entrySet()) {
+      final Territory t = data.getMap().getTerritoryOrNull(e.getKey());
+      if (t == null || t.getOwner().isNull() || !player.isAtWar(t.getOwner())) {
+        continue;
+      }
       final JsonObject row = new JsonObject();
-      row.addProperty("territorio", target.getName());
-      row.addProperty("proprietario", target.getOwner().getName());
-      row.addProperty("unita_sbarcate_alleato", landed.get(target.getName()));
+      row.addProperty("territorio", t.getName());
+      row.addProperty("proprietario", t.getOwner().getName());
+      row.addProperty("unita_sbarcate_alleato", e.getValue());
       row.addProperty("peso", Config.get().pesoAttacco());
       registra(
           data,
@@ -314,7 +328,22 @@ public final class IndicazioniP7 {
           "sbarco alleato fallito: peso sul territorio tra i bersagli d'attacco di Hard",
           row);
     }
-    return Config.get().pesoAttacco();
+  }
+
+  /** B: the attack weight of {@code target} (the ally's landing failed: still the enemy's). */
+  static double pesoAttacco(final ProData proData, final Territory target, final Ponte st) {
+    final GamePlayer player = proData.getPlayer();
+    final GameState data = proData.getData();
+    if (player == null
+        || target.isWater()
+        || target.getOwner().isNull()
+        || !player.isAtWar(target.getOwner())
+        || !attivo(data, player, StrategaInterruttori.PONTE_UK)) {
+      return 0;
+    }
+    return st.di(data.getSequence().getRound()).containsKey(target.getName())
+        ? Config.get().pesoAttacco()
+        : 0;
   }
 
   // ======================================================================== C: troops ready

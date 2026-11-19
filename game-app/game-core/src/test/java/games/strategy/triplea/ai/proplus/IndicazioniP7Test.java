@@ -107,7 +107,9 @@ class IndicazioniP7Test extends AbstractClientSettingTestCase {
       }
       assertThat(tuning.allowsPoliticalAction(proData, war)).isTrue();
       assertThat(tuning.excludesAttackTarget(proData, territory("Spain"))).isFalse();
-      assertThat(IndicazioniP7.pesoAttacco(proData, territory("Normandy Bordeaux"))).isZero();
+      final IndicazioniP7.Ponte st = new IndicazioniP7.Ponte();
+      st.imposta(5, Map.of("Normandy Bordeaux", 8));
+      assertThat(IndicazioniP7.pesoAttacco(proData, territory("Normandy Bordeaux"), st)).isZero();
       assertThat(IndicazioniP7.ordini(proData)).isEmpty();
       assertThat(IndicazioniP7.sbarchiDelRound(data, p)).isEmpty();
     }
@@ -152,6 +154,29 @@ class IndicazioniP7Test extends AbstractClientSettingTestCase {
             row("Americans", 5, "ATTESA", "Denmark", 9));
     assertThat(IndicazioniP7.sbarchi(rows, "Americans", 5, 6))
         .isEqualTo(Map.of("Normandy Bordeaux", 7));
+  }
+
+  @Test
+  void theBridgeheadWeightActsOnTheRoundsEnemyLandingOnly() {
+    StrategaInterruttori.accendi(data.getProperties(), "Allies", "ponte_uk");
+    atWar();
+    data.performChange(
+        ChangeFactory.changeOwner(territory("Normandy Bordeaux"), player("Germans")));
+    final ProData uk = proData(player("British"), 5);
+    final IndicazioniP7.Ponte st = new IndicazioniP7.Ponte();
+    st.imposta(5, Map.of("Normandy Bordeaux", 8));
+    assertThat(IndicazioniP7.pesoAttacco(uk, territory("Normandy Bordeaux"), st)).isEqualTo(40);
+    // another territory, another round, an allied one: no weight
+    assertThat(IndicazioniP7.pesoAttacco(uk, territory("Holland Belgium"), st)).isZero();
+    st.imposta(4, Map.of("Normandy Bordeaux", 8));
+    assertThat(IndicazioniP7.pesoAttacco(uk, territory("Normandy Bordeaux"), st)).isZero();
+    st.imposta(5, Map.of("Gibraltar", 8));
+    assertThat(IndicazioniP7.pesoAttacco(uk, territory("Gibraltar"), st)).isZero();
+    // the USA are not concerned
+    assertThat(
+            IndicazioniP7.pesoAttacco(
+                proData(player("Americans"), 5), territory("Normandy Bordeaux"), st))
+        .isZero();
   }
 
   @Test

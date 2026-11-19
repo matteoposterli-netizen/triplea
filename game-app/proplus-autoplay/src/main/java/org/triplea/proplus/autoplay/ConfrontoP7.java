@@ -125,7 +125,6 @@ final class ConfrontoP7 {
       if (!USA.equals(s(l, "nazione")) || n(l, "unita") < FORTE) {
         continue;
       }
-      strong++;
       final JsonObject x = new JsonObject();
       for (final String k :
           List.of(
@@ -146,6 +145,11 @@ final class ConfrontoP7 {
         }
       }
       f1.add(x);
+      // bridgeheads and F3: landings on enemy land only (not the moves to the own bases)
+      if (!"Asse".equals(s(l, "categoria")) && !"nemico".equals(s(l, "categoria"))) {
+        continue;
+      }
+      strong++;
       final boolean p = flag(l, "presa");
       final boolean reinforced = n(l, "uk_sbarcate") > 0;
       if (p) {
@@ -368,7 +372,7 @@ final class ConfrontoP7 {
         "| Config | Partite | Alleati vince [IC 95%] | Stalli | Mosca oltre R14 | Roma cade |"
             + " Berlino cade | USA sbarcate R6 / R8 / R10 (tot.) | idem su Asse | Trasporti persi"
             + " entro R8 USA / UK (media) | Teste di ponte USA >= 6 tenute un round dopo |"
-            + " Sbarchi USA >= 6 raggiungibili dal UK con >= 2: rinforzati |\n");
+            + " Sbarchi USA >= 6 su territorio nemico raggiungibili dal UK con >= 2: rinforzati |\n");
     md.append("|---|---|---|---|---|---|---|---|---|---|---|---|\n");
     for (final var e : byCode.entrySet()) {
       final List<JsonObject> l = e.getValue();
