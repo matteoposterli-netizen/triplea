@@ -6621,3 +6621,20 @@ impegno+assedio (quota 70). Numeri dalla sezione "P6" di `riepilogo-generale.md`
 - Criterio 4 (s4): primo >= 6 mediana R4, >= 6 entro R8 3,4, sbarcate R6 / R8 24,7 / 41,8, trasporti USA persi R8 7,3; Norway R4 22/40; Mosca oltre
   R14 23/40; esercito russo R8 / R10 176,8 / 147,9.
 - Criterio 5: 1 stallo (e2: NO), 0 errori del calcolatore.
+
+### Step P7 — tre leve: niente neutrali, ponte del Regno Unito, truppe britanniche pronte (2026-11-19)
+
+Vedi "Tre leve (step P7)" e "Scelte di P7". Motivo (run P6 44585482987): `sbarco_concentrato` porta gli USA a sbarcare in forza dal R5 ma
+le teste di ponte restano sole (tenute un round dopo 261/490) e parte degli sbarchi va su neutrali (Spain 255 unita' entro R10).
+- File nuovi: `ai/proplus/IndicazioniP7`, `PonteRegnoUnito`, risorsa `proplus/strategia/p7.json`, test `IndicazioniP7Test`; autoplay
+  `MonitorP7`, `ConfrontoP7`, test `ConfrontoP7Test`. Modificati: `ProTuning` (+`allowsPoliticalAction`, `excludesAttackTarget`, default =
+  Hard), `ProPoliticsAi` (2 filtri), `ProCombatMoveAi` (1 filtro), `ProPlusTuning`, `ProPlusAi`, `ForzaSbarco` (2 metodi visibili nel
+  pacchetto), `StrategaInterruttori`, `RegistroDecisioni`, `Stratega`, `ProfiloStratega`, `StrategistPanel` (3 caselle); autoplay `Monitor`,
+  `Riepilogo` (blocco `p7`, `p7_eventi`), `ConfrontoCompleta`; workflow (gruppi di 5 partite per job, `partite.json`, `[prova7]`).
+- Prova breve in CI (`[prova7]`, s5/c1/c2 x semi 1621-1625), 3 giri: giro 1 (run 44620609614) eventi del monitor non nel riepilogo, righe di
+  `ponte_pronti` scritte sulle copie della simulazione; giro 2 (run 44628533291) peso di `ponte_uk` mai scattato (combattimento pianificato
+  sulla copia), rinforzi 8 su 35 casi (13 non raggiungibili, 14 esposti); giro 3 (run 44636391561, commit 96236ec): s5 0 guerre e 0 attacchi
+  alleati su Neutral_True (316 righe GUERRA_NEUTRALI_ESCLUSA); c1 19 rinforzi, rinforzati tra i raggiungibili >= 2 unita' 19/32 (59%) contro
+  14/43 (33%) di s5 (rinforzi di Hard da solo), peso d'attacco scattato 1 volta (un solo T dell'Asse nelle 5 partite); c2 unita' britanniche in
+  patria a inizio turno R4/R6/R8 9,6/6,0/9,4 contro 11,4/5,6/7,4 di c1 (piu' alte solo in media, di poco; 43 righe "oltre capacita'").
+- Run lunga: run 44641570445 (commit d9e684a), 9 configurazioni x semi 1621-1740.
