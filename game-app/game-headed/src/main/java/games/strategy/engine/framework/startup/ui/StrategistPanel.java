@@ -85,6 +85,11 @@ final class StrategistPanel {
   @Getter private final javax.swing.JCheckBox norvegiaPresto = new javax.swing.JCheckBox();
   @Getter private final javax.swing.JCheckBox russiaFronte = new javax.swing.JCheckBox();
 
+  /** Step P5: two levers for the Allies (each on its own). */
+  @Getter private final javax.swing.JCheckBox usaProporzione = new javax.swing.JCheckBox();
+
+  @Getter private final javax.swing.JCheckBox norvegiaScorta = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -212,6 +217,19 @@ final class StrategistPanel {
             + " soglie piu' basse se lo scambio conviene e ripara solo il necessario (step P4,"
             + " sperimentale); vale per le partite nuove</html>");
     panel.add(row("Fronte russo:", russiaFronte));
+    usaProporzione.setSelected(profile.usaProporzione());
+    usaProporzione.setText(
+        "<html>Alleati: da neutrali (e nel primo turno di guerra) gli USA comprano trasporti per"
+            + " le truppe in patria, la scorta che serve contro la minaccia e carichi completi;"
+            + " nell'ultimo turno neutrale caricano le truppe (step P5, sperimentale); vale per le"
+            + " partite nuove</html>");
+    panel.add(row("USA in proporzione:", usaProporzione));
+    norvegiaScorta.setSelected(profile.norvegiaScorta());
+    norvegiaScorta.setText(
+        "<html>Alleati: lo sbarco britannico in Norvegia con i trasporti esposti si scorta con"
+            + " le navi che arrivano, invece di annullarlo; accende anche Norvegia presto (step"
+            + " P5, sperimentale); vale per le partite nuove</html>");
+    panel.add(row("Norvegia scortata:", norvegiaScorta));
     panel.add(
         row(
             "",
@@ -240,6 +258,8 @@ final class StrategistPanel {
     profile.setUsaPronti(usaPronti.isSelected());
     profile.setNorvegiaPresto(norvegiaPresto.isSelected());
     profile.setRussiaFronte(russiaFronte.isSelected());
+    profile.setUsaProporzione(usaProporzione.isSelected());
+    profile.setNorvegiaScorta(norvegiaScorta.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

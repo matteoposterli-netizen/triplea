@@ -106,6 +106,20 @@ public final class ProPlusTuning implements ProTuning {
     return p4;
   }
 
+  /** Step P5 (A): the landing force's plan of the turn. */
+  private final ForzaSbarco.Stato p5a = new ForzaSbarco.Stato();
+
+  /** Step P5 (B): the escorted landings of the turn. */
+  private final ScortaSbarco.Stato p5b = new ScortaSbarco.Stato();
+
+  public ForzaSbarco.Stato p5a() {
+    return p5a;
+  }
+
+  public ScortaSbarco.Stato p5b() {
+    return p5b;
+  }
+
   /**
    * Step PROVA DI VALORE: set when the last answer came from a joint operation ({@link
    * OperazioniCongiunte}), read and cleared by the check against Hard ({@link ControlloTuning}).
@@ -341,6 +355,11 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public Optional<ProPurchaseOrders> purchaseOrders(final ProData proData) {
+    // step P5 (A): the landing force in proportion (switch "usa_proporzione")
+    final Optional<ProPurchaseOrders> force = ForzaSbarco.ordini(proData, p5a);
+    if (force.isPresent()) {
+      return force;
+    }
     // step PROVA DI VALORE: the joint operation's reserves (only with its switch on)
     final Optional<ProPurchaseOrders> reserves = OperazioniCongiunte.ordiniAcquisto(proData);
     // step P1: the task's orders (switch "compiti")
@@ -375,6 +394,7 @@ public final class ProPlusTuning implements ProTuning {
       final ProData proData,
       final ProPurchaseOrders orders,
       final ProPurchaseOrders.Result result) {
+    ForzaSbarco.acquistato(orders, result, p5a);
     Impegno.acquistato(proData, orders, result);
   }
 
@@ -619,6 +639,10 @@ public final class ProPlusTuning implements ProTuning {
     // capital and the factories at risk are defended without a limit)
     if (Impegno.ordini(proData).isPresent() || Compiti.ordini(proData).isPresent()) {
       return operationAnswer(java.util.OptionalDouble.empty());
+    }
+    // step P5 (A): with the landing force's orders the share of the orders reserves the PUs too
+    if (ForzaSbarco.ordini(proData, p5a).isPresent()) {
+      return java.util.OptionalDouble.empty();
     }
     return ProPlusSettings.allianceOf(proData.getData(), player)
         .map(
@@ -928,6 +952,14 @@ public final class ProPlusTuning implements ProTuning {
             proData.getData().getSequence().getRound(), SquadraGibilterra.Config.get())) {
       return OptionalDouble.of(100);
     }
+    // step P5 (A): in the neutral rounds the "threat" Hard defends against is the future allies'
+    // (every player not allied counts as an enemy): the PUs go to the landing force
+    if (proData.getPlayer() != null
+        && ForzaSbarco.fase(proData.getData(), proData.getPlayer())
+            .filter(f -> f != ForzaSbarco.Fase.PRIMO_GUERRA)
+            .isPresent()) {
+      return OptionalDouble.of(100);
+    }
     if (!on(proData, Ablazione.Componente.GUARNIGIONE_CAPITALE)) {
       return OptionalDouble.empty();
     }
@@ -1050,6 +1082,12 @@ public final class ProPlusTuning implements ProTuning {
     if (OperazioniCongiunte.forzaBersaglio(proData, territory)) {
       return operationAnswer(Optional.of(KEPT_BY_OPERATION));
     }
+    // step P5 (B): the exposed landing on a weighted target is escorted, not dropped
+    final Optional<String> escorted =
+        ScortaSbarco.valuta(proData, p5b, territory, winPercentage, enemyTuvSwing, attackValue);
+    if (escorted.isPresent()) {
+      return escorted;
+    }
     // step ABLAZIONE: without the Pro+ transport rule the landing follows Hard's rule alone
     if (!on(proData, Ablazione.Componente.NON_CONVIENE)
         || !on(proData, Ablazione.Componente.TRASPORTI_SBARCO)) {
@@ -1097,6 +1135,8 @@ public final class ProPlusTuning implements ProTuning {
       final games.strategy.triplea.ai.pro.data.ProBattleResult battle,
       final double conquestValue,
       final java.util.function.BiPredicate<Territory, java.util.Collection<Unit>> lostToScramble) {
+    // step P5 (B): the landing being checked, for the escort if Hard drops it (read only)
+    ScortaSbarco.contesto(proData, p5b, calc, landing, zones, enemyAttackOptions, moving);
     if (!on(proData, Ablazione.Componente.TRASPORTI_SBARCO)) {
       return Optional.empty();
     }

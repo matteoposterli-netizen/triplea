@@ -1,0 +1,20 @@
+{
+  "nota": "Step P5: due leve indipendenti per gli Alleati dello Stratega, ognuna con il suo interruttore (default spento). Niente quantita' fisse: solo proporzioni (capacita' dei trasporti = truppe da portare; scorta = quanto serve contro la minaccia reale). Nazioni, round di guerra e relazioni future stanno in p4.json (usa_pronti.nazioni); i bersagli di B in p4.json (norvegia_presto.nazioni). Nessun nome di nazione o territorio nel codice.",
+  "usa_proporzione": {
+    "nota": "A. Nei round in cui la nazione e' neutrale con guerra certa per regola (p4.json, usa_pronti.nazioni) e nel primo turno di guerra i PU vanno, in quest'ordine e ricalcolati ogni turno sullo stato reale, a: 1 trasporti per le truppe di terra gia' in patria; 2 scorta (navi da guerra e aerei imbarcati) finche' il convoglio regge l'attacco realistico del nemico nella zona d'arrivo, un'unita' alla volta, quella che abbassa di piu' la vittoria nemica per PU; 3 carichi completi (trasporto + truppe che lo riempiono, mix scelto con l'efficienza anfibia di Hard). Nell'ultimo turno neutrale le truppe in patria vengono caricate sui trasporti nelle zone di mare di casa. Dal turno dopo il primo di guerra decide Hard.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P5 (default spento)"},
+    "parametri": {
+      "soglia_convoglio": {"valore": 40, "origine": "soglia esistente (soglia_trasporti di impegno.r6b e soglia_tenuta di compiti.json): il convoglio regge se l'attacco realistico del nemico vince al massimo il 40%"},
+      "raggio_zona_arrivo": {"valore": 10, "origine": "scelto: zone di mare cercate dal porto per trovare la costa nemica o la base alleata vicina al nemico (5 turni di trasporto; l'Atlantico si attraversa in 3-4)"},
+      "max_unita_scorta": {"valore": 12, "origine": "scelto: limite di calcolo (passi del calcolatore) per la scorta di un turno; con i PU di un turno USA non si arriva a 12 navi"}
+    }
+  },
+  "norvegia_scorta": {
+    "nota": "B. Per i bersagli con il peso alzato di norvegia_presto (p4.json), quando Hard annullerebbe lo sbarco per trasporti esposti: le navi da guerra proprie (con gli aerei imbarcati) che in questo turno arrivano nella zona di scarico; se con loro i trasporti reggono l'attacco realistico del nemico, scorta minima e sbarco eseguito; altrimenti sbarco annullato (i trasporti si proteggono, non si sacrificano) e il registro dice quanta scorta mancava. Le navi di scorta sono prese a Hard solo per quel turno.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P5 (default spento)"},
+    "parametri": {
+      "soglia_trasporti": {"valore": 40, "origine": "soglia esistente (soglia_trasporti di impegno.r6b): i trasporti reggono se l'attacco realistico del nemico vince al massimo il 40%"},
+      "max_unita_mancanti": {"valore": 10, "origine": "scelto: limite del conto della scorta mancante (solo registro)"}
+    }
+  }
+}

@@ -165,6 +165,27 @@ public final class ProfiloStratega {
     values.setProperty(KEY_RUSSIA_FRONTE, on ? "si" : "no");
   }
 
+  private static final String KEY_USA_PROPORZIONE = "usa_proporzione";
+  private static final String KEY_NORVEGIA_SCORTA = "norvegia_scorta";
+
+  /** Step P5: "USA in proporzione" for the Allies. Off unless set. */
+  public boolean usaProporzione() {
+    return si(KEY_USA_PROPORZIONE);
+  }
+
+  public void setUsaProporzione(final boolean on) {
+    values.setProperty(KEY_USA_PROPORZIONE, on ? "si" : "no");
+  }
+
+  /** Step P5: "Norvegia scortata" for the Allies (turns on "norvegia_presto" too). */
+  public boolean norvegiaScorta() {
+    return si(KEY_NORVEGIA_SCORTA);
+  }
+
+  public void setNorvegiaScorta(final boolean on) {
+    values.setProperty(KEY_NORVEGIA_SCORTA, on ? "si" : "no");
+  }
+
   private static final String KEY_REGNO_UNITO_P3 = "regno_unito_p3";
 
   /**

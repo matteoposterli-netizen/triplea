@@ -165,6 +165,14 @@ public final class Stratega {
     if ("Allies".equals(alliance.get()) && profile.russiaFronte()) {
       wanted.add(StrategaInterruttori.RUSSIA_FRONTE);
     }
+    // step P5: two levers (Allies); the escort of Norway with its weight
+    if ("Allies".equals(alliance.get()) && profile.usaProporzione()) {
+      wanted.add(StrategaInterruttori.USA_PROPORZIONE);
+    }
+    if ("Allies".equals(alliance.get()) && profile.norvegiaScorta()) {
+      wanted.add(StrategaInterruttori.NORVEGIA_PRESTO);
+      wanted.add(StrategaInterruttori.NORVEGIA_SCORTA);
+    }
     final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
     boolean changed = false;
     for (final StrategaInterruttori w : wanted) {

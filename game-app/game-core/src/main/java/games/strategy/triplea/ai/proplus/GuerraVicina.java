@@ -94,7 +94,9 @@ public final class GuerraVicina {
    * after the war's round), no war view.
    */
   static boolean soloValoreMare(final GameState data, final GamePlayer player) {
-    if (!IndicazioniP4.attivo(data, player, StrategaInterruttori.USA_PRONTI)) {
+    // step P5: also with "usa_proporzione" (no bombers in the first war turn)
+    if (!IndicazioniP4.attivo(data, player, StrategaInterruttori.USA_PRONTI)
+        && !IndicazioniP4.attivo(data, player, StrategaInterruttori.USA_PROPORZIONE)) {
       return false;
     }
     final IndicazioniP4.Guerra g = IndicazioniP4.Config.get().guerra().get(player.getName());

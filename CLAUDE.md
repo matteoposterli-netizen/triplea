@@ -254,6 +254,13 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   (ProCombatMoveAi, scarto defensive_stance), `defensePriorityBonus` (ProNonCombatMoveAi, priorita' di difesa);
   `AbstractProAi.forgetStoredFactoryMove()`. Interruttori `StrategaInterruttori.USA_PRONTI/NORVEGIA_PRESTO/RUSSIA_FRONTE`; caselle
   del pannello; autoplay `MonitorP4`, `ConfrontoP4` (blocco `p4`, sezione "P4"). Vedi "Tre indicazioni a Hard (step P4)".
+- Step P5 DUE LEVE: `ai/proplus/IndicazioniP5` (dati `proplus/strategia/p5.json`, righe del registro), `ForzaSbarco` (A
+  `usa_proporzione`: tre passi in ordini d'acquisto per Hard, carico nell'ultimo turno neutrale), `ScortaSbarco` (B
+  `norvegia_scorta`: scorta minima dello sbarco esposto, mossa nel non combattimento). Agganci: `ProPlusTuning.purchaseOrders`
+  (ordini di A per primi), `purchaseOrdersBought`, `checksLandingTransports` (solo lettura del contesto per B),
+  `keepsLandingWithExposedTransports` (B tiene lo sbarco scortato); `ProPlusAi.startLevers` (acquisto) e `playLevers` (non
+  combattimento, prima di Hard). Interruttori `StrategaInterruttori.USA_PROPORZIONE/NORVEGIA_SCORTA`; 2 caselle del pannello;
+  autoplay `MonitorP5`, `ConfrontoP5` (blocco `p5`, sezione "P5"). Vedi "Due leve (step P5)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -3241,6 +3248,86 @@ relazioni stanno in `p4.json`.
 7. **Riparazione: 1 PU per punto e costo minimo per unita' di terra** (fanteria 3): la regola della mappa; ogni fabbrica per conto
    suo (PU restanti dopo le riparazioni precedenti). Prima versione sbagliata (capacita' calcolata dalla capacita' gia' azzerata:
    a Mosca con danno 17 riparava 5 e restava a 0): corretta dopo la prova locale.
+
+### Due leve (step P5)
+
+Due leve indipendenti lato Alleati dello Stratega, default spenti (`p5.json`): autoplay `--stratega-acceso Allies=usa_proporzione`
+(`norvegia_presto+norvegia_scorta`), pannello: caselle "USA in proporzione" e "Norvegia scortata" (la seconda accende anche
+`norvegia_presto`). Nazioni, round della guerra, relazioni future e bersagli di B da `p4.json`. Con tutto spento lo Stratega
+senza chiave = Hard (`NudoHardTest`, `IndicazioniP5Test.withTheSwitchesOffNothingActs`). Nessun nome nel codice (test sul
+sorgente).
+- **A `usa_proporzione`** (`ForzaSbarco`): fasi = round neutrali (`GuerraVicina.neutrale`), ultimo neutrale (round =
+  `guerra_dopo_il_round`), primo turno di guerra (round + 1); dopo: niente. All'inizio dell'acquisto, sul tabellone vero e con il
+  calcolatore: porto = fabbriche proprie che piazzano in mare; truppe in patria = unita' di terra trasportabili (non contraerea)
+  nei territori d'origine propri uniti per terra a una fabbrica del porto; trasporti posseduti con i posti liberi.
+  Passo 1: trasporti nuovi = first fit decreasing dei costi di trasporto delle truppe sui posti liberi e poi su trasporti nuovi
+  (capacita' del trasporto piu' economico). Passo 2: zona d'arrivo = la zona di mare piu' vicina alle zone del porto (entro
+  `raggio_zona_arrivo` 10) accanto a una costa nemica (nemici = in guerra o futuri nemici dei dati) o a una base alleata
+  (alleata o futura alleata) con un vicino nemico per terra o per una zona di mare; a parita' la minaccia piu' bassa. Minaccia =
+  massimo attacco nemico sulla zona (`populateEnemyAttackOptionsOfEveryEnemy`, solo unita' dei nemici); convoglio = flotta propria
+  (navi da guerra e aerei in mare) + trasporti posseduti + trasporti del passo 1 + navi/aerei alleati nella zona; un'unita' alla
+  volta tra navi da guerra e aerei da portaerei (solo con posti liberi sulle portaerei), quella che abbassa di piu' la vittoria
+  nemica per PU (`Risposta.miglioreAcquisto`; se nessuna la abbassa: tutte le unita' di un tipo che i PU permettono), fino a
+  `soglia_convoglio` 40 o PU finiti o `max_unita_scorta` 12. Passo 3: carico = riempimento di un trasporto con l'opzione di terra
+  di efficienza anfibia di Hard (`getAmphibEfficiency`, senza il caso) piu' alta che entra; carichi = PU rimasti / (trasporto +
+  carico), entro i posti di piazzamento delle fabbriche del porto. Ordini (`ProPurchaseOrders`, quota 100: la difesa di Hard
+  solo dove una fabbrica o la capitale rischia): categorie `p5 1 trasporti`, `p5 2 scorta <tipo>`, `p5 3 carico <i> ...` in
+  quest'ordine; piazzamento preferito: zona del porto piu' vicina all'arrivo, poi le fabbriche. I PU rimasti (meno di un carico)
+  a Hard. Primo turno di guerra: in piu' il solo valore delle zone di mare di P4 (`GuerraVicina.soloValoreMare`, niente
+  bombardieri). Ultimo turno neutrale, non combattimento prima di Hard: truppe nei territori di casa accanto alla zona di ogni
+  trasporto proprio caricate (costo di trasporto decrescente), trasporti e carico trattenuti da Hard in quel turno.
+- **B `norvegia_scorta`** (`ScortaSbarco`, con `norvegia_presto`): per i bersagli col peso di B del round, quando Hard scarterebbe
+  lo sbarco per "transports_exposed" (`keepsLandingWithExposedTransports`, il contesto - zone di scarico, opzioni d'attacco nemiche
+  di Hard, unita' che muovono - preso da `checksLandingTransports`): per ogni zona di scarico, difensori = unita' alleate non
+  proprie della zona + trasporti e navi da bombardamento dello sbarco; candidati = navi da guerra proprie non usate nel
+  combattimento che arrivano nella zona in questo turno per mare senza nemici (una portaerei con i suoi aerei); minaccia = il
+  massimo attacco nemico di Hard sulla zona. Scorta minima (`scortaMinima`): nessuna se la zona regge (<= 40%); se nemmeno con
+  tutti i candidati: sbarco annullato e nel registro quante navi del tipo piu' economico mancavano; altrimenti un candidato alla
+  volta (vittoria nemica abbassata per TUV) e poi tolti quelli non necessari. Sbarco tenuto: le navi di scorta vanno nella zona
+  nel non combattimento prima di Hard e restano li' (trattenute) quel turno. La riserva della capitale di Hard non cambia.
+- **Registro**: `usa_proporzione` (PIANO_NEUTRALE / PIANO_PRIMO_TURNO: truppe in patria, trasporti posseduti e posti liberi,
+  trasporti mancanti, zona d'arrivo, minaccia, vittoria nemica prima/dopo la scorta, convoglio regge, passi 1-3 con PU, PU a Hard,
+  comprato davvero per passo da `ProPurchaseOrders.Result`, non comprati; CARICATE: truppe caricate per tipo, trasporti caricati),
+  `norvegia_scorta` (SCORTA_TROVATA / SCORTA_MANCANTE: zone, minaccia, difensori, scorta disponibile e scelta, vittoria nemica
+  prima/dopo/con tutta, mancante, preso, truppe sbarcate, scorta mossa e non mossa; PERDITE_SCORTA all'inizio del turno dopo).
+- **Autoplay**: `MonitorP5` (`round[].p5`: acquisti USA del round in PU per terra/trasporti/navi/aerei, trasporti e navi da guerra
+  USA, unita' di terra USA in patria - territori d'origine uniti per terra alla capitale - e a bordo, navi da guerra britanniche,
+  perse del round: trasporti USA e navi da guerra britanniche scomparse tra due passi). Blocco `p5` (`ConfrontoP5.blocco`):
+  `usa_acquisti_pu.{1..5}`, `usa_forza.{3,4}`, `round_primo_sbarco_usa_6`, `usa_sbarcate_cumulate.{5,6,8,10}.{totale,dove}`,
+  `usa_trasporti_persi_r8`, `uk_navi_perse_r4`, `norway_alleata.{2,3,4,6}`, `reddito_tedesco.{4,6}`, `esercito_tuv.{6,8,10}`,
+  `cadute`, `mosca_oltre_r14`, `regno_unito_perso`, `registro`. Sezione "P5" di `riepilogo-generale.md`.
+- Test: `IndicazioniP5Test`, `ConfrontoP5Test`.
+
+### Scelte di P5 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **A senza la vista di guerra di P4, ma con la quota d'ordine piena e nessuna difesa "critica" nei round neutrali**: le
+   prove locali (seme 1541) mostrano che con gli ordini Hard comprava ancora 13-21 PU di fanteria/artiglieria per la "difesa"
+   contro i britannici (da neutrale ogni non alleato e' un nemico, diagnosi di P4) per due vie: (a) il tetto della strategia
+   dello Stratega (`--tetto-strategia 70`) lascia a Hard la sua difesa e il 30% dei PU; (b) la capitale "a rischio". Correzioni:
+   `strategyCapPercent` vuoto con gli ordini di A (come gia' per impegno e compiti) e `capitalGuardThreshold` 100 nei round
+   neutrali (come la squadra di Gibilterra di R6); nel primo turno di guerra la soglia di Hard. Scartato: riusare la vista di
+   guerra (il prompt chiede di riusare da usa_pronti solo la parte anti-bombardieri; la uso: `soloValoreMare` nel primo turno di
+   guerra).
+2. **Sottomarini fuori dalla scorta** (A e B, anche tra i difensori contati): con l'aviazione nemica la vittoria nemica crolla con
+   pochi sottomarini (prova B, seme 1542: 3 sottomarini 100% → 15%) perche' gli aerei non li colpiscono senza cacciatorpediniere,
+   ma i colpi vanno ai trasporti: la regola "vittoria <= 40%" li darebbe protetti mentre affondano. Regola generica: esclusi i tipi
+   che possono evadere o che qualche attaccante non puo' colpire. Scartato: cambiare la misura (prompt: soglia esistente 40%).
+3. **Zona d'arrivo = la piu' vicina, a parita' la minaccia piu' bassa**; zone d'arrivo trattate come "nostre" nel calcolo della
+   minaccia (`clearedTerritories`), altrimenti una zona vuota non risulta attaccabile (prima versione: minaccia 0 a 105 SZ con la
+   Luftwaffe accanto). La zona cambia tra i turni (seme 1541: 105 SZ a R1, poi 91 SZ): ricalcolo ogni turno come chiesto.
+4. **Carico = efficienza anfibia di Hard senza il caso** (`getAmphibEfficiency`, la stessa misura che Hard usa per riempire i
+   trasporti, senza `randomizePurchaseOption`): esce 2 fanterie per trasporto; Hard poi sostituisce fanterie con artiglierie col suo
+   passo `upgrade` (comprato davvero: 1 artiglieria + 1 fanteria). Scartato: un mix fisso fanteria+artiglieria (quantita' scritta a
+   mano).
+5. **Truppe in patria = territori d'origine propri uniti per terra a una fabbrica del porto**, senza contraerea: in Europe 1940 gli
+   USA hanno anche territori d'origine in Cina, da non contare. Il monitor usa lo stesso criterio dalla capitale.
+6. **B: scorta mossa nel non combattimento, prima di Hard**, non nel combattimento: le navi che non combattono hanno ancora tutto il
+   movimento e una mossa in zona senza nemici e' sempre permessa; la decisione si prende durante la pianificazione di Hard (anche
+   sulla copia all'acquisto), le unita' sono ritrovate per id. Candidati = navi non usate nel piano d'attacco a quel punto.
+   "Mancante" nel registro = navi del tipo con la miglior difesa per PU aggiunte finche' regge (max 10).
+7. **Passo 2 anche quando la scorta non basta** (nessuna regola nel prompt): si compra un'unita' alla volta finche' ci sono PU o
+   nessuna abbassa la vittoria; se la scorta non arriva al 40% il registro lo dice (`convoglio_regge` false). Scartato: saltare la
+   scorta se irraggiungibile (sarebbe una regola nuova).
 
 ## Come configurare lo stratega
 
@@ -6247,3 +6334,39 @@ Vedi "Tre indicazioni a Hard (step P4)" e "Scelte di P4". Tre interruttori lato 
   standard 4, presi 984; tenuti in difensiva 120; PU risparmiati 1917.
 - Criterio 4 (q4): nessun indicatore raggiunto (sbarcate R6/R8 4,5/12,7, trasporti R4 3,0, Norway R4 13, Ukraine R6 11, esercito russo R8 160,1).
 - Lettura: q1 compra navi da guerra prima (portaerei, caccia) ma i trasporti arrivano comunque tardi; B e C cambiano poco le partite.
+
+### Step P5 — USA: proporzione nei round di neutralita'; Norvegia: sbarco scortato (2026-11-19)
+
+Vedi "Due leve (step P5)" e "Scelte di P5". Motivo (run P4 44484486164): `usa_pronti` porta Hard a comprare solo flotta (R4: 7,4
+unita' di terra in patria, 4,2 trasporti, primo sbarco >= 6 al round mediano 9); `norvegia_presto` vede Norway ma Hard scarta lo
+sbarco 43 volte per "transports_exposed". Due leve nuove, default spente; `usa_pronti`, `russia_fronte`, `compiti`,
+`regno_unito_p3` spenti in questa run; Asse non toccato; ProAi (Hard) invariata (nessun aggancio nuovo in `ProTuning`).
+- File nuovi: `ai/proplus/IndicazioniP5`, `ForzaSbarco`, `ScortaSbarco`, risorsa `proplus/strategia/p5.json`, test
+  `IndicazioniP5Test` (9); autoplay `MonitorP5`, `ConfrontoP5`, test `ConfrontoP5Test` (2). Modificati: `ProPlusTuning`
+  (`purchaseOrders`, `purchaseOrdersBought`, `strategyCapPercent`, `capitalGuardThreshold`, `checksLandingTransports`,
+  `keepsLandingWithExposedTransports`, stati `p5a`/`p5b`), `ProPlusAi` (`startLevers`, `playLevers`, riga P4 del solo valore del
+  mare solo con `usa_pronti`), `GuerraVicina.soloValoreMare` (anche con `usa_proporzione`), `IndicazioniP4.attivo`,
+  `RegistroDecisioni` (tipi e codici P5), `StrategaInterruttori`, `Stratega`, `ProfiloStratega`, `StrategistPanel` (2 caselle);
+  autoplay `Monitor` (`round[].p5`), `Riepilogo` (blocco `p5`), `ConfrontoCompleta` (sezione "P5"); workflow `[completa]` = e2,
+  r1-r3 x semi 1541-1580 (160 partite, costo API 0).
+- Test locali: AI di game-core 681 (1 saltato; golden Hard, `NudoHardTest`, `DiaryNeutralityTest`, `CampagnaOmbraTest`,
+  `IndicazioniP4Test`, `IndicazioniP5Test`), `:ai:test` 13, `:proplus-autoplay:test` 58, `:game-headed:test` 94: verdi. JDK 25
+  Temurin 25.0.1 da GitHub; Maven Central 429 ritentato.
+- Prove locali, Asse impegno+assedio (quota 70), 1 partita per configurazione (NON e' una misura):
+  - A (`usa_proporzione`, seme 1541, 10 round, versione finale): acquisti USA R1 / R2 / R3 / R4 in PU (terra / trasporti / navi /
+    aerei) = 7/28/0/0, 14/21/0/0, 21/14/0/0, 12/28/20/0 (R1 4 trasporti per 7 truppe in patria; R2-R3 1 trasporto + 2 carichi;
+    R4 1 trasporto, 1 corazzata di scorta - vittoria nemica in 91 SZ 96,9% → 18,4% - e 2 carichi; la terra in piu' sono i PU
+    avanzati a Hard e il suo `upgrade`). Zona d'arrivo 105 SZ a R1 (minaccia 155 TUV, la scorta non basta: 0 PU possibili), poi 91
+    SZ (minaccia 0 fino a R3). Fine R3: 10 trasporti, 6 truppe a bordo (3 trasporti caricati), 15 in patria. R4: Hard scarica e
+    sposta: a fine R4 0 a bordo, 15 in patria, 10 "altrove" (in viaggio/basi), 14 trasporti; a fine R5 19 a Gibraltar (base), 2 in
+    patria; R5 primo sbarco (Morocco 2); R6 Normandy Bordeaux 5 + Holland Belgium 4; R7 Western Germany 5; R9 Normandy 10 (primo
+    sbarco >= 6 nello stesso territorio); sbarcate cumulate R6 / R8 / R10 = 11 / 16 / 46; trasporti USA persi entro R8 0; Mosca non
+    caduta entro R10. Prove precedenti (corrette): difesa contro i britannici (scelta 1) e sottomarino di scorta (scelta 2).
+  - B (`norvegia_presto+norvegia_scorta`, semi 1541-1545, 4-10 round): Norway candidata del Regno Unito a R1 in 3 partite su 5 e a
+    R4 in una; in tutti i 4 casi Hard scarta per trasporti esposti e la scorta NON basta: 112 SZ con l'aviazione tedesca (155-165
+    TUV) 100% anche con corazzata, incrociatore e 1-2 cacciatorpediniere (in un caso 92,6% con tutta la scorta; mancavano 2
+    cacciatorpediniere). Sbarco annullato, nessuna nave mossa. R2-R3 Norway non e' tra i bersagli di Hard. Norway alleata a fine R4
+    in 1 partita su 5 (presa dalla Russia).
+  - 0 eccezioni, 0 avvisi `[Pro+] P5` nei log.
+- CI: `[completa]` = e2, r1, r2, r3 x semi 1541-1580.
+

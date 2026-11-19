@@ -42,6 +42,9 @@ import java.util.Optional;
  *   <li>{@link #USA_PRONTI}, {@link #NORVEGIA_PRESTO}, {@link #RUSSIA_FRONTE} (step P4, defaults
  *       from {@code p4.json}: OFF), independent of {@link #COMPITI} and {@link #IMPEGNO}: three
  *       indications to Hard ({@link IndicazioniP4}).
+ *   <li>{@link #USA_PROPORZIONE}, {@link #NORVEGIA_SCORTA} (step P5, defaults from {@code p5.json}:
+ *       OFF): the USA's landing force in proportion in the neutral rounds ({@link ForzaSbarco}) and
+ *       the escorted landing of the UK ({@link ScortaSbarco}, with {@link #NORVEGIA_PRESTO}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -58,7 +61,9 @@ public enum StrategaInterruttori {
   REGNO_UNITO_P3("regno_unito_p3", false),
   USA_PRONTI("usa_pronti", false),
   NORVEGIA_PRESTO("norvegia_presto", false),
-  RUSSIA_FRONTE("russia_fronte", false);
+  RUSSIA_FRONTE("russia_fronte", false),
+  USA_PROPORZIONE("usa_proporzione", false),
+  NORVEGIA_SCORTA("norvegia_scorta", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -109,6 +114,12 @@ public enum StrategaInterruttori {
     }
     if (this == RUSSIA_FRONTE) {
       return IndicazioniP4.Config.get().fronteDiDefault();
+    }
+    if (this == USA_PROPORZIONE) {
+      return IndicazioniP5.Config.get().usaDiDefault();
+    }
+    if (this == NORVEGIA_SCORTA) {
+      return IndicazioniP5.Config.get().scortaDiDefault();
     }
     return predefinito;
   }
@@ -173,7 +184,8 @@ public enum StrategaInterruttori {
                                         + " (liste, tenute, ombra, impegno, assedio, alleati_r4,"
                                         + " alleati_r5, squadra_gibilterra, italia_convoglio,"
                                         + " compiti, regno_unito_p3, usa_pronti,"
-                                        + " norvegia_presto, russia_fronte)"))
+                                        + " norvegia_presto, russia_fronte, usa_proporzione,"
+                                        + " norvegia_scorta)"))
                         .id())
             .distinct()
             .toList();

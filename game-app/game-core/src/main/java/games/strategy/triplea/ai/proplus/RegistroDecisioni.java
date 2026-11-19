@@ -90,11 +90,23 @@ public final class RegistroDecisioni {
           // step P4
           "usa_pronti",
           "norvegia_presto",
-          "russia_fronte");
+          "russia_fronte",
+          // step P5
+          "usa_proporzione",
+          "norvegia_scorta");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P5
+          "PIANO_NEUTRALE",
+          "PIANO_PRIMO_TURNO",
+          "ACQUISTATO",
+          "CARICATE",
+          "SCORTA_TROVATA",
+          "SCORTA_MANCANTE",
+          "SCORTA_MOSSA",
+          "PERDITE_SCORTA",
           // step P4
           "ACQUISTO_NEUTRALE",
           "PRIMO_TURNO_DI_GUERRA",

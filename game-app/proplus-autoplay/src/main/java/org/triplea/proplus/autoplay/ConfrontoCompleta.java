@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P5: the two levers (USA in proportion, escorted Norway)
+    if (ConfrontoP5.applicabile(games)) {
+      try {
+        ConfrontoP5.write(md, games, alliances);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P5 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step P4: the three indications to Hard
     if (ConfrontoP4.applicabile(games)) {
       try {

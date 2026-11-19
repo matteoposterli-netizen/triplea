@@ -136,6 +136,10 @@ public class ProPlusAi extends ProAi {
         ProLogger.warn(LOG_PREFIX + "Joint operation update failed: " + e);
       }
     }
+    // step P5: the two levers (switches off: nothing)
+    if (!purchaseForBid) {
+      startLevers(data, player);
+    }
     // step P4: the three indications (switches off: nothing, Hard's own purchase)
     final java.util.Optional<GuerraVicina.Vista> view =
         purchaseForBid ? java.util.Optional.empty() : startIndications(data, player);
@@ -153,12 +157,23 @@ public class ProPlusAi extends ProAi {
         p4tuning.p4().soloValoreMare = false;
       }
       try {
-        GuerraVicina.registraValoreMare(data, player, p4tuning.p4());
+        if (IndicazioniP4.attivo(data, player, StrategaInterruttori.USA_PRONTI)) {
+          GuerraVicina.registraValoreMare(data, player, p4tuning.p4());
+        }
       } catch (final RuntimeException e) {
         ProLogger.warn(LOG_PREFIX + "P4 register failed: " + e);
       }
     } else {
       super.purchase(purchaseForBid, pusToSpend, purchaseDelegate, data, player);
+    }
+    if (!purchaseForBid
+        && ForzaSbarco.attivo(data, player)
+        && ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning p5tuning) {
+      try {
+        ForzaSbarco.registraAcquisto(data, player, p5tuning.p5a());
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P5 register failed: " + e);
+      }
     }
     if (!purchaseForBid && Stratega.gioca(data, player)) {
       try {
@@ -188,6 +203,9 @@ public class ProPlusAi extends ProAi {
     } else {
       playCoordinatedLanding(moveDel, data, player);
       playTask(false, moveDel, data, player);
+    }
+    if (nonCombat) {
+      playLevers(moveDel, data, player);
     }
     super.move(nonCombat, moveDel, data, player);
     if (nonCombat) {
@@ -374,6 +392,63 @@ public class ProPlusAi extends ProAi {
       GuerraVicina.registraAcquisto(data, player, st, view.guerra());
     } catch (final RuntimeException e) {
       ProLogger.warn(LOG_PREFIX + "P4 register failed: " + e);
+    }
+  }
+
+  /**
+   * Step P5, at the start of the purchase: B's losses of last turn's escort and a new turn; A's
+   * plan of the three steps (orders for Hard's purchase). Nothing with the switches off.
+   */
+  private void startLevers(final GameData data, final GamePlayer player) {
+    if (!(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      if (ScortaSbarco.attivo(data, player)) {
+        ScortaSbarco.inizioTurno(data, player, tuning.p5b());
+      }
+      final java.util.Optional<ForzaSbarco.Fase> phase = ForzaSbarco.fase(data, player);
+      if (phase.isPresent()) {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        ForzaSbarco.piano(getProData(), getCalc(), tuning.p5a(), phase.get());
+      } else {
+        tuning.p5a().pulisci();
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P5 start failed: " + e);
+      tuning.p5a().pulisci();
+    }
+  }
+
+  /**
+   * Step P5, the non-combat move before Hard's: A loads the troops at home in the last neutral
+   * turn, B moves the escort of the landings made; Hard leaves those units where they are.
+   */
+  private void playLevers(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (!(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    final java.util.Set<games.strategy.engine.data.Unit> held = new java.util.LinkedHashSet<>();
+    try {
+      if (ForzaSbarco.fase(data, player).orElse(null) == ForzaSbarco.Fase.ULTIMO_NEUTRALE) {
+        held.addAll(ForzaSbarco.carica(data, player, moveDel));
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P5 load failed: " + e);
+    }
+    try {
+      if (ScortaSbarco.attivo(data, player)) {
+        held.addAll(ScortaSbarco.nonCombattimento(data, player, moveDel, tuning.p5b()));
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P5 escort failed: " + e);
+    }
+    if (!held.isEmpty()) {
+      tuning.holdForOperation(data, player, held);
     }
   }
 

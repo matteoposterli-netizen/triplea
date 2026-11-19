@@ -178,8 +178,8 @@ public final class IndicazioniP4 {
     final Config c = Config.get();
     final String name = player.getName();
     return switch (s) {
-      case USA_PRONTI -> c.guerra().containsKey(name);
-      case NORVEGIA_PRESTO -> c.bersagli().containsKey(name);
+      case USA_PRONTI, USA_PROPORZIONE -> c.guerra().containsKey(name);
+      case NORVEGIA_PRESTO, NORVEGIA_SCORTA -> c.bersagli().containsKey(name);
       case RUSSIA_FRONTE -> c.nazioniFronte().contains(name);
       default -> false;
     };
