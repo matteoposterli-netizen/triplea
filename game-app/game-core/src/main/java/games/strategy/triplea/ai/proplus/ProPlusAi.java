@@ -175,6 +175,10 @@ public class ProPlusAi extends ProAi {
         ProLogger.warn(LOG_PREFIX + "P5 register failed: " + e);
       }
     }
+    // step P7 (C): the row of the UK's indication, on the real game
+    if (!purchaseForBid) {
+      IndicazioniP7.registraPronti(data, player);
+    }
     if (!purchaseForBid && Stratega.gioca(data, player)) {
       try {
         Difesa.registraBudget(data, player);

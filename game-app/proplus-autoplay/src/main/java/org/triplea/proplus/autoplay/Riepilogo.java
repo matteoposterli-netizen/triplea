@@ -98,6 +98,10 @@ final class Riepilogo {
     json.add("tuv_perso", lostTuv(data.getAsJsonArray("battaglie"), monitor));
     final JsonArray landings = data.getAsJsonArray("sbarchi");
     json.add("sbarchi", landings);
+    // step P7: the monitor's events (landings with the owner before, neutrals, captures)
+    if (data.has("p7_eventi")) {
+      json.add("p7_eventi", data.get("p7_eventi"));
+    }
     firstLandingInEurope(landings).ifPresent(l -> json.add("primo_sbarco_europa", l));
     json.add("primo_sbarco_vero", firstLandings(landings, monitor.alliances().keySet()));
     json.add("usa_sbarcate_ovest", usLandedInWestEurope(landings, rounds.size()));

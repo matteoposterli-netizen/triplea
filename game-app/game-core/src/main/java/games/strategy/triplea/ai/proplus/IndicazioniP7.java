@@ -385,43 +385,12 @@ public final class IndicazioniP7 {
     if (home == null || !home.isOwnedBy(player)) {
       return Optional.empty();
     }
-    final int places = postiInPatria(home, player);
-    final int cap = capacitaAccanto(data, home, player);
-    final int round = data.getSequence().getRound();
-    final boolean write =
-        !proData.isSimulation() && SCRITTE.add(round + "|" + player.getName() + "|C");
-    final JsonObject row = new JsonObject();
-    row.addProperty("patria", home.getName());
-    row.addProperty("posti_terra_in_patria", places);
-    row.addProperty("capacita_trasporti_accanto", cap);
-    row.addProperty("quota_pct", c.quotaPct());
-    if (!sottoCapacita(places, cap)) {
-      if (write) {
-        registra(
-            data,
-            player,
-            TIPO_C,
-            "PRONTI_OLTRE_CAPACITA",
-            "truppe in patria oltre la capacita' dei trasporti accanto: nessuna indicazione",
-            row);
-      }
+    if (!sottoCapacita(postiInPatria(home, player), capacitaAccanto(data, home, player))) {
       return Optional.empty();
     }
     final List<String> types = tipiTerra(proData);
     if (types.isEmpty()) {
       return Optional.empty();
-    }
-    final JsonArray t = new JsonArray();
-    types.forEach(t::add);
-    row.add("tipi", t);
-    if (write) {
-      registra(
-          data,
-          player,
-          TIPO_C,
-          "PRONTI_INDICAZIONE",
-          "dopo la difesa di Hard, quota dei PU in unita' di terra in patria",
-          row);
     }
     return Optional.of(
         new ProPurchaseOrders(
@@ -431,6 +400,51 @@ public final class IndicazioniP7 {
             List.of(home.getName()),
             List.of(),
             0));
+  }
+
+  /**
+   * C: the register row of this turn's indication, written after the purchase on the real game
+   * (Hard's purchase is planned on a copy of the game, where no row is written). The land units at
+   * home are those after the placement of the previous turn (the purchase is placed at the end of
+   * this turn), the capacity is the one next to home now. Never throws.
+   */
+  static void registraPronti(final GameState data, final GamePlayer player) {
+    try {
+      if (!attivo(data, player, StrategaInterruttori.PONTE_PRONTI) || !alleatoInGuerra(data)) {
+        return;
+      }
+      final Config c = Config.get();
+      final Territory home = data.getMap().getTerritoryOrNull(c.patria());
+      if (home == null || !home.isOwnedBy(player)) {
+        return;
+      }
+      final int places = postiInPatria(home, player);
+      final int cap = capacitaAccanto(data, home, player);
+      final JsonObject row = new JsonObject();
+      row.addProperty("patria", home.getName());
+      row.addProperty("posti_terra_in_patria", places);
+      row.addProperty("capacita_trasporti_accanto", cap);
+      row.addProperty("quota_pct", c.quotaPct());
+      if (sottoCapacita(places, cap)) {
+        registra(
+            data,
+            player,
+            TIPO_C,
+            "PRONTI_INDICAZIONE",
+            "dopo la difesa di Hard, quota dei PU in unita' di terra in patria",
+            row);
+      } else {
+        registra(
+            data,
+            player,
+            TIPO_C,
+            "PRONTI_OLTRE_CAPACITA",
+            "truppe in patria oltre la capacita' dei trasporti accanto: nessuna indicazione",
+            row);
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn("[Pro+] P7, pronti: " + e);
+    }
   }
 
   /** C: the land types in rotation: one transport's load by Hard's amphibious efficiency. */
