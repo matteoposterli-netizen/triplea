@@ -57,10 +57,12 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P7: 9 configurazioni (e2, s1, s2, s5, c1-c5) x 120 semi 1621-1740 fino alla vittoria, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P7: 9 configurazioni (e2, s1, s2, s5, c1-c5) x 120 semi 1621-1740 fino alla vittoria, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625) | ripubblica (nessuna partita: confronto e zip delle partite della run 44643856735)"
         default: "normale"
 permissions:
   contents: write
+  # [ripubblica]: the publish job downloads the games of an earlier run
+  actions: read
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -114,7 +116,8 @@ jobs:
           PARTITE: ${{ inputs.partite || '7' }}
           SEMI: ${{ inputs.semi || '2' }}
           PIANI: ${{ inputs.piani || '' }}
-          MODALITA: ${{ inputs.modalita || 'normale' }}
+          # [ripubblica] uses the game list of [completa] (the games come from an earlier run)
+          MODALITA: ${{ inputs.modalita == 'ripubblica' && 'completa' || inputs.modalita || 'normale' }}
         run: |
           # the full matrix goes to a file, not to the step outputs (run 44641570445: job outputs > 1 MB)
           python3 - <<'EOF' > matrice.txt
@@ -565,6 +568,8 @@ jobs:
   # counts; the other modes: 1 game per job as before); groups in seed order, seeds 1621-1700 first
   play:
     needs: prepare
+    # [ripubblica]: no game is played, the publish job takes them from an earlier run
+    if: inputs.modalita != 'ripubblica'
     runs-on: ubuntu-latest
     # [completa]: up to 5 games in one job (each at most 120 minutes, the job's budget 340)
     timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7') && 355 || 30 }}
@@ -672,15 +677,28 @@ jobs:
           name: autoplay-kit
           path: autoplay-kit
       - uses: actions/download-artifact@v8
+        if: inputs.modalita != 'ripubblica'
         with:
           pattern: partita-*
           path: autoplay
           merge-multiple: true
+      # [ripubblica]: the 1080 games of run 44643856735 ([completa] of step P7, commit 60d7e6a),
+      # whose publish job ran out of memory while reading them
+      - uses: actions/download-artifact@v8
+        if: inputs.modalita == 'ripubblica'
+        with:
+          pattern: partita-*
+          path: autoplay
+          merge-multiple: true
+          run-id: 44643856735
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Comparison and zip
         env:
           HAS_LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
           LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          MODALITA: ${{ inputs.modalita || 'normale' }}
+          MODALITA: ${{ inputs.modalita == 'ripubblica' && 'completa' || inputs.modalita || 'normale' }}
+          # 1080 game summaries in memory (run 44643856735: out of memory with the default heap)
+          JAVA_OPTS: -Xmx12g
         run: |
           set -euo pipefail
           mkdir -p autoplay

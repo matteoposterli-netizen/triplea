@@ -50,14 +50,17 @@ final class RiepilogoGenerale {
       games = s.filter(Files::isDirectory).sorted(Comparator.comparing(Path::getFileName)).toList();
     }
     final List<Game> list = new ArrayList<>();
+    final boolean many = games.size() > MANY_GAMES;
     for (final Path g : games) {
       final Path json = g.resolve(Riepilogo.JSON_FILE);
       if (Files.exists(json)) {
-        list.add(
-            new Game(
-                g.getFileName().toString(),
-                JsonParser.parseString(Files.readString(json, StandardCharsets.UTF_8))
-                    .getAsJsonObject()));
+        final JsonObject o =
+            JsonParser.parseString(Files.readString(json, StandardCharsets.UTF_8))
+                .getAsJsonObject();
+        if (many) {
+          dropShadowData(o);
+        }
+        list.add(new Game(g.getFileName().toString(), o));
       } else {
         list.add(new Game(g.getFileName().toString(), null));
       }
@@ -65,6 +68,25 @@ final class RiepilogoGenerale {
     Files.writeString(folder.resolve(FILE), markdown(title, list), StandardCharsets.UTF_8);
     log.info("Scritto {} ({} partite)", folder.resolve(FILE), list.size());
     return 0;
+  }
+
+  /**
+   * Over this many games the shadow data of the strategist (defense and campaigns in shadow, about
+   * half of each summary) is not kept in memory: run 44643856735 (1080 games of [completa]) ran out
+   * of memory. Only the smoke and shadow sections read them, never with so many games.
+   */
+  static final int MANY_GAMES = 300;
+
+  static void dropShadowData(final JsonObject json) {
+    json.remove("ombra_dettagli");
+    if (json.has("stratega_llm") && json.get("stratega_llm").isJsonObject()) {
+      for (final var e : json.getAsJsonObject("stratega_llm").entrySet()) {
+        if (e.getValue().isJsonObject()) {
+          e.getValue().getAsJsonObject().remove("difesa");
+          e.getValue().getAsJsonObject().remove("ombra");
+        }
+      }
+    }
   }
 
   record Game(String folder, JsonObject json) {}
