@@ -6637,4 +6637,38 @@ le teste di ponte restano sole (tenute un round dopo 261/490) e parte degli sbar
   alleati su Neutral_True (316 righe GUERRA_NEUTRALI_ESCLUSA); c1 19 rinforzi, rinforzati tra i raggiungibili >= 2 unita' 19/32 (59%) contro
   14/43 (33%) di s5 (rinforzi di Hard da solo), peso d'attacco scattato 1 volta (un solo T dell'Asse nelle 5 partite); c2 unita' britanniche in
   patria a inizio turno R4/R6/R8 9,6/6,0/9,4 contro 11,4/5,6/7,4 di c1 (piu' alte solo in media, di poco; 43 righe "oltre capacita'").
-- Run lunga: run 44641570445 (commit d9e684a), 9 configurazioni x semi 1621-1740.
+- Run lunga: run 44643856735 (commit 60d7e6a; la prima, 44641570445, era fallita per le uscite del job oltre 1 MB). Il job
+  `publish` e' andato in memoria esaurita leggendo i 1080 riepiloghi ⇒ modalita' `[ripubblica]` (nessuna partita: il publish
+  scarica UNA ALLA VOLTA, con ritentativi, gli artefatti della run 44643856735 - con `download-artifact` e `run-id` GitHub
+  risponde col limite secondario delle richieste, run 44724639523 - e rifa' confronto e zip; heap 12 GB; oltre 300 partite
+  `RiepilogoGenerale` non tiene in memoria `stratega_llm.*.difesa`/`ombra` e `ombra_dettagli`). Zip pubblicato dalla run
+  44728221325 (commit 1349253). Il numero della run da ripubblicare e' scritto nel workflow.
+
+#### Autoplay in CI (run 44643856735 + 44728221325, 1080 partite [completa] senza chiave, semi 1621-1740, costo API 0)
+1078 completate, 2 in errore del calcolatore ("Can't calculate while operation is still running!": c1 seme 1718, c5 seme 1633,
+contate come non vinte nella tabella del riepilogo: qui escluse), 2 stalli al tetto di 60 round (s5, c5). Asse impegno+assedio
+(quota 70) in tutte.
+
+| Config | Alleati vince | Mosca oltre R14 | Roma / Berlino cadono | Sbarchi USA >= 6 rinforzati dal UK (tra i raggiungibili) |
+|---|---|---|---|---|
+| e2 Hard | 49/120 41% | 52 | 53 / 50 | 34% |
+| s1 usa_proporzione | 47/120 39% | 57 | 54 / 48 | 32% |
+| s2 Base | 47/120 39% | 53 | 62 / 50 | 24% |
+| s5 Base + niente_neutrali | 66/120 55% | 75 | 83 / 67 | 24% |
+| c1 Base + ponte_uk | 57/119 48% | 62 | 70 / 57 | 57% |
+| c2 c1 + ponte_pronti | 54/120 45% | 63 | 72 / 54 | 57% |
+| c3 Base + niente_neutrali + ponte_uk | 60/120 50% | 66 | 80 / 61 | 61% |
+| c4 c3 + ponte_pronti | 60/120 50% | 61 | 82 / 62 | 59% |
+| c5 c4 + norvegia | 63/119 53% | 70 | 80 / 64 | 60% |
+
+- Confronti (Fisher, vittorie / Mosca oltre R14): s2/e2 p 0,90 / 1,00; s2/s1 1,00 / 0,70; **s5/s2 0,020 / 0,006**; c1/s2 0,19 / 0,24;
+  c2/c1 0,70 / 1,00; c4/s2 0,12 / 0,37; c5/c4 0,70 / 0,24. Solo `niente_neutrali` esce dal rumore (+19 vittorie, +22 Mosca oltre
+  R14; con 7 confronti Bonferroni 0,007: passa solo la misura su Mosca). s5 contro e2: 66 contro 49, p 0,038.
+- Criteri: e2 41% (30-45%: SI'); s5, c3-c5 0 guerre e 0 attacchi alleati a Neutral_True (SI'; 7.688-8.121 guerre escluse per
+  configurazione), contro 43-53 partite su 120 con guerra aperta dagli Alleati senza la leva; quota di rinforzo UK c1 57% contro
+  s2 24% (SI'); test verdi (SI').
+- Ponte: rinforzi 490-555 per configurazione (4.020-4.680 unita'), ma le teste di ponte rinforzate sono tenute un round dopo il
+  62-68% (s2 85%: senza la leva il Regno Unito rinforza solo dove e' gia' facile), senza rinforzo 49-52%. Peso d'attacco 84-112
+  volte. `ponte_pronti`: nessun effetto misurabile (F4: terra britannica in patria uguale a c1).
+- `sbarco_concentrato` (s2 contro s1): nessun effetto sulle vittorie in 240 partite (in P6 +9, p 0,062: non confermato); sbarchi
+  USA in forza sull'Asse raddoppiati (R6 21,7 contro 8,8) e trasporti USA persi entro R8 6,6 contro 2,0.
