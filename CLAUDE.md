@@ -6709,3 +6709,18 @@ contate come non vinte nella tabella del riepilogo: qui escluse), 2 stalli al te
   volte. `ponte_pronti`: nessun effetto misurabile (F4: terra britannica in patria uguale a c1).
 - `sbarco_concentrato` (s2 contro s1): nessun effetto sulle vittorie in 240 partite (in P6 +9, p 0,062: non confermato); sbarchi
   USA in forza sull'Asse raddoppiati (R6 21,7 contro 8,8) e trasporti USA persi entro R8 6,6 contro 2,0.
+
+### Step P9+P10 — ponte concentrato, conferma di niente_neutrali (2026-11-20)
+
+Vedi "Ponte concentrato (step P9+P10)" e "Scelte di P9+P10". File nuovi: `ai/proplus/PonteConcentrato`, risorsa
+`proplus/strategia/p9.json`, test `PonteConcentratoTest` (5); autoplay `ConfrontoP9` + `ConfrontoP9Test` (4). Modificati:
+`PonteRegnoUnito` (4 metodi e `Viaggio` visibili nel pacchetto, logica invariata), `IndicazioniP7.attivo` (PONTE_UK spento con il
+concentrato), `ProPlusAi.playLevers`, `StrategaInterruttori`, `RegistroDecisioni` (tipo e 6 codici), `Stratega`, `ProfiloStratega`,
+`StrategistPanel` (casella); autoplay `MonitorP7` (teste di ponte e contrattacchi), `ConfrontoP7` (colonna USA sbarcate),
+`Riepilogo` (blocco `p9`), `ConfrontoCompleta` (sezione); workflow `[prova9]`, `[completa]` = e2, n1, s2, s5, c3, d1, d2 x semi 1741-1860.
+- Test locali: `PonteConcentratoTest`, `IndicazioniP7Test`, `NudoHardTest`, `:proplus-autoplay:test` verdi (JDK 25 da apt).
+- Prova breve: CI `[prova9]` run 44745693981 (5/5 partite d1 verdi; gli artefatti delle partite non si scaricano dalla sandbox: host
+  Azure bloccato) + 3 partite locali (seme 1741 completa, 1742/1743 fino al R16/R12, interrotte dal riavvio del container). 44 turni
+  britannici: 1 rinforzo (Spain R7, vittoria Asse 77% -> 0%, 9 unita' mandate su 9), nessun round con piu' di un bersaglio;
+  nessun candidato 32, trasporti esposti 7, nessuno sotto soglia 3, gia' sicuro 1. Vittoria dell'Asse DOPO sui 12 candidati:
+  0, 0, 0, 0, 44,8, 100 x 7. Agisce quasi mai: soglia NON abbassata (regola del prompt), run lunga lanciata comunque.

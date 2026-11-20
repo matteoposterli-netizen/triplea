@@ -185,6 +185,7 @@ jobs:
               # step P9+P10: niente_neutrali confirmed, the UK's concentrated bridge; 7
               # configurations x 120 new seeds 1741-1860 = 840 games in groups of 5 (block p9);
               # [prova9]: d1 x seeds 1741-1745 = 5 games (the short check before the long run)
+              # (run 44745693981, commit 4115024: 5/5 green; one target per British turn, all the cargo sent)
               asse = "Asse Stratega con impegno e assedio (quota 70)"
               ax = "Axis=impegno+assedio"
               base = "usa_proporzione+sbarco_concentrato"
