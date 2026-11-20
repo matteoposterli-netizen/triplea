@@ -53,6 +53,9 @@ import java.util.Optional;
  *       {@code p7.json}: OFF): no war on the true neutrals and no attack on their land; the UK's
  *       weight on the US bridgehead of the round; the UK's land purchase at home ({@link
  *       IndicazioniP7}).
+ *   <li>{@link #PONTE_CONCENTRATO} (step P9+P10, default from {@code p9.json}: OFF): the UK's
+ *       reinforcement on ONE bridgehead of the round, with all the cargo ({@link
+ *       PonteConcentrato}); it replaces {@link #PONTE_UK} while on.
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -76,7 +79,8 @@ public enum StrategaInterruttori {
   NORVEGIA_ESPOSTA("norvegia_esposta", false),
   NIENTE_NEUTRALI("niente_neutrali", false),
   PONTE_UK("ponte_uk", false),
-  PONTE_PRONTI("ponte_pronti", false);
+  PONTE_PRONTI("ponte_pronti", false),
+  PONTE_CONCENTRATO("ponte_concentrato", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -148,6 +152,9 @@ public enum StrategaInterruttori {
     }
     if (this == PONTE_PRONTI) {
       return IndicazioniP7.Config.get().prontiDiDefault();
+    }
+    if (this == PONTE_CONCENTRATO) {
+      return PonteConcentrato.Config.get().diDefault();
     }
     return predefinito;
   }

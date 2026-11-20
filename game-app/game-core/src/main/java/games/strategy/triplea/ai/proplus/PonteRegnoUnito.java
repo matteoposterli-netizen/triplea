@@ -50,7 +50,7 @@ final class PonteRegnoUnito {
   private PonteRegnoUnito() {}
 
   /** One transport's trip to T. */
-  private static final class Viaggio {
+  static final class Viaggio {
     final Unit trasporto;
     final Territory da;
 
@@ -348,7 +348,7 @@ final class PonteRegnoUnito {
    * → loading zone → unload zone within its movement), null if none. {@code reached} gets it if it
    * reaches any zone.
    */
-  private static @javax.annotation.Nullable Viaggio pianifica(
+  static @javax.annotation.Nullable Viaggio pianifica(
       final GameData data,
       final GamePlayer player,
       final Unit tr,
@@ -443,7 +443,7 @@ final class PonteRegnoUnito {
   }
 
   /** Allied sea units in {@code z} that cover transports (warships, transports). */
-  private static List<Unit> copertura(final GamePlayer player, final Territory z) {
+  static List<Unit> copertura(final GamePlayer player, final Territory z) {
     final List<Unit> out = new ArrayList<>();
     for (final Unit u : z.getUnits()) {
       if (player.isAllied(u.getOwner())
@@ -457,7 +457,7 @@ final class PonteRegnoUnito {
   }
 
   /** Hard's check of exposed transports in {@code z} for {@code trips} (a row of the register). */
-  private static JsonObject esposizione(
+  static JsonObject esposizione(
       final ProData proData,
       final ProOddsCalculator calc,
       final ProTerritoryManager tm,
@@ -505,7 +505,7 @@ final class PonteRegnoUnito {
   }
 
   /** Load (if needed), move, unload; returns the units ashore in {@code t}. */
-  private static int esegui(final IMoveDelegate del, final Viaggio v, final Territory t) {
+  static int esegui(final IMoveDelegate del, final Viaggio v, final Territory t) {
     final List<Unit> aboard = new ArrayList<>(v.trasporto.getTransporting());
     if (v.rotta.numberOfSteps() > 0) {
       final List<Unit> units = new ArrayList<>(List.of(v.trasporto));
@@ -550,7 +550,7 @@ final class PonteRegnoUnito {
     return aboard.size();
   }
 
-  private static int tuv(final ProData proData, final Collection<Unit> units) {
+  static int tuv(final ProData proData, final Collection<Unit> units) {
     int s = 0;
     for (final Unit u : units) {
       s += proData.getUnitValueMap().getInt(u.getType());

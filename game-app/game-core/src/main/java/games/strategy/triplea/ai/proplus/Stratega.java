@@ -191,6 +191,10 @@ public final class Stratega {
     if ("Allies".equals(alliance.get()) && profile.pontePronti()) {
       wanted.add(StrategaInterruttori.PONTE_PRONTI);
     }
+    // step P9+P10: the UK's bridgehead concentrated on one target
+    if ("Allies".equals(alliance.get()) && profile.ponteConcentrato()) {
+      wanted.add(StrategaInterruttori.PONTE_CONCENTRATO);
+    }
     final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
     boolean changed = false;
     for (final StrategaInterruttori w : wanted) {

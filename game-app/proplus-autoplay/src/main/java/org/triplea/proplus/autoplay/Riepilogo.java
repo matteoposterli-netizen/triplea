@@ -176,6 +176,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p7", err);
     }
+    // step P9+P10: the bridgeheads, the concentrated bridge, the UK's own landings
+    try {
+      json.add("p9", ConfrontoP9.blocco(json));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p9", err);
+    }
     return json;
   }
 

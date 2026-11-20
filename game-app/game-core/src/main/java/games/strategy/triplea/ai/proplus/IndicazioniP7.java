@@ -162,7 +162,9 @@ public final class IndicazioniP7 {
     final Config c = Config.get();
     return switch (s) {
       case NIENTE_NEUTRALI -> c.nazioniNeutrali().contains(player.getName());
-      case PONTE_UK -> c.nazioniPonte().contains(player.getName());
+      // step P9+P10: ponte_concentrato replaces ponte_uk while on
+      case PONTE_UK ->
+          c.nazioniPonte().contains(player.getName()) && !PonteConcentrato.attivo(data, player);
       case PONTE_PRONTI -> c.nazioniPronti().contains(player.getName());
       default -> false;
     };

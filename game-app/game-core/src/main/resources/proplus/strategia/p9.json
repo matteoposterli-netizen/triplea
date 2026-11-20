@@ -1,0 +1,14 @@
+{
+  "nota": "Step P9+P10: una leva per gli Alleati dello Stratega con il suo interruttore (default spento). Si aggiunge a Hard: nessun divieto, nessuna riserva, nessuna attesa. Nessun nome di nazione o territorio nel codice: stanno qui.",
+  "ponte_concentrato": {
+    "nota": "Solo la nazione indicata, solo nel suo turno, nel non combattimento dopo gli attacchi di Hard e prima del suo non combattimento. Candidati: i territori dove in questo round l'alleato indicato ha sbarcato almeno unita_minime_sbarco unita' di terra (registro di sbarco_concentrato), ora alleati, raggiungibili in questo turno da trasporti propri con truppe caricabili (stesse rotte, stessa guardia della capitale e delle fabbriche e stesso controllo dei trasporti esposti di ponte_uk; le navi alleate nella zona di scarico contano come difesa). Per ogni candidato: vittoria del miglior contrattacco delle nazioni_contrattacco (stima di Hard: unita' massime di un nemico, anfibie e bombardamento compresi) contro i difensori alleati di ora, PRIMA e DOPO aver aggiunto tutto il carico proprio che puo' arrivarci. Bersaglio: uno solo, quello con vittoria DOPO < soglia_attacco_pct e calo maggiore; su di esso tutto il carico. Candidati gia' sotto la soglia PRIMA non sono bersagli. Nessun bersaglio: Hard gioca come sempre. Sostituisce ponte_uk quando e' acceso.",
+    "acceso_di_default": {"valore": false, "origine": "richiesta dello step P9+P10 (default spento)"},
+    "nazioni": {"valore": ["British"], "origine": "richiesta dello step P9+P10 (solo Regno Unito)"},
+    "alleato_sbarco": {"valore": "Americans", "origine": "richiesta dello step P9+P10 (sbarchi USA)"},
+    "nazioni_contrattacco": {"valore": ["Germans", "Italians"], "origine": "richiesta dello step P9+P10 (Germania e Italia)"},
+    "parametri": {
+      "unita_minime_sbarco": {"valore": 6, "origine": "richiesta dello step P9+P10: sbarco USA di almeno 6 unita' di terra"},
+      "soglia_attacco_pct": {"valore": 65, "origine": "richiesta dello step P9+P10: soglia minima d'attacco dell'Asse 65%"}
+    }
+  }
+}

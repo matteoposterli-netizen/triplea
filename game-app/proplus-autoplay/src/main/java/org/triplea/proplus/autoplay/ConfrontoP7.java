@@ -88,14 +88,14 @@ final class ConfrontoP7 {
     if (ev.has("sbarchi")) {
       ev.getAsJsonArray("sbarchi").forEach(e -> landings.add(e.getAsJsonObject()));
     }
-    // US units landed by R6 / R8 / R10: in all and on Axis land
+    // US units landed by R6 / R8 / R10: on land not allied when the US turn started (step P9:
+    // "totale" counted the transfers to own and allied land too) and on Axis land
     final JsonObject cum = new JsonObject();
     for (final int r : ROUND_SBARCATE) {
-      int all = 0;
+      final int all = ConfrontoP9.usaSbarcate(landings, r);
       int axis = 0;
       for (final JsonObject l : landings) {
         if (USA.equals(s(l, "nazione")) && n(l, "round") <= r) {
-          all += n(l, "unita");
           if ("Asse".equals(s(l, "categoria")) || "nemico".equals(s(l, "categoria"))) {
             axis += n(l, "unita");
           }
@@ -370,7 +370,7 @@ final class ConfrontoP7 {
     // the numbers per configuration
     md.append(
         "| Config | Partite | Alleati vince [IC 95%] | Stalli | Mosca oltre R14 | Roma cade |"
-            + " Berlino cade | USA sbarcate R6 / R8 / R10 (tot.) | idem su Asse | Trasporti persi"
+            + " Berlino cade | USA sbarcate R6 / R8 / R10 su territorio non alleato (media) | idem su Asse | Trasporti persi"
             + " entro R8 USA / UK (media) | Teste di ponte USA >= 6 tenute un round dopo |"
             + " Sbarchi USA >= 6 su territorio nemico raggiungibili dal UK con >= 2: rinforzati |\n");
     md.append("|---|---|---|---|---|---|---|---|---|---|---|---|\n");

@@ -485,6 +485,18 @@ public class ProPlusAi extends ProAi {
         ProLogger.warn(LOG_PREFIX + "P7 bridgehead failed: " + e);
       }
     }
+    // step P9+P10: the UK's whole cargo on ONE bridgehead of the round (replaces ponte_uk)
+    if (PonteConcentrato.attivo(data, player)) {
+      try {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        PonteConcentrato.nonCombattimento(getProData(), getCalc(), moveDel);
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P9 bridgehead failed: " + e);
+      }
+    }
     if (!held.isEmpty()) {
       tuning.holdForOperation(data, player, held);
     }

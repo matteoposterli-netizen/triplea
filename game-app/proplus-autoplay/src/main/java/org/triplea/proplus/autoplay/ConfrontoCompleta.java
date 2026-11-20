@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P9+P10: the concentrated bridge, the bridgeheads (every configuration)
+    if (ConfrontoP9.applicabile(games)) {
+      try {
+        ConfrontoP9.write(md, games);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P9 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step P7: no neutrals, the UK's bridgehead, the UK's troops ready (every configuration)
     if (ConfrontoP7.applicabile(games)) {
       try {

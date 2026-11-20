@@ -102,6 +102,9 @@ final class StrategistPanel {
 
   @Getter private final javax.swing.JCheckBox pontePronti = new javax.swing.JCheckBox();
 
+  /** Step P9+P10: the UK's bridgehead concentrated on one target. */
+  @Getter private final javax.swing.JCheckBox ponteConcentrato = new javax.swing.JCheckBox();
+
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
   private final Supplier<ClaudeCode.Stato> claude;
@@ -275,6 +278,14 @@ final class StrategistPanel {
             + " dopo la difesa in truppe di terra in patria, finche' i suoi trasporti accanto"
             + " bastano a portarle (step P7, sperimentale); vale per le partite nuove</html>");
     panel.add(row("Truppe britanniche pronte:", pontePronti));
+    ponteConcentrato.setSelected(profile.ponteConcentrato());
+    ponteConcentrato.setText(
+        "<html>Alleati: tra le teste di ponte USA del round (almeno 6 unita') il Regno Unito ne"
+            + " sceglie una sola, quella che il suo carico rende sicura contro il contrattacco"
+            + " dell'Asse (vittoria stimata sotto il 65%), e ci porta tutte le truppe che i suoi"
+            + " trasporti raggiungono; se nessuna diventa sicura non fa nulla. Sostituisce Ponte"
+            + " del Regno Unito (step P9, sperimentale); vale per le partite nuove</html>");
+    panel.add(row("Ponte concentrato:", ponteConcentrato));
     panel.add(
         row(
             "",
@@ -310,6 +321,7 @@ final class StrategistPanel {
     profile.setNienteNeutrali(nienteNeutrali.isSelected());
     profile.setPonteUk(ponteUk.isSelected());
     profile.setPontePronti(pontePronti.isSelected());
+    profile.setPonteConcentrato(ponteConcentrato.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

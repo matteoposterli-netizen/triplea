@@ -238,6 +238,17 @@ public final class ProfiloStratega {
     values.setProperty(KEY_PONTE_PRONTI, on ? "si" : "no");
   }
 
+  private static final String KEY_PONTE_CONCENTRATO = "ponte_concentrato";
+
+  /** Step P9+P10: "Ponte concentrato" for the Allies. Off unless set. */
+  public boolean ponteConcentrato() {
+    return si(KEY_PONTE_CONCENTRATO);
+  }
+
+  public void setPonteConcentrato(final boolean on) {
+    values.setProperty(KEY_PONTE_CONCENTRATO, on ? "si" : "no");
+  }
+
   private static final String KEY_REGNO_UNITO_P3 = "regno_unito_p3";
 
   /**

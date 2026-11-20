@@ -119,6 +119,19 @@ final class MonitorP7 {
   private final Set<String> beforePlace = new HashSet<>();
   private Set<String> ukTransports;
 
+  /**
+   * Step P9 (D): the US bridgeheads of at least {@link #FORTE} units on enemy land, taken, followed
+   * from the end of the British turn of their round to the end of the next round (landing key →
+   * landing row).
+   */
+  private final Map<String, JsonObject> heads = new LinkedHashMap<>();
+
+  /** Step P9 (D): the counterattacks seen at the start of an Axis battle step. */
+  private final List<Contrattacco> pending = new ArrayList<>();
+
+  private record Contrattacco(
+      JsonObject testa, Territory t, String player, List<Unit> att, List<Unit> def) {}
+
   MonitorP7(final GameData data, final Supplier<Map<String, Map<String, Integer>>> costs) {
     this.data = data;
     this.costs = costs;
@@ -138,6 +151,13 @@ final class MonitorP7 {
   // ========================================================================= steps
 
   void beforeStep(final String step, final String player, final int round) {
+    try {
+      if (ASSE.contains(player) && GameStep.isBattleStepName(step)) {
+        counterattacksBefore(player);
+      }
+    } catch (final RuntimeException e) {
+      // read only: never stops the game
+    }
     if (!player.equals(turnPlayer) || round != turnRound) {
       endOfTurn(turnPlayer, turnRound);
       turnPlayer = player;
@@ -170,6 +190,9 @@ final class MonitorP7 {
 
   void afterStep(final String step, final String player, final int round) {
     try {
+      if (GameStep.isBattleStepName(step)) {
+        counterattacksAfter();
+      }
       if ((USA.equals(player) || UK.equals(player))
           && (GameStep.isCombatMoveStepName(step) || GameStep.isNonCombatMoveStepName(step))) {
         arrivals(player, round, GameStep.isCombatMoveStepName(step));
@@ -214,6 +237,8 @@ final class MonitorP7 {
       }
     }
     if (USA.equals(player)) {
+      // step P9 (D): from now on a counterattack meets the bridgehead after the US moved again
+      heads.values().forEach(l -> l.addProperty("usa_mosso_dopo", true));
       // the US transports in the unload zones of last round's landings, lost since
       for (final var e : usTransportsAtEnd.entrySet()) {
         final JsonObject l = landings.get(e.getKey());
@@ -295,6 +320,138 @@ final class MonitorP7 {
         }
       }
     }
+    if (UK.equals(player)) {
+      bridgeheadsAtEndOfUk(round);
+    }
+  }
+
+  // ========================================================================= P9 (D)
+
+  /**
+   * Step P9 (D), at the end of the British turn: each US bridgehead of the round (at least {@link
+   * #FORTE} units, enemy land, taken) gets the allied defenders there and the Axis units in reach
+   * (approximation: land units within their movement by land, planes within their movement), and is
+   * followed until the end of the next round.
+   */
+  private void bridgeheadsAtEndOfUk(final int round) {
+    final GamePlayer us = p(USA);
+    if (us == null) {
+      return;
+    }
+    for (final var e : landings.entrySet()) {
+      final JsonObject l = e.getValue();
+      if (l.get("round").getAsInt() != round
+          || !USA.equals(l.get("nazione").getAsString())
+          || l.get("unita").getAsInt() < FORTE
+          || !("Asse".equals(l.get("categoria").getAsString())
+              || "nemico".equals(l.get("categoria").getAsString()))
+          || !(l.has("presa") && l.get("presa").getAsBoolean())) {
+        continue;
+      }
+      final Territory t = data.getMap().getTerritoryOrNull(l.get("territorio").getAsString());
+      if (t == null) {
+        continue;
+      }
+      l.addProperty("alleata_fine_uk", friendly(us, t));
+      l.addProperty("difensori_fine_uk", t.getMatches(alliedForce(us)).size());
+      l.addProperty("asse_in_portata", inReach(t));
+      if (!l.has("uk_sbarcate")) {
+        l.addProperty("uk_sbarcate", 0);
+      }
+      l.addProperty("contrattaccata", false);
+      l.add("contrattacchi", new JsonArray());
+      heads.put(e.getKey(), l);
+    }
+  }
+
+  private Predicate<Unit> alliedForce(final GamePlayer us) {
+    return u ->
+        (u.isOwnedBy(us) || us.isAllied(u.getOwner()))
+            && (Matches.unitIsLand().test(u) || Matches.unitIsAir().test(u))
+            && Matches.unitIsNotInfrastructure().test(u);
+  }
+
+  /** Axis land units within their movement by land, Axis planes within their movement. */
+  private int inReach(final Territory t) {
+    int n = 0;
+    for (final Territory x : data.getMap().getTerritories()) {
+      final List<Unit> axis =
+          x.getMatches(
+              u ->
+                  ASSE.contains(u.getOwner().getName())
+                      && Matches.unitIsNotInfrastructure().test(u)
+                      && (Matches.unitIsLand().test(u) || Matches.unitIsAir().test(u)));
+      if (axis.isEmpty()) {
+        continue;
+      }
+      final int land =
+          x.isWater() ? -1 : data.getMap().getDistance(x, t, Matches.territoryIsLand());
+      final int any = data.getMap().getDistance(x, t);
+      for (final Unit u : axis) {
+        final int mv = Math.max(0, u.getUnitAttachment().getMovement(u.getOwner()));
+        if (Matches.unitIsAir().test(u)) {
+          if (any >= 0 && any <= mv) {
+            n++;
+          }
+        } else if (x.equals(t) || (land >= 0 && land <= mv)) {
+          n++;
+        }
+      }
+    }
+    return n;
+  }
+
+  /** Before an Axis battle step: the followed bridgeheads, still allied, with Axis units in. */
+  private void counterattacksBefore(final String player) {
+    pending.clear();
+    final GamePlayer us = p(USA);
+    if (us == null) {
+      return;
+    }
+    for (final JsonObject l : heads.values()) {
+      final Territory t = data.getMap().getTerritoryOrNull(l.get("territorio").getAsString());
+      if (t == null || !friendly(us, t)) {
+        continue;
+      }
+      final List<Unit> att = t.getMatches(u -> player.equals(u.getOwner().getName()) || isAxis(u));
+      if (att.isEmpty()) {
+        continue;
+      }
+      pending.add(
+          new Contrattacco(
+              l, t, player, new ArrayList<>(att), new ArrayList<>(t.getMatches(alliedForce(us)))));
+    }
+  }
+
+  private static boolean isAxis(final Unit u) {
+    return ASSE.contains(u.getOwner().getName());
+  }
+
+  /** After the battle step: the outcome and the losses of each counterattack. */
+  private void counterattacksAfter() {
+    for (final Contrattacco c : pending) {
+      final Set<Unit> now = new HashSet<>(c.t().getUnits());
+      final JsonObject o = new JsonObject();
+      o.addProperty("da", c.player());
+      o.addProperty("prima_del_turno_usa", !c.testa().has("usa_mosso_dopo"));
+      o.addProperty("attaccanti", c.att().size());
+      o.addProperty("difensori", c.def().size());
+      o.addProperty("perse_asse", (int) c.att().stream().filter(u -> !now.contains(u)).count());
+      o.addProperty("perse_alleate", (int) c.def().stream().filter(u -> !now.contains(u)).count());
+      final boolean taken = ASSE.contains(c.t().getOwner().getName());
+      o.addProperty("esito", taken ? "presa_asse" : "respinto");
+      final JsonObject l = c.testa();
+      l.addProperty("contrattaccata", true);
+      if (!c.testa().has("usa_mosso_dopo")) {
+        l.addProperty("contrattaccata_prima_del_turno_usa", true);
+      }
+      if (!l.has("contrattaccata_da")) {
+        l.addProperty("contrattaccata_da", c.player());
+      }
+      l.addProperty("esito_contrattacco", taken ? "presa_asse" : "respinto");
+      l.getAsJsonArray("contrattacchi").add(o);
+    }
+    pending.clear();
   }
 
   // ========================================================================= arrivals
@@ -549,6 +706,8 @@ final class MonitorP7 {
         l.addProperty("alleato_round_dopo", t != null && me != null && friendly(me, t));
       }
     }
+    // step P9 (D): the bridgeheads of last round are no longer followed
+    heads.values().removeIf(l -> l.get("round").getAsInt() <= round - 1);
     final JsonObject o = new JsonObject();
     int exNeutralAxis = 0;
     for (final String n : neutralLand) {

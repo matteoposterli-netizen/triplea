@@ -100,11 +100,20 @@ public final class RegistroDecisioni {
           // step P7
           "niente_neutrali",
           "ponte_uk",
-          "ponte_pronti");
+          "ponte_pronti",
+          // step P9+P10
+          "ponte_concentrato");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P9+P10
+          "PONTE_CONC_RINFORZO",
+          "PONTE_CONC_NESSUN_CANDIDATO",
+          "PONTE_CONC_NESSUNO_SOTTO_SOGLIA",
+          "PONTE_CONC_GIA_SICURO",
+          "PONTE_CONC_ESPOSTI",
+          "PONTE_CONC_RIFIUTATO",
           // step P7
           "GUERRA_NEUTRALI_ESCLUSA",
           "BERSAGLIO_NEUTRALE_ESCLUSO",
