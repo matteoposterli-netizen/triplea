@@ -6724,3 +6724,26 @@ concentrato), `ProPlusAi.playLevers`, `StrategaInterruttori`, `RegistroDecisioni
   britannici: 1 rinforzo (Spain R7, vittoria Asse 77% -> 0%, 9 unita' mandate su 9), nessun round con piu' di un bersaglio;
   nessun candidato 32, trasporti esposti 7, nessuno sotto soglia 3, gia' sicuro 1. Vittoria dell'Asse DOPO sui 12 candidati:
   0, 0, 0, 0, 44,8, 100 x 7. Agisce quasi mai: soglia NON abbassata (regola del prompt), run lunga lanciata comunque.
+
+#### Autoplay in CI (run 44754198596, commit 9b68a7c, tutto verde al 1° tentativo, 840/840 partite [completa] senza chiave, semi 1741-1860, costo API 0)
+0 errori del calcolatore, 0 stalli, 840 con un vincitore. Zip scaricato dalla sandbox con `gh api -H "Accept: application/octet-stream"
+repos/.../releases/assets/<id>` (`gh release download` usa GraphQL, bloccato). Numeri dalla sezione "P9+P10" di `riepilogo-generale.md`.
+
+| Config | Alleati vince | Mosca non caduta R14 | Roma / Berlino cadono | USA sbarcate R6/R8/R10 | Trasporti persi R8 USA/UK | Teste prese / contrattaccate / tenute |
+|---|---|---|---|---|---|---|
+| e2 Hard | 50/120 42% | 50 | 60 / 51 | 2,9 / 16,0 / 31,8 | 0,8 / 1,9 | 355 / 40% / 73% |
+| n1 niente_neutrali | 53/120 44% | 54 | 66 / 56 | 1,4 / 10,3 / 25,9 | 0,7 / 1,9 | 358 / 49% / 68% |
+| s2 Base | 53/120 44% | 61 | 77 / 54 | 24,2 / 41,8 / 62,7 | 6,3 / 1,6 | 1180 / 53% / 58% |
+| s5 Base+nn | 61/120 51% | 70 | 80 / 64 | 22,3 / 37,0 / 55,6 | 6,7 / 1,9 | 1320 / 58% / 54% |
+| c3 s5+ponte_uk | 74/120 62% | 78 | 83 / 75 | 22,9 / 37,8 / 57,8 | 7,2 / 2,2 | 1195 / 50% / 58% |
+| d1 Base+ponte_conc | 53/120 44% | 59 | 69 / 53 | 25,0 / 39,8 / 60,6 | 6,2 / 1,9 | 1060 / 51% / 61% |
+| d2 s5+ponte_conc | 67/120 56% | 76 | 82 / 68 | 24,9 / 38,9 / 58,9 | 7,0 / 2,0 | 1213 / 56% / 55% |
+
+- Confronti dichiarati (Fisher, vittorie / Mosca): n1-e2 0,79 / 0,70; s5-s2 0,37 / 0,30; s5-n1 0,37 / 0,052; d1-s2 1,00 / 0,90; d2-s5 0,52
+  / 0,51; d2-c3 0,43 / 0,89. Nessuno sotto 0,05. Fuori dai dichiarati: c3-s2 0,010, c3-s5 0,12.
+- `niente_neutrali` sopra la Base: P7 +19 (p 0,020), qui +8 (p 0,37); somma delle due run s5 127/240 contro s2 100/240, p 0,017.
+  Da solo sopra Hard (n1): +3, niente. 0 guerre e 0 attacchi alleati a Neutral_True con la leva (senza: 52-56 partite su 120).
+- `ponte_concentrato`: agisce 0,5-0,6 volte a partita (d1 63 rinforzi su 2310 turni britannici, d2 69 su 2521), sempre un solo bersaglio
+  con tutto il carico (12-14 unita'); motivi: nessun candidato 71%, nessuno sotto soglia 11-13%, esposti 9-11%, gia' sicuro 5-6%. Vittoria
+  Asse DOPO sui candidati: <35 34%, 35-65 3%, 65-85 3%, >=85 59-69%. Bersagli scelti tenuti 82-86%. Nessun effetto sulle vittorie.
+- `ponte_uk` (c3) 74/120 contro 60/120 in P7 (stesso codice): varianza tra run; somma c3 134/240 contro s5 127/240 (p 0,58).
