@@ -684,14 +684,31 @@ jobs:
           merge-multiple: true
       # [ripubblica]: the 1080 games of run 44643856735 ([completa] of step P7, commit 60d7e6a),
       # whose publish job ran out of memory while reading them
-      - uses: actions/download-artifact@v8
+      - name: Download the games of run 44643856735
         if: inputs.modalita == 'ripubblica'
-        with:
-          pattern: partita-*
-          path: autoplay
-          merge-multiple: true
-          run-id: 44643856735
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # one download at a time with retries: download-artifact with run-id asks for all 216
+          # artifacts at once and hits GitHub's secondary rate limit (run 44724639523)
+          mkdir -p autoplay dl
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44643856735/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name | startswith("partita-")) | "\(.id) \(.name)"' > artefatti.txt
+          wc -l artefatti.txt
+          while read -r id name; do
+            ok=0
+            for attempt in 1 2 3 4 5 6; do
+              if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "dl/${name}.zip"; then
+                ok=1; break
+              fi
+              echo "retry ${name} (${attempt})"; sleep $((30 * attempt))
+            done
+            [ "$ok" = 1 ] || { echo "download fallito: ${name}"; exit 1; }
+            unzip -q -o "dl/${name}.zip" -d autoplay
+            rm "dl/${name}.zip"
+            sleep 1
+          done < artefatti.txt
       - name: Comparison and zip
         env:
           HAS_LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
