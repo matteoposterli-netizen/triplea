@@ -3491,6 +3491,43 @@ britanniche pronte". Tutti spenti = decisioni identiche a P6 (agganci nuovi con 
    senza navi nemiche; "caricabili" = truppe nelle terre accanto alle zone da cui il trasporto parte o passa, riempiendo i posti
    per costo di trasporto crescente (approssimazione di sola lettura, i canali non sono controllati).
 
+### Ponte concentrato (step P9+P10)
+
+Interruttore alleato `ponte_concentrato` (default spento, `p9.json`; autoplay `--stratega-acceso Allies=...+ponte_concentrato`;
+pannello: casella "Ponte concentrato"). Solo Regno Unito, nel suo non combattimento, dopo gli attacchi di Hard e prima del suo non
+combattimento (`ProPlusAi.playLevers`). **Sostituisce `ponte_uk`** quando acceso (`IndicazioniP7.attivo(PONTE_UK)` e' falso: niente
+rinforzo di P7 e niente peso d'attacco). Spento = decisioni identiche a 187040c (`PonteConcentratoTest`, `NudoHardTest`).
+- Candidati: territori con >= 6 unita' USA sbarcate nel round (registro di `sbarco_concentrato`, come `ponte_uk`), ora alleati,
+  raggiungibili da trasporti britannici con truppe caricabili: stesse rotte, stessa guardia di capitale e fabbriche (Hard: un'unita'
+  esce solo finche' il nemico vi vince al massimo 100 - win%) e stesso controllo dei trasporti esposti di `PonteRegnoUnito` (navi
+  alleate nella zona contano come difesa; tre passate su altre zone). Metodi di `PonteRegnoUnito` resi visibili nel pacchetto, logica
+  invariata.
+- Per candidato: vittoria del **miglior contrattacco** (stima "tenibile" di Hard: `getEnemyAttackOptions().getMax(T)`, unita' massime
+  di UN nemico tra `nazioni_contrattacco` = Germania/Italia, anfibie e bombardamento compresi) contro difensori alleati di terra/aria
+  ora, PRIMA e DOPO aver aggiunto tutto il carico che puo' arrivare.
+- Bersaglio: uno solo, vittoria DOPO < 65% (`soglia_attacco_pct`) e PRIMA >= 65%, calo maggiore (pari: nome); tutto il carico ci va.
+  Nessun bersaglio: nulla. Registro (tipo `ponte_concentrato`, una riga per turno britannico): PONTE_CONC_RINFORZO (bersaglio,
+  prima/dopo, unita' mandate / che potevano arrivare), PONTE_CONC_NESSUN_CANDIDATO, PONTE_CONC_NESSUNO_SOTTO_SOGLIA,
+  PONTE_CONC_GIA_SICURO, PONTE_CONC_ESPOSTI, PONTE_CONC_RIFIUTATO; `candidati` con i numeri di ciascuno.
+- Diagnostica (autoplay, tutte le configurazioni): `MonitorP7` segue le teste di ponte USA (>= 6, territorio dell'Asse, prese) dalla
+  fine del turno britannico alla fine del round dopo: difensori, Asse in portata (approssimazione: terra entro il movimento via terra,
+  aerei entro il movimento, niente anfibi), contrattacchi (chi, prima o dopo il turno USA successivo, attaccanti/difensori, perdite,
+  esito). `ConfrontoP9`: blocco `p9` e sezione "P9+P10". "USA sbarcate" (anche nel blocco `p7.usa_sbarcate.N.totale`) = solo
+  sbarchi su territorio non alleato a inizio turno USA: prima contava anche i trasferimenti verso basi alleate (French West Africa,
+  Gibraltar, ...), da qui i valori 4 volte piu' alti di P7.
+
+### Scelte di P9+P10 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **"Miglior contrattacco" = il massimo di UN nemico come Hard** (`getMax`), non la somma Germania + Italia: i due giocano in turni
+   diversi e il prompt chiede la stima di Hard. Scartata: unione delle unita' dei due (sovrastima).
+2. **Guardia di capitale e fabbriche tenuta**: "tutto il carico che puo' arrivare" e' contato dopo la guardia (che e' la difesa di
+   Hard, non una riserva della leva) e dopo il controllo dei trasporti esposti; il registro riporta anche le unita' caricabili prima
+   della guardia.
+3. **Con entrambi accesi vale `ponte_concentrato` anche per il peso d'attacco**: `ponte_uk` e' spento del tutto.
+4. **Contrattacchi seguiti fino alla fine del round dopo**, con il flag "prima del turno USA": dopo il turno USA del round dopo la
+   testa di ponte puo' essere stata svuotata dagli USA stessi (visto nella prova locale: Spain 20 difensori a fine turno UK, 2 al
+   contrattacco italiano del round dopo).
+
 ## Come configurare lo stratega
 
 Per Matteo e gli amici (stesso testo, piu' corto, nel `LEGGIMI.txt` dello zip):
