@@ -116,7 +116,8 @@ jobs:
           PIANI: ${{ inputs.piani || '' }}
           MODALITA: ${{ inputs.modalita || 'normale' }}
         run: |
-          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          # the full matrix goes to a file, not to the step outputs (run 44641570445: job outputs > 1 MB)
+          python3 - <<'EOF' > matrice.txt
           import json, os, re
           rounds = int(os.environ["ROUND"])
           seeds = max(1, min(4, int(os.environ["SEMI"])))
@@ -533,9 +534,11 @@ jobs:
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json, os
           m = None
-          for line in open(os.environ["GITHUB_OUTPUT"]):
+          for line in open("matrice.txt"):
               if line.startswith("matrix="):
                   m = json.loads(line[len("matrix="):])
+              elif line.startswith("round="):
+                  print(line.strip())
           inc = m["include"]
           json.dump(m, open("autoplay-kit/partite.json", "w"))
           size = 5 if os.environ["MODALITA"] == "completa" else 1
@@ -544,11 +547,13 @@ jobs:
               gs = inc[i:i + size]
               gid = gs[0]["id"] if size == 1 else f"g{i // size + 1:03d}-semi{gs[0]['seme']}-{gs[-1]['seme']}"
               llm = any(g.get("decisore") or g.get("opllm") or g.get("stratega") for g in gs)
-              groups.append({"id": gid, "llm": "si" if llm else "", "giochi": gs})
+              # only the ids: the job outputs must stay under 1 MB (run 44641570445); the play job
+              # reads the games from autoplay-kit/partite.json
+              groups.append({"id": gid, "llm": "si" if llm else "", "giochi": [g["id"] for g in gs]})
           assert len(groups) <= 256, "troppi job"
           print("gruppi=" + json.dumps({"include": groups}))
           EOF
-          cat "$GITHUB_OUTPUT"
+          cut -c1-2000 "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with:
           name: autoplay-kit
@@ -591,7 +596,8 @@ jobs:
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           python3 - <<'EOF'
           import gzip, json, os, shutil, subprocess, sys, time
-          games = json.loads(os.environ["GIOCHI"])
+          per_id = {g["id"]: g for g in json.load(open("autoplay-kit/partite.json"))["include"]}
+          games = [per_id[i] for i in json.loads(os.environ["GIOCHI"])]
           start = time.time()
           worst = 0
           opts = [("--piano", "piano"), ("--decisore", "decisore"), ("--ablazione", "ablazione"),
