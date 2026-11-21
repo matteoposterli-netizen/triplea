@@ -3555,6 +3555,76 @@ Il pannello "Stratega (LLM)" ha **due sole caselle di strategia** (default spent
    diventa "Asse consigliato" acceso e Alleati spenti (Hard).
 3. **Asse consigliato = `assedio` senza `italia_convoglio`**: `assedio` nel profilo accende gia' `impegno` per l'Asse.
 
+### Leve dell'Italia e Alleati finali (step P12)
+
+**Alleati consigliati = "Alleati finali"** (`ProfiloStratega.alleatiConsigliati`/`setAlleatiConsigliati`): `usa_proporzione`,
+`sbarco_concentrato`, `niente_neutrali`, `norvegia_presto`, `norvegia_esposta`, `ponte_concentrato` accesi, gli altri alleati spenti.
+Il nucleo di P11 (i primi tre, gli altri tre spenti) conta come casella accesa e `normalizza()` lo porta a sei. Marcatore del profilo
+`pannello=p12`: un profilo senza marcatore o con `p11` viene normalizzato al caricamento. Logica degli interruttori invariata.
+
+**Quattro leve dell'Italia** (`ai/proplus/LeveItalia`, dati `proplus/strategia/p12.json`, default spenti, sopra impegno + assedio;
+autoplay `--stratega-acceso Axis=impegno+assedio+italia_est+...`; NON nel pannello, casella dell'Asse invariata). Tutte spente = nessun
+codice nuovo agisce (`LeveItaliaTest.allOffNothingActs`, `NudoHardTest`). Nessun nome nel codice (test sul sorgente).
+- **B `italia_est`** (non combattimento italiano, dopo l'impegno e dopo D/C/E, prima di Hard): le unita' di terra italiane con movimento,
+  fuori dall'Africa (`italia_livello1` + `italia_livello2` di R4), non trattenute dalle altre leve (senza D: mai quelle in Southern Italy)
+  si muovono via terra alleata verso il territorio dell'Asse del `fronte_sud` (Romania, Bessarabia, Ucraina, ... Russia) con unita'
+  tedesche piu' vicino per terra all'obiettivo corrente dell'assedio (impegno tedesco, riserva: Mosca); nessuno con tedeschi: il piu'
+  vicino del fronte. Trattenute li' (Hard non le sposta nel turno).
+- **D `capitale_minima`**: guarnigione = minimo di unita' di terra (candidate: le italiane gia' in capitale, poi quelle che arrivano per
+  terra, per difesa decrescente, poi fanterie ipotetiche) che porta la vittoria del miglior attacco nemico (stima di Hard
+  `getEnemyAttackOptions().getMax`, anfibi e bombardamento) sotto il 30% (`LeveItalia.guarnigione`, ricerca esponenziale + binaria).
+  Nessuna minaccia = zero. Acquisto: le mancanti come fanterie obbligate in capitale (con le sole leve senza mare aggiunte agli ordini
+  dell'impegno). Non combattimento: tiene il minimo e porta le vicine. Mancanti salvate (`Pro+ stratega p12: Axis`): nel turno tedesco
+  le unita' tedesche gia' in capitale restano e quelle in Italia accanto ci vanno (`LeveItalia.tedeschi`).
+- **C `italia_africa`, E `italia_gibilterra`** = UN compito di mare per turno (`compitoMare`): Egitto non dell'Asse (C) -> Gibilterra
+  non dell'Asse (E) -> il piu' minacciato dei due presi. Scarico: Egitto/Gibilterra se dell'Asse, per l'Egitto altrimenti il territorio
+  dell'Asse del Nord Africa piu' vicino per terra all'Egitto; altrimenti il convoglio va carico accanto al bersaglio. Ogni trasporto
+  italiano vuoto va al porto (`porti`) che ha truppe da caricare, carica, naviga e scarica nello stesso turno; si rinuncia solo se nella
+  sosta (senza scaricare) il convoglio verrebbe distrutto (vittoria nemica >= 95%). Gibilterra presa: si porta solo il minimo mancante
+  (regola di D). La flotta italiana va nella zona dove sono finiti i trasporti e resta (Gibilterra presa: zona 92 finche' la vittoria
+  nemica contro la flotta e' <= 40, altrimenti al porto). Combattimento, prima di Hard: trasporti carichi che raggiungono una zona libera
+  accanto al bersaglio nemico sbarcano se la vittoria (calcolatore, solo carico) >= soglia minima di Hard del bersaglio; peso 40 al
+  bersaglio del compito nella priorita' degli attacchi di Hard. Con C o E accesi la spola italiana dell'impegno e' spenta.
+- **Bilancio unico** (ordini `ProPurchaseOrders` calcolati a inizio acquisto sul gioco reale, `LeveItalia.ordini`): difesa urgente di
+  Hard intoccata; obbligati: fanterie di D in capitale, un trasporto se l'Italia ne ha meno di 2 (al porto piu' vicino al compito);
+  mix: navi da guerra (destroyer/cruiser) = PU necessari perche' la flotta + trasporti reggano (<= 40%) nella zona del compito, al
+  massimo 30% della base; Hard non compra altre navi (`ProTuning.buysOwnSeaUnits`, default true; `ProPurchaseAi` salta difesa navale e
+  passo navale); il resto e' l'acquisto di terra di Hard. Con una leva di mare gli ordini P12 sostituiscono quelli dell'impegno anche se
+  vuoti.
+- **Registro**: `p12_bilancio` (P12_BILANCIO: compito, PU inizio/spesi, difesa Roma, trasporti, navi, terra, avanzati, tetto,
+  `mare_entro_tetto`, guarnigione richiesta/mancante, vittoria contro la flotta, quota navi), `p12_turno` (P12_TURNO: roma, mare, est
+  con i numeri), `p12_assalto` (P12_ASSALTO / P12_ASSALTO_NO), `p12_germania` (P12_GERMANIA_ROMA).
+- **Autoplay**: `MonitorP12` (`round[].p12`: italiani di terra per regione italia / nord_africa / balcani_mo / sud_russia (Bessarabia,
+  Ucraina e oltre) / gibilterra / altrove / in mare, trasporti vivi e persi, navi, reddito, Egitto e Gibilterra dell'Asse, i sei del Nord
+  Africa, tedeschi a ovest e in Italia). Blocco `p12` (`ConfrontoP12.blocco`, codice H/F + 4 cifre, a3, h3, h5; cadute, Mosca R12, Roma
+  R16, per round, registro, portate in Africa/Gibilterra entro R8, USA nel Mediterraneo entro R8, dati alleati). Sezione "P12": tabella per
+  configurazione, 16 combinazioni H/F/sommate con classifica, effetto di ogni leva (Fisher, tutte/H/F), regressione logistica (IRLS,
+  Wald) con avversario, leve e 6 coppie, tabelle 2x2, bilancio e misure per combinazione, Italia per round, round di caduta, Alleati con i
+  tre confronti. Oltre 1200 partite `RiepilogoGenerale` non tiene in memoria registro, stratega_llm, p7_eventi, battaglie_top.
+- **CI**: `[prova12]` (H1000, H0100, H0010, H0001, H1111, H0000 x semi 2101-2105, 30 job); `[completa]` P12 in tre blocchi di job
+  (`play`, `play2`, `play3`, 5 partite per job; blocco 1 = 16 combinazioni contro H, 2 = contro F, semi 2101-2160; 3 = H0000 e F0000 su
+  2161-2220 + a3, h3, h5 su 2101-2220), riepilogo parziale (`publish1`, `publish2`) dopo i blocchi 1 e 2, finale dopo il 3.
+- Test: `LeveItaliaTest` (7), `PannelloConsigliatiTest` (+2), `StrategistPanelTest` (+1), `ConfrontoP12Test` (3).
+
+### Scelte di P12 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Le leve muovono, Hard decide il resto**: B, C, D, E sono mosse eseguite prima del non combattimento di Hard (unita' poi trattenute),
+   non pesi: un peso nella difesa di Hard non porta truppe (lezione di P7). Unica eccezione il peso 40 sul bersaglio del compito di mare.
+2. **B senza D non tocca la capitale**: il testo cita Balcani, Nord Italia e unita' appena piazzate; senza D nessuna regola dice quante
+   unita' lasciare a Roma, quindi quelle in Southern Italy restano a Hard. Con D accese le eccedenti al minimo sono libere.
+3. **B verso il fronte meridionale**: prima versione "Asse con tedeschi piu' vicino all'obiettivo" mandava gli italiani in Finlandia /
+   Arcangelo quando l'obiettivo era Leningrado; il testo chiede il fronte russo meridionale. Lista `fronte_sud` nei dati.
+4. **D all'acquisto = fanterie obbligate in capitale** (le mancanti); la difesa d'acquisto di Hard resta (punto 1 del bilancio): non si
+   sostituisce la difesa di Roma di Hard col minimo di D, si aggiunge. Scartato: toccare la soglia di difesa della capitale di Hard.
+5. **Hard non compra navi con C/E accese**: senza, nella prima prova Hard (via gli ordini dell'impegno, "flotta" con il Nord Africa
+   dell'Asse) comprava 16 PU di cacciatorpediniere oltre il tetto. Il tetto "mai piu' del 30% + un trasporto" vale quindi anche per la
+   difesa navale di Hard.
+6. **Tedesco a Gibilterra non implementato**: da Francia del Sud o Italia Gibilterra si raggiunge solo dalla Spagna (neutrale) o per mare
+   con trasporti tedeschi: la regola non ha mosse possibili.
+7. **Sbarco su Egitto/Gibilterra solo con trasporti gia' carichi** accanto al bersaglio (caricati nel non combattimento prima) e solo col
+   carico italiano nel calcolo (niente bombardamento): conservativo, Hard puo' unirsi con aerei e terra grazie al peso.
+8. **"Regge" = vittoria nemica <= 40%** (soglia della scorta di P5/P6), "distrutto" = >= 95%: valori scelti, nei dati.
+
 ## Come configurare lo stratega
 
 Per Matteo e gli amici (stesso testo, piu' corto, nel `LEGGIMI.txt` dello zip):
