@@ -252,7 +252,12 @@ try {
 
   # Verifica 2: lo zip e' valido e contiene il jar.
   try {
-    Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDir -Force
+    # Not Expand-Archive: with a newer Microsoft.PowerShell.Archive module (as on the
+    # windows-latest runners of Nov 2026) Windows PowerShell 5.1 fails with "Cannot find an
+    # overload for ExtractToDirectory and the argument count: 3". The 2-argument .NET call
+    # exists in .NET Framework 4.5+ and in PowerShell 7; $extractDir is new (GUID folder).
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $extractDir)
   } catch {
     Write-Warn "zip non valido o non estraibile ($($_.Exception.Message)). Avvio la build locale."
     exit $EXIT_OK
