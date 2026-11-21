@@ -6774,3 +6774,36 @@ repos/.../releases/assets/<id>` (`gh release download` usa GraphQL, bloccato). N
   con tutto il carico (12-14 unita'); motivi: nessun candidato 71%, nessuno sotto soglia 11-13%, esposti 9-11%, gia' sicuro 5-6%. Vittoria
   Asse DOPO sui candidati: <35 34%, 35-65 3%, 65-85 3%, >=85 59-69%. Bersagli scelti tenuti 82-86%. Nessun effetto sulle vittorie.
 - `ponte_uk` (c3) 74/120 contro 60/120 in P7 (stesso codice): varianza tra run; somma c3 134/240 contro s5 127/240 (p 0,58).
+
+### Step P11 — pannello a due caselle, Alleati consigliati contro l'Asse di Hard (2026-11-21)
+
+Vedi "Pannello a due caselle (step P11)" e "Scelte di P11". File nuovi: test `PannelloConsigliatiTest` (7, game-core); autoplay
+`ConfrontoP11` + `ConfrontoP11Test` (2). Modificati: `ProfiloStratega` (combinazioni consigliate, `normalizza`, marcatore `pannello=p11`),
+`StrategistPanel` (due caselle al posto di 17), `StrategistPanelTest` (+3), `LEGGIMI.txt`, autoplay `ConfrontoCompleta` (sezione P11),
+workflow `[completa]` = h0, h3 semi 1861-2100 + h1, h2 semi 1861-1980 (Asse = Hard; job in ordine di priorita'). Nessuna regola di
+gioco, interruttore, soglia, acquisto o movimento cambiato; `Stratega.registra` invariato.
+- **Fuori perimetro, necessario**: `aggiorna.ps1` estrae lo zip con `[IO.Compression.ZipFile]::ExtractToDirectory(zip, dir)` invece di
+  `Expand-Archive`. Sul runner windows-latest (nov 2026) `Expand-Archive` di PowerShell 5.1 fallisce con "Cannot find an overload for
+  ExtractToDirectory and the argument count: 3" (modulo Archive piu' nuovo): 43 controlli falliti in `powershell-tests` (run 44877135924,
+  partito perche' il commit toccava `proplus/dist/LEGGIMI.txt`) e build saltata. Con la correzione verde (run 44879314053).
+- Test locali (JDK 25 da apt): AI di game-core, `:game-headed:test`, `:proplus-autoplay:test` verdi; unico fallito
+  `ContentDownloaderIntegrationTest` (rete della sandbox). PMD: solo violazioni preesistenti in file non toccati.
+
+#### Autoplay in CI (run 44879314053, commit 3964455, tutto verde al 1° tentativo, 720/720 partite [completa] senza chiave, costo API 0)
+0 errori del calcolatore, 2 stalli al tetto di 60 round (h0, h1). Asse = Hard puro in tutte. Numeri dalla sezione "P11" di
+`riepilogo-generale.md`.
+
+| Config | Partite | Alleati vince | Roma / Berlino / Mosca / Londra cadono (round mediano) | Fine (mediana) | USA sbarcate R6/R8/R10 | Trasporti persi R8 USA/UK |
+|---|---|---|---|---|---|---|
+| h0 Hard | 240 (1 stallo) | 143 60% [53; 66] | 159 R17 / 146 R20 / 108 R10 / 4 | R21 | 3,3 / 17,5 / 35,1 | 0,6 / 2,3 |
+| h3 consigliati | 240 | 160 67% [60; 72] | 194 R17 / 162 R19 / 87 R12 / 3 | R22 | 22,0 / 37,5 / 55,6 | 5,7 / 2,0 |
+| h1 niente_neutrali | 120 (1 stallo) | 65 54% [45; 63] | 77 R18 / 65 R20 / 63 R11 / 1 | R23 | 1,3 / 12,9 / 29,3 | 0,5 / 2,4 |
+| h2 proporzione+sbarco | 120 | 71 59% [50; 68] | 80 R17 / 71 R19 / 53 R12 / 1 | R21 | 23,6 / 38,5 / 60,4 | 6,0 / 1,9 |
+
+- Confronti dichiarati (Fisher, vittorie alleate): **h3-h0 160/240 contro 143/240, p 0,130**; h1-h0 (semi fino a 1980) 65/120 contro
+  73/120, p 0,361; h2-h0 71/120 contro 73/120, p 0,895. Fuori dai dichiarati: h3-h0 sugli stessi 120 semi 76 contro 73, p 0,79.
+- Regola di chiusura dichiarata prima: h3 non e' peggiore di h0 (+17, a favore, dentro il rumore) ⇒ **la configurazione consigliata resta
+  la versione alleata definitiva**. h0 60% dentro il riferimento Hard contro Hard 55-75%.
+- Neutrali: h3 e h1 0 guerre e 0 attacchi alleati a Neutral_True (h0 109/240 partite con guerra, h2 54/120).
+- Contro l'Asse di Hard nessuna leva da sola sposta le vittorie; la combinazione da' +7 punti non significativi. Mosca cade meno con h3
+  (87 contro 108), Roma di piu' (194 contro 159). Gli sbarchi USA anticipati costano trasporti (5,7 contro 0,6 persi entro R8).
