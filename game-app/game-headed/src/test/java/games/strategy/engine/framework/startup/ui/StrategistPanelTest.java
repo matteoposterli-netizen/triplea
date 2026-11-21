@@ -8,10 +8,15 @@ import games.strategy.triplea.ai.proplus.strategia.llm.ClientApi;
 import games.strategy.triplea.ai.proplus.strategia.llm.Fornitore;
 import games.strategy.triplea.ai.proplus.strategia.llm.Http;
 import games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega;
+import java.awt.Component;
+import java.awt.Container;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import javax.swing.JCheckBox;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -113,5 +118,71 @@ class StrategistPanelTest {
     none.setChiave(Fornitore.ANTHROPIC, KEY);
     assertThat(StrategistPanel.detectedText(missing, none, Fornitore.ANTHROPIC))
         .isEqualTo("✗ Claude non trovato – uso la chiave Haiku (••••1234)");
+  }
+
+  // ------------------------------------------------------------------ step P11: two boxes
+
+  @Test
+  void theOnlyStrategyBoxesAreAlleatiConsigliatiAndAsseConsigliatoOffByDefault() {
+    final StrategistPanel p = panel(answering(200, "{}"));
+
+    final List<JCheckBox> boxes = boxes(p.getPanel());
+    assertThat(boxes).containsExactly(p.getAlleatiConsigliati(), p.getAsseConsigliato());
+    assertThat(p.getAlleatiConsigliati().isSelected()).isFalse();
+    assertThat(p.getAsseConsigliato().isSelected()).isFalse();
+  }
+
+  @Test
+  void theBoxesSaveExactlyTheRecommendedSwitches() {
+    final StrategistPanel p = panel(answering(200, "{}"));
+    p.getAlleatiConsigliati().setSelected(true);
+    p.getAsseConsigliato().setSelected(true);
+    p.apply(new GameProperties(null), Optional.empty());
+
+    final ProfiloStratega saved = ProfiloStratega.carica();
+    assertThat(saved.usaProporzione()).isTrue();
+    assertThat(saved.sbarcoConcentrato()).isTrue();
+    assertThat(saved.nienteNeutrali()).isTrue();
+    assertThat(saved.ponteUk()).isFalse();
+    assertThat(saved.impegno()).isFalse();
+    assertThat(saved.assedio()).isTrue();
+    assertThat(saved.italiaConvoglio()).isFalse();
+    assertThat(saved.alleatiConsigliati()).isTrue();
+    assertThat(saved.asseConsigliato()).isTrue();
+  }
+
+  @Test
+  void anOldProfileShowsTheBoxOnOnlyForTheExactCombination() throws IOException {
+    Files.writeString(
+        profile.resolve("stratega.properties"),
+"""
+usa_proporzione=si
+sbarco_concentrato=si
+niente_neutrali=si
+assedio=si
+italia_convoglio=si
+""");
+
+    final StrategistPanel p = panel(answering(200, "{}"));
+    assertThat(p.getAlleatiConsigliati().isSelected()).isTrue();
+    assertThat(p.getAsseConsigliato().isSelected()).isFalse();
+    p.apply(new GameProperties(null), Optional.empty());
+
+    final ProfiloStratega saved = ProfiloStratega.carica();
+    assertThat(saved.alleatiConsigliati()).isTrue();
+    assertThat(saved.assedio()).isFalse();
+    assertThat(saved.italiaConvoglio()).isFalse();
+  }
+
+  private static List<JCheckBox> boxes(final Container c) {
+    final List<JCheckBox> found = new ArrayList<>();
+    for (final Component child : c.getComponents()) {
+      if (child instanceof JCheckBox box) {
+        found.add(box);
+      } else if (child instanceof Container inner) {
+        found.addAll(boxes(inner));
+      }
+    }
+    return found;
   }
 }

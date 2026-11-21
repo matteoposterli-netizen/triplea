@@ -61,49 +61,17 @@ final class StrategistPanel {
   /** Step STRATEGA LLM: cap in USD per game of the "Pro+ Stratega LLM" player (user profile). */
   @Getter private final JSpinner usdCap;
 
-  /** Step R2b: the commitment ("Impegno") of the "Pro+ Stratega LLM" player (user profile). */
-  @Getter private final javax.swing.JCheckBox impegno = new javax.swing.JCheckBox();
+  /**
+   * Step P11: the only strategy box of the Allies, "Alleati consigliati": on = usa_proporzione +
+   * sbarco_concentrato + niente_neutrali, every other switch of the Allies off; off = Hard.
+   */
+  @Getter private final javax.swing.JCheckBox alleatiConsigliati = new javax.swing.JCheckBox();
 
-  /** Step R6b (D): the Axis' siege ("Assedio") with the commitment (user profile). */
-  @Getter private final javax.swing.JCheckBox assedio = new javax.swing.JCheckBox();
-
-  /** Step R6b (D): the Allies' Gibraltar squadron with the commitment (user profile). */
-  @Getter private final javax.swing.JCheckBox squadraGibilterra = new javax.swing.JCheckBox();
-
-  /** Step R6c: Italy's Africa shuttle in convoy (with the siege and the commitment). */
-  @Getter private final javax.swing.JCheckBox italiaConvoglio = new javax.swing.JCheckBox();
-
-  /** Step P1/P2: "Compiti (USA + Regno Unito)", the generic task mechanism (alliance level). */
-  @Getter private final javax.swing.JCheckBox compiti = new javax.swing.JCheckBox();
-
-  /** Step P3: "Regno Unito: Il Cairo e ponte" (with the tasks and the commitment). */
-  @Getter private final javax.swing.JCheckBox regnoUnitoP3 = new javax.swing.JCheckBox();
-
-  /** Step P4: three indications to Hard for the Allies (each on its own). */
-  @Getter private final javax.swing.JCheckBox usaPronti = new javax.swing.JCheckBox();
-
-  @Getter private final javax.swing.JCheckBox norvegiaPresto = new javax.swing.JCheckBox();
-  @Getter private final javax.swing.JCheckBox russiaFronte = new javax.swing.JCheckBox();
-
-  /** Step P5: two levers for the Allies (each on its own). */
-  @Getter private final javax.swing.JCheckBox usaProporzione = new javax.swing.JCheckBox();
-
-  @Getter private final javax.swing.JCheckBox norvegiaScorta = new javax.swing.JCheckBox();
-
-  /** Step P6: two levers for the Allies (each on its own). */
-  @Getter private final javax.swing.JCheckBox sbarcoConcentrato = new javax.swing.JCheckBox();
-
-  @Getter private final javax.swing.JCheckBox norvegiaEsposta = new javax.swing.JCheckBox();
-
-  /** Step P7: three levers for the Allies (each on its own). */
-  @Getter private final javax.swing.JCheckBox nienteNeutrali = new javax.swing.JCheckBox();
-
-  @Getter private final javax.swing.JCheckBox ponteUk = new javax.swing.JCheckBox();
-
-  @Getter private final javax.swing.JCheckBox pontePronti = new javax.swing.JCheckBox();
-
-  /** Step P9+P10: the UK's bridgehead concentrated on one target. */
-  @Getter private final javax.swing.JCheckBox ponteConcentrato = new javax.swing.JCheckBox();
+  /**
+   * Step P11: the only strategy box of the Axis, "Asse consigliato (assedio di Mosca)": on =
+   * impegno + assedio, every other switch of the Axis off; off = Hard.
+   */
+  @Getter private final javax.swing.JCheckBox asseConsigliato = new javax.swing.JCheckBox();
 
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
@@ -180,112 +148,20 @@ final class StrategistPanel {
             "<html>$ per partita del giocatore \"Pro+ Stratega LLM (Europe 1940)\" (Claude Sonnet,"
                 + " chiave Anthropic); raggiunto il tetto gioca come Hard</html>"));
     panel.add(row("Tetto Stratega LLM:", usdRow));
-    impegno.setSelected(profile.impegno());
-    impegno.setText(
-        "<html>campagna via terra che AGISCE (step R2b, sperimentale): un obiettivo per nazione,"
-            + " 70% dei PU, instradamento, attacchi forzati; vale per le partite nuove</html>");
-    panel.add(row("Impegno:", impegno));
-    assedio.setSelected(profile.assedio());
-    assedio.setText(
-        "<html>Asse: assedio di Mosca e Africa italiana (step R4, sperimentale); accende anche"
-            + " Impegno per l'Asse; vale per le partite nuove</html>");
-    panel.add(row("Assedio:", assedio));
-    italiaConvoglio.setSelected(profile.italiaConvoglio());
-    italiaConvoglio.setText(
-        "<html>Asse: spola italiana in Africa in convoglio con la flotta (step R6c,"
-            + " sperimentale); accende anche Assedio e Impegno per l'Asse; vale per le partite"
-            + " nuove</html>");
-    panel.add(row("Italia in convoglio:", italiaConvoglio));
-    squadraGibilterra.setSelected(profile.squadraGibilterra());
-    squadraGibilterra.setText(
-        "<html>Alleati: squadra USA a Gibilterra con trasporti protetti (step R6b, sperimentale);"
-            + " accende anche Impegno per gli Alleati; vale per le partite nuove</html>");
-    panel.add(row("Squadra di Gibilterra:", squadraGibilterra));
-    compiti.setSelected(profile.compiti());
-    compiti.setText(
-        "<html>Alleati: compito degli USA (step P1, sperimentale): base di Gibilterra, direzione"
-            + " Italia o Francia, presa della capitale guidate dagli ostacoli; accende anche Impegno"
-            + " per gli Alleati (Regno Unito e Russia giocano come Hard); vale per le partite"
-            + " nuove</html>");
-    panel.add(row("Compiti (USA + Regno Unito):", compiti));
-    regnoUnitoP3.setSelected(profile.regnoUnitoP3());
-    regnoUnitoP3.setText(
-        "<html>Alleati: il Regno Unito tiene Il Cairo (riserva minima, rinforzi via terra e via"
-            + " mare, ripresa, truppe dalla fabbrica piu' vicina) e da' a Hard un valore piu' alto"
-            + " sulle teste di ponte alleate del round (step P3, sperimentale); accende anche"
-            + " Compiti e Impegno per gli Alleati; vale per le partite nuove</html>");
-    panel.add(row("Regno Unito: Il Cairo e ponte:", regnoUnitoP3));
-    usaPronti.setSelected(profile.usaPronti());
-    usaPronti.setText(
-        "<html>Alleati: da neutrali gli USA pianificano gli acquisti come a guerra iniziata e"
-            + " danno valore alle coste nemiche raggiungibili (step P4, sperimentale); vale per le"
-            + " partite nuove</html>");
-    panel.add(row("USA pronti prima della guerra:", usaPronti));
-    norvegiaPresto.setSelected(profile.norvegiaPresto());
-    norvegiaPresto.setText(
-        "<html>Alleati: nei round 1-4 la Norvegia vale di piu' come bersaglio per il Regno Unito"
-            + " (step P4, sperimentale); vale per le partite nuove</html>");
-    panel.add(row("Norvegia presto:", norvegiaPresto));
-    russiaFronte.setSelected(profile.russiaFronte());
-    russiaFronte.setText(
-        "<html>Alleati: la Russia difende e riprende le fabbriche al fronte, contrattacca con"
-            + " soglie piu' basse se lo scambio conviene e ripara solo il necessario (step P4,"
-            + " sperimentale); vale per le partite nuove</html>");
-    panel.add(row("Fronte russo:", russiaFronte));
-    usaProporzione.setSelected(profile.usaProporzione());
-    usaProporzione.setText(
-        "<html>Alleati: da neutrali (e nel primo turno di guerra) gli USA comprano trasporti per"
-            + " le truppe in patria, la scorta che serve contro la minaccia e carichi completi;"
-            + " nell'ultimo turno neutrale caricano le truppe (step P5, sperimentale); vale per le"
-            + " partite nuove</html>");
-    panel.add(row("USA in proporzione:", usaProporzione));
-    norvegiaScorta.setSelected(profile.norvegiaScorta());
-    norvegiaScorta.setText(
-        "<html>Alleati: lo sbarco britannico in Norvegia con i trasporti esposti si scorta con"
-            + " le navi che arrivano, invece di annullarlo; accende anche Norvegia presto (step"
-            + " P5, sperimentale); vale per le partite nuove</html>");
-    panel.add(row("Norvegia scortata:", norvegiaScorta));
-    sbarcoConcentrato.setSelected(profile.sbarcoConcentrato());
-    sbarcoConcentrato.setText(
-        "<html>Alleati: i trasporti USA carichi sbarcano tutti insieme su un territorio dell'Asse"
-            + " dove vincono (almeno 70%); se nessuno e' vincibile si radunano a bordo per un"
-            + " round al massimo e poi sbarcano dove lo scambio e' migliore (step P6,"
-            + " sperimentale); vale per le partite nuove</html>");
-    panel.add(row("Sbarco USA concentrato:", sbarcoConcentrato));
-    norvegiaEsposta.setSelected(profile.norvegiaEsposta());
-    norvegiaEsposta.setText(
-        "<html>Alleati: in Norvegia il Regno Unito sbarca anche con i trasporti esposti (round"
-            + " 1-8, poi la tiene fino al round 10), con la scorta minima se basta e senza"
-            + " svuotare le acque di casa; accende anche Norvegia presto (step P6, sperimentale);"
+    // step P11: one box per side; an old profile that is not exactly a recommended combination
+    // shows the box off, with its switches turned off (saved with the other settings)
+    profile.normalizza();
+    alleatiConsigliati.setSelected(profile.alleatiConsigliati());
+    alleatiConsigliati.setText(
+        "<html>USA in proporzione nei round di neutralita', sbarco USA concentrato, niente guerre"
+            + " ai neutrali (gli altri interruttori alleati spenti); spenta = Alleati come Hard;"
             + " vale per le partite nuove</html>");
-    panel.add(row("Norvegia anche esposta:", norvegiaEsposta));
-    nienteNeutrali.setSelected(profile.nienteNeutrali());
-    nienteNeutrali.setText(
-        "<html>Alleati: USA, Regno Unito, Francia e Russia non dichiarano mai guerra ai neutrali"
-            + " veri e non attaccano i loro territori (restano attaccabili gli ex neutrali presi"
-            + " dall'Asse) (step P7, sperimentale); vale per le partite nuove</html>");
-    panel.add(row("Niente neutrali:", nienteNeutrali));
-    ponteUk.setSelected(profile.ponteUk());
-    ponteUk.setText(
-        "<html>Alleati: quando gli USA sbarcano almeno 6 unita' in un territorio, nello stesso"
-            + " round il Regno Unito ci porta le truppe che i suoi trasporti raggiungono (se il"
-            + " territorio e' ancora dell'Asse lo preferisce come bersaglio), senza svuotare la"
-            + " difesa di casa (step P7, sperimentale); vale per le partite nuove</html>");
-    panel.add(row("Ponte del Regno Unito:", ponteUk));
-    pontePronti.setSelected(profile.pontePronti());
-    pontePronti.setText(
-        "<html>Alleati: con gli USA in guerra il Regno Unito spende almeno il 40% dei PU rimasti"
-            + " dopo la difesa in truppe di terra in patria, finche' i suoi trasporti accanto"
-            + " bastano a portarle (step P7, sperimentale); vale per le partite nuove</html>");
-    panel.add(row("Truppe britanniche pronte:", pontePronti));
-    ponteConcentrato.setSelected(profile.ponteConcentrato());
-    ponteConcentrato.setText(
-        "<html>Alleati: tra le teste di ponte USA del round (almeno 6 unita') il Regno Unito ne"
-            + " sceglie una sola, quella che il suo carico rende sicura contro il contrattacco"
-            + " dell'Asse (vittoria stimata sotto il 65%), e ci porta tutte le truppe che i suoi"
-            + " trasporti raggiungono; se nessuna diventa sicura non fa nulla. Sostituisce Ponte"
-            + " del Regno Unito (step P9, sperimentale); vale per le partite nuove</html>");
-    panel.add(row("Ponte concentrato:", ponteConcentrato));
+    panel.add(row("Alleati consigliati:", alleatiConsigliati));
+    asseConsigliato.setSelected(profile.asseConsigliato());
+    asseConsigliato.setText(
+        "<html>Impegno e assedio di Mosca (gli altri interruttori dell'Asse spenti); spenta ="
+            + " Asse come Hard; vale per le partite nuove</html>");
+    panel.add(row("Asse consigliato (assedio di Mosca):", asseConsigliato));
     panel.add(
         row(
             "",
@@ -305,23 +181,8 @@ final class StrategistPanel {
     profile.setFornitore(selected());
     llmMode.ifPresent(profile::setModalitaPredefinita);
     profile.setTettoPartitaUsd(((Number) usdCap.getValue()).doubleValue());
-    profile.setImpegno(impegno.isSelected());
-    profile.setAssedio(assedio.isSelected());
-    profile.setSquadraGibilterra(squadraGibilterra.isSelected());
-    profile.setItaliaConvoglio(italiaConvoglio.isSelected());
-    profile.setCompiti(compiti.isSelected());
-    profile.setRegnoUnitoP3(regnoUnitoP3.isSelected());
-    profile.setUsaPronti(usaPronti.isSelected());
-    profile.setNorvegiaPresto(norvegiaPresto.isSelected());
-    profile.setRussiaFronte(russiaFronte.isSelected());
-    profile.setUsaProporzione(usaProporzione.isSelected());
-    profile.setNorvegiaScorta(norvegiaScorta.isSelected());
-    profile.setSbarcoConcentrato(sbarcoConcentrato.isSelected());
-    profile.setNorvegiaEsposta(norvegiaEsposta.isSelected());
-    profile.setNienteNeutrali(nienteNeutrali.isSelected());
-    profile.setPonteUk(ponteUk.isSelected());
-    profile.setPontePronti(pontePronti.isSelected());
-    profile.setPonteConcentrato(ponteConcentrato.isSelected());
+    profile.setAlleatiConsigliati(alleatiConsigliati.isSelected());
+    profile.setAsseConsigliato(asseConsigliato.isSelected());
     try {
       profile.salva();
     } catch (final IOException e) {

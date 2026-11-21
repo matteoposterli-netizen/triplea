@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P11: the Allies' recommended combination against the Axis of Hard
+    if (ConfrontoP11.applicabile(games)) {
+      try {
+        ConfrontoP11.write(md, games);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P11 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step P9+P10: the concentrated bridge, the bridgeheads (every configuration)
     if (ConfrontoP9.applicabile(games)) {
       try {

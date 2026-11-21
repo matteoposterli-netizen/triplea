@@ -3528,6 +3528,33 @@ rinforzo di P7 e niente peso d'attacco). Spento = decisioni identiche a 187040c 
    testa di ponte puo' essere stata svuotata dagli USA stessi (visto nella prova locale: Spain 20 difensori a fine turno UK, 2 al
    contrattacco italiano del round dopo).
 
+### Pannello a due caselle (step P11)
+
+Il pannello "Stratega (LLM)" ha **due sole caselle di strategia** (default spente; valgono per le nazioni "Pro+ Stratega LLM (Europe
+1940)" e per le partite nuove):
+- **"Alleati consigliati"** = `usa_proporzione` + `sbarco_concentrato` + `niente_neutrali` accesi, tutti gli altri interruttori
+  alleati spenti (`impegno` compreso: nel profilo accendeva l'impegno di entrambe le alleanze). Spenta = Alleati Hard.
+- **"Asse consigliato (assedio di Mosca)"** = `assedio` nel profilo (che accende `impegno` + `assedio` per l'Asse), `italia_convoglio`
+  spento. Spenta = Asse Hard.
+- Le caselle singole (Impegno, Assedio, Italia in convoglio, Squadra di Gibilterra, Compiti, Regno Unito P3, USA pronti, Norvegia *,
+  Fronte russo, USA in proporzione, Sbarco concentrato, Niente neutrali, Ponte UK, Truppe pronte, Ponte concentrato) sono sparite dal
+  pannello; gli interruttori restano in `StrategaInterruttori`, nel profilo (`ProfiloStratega.setX`) e nell'autoplay
+  (`--stratega-acceso`) come prima. `Stratega.registra` invariato.
+- `ProfiloStratega`: `alleatiConsigliati()`/`setAlleatiConsigliati`, `asseConsigliato()`/`setAsseConsigliato`, `normalizza()`.
+  `salva()` scrive `pannello=p11`; un file **senza** questa chiave (profilo vecchio, una casella per interruttore) viene normalizzato al
+  caricamento (`carica()`, quindi anche nel gioco senza aprire il pannello): ogni parte resta accesa solo se e' esattamente la sua
+  combinazione consigliata, altrimenti i suoi interruttori vanno a spento. Profili salvati da P11 in poi (test, autoplay) non vengono
+  toccati. Test: `PannelloConsigliatiTest` (game-core, 7), `StrategistPanelTest` (+3).
+
+### Scelte di P11 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Migrazione con marcatore nel file** invece di normalizzare in `Stratega.registra`: i test di P1-P10 accendono interruttori singoli
+   nel profilo e si aspettano che `registra` li applichi ("restano utilizzabili dai test come oggi"). Senza migrazione al caricamento un
+   profilo vecchio con, per esempio, `compiti` avrebbe continuato a giocarlo con la casella mostrata spenta.
+2. **`impegno` del profilo conta come interruttore alleato**: accende l'impegno anche degli Alleati; un profilo vecchio impegno + assedio
+   diventa "Asse consigliato" acceso e Alleati spenti (Hard).
+3. **Asse consigliato = `assedio` senza `italia_convoglio`**: `assedio` nel profilo accende gia' `impegno` per l'Asse.
+
 ## Come configurare lo stratega
 
 Per Matteo e gli amici (stesso testo, piu' corto, nel `LEGGIMI.txt` dello zip):

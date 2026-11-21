@@ -158,7 +158,12 @@ Sezione "Stratega (LLM)" dello stesso pannello:
     dice subito se funziona; "Rimuovi" la cancella. Della chiave si vedono
     solo le ultime 4 cifre;
   - Tetto chiamate per partita (predefinito 100: una partita da 12 round con
-    un'alleanza affidata all'LLM ne usa 36-48, con tutte e due circa 85).
+    un'alleanza affidata all'LLM ne usa 36-48, con tutte e due circa 85);
+  - due sole caselle di strategia (spente = gioca come Hard), valgono per le
+    nazioni "Pro+ Stratega LLM (Europe 1940)" e per le partite nuove:
+    "Alleati consigliati" = USA in proporzione, sbarco USA concentrato,
+    niente guerre ai neutrali; "Asse consigliato (assedio di Mosca)" =
+    impegno + assedio di Mosca.
 MODO PIU' SEMPLICE: metti un file chiave-stratega.txt accanto ad avvia.bat
 con dentro solo la chiave; alla prima apertura del pannello viene importata
 e ti viene proposto di cancellare il file (rispondi Si').

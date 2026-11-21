@@ -47,6 +47,9 @@ public final class ProfiloStratega {
       } catch (final IOException e) {
         // unreadable profile = no saved settings
       }
+      if (!values.containsKey(KEY_VERSIONE_PANNELLO)) {
+        normalizza();
+      }
     }
   }
 
@@ -296,6 +299,86 @@ public final class ProfiloStratega {
     values.setProperty(KEY_SQUADRA, on ? "si" : "no");
   }
 
+  /**
+   * Step P11: marker written by {@link #salva()}. A profile file without it was saved by the panel
+   * with one box per switch; on loading, each side that is not exactly its recommended combination
+   * is turned off ({@link #normalizza()}).
+   */
+  static final String KEY_VERSIONE_PANNELLO = "pannello";
+
+  static final String VERSIONE_PANNELLO = "p11";
+
+  /**
+   * Step P11: "Alleati consigliati" = exactly {@code usa_proporzione}, {@code sbarco_concentrato}
+   * and {@code niente_neutrali} on, every other switch of the Allies off ({@code impegno} counts as
+   * an Allies switch: it turns on the commitment of both alliances).
+   */
+  public boolean alleatiConsigliati() {
+    return usaProporzione()
+        && sbarcoConcentrato()
+        && nienteNeutrali()
+        && !impegno()
+        && !squadraGibilterra()
+        && !compiti()
+        && !regnoUnitoP3()
+        && !usaPronti()
+        && !norvegiaPresto()
+        && !russiaFronte()
+        && !norvegiaScorta()
+        && !norvegiaEsposta()
+        && !ponteUk()
+        && !pontePronti()
+        && !ponteConcentrato();
+  }
+
+  /**
+   * Step P11: on = the recommended combination of the Allies, off = every switch of the Allies off
+   * (Hard).
+   */
+  public void setAlleatiConsigliati(final boolean on) {
+    setUsaProporzione(on);
+    setSbarcoConcentrato(on);
+    setNienteNeutrali(on);
+    setImpegno(false);
+    setSquadraGibilterra(false);
+    setCompiti(false);
+    setRegnoUnitoP3(false);
+    setUsaPronti(false);
+    setNorvegiaPresto(false);
+    setRussiaFronte(false);
+    setNorvegiaScorta(false);
+    setNorvegiaEsposta(false);
+    setPonteUk(false);
+    setPontePronti(false);
+    setPonteConcentrato(false);
+  }
+
+  /**
+   * Step P11: "Asse consigliato (assedio di Mosca)" = {@code assedio} on (which turns on {@code
+   * impegno} and {@code assedio} for the Axis) and {@code italia_convoglio} off.
+   */
+  public boolean asseConsigliato() {
+    return assedio() && !italiaConvoglio();
+  }
+
+  /** Step P11: on = impegno + assedio for the Axis, off = every switch of the Axis off (Hard). */
+  public void setAsseConsigliato(final boolean on) {
+    setAssedio(on);
+    setItaliaConvoglio(false);
+    setImpegno(false);
+  }
+
+  /**
+   * Step P11: keeps a side on only if it is exactly its recommended combination, else turns all its
+   * switches off.
+   */
+  public void normalizza() {
+    final boolean allies = alleatiConsigliati();
+    final boolean axis = asseConsigliato();
+    setAlleatiConsigliati(allies);
+    setAsseConsigliato(axis);
+  }
+
   private boolean si(final String key) {
     final String v = values.getProperty(key, "").strip();
     return "si".equalsIgnoreCase(v) || "true".equalsIgnoreCase(v);
@@ -333,6 +416,7 @@ public final class ProfiloStratega {
       Files.createFile(
           file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
     }
+    values.setProperty(KEY_VERSIONE_PANNELLO, VERSIONE_PANNELLO);
     try (Writer out = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
       values.store(
           out, "Stratega Pro+: impostazioni e chiavi API di questo utente. Non condividere.");

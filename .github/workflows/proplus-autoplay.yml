@@ -57,7 +57,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P9+P10: 7 configurazioni (e2, n1, s2, s5, c3, d1, d2) x 120 semi 1741-1860 fino alla vittoria, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625) | prova9 (step P9+P10: d1 x semi 1741-1745) | ripubblica (nessuna partita: confronto e zip delle partite della run 44643856735)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P11: Asse Hard contro h0 Hard, h3 consigliati (semi 1861-2100), h1 niente_neutrali, h2 proporzione + sbarco (semi 1861-1980) = 720 partite fino alla vittoria, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625) | prova9 (step P9+P10: d1 x semi 1741-1745) | ripubblica (nessuna partita: confronto e zip delle partite della run 44643856735)"
         default: "normale"
 permissions:
   contents: write
@@ -221,17 +221,40 @@ jobs:
               completa = [
                   (n, key, asse + " / " + (label if hard else "Alleati Stratega con " + label),
                    "Axis=stratega,Allies=" + ("hard" if hard else "stratega"),
-                   ax if hard else ax + ",Allies=" + allies, "")
+                   ax if hard else ax + ",Allies=" + allies, "", seeds)
                   for (n, key, label, allies, hard) in p7]
+              if os.environ["MODALITA"] == "completa":
+                  # step P11: the Axis of Hard (no switch) against the Allies' recommended
+                  # combination and its parts; h0 and h3 on seeds 1861-2100 (240), h1 and h2 on
+                  # 1861-1980 (120) = 720 games. Order of the jobs by priority (if time runs out):
+                  # h0 and h3 on 1861-1980, then h1 and h2, then h0 and h3 on 1981-2100
+                  p11 = [
+                      ("h0", "Hard-vs-Hard", "Alleati Hard", "", range(1861, 2101)),
+                      ("h3", "Hard-vs-Alleati-consigliati", "usa_proporzione + sbarco_concentrato + niente_neutrali", base + "+niente_neutrali", range(1861, 2101)),
+                      ("h1", "Hard-vs-Alleati-niente-neutrali", "niente_neutrali", "niente_neutrali", range(1861, 1981)),
+                      ("h2", "Hard-vs-Alleati-base", "usa_proporzione + sbarco_concentrato", base, range(1861, 1981)),
+                  ]
+                  completa = [
+                      (n, key, "Asse Hard / " + (label if not allies else "Alleati Stratega con " + label),
+                       "Axis=hard,Allies=" + ("stratega" if allies else "hard"),
+                       "Allies=" + allies if allies else "", "", ss)
+                      for (n, key, label, allies, ss) in p11]
               include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
                           "tipo": tipo, "piano": "", "seme": seed, "decisore": "",
                           "ablazione": "", "operazione": "", "opllm": "", "stratega": "",
                           "budget": "", "tetto": "70" if "stratega" in tipo else "",
                           "spento": "", "regole": "", "acceso": acceso, "completa": "si",
                           "quota": quota}
-                         for (n, key, name, tipo, acceso, quota) in completa
-                         for seed in seeds]
-              include.sort(key=lambda g: (g["seme"], g["id"]))
+                         for (n, key, name, tipo, acceso, quota, ss) in completa
+                         for seed in ss]
+              def priorita(g):
+                  code = g["id"].split("-")[0]
+                  if code in ("h1", "h2"):
+                      return 1
+                  if code in ("h0", "h3") and g["seme"] > 1980:
+                      return 2
+                  return 0
+              include.sort(key=lambda g: (priorita(g), g["seme"], g["id"]))
               print("matrix=" + json.dumps({"include": include}))
               print("round=60")
               raise SystemExit(0)
@@ -741,7 +764,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.load(open('autoplay-kit/partite.json'))['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P9+P10 (semi 1741-1860)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P11 (Asse Hard, semi 1861-2100)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           # the step summary takes at most 1 MiB: the full text is in the zip
           head -c 900000 autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
