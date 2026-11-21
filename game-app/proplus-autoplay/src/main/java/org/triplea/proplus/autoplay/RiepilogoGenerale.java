@@ -60,6 +60,9 @@ final class RiepilogoGenerale {
         if (many) {
           dropShadowData(o);
         }
+        if (games.size() > VERY_MANY_GAMES) {
+          dropHeavyData(o);
+        }
         list.add(new Game(g.getFileName().toString(), o));
       } else {
         list.add(new Game(g.getFileName().toString(), null));
@@ -86,6 +89,26 @@ final class RiepilogoGenerale {
           e.getValue().getAsJsonObject().remove("ombra");
         }
       }
+    }
+  }
+
+  /**
+   * Step P12: over this many games (2,400 complete games in one run) the heavy parts already summed
+   * up in the blocks of each summary are not kept in memory either: the strategist's record, the
+   * register, the P7 events, the tuning check and the top battles.
+   */
+  static final int VERY_MANY_GAMES = 1200;
+
+  static void dropHeavyData(final JsonObject json) {
+    for (final String k :
+        List.of(
+            "stratega_llm",
+            "impegno_decisioni",
+            "ombra_dettagli",
+            "p7_eventi",
+            "controllo_nudo",
+            "battaglie_top")) {
+      json.remove(k);
     }
   }
 

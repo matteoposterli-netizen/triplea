@@ -139,6 +139,8 @@ public class ProPlusAi extends ProAi {
     // step P5: the two levers (switches off: nothing)
     if (!purchaseForBid) {
       startLevers(data, player);
+      // step P12: Italy's balance (switches off: nothing)
+      startItaly(data, player);
     }
     // step P4: the three indications (switches off: nothing, Hard's own purchase)
     final java.util.Optional<GuerraVicina.Vista> view =
@@ -179,6 +181,12 @@ public class ProPlusAi extends ProAi {
     if (!purchaseForBid) {
       IndicazioniP7.registraPronti(data, player);
     }
+    // step P12: the balance's row, on the real game
+    if (!purchaseForBid
+        && LeveItalia.alcuna(data, player)
+        && ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning p12tuning) {
+      LeveItalia.registraAcquisto(data, player, p12tuning.p12());
+    }
     if (!purchaseForBid && Stratega.gioca(data, player)) {
       try {
         Difesa.registraBudget(data, player);
@@ -208,6 +216,7 @@ public class ProPlusAi extends ProAi {
       playCoordinatedLanding(moveDel, data, player);
       playTask(false, moveDel, data, player);
       playConcentratedLanding(moveDel, data, player);
+      playItalyLanding(moveDel, data, player);
     }
     if (nonCombat) {
       playLevers(moveDel, data, player);
@@ -401,6 +410,61 @@ public class ProPlusAi extends ProAi {
   }
 
   /**
+   * Step P12, at the start of Italy's purchase: the capital's shortfall, the sea task and the
+   * orders of the balance. Nothing with the switches off.
+   */
+  private void startItaly(final GameData data, final GamePlayer player) {
+    if (!LeveItalia.alcuna(data, player)
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      attendiCalcolatore(data, player);
+      initializeData();
+      LeveItalia.inizioAcquisto(getProData(), getCalc(), tuning.p12());
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P12 start failed: " + e);
+      tuning.p12().pulisci();
+    }
+  }
+
+  /**
+   * Step P12 (C, E): the loaded Italian transports next to the sea task's land land there before
+   * Hard's combat move; Hard then plans again without them. Nothing with the switches off.
+   */
+  private void playItalyLanding(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (!LeveItalia.mare(data, player)
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      attendiCalcolatore(data, player);
+      initializeData();
+      final java.util.Set<games.strategy.engine.data.Unit> moved =
+          LeveItalia.combattimento(getProData(), getCalc(), moveDel);
+      if (moved.isEmpty()) {
+        return;
+      }
+      initializeData();
+      final java.util.Set<games.strategy.engine.data.Unit> keep =
+          new java.util.LinkedHashSet<>(tuning.combatHeldUnits(getProData()));
+      keep.removeIf(u -> !u.isOwnedBy(player) || !data.getUnits().getUnits().contains(u));
+      keep.addAll(moved);
+      tuning.holdCombat(data, player, keep);
+      if (hasStoredCombatMove()) {
+        forgetStoredCombatMove();
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P12 landing failed: " + e);
+    }
+  }
+
+  /**
    * Step P5, at the start of the purchase: B's losses of last turn's escort and a new turn; A's
    * plan of the three steps (orders for Hard's purchase). Nothing with the switches off.
    */
@@ -496,6 +560,20 @@ public class ProPlusAi extends ProAi {
       } catch (final RuntimeException e) {
         ProLogger.warn(LOG_PREFIX + "P9 bridgehead failed: " + e);
       }
+    }
+    // step P12: Italy's capital, sea task and east; the German units in Italy for its capital
+    if (LeveItalia.alcuna(data, player)) {
+      try {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        held.addAll(LeveItalia.nonCombattimento(getProData(), getCalc(), moveDel));
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P12 non-combat failed: " + e);
+      }
+    } else if (LeveItalia.tedeschiPerRoma(data, player)) {
+      held.addAll(LeveItalia.tedeschi(data, player, moveDel));
     }
     if (!held.isEmpty()) {
       tuning.holdForOperation(data, player, held);

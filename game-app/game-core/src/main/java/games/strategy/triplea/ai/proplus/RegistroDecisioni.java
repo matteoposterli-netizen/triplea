@@ -102,11 +102,22 @@ public final class RegistroDecisioni {
           "ponte_uk",
           "ponte_pronti",
           // step P9+P10
-          "ponte_concentrato");
+          "ponte_concentrato",
+          // step P12
+          "p12_bilancio",
+          "p12_turno",
+          "p12_assalto",
+          "p12_germania");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P12
+          "P12_BILANCIO",
+          "P12_TURNO",
+          "P12_ASSALTO",
+          "P12_ASSALTO_NO",
+          "P12_GERMANIA_ROMA",
           // step P9+P10
           "PONTE_CONC_RINFORZO",
           "PONTE_CONC_NESSUN_CANDIDATO",

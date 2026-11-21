@@ -134,6 +134,13 @@ public final class ProPlusTuning implements ProTuning {
     return p6a;
   }
 
+  /** Step P12: Italy's turn (capital, sea task, balance). */
+  private final LeveItalia.Stato p12 = new LeveItalia.Stato();
+
+  public LeveItalia.Stato p12() {
+    return p12;
+  }
+
   /**
    * Step PROVA DI VALORE: set when the last answer came from a joint operation ({@link
    * OperazioniCongiunte}), read and cleared by the check against Hard ({@link ControlloTuning}).
@@ -348,7 +355,10 @@ public final class ProPlusTuning implements ProTuning {
             Math.max(
                 IndicazioniP6.pesoAttacco(proData, target),
                 // step P7 (B): the ally's bridgehead of the round, still the enemy's
-                IndicazioniP7.pesoAttacco(proData, target, p7b)));
+                Math.max(
+                    IndicazioniP7.pesoAttacco(proData, target, p7b),
+                    // step P12 (C, E): Italy's sea task land, still the enemy's
+                    LeveItalia.pesoAttacco(proData, target))));
     return p4Bonus > base ? p4Bonus : base;
   }
 
@@ -376,6 +386,13 @@ public final class ProPlusTuning implements ProTuning {
    */
   @Override
   public Optional<ProPurchaseOrders> purchaseOrders(final ProData proData) {
+    // step P12: Italy's balance (sea task, capital's minimum; with only the capital's lever its
+    // units are added to the commitment's orders)
+    final Optional<ProPurchaseOrders> italy =
+        LeveItalia.ordini(proData, p12, () -> Impegno.ordini(proData));
+    if (italy.isPresent()) {
+      return italy;
+    }
     // step P5 (A): the landing force in proportion (switch "usa_proporzione")
     final Optional<ProPurchaseOrders> force = ForzaSbarco.ordini(proData, p5a);
     if (force.isPresent()) {
@@ -421,6 +438,7 @@ public final class ProPlusTuning implements ProTuning {
       final ProPurchaseOrders orders,
       final ProPurchaseOrders.Result result) {
     ForzaSbarco.acquistato(orders, result, p5a);
+    LeveItalia.acquistato(orders, result, p12);
     Impegno.acquistato(proData, orders, result);
   }
 
@@ -665,6 +683,10 @@ public final class ProPlusTuning implements ProTuning {
     // capital and the factories at risk are defended without a limit)
     if (Impegno.ordini(proData).isPresent() || Compiti.ordini(proData).isPresent()) {
       return operationAnswer(java.util.OptionalDouble.empty());
+    }
+    // step P12: Italy's orders spend every PU left after Hard's defense
+    if (LeveItalia.ordini(proData, p12, Optional::empty).isPresent()) {
+      return java.util.OptionalDouble.empty();
     }
     // step P5 (A): with the landing force's orders the share of the orders reserves the PUs too
     if (ForzaSbarco.ordini(proData, p5a).isPresent()) {
@@ -970,6 +992,12 @@ public final class ProPlusTuning implements ProTuning {
       return ProTuning.super.garrisonNeeded(proData, territory, landingEnemies);
     }
     return !landingEnemies.isEmpty();
+  }
+
+  /** Step P12: no ship of Hard's own for Italy while a sea lever is on (the balance's cap). */
+  @Override
+  public boolean buysOwnSeaUnits(final ProData proData) {
+    return proData.getPlayer() == null || LeveItalia.compraNaviHard(proData);
   }
 
   @Override

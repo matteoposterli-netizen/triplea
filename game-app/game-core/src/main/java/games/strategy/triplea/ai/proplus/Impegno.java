@@ -1893,7 +1893,8 @@ public final class Impegno {
                 programmi(),
                 delegate,
                 ns.has("presidio_porto") ? ns.get("presidio_porto").getAsInt() : 0));
-      } else if (Assedio.italia(data, player)) {
+      } else if (Assedio.italia(data, player) && !LeveItalia.mare(data, player)) {
+        // step P12: with a sea lever on, Italy's transports serve the sea task (LeveItalia)
         held.addAll(
             programmi()
                 .spola(

@@ -47,7 +47,8 @@ public final class ProfiloStratega {
       } catch (final IOException e) {
         // unreadable profile = no saved settings
       }
-      if (!values.containsKey(KEY_VERSIONE_PANNELLO)) {
+      // step P12: a profile saved before this panel (no marker, or the P11 marker) is normalized
+      if (!VERSIONE_PANNELLO.equals(values.getProperty(KEY_VERSIONE_PANNELLO, "").strip())) {
         normalizza();
       }
     }
@@ -306,51 +307,53 @@ public final class ProfiloStratega {
    */
   static final String KEY_VERSIONE_PANNELLO = "pannello";
 
-  static final String VERSIONE_PANNELLO = "p11";
+  static final String VERSIONE_PANNELLO = "p12";
 
   /**
-   * Step P11: "Alleati consigliati" = exactly {@code usa_proporzione}, {@code sbarco_concentrato}
-   * and {@code niente_neutrali} on, every other switch of the Allies off ({@code impegno} counts as
-   * an Allies switch: it turns on the commitment of both alliances).
+   * Step P12: "Alleati consigliati" ("Alleati finali") = exactly {@code usa_proporzione}, {@code
+   * sbarco_concentrato}, {@code niente_neutrali}, {@code norvegia_presto}, {@code norvegia_esposta}
+   * and {@code ponte_concentrato} on, every other switch of the Allies off ({@code impegno} counts
+   * as an Allies switch: it turns on the commitment of both alliances). The core of step P11 (the
+   * first three on, the other three off) also counts as on: {@link #normalizza()} turns it into the
+   * six.
    */
   public boolean alleatiConsigliati() {
-    return usaProporzione()
-        && sbarcoConcentrato()
-        && nienteNeutrali()
-        && !impegno()
-        && !squadraGibilterra()
-        && !compiti()
-        && !regnoUnitoP3()
-        && !usaPronti()
-        && !norvegiaPresto()
-        && !russiaFronte()
-        && !norvegiaScorta()
-        && !norvegiaEsposta()
-        && !ponteUk()
-        && !pontePronti()
-        && !ponteConcentrato();
+    final boolean core = usaProporzione() && sbarcoConcentrato() && nienteNeutrali();
+    final boolean others =
+        !impegno()
+            && !squadraGibilterra()
+            && !compiti()
+            && !regnoUnitoP3()
+            && !usaPronti()
+            && !russiaFronte()
+            && !norvegiaScorta()
+            && !ponteUk()
+            && !pontePronti();
+    final boolean six = norvegiaPresto() && norvegiaEsposta() && ponteConcentrato();
+    final boolean none = !norvegiaPresto() && !norvegiaEsposta() && !ponteConcentrato();
+    return core && others && (six || none);
   }
 
   /**
-   * Step P11: on = the recommended combination of the Allies, off = every switch of the Allies off
+   * Step P12: on = the six switches of "Alleati finali", off = every switch of the Allies off
    * (Hard).
    */
   public void setAlleatiConsigliati(final boolean on) {
     setUsaProporzione(on);
     setSbarcoConcentrato(on);
     setNienteNeutrali(on);
+    setNorvegiaPresto(on);
+    setNorvegiaEsposta(on);
+    setPonteConcentrato(on);
     setImpegno(false);
     setSquadraGibilterra(false);
     setCompiti(false);
     setRegnoUnitoP3(false);
     setUsaPronti(false);
-    setNorvegiaPresto(false);
     setRussiaFronte(false);
     setNorvegiaScorta(false);
-    setNorvegiaEsposta(false);
     setPonteUk(false);
     setPontePronti(false);
-    setPonteConcentrato(false);
   }
 
   /**

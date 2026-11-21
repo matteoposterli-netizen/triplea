@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P12: Italy's four levers in all combinations, against H and F
+    if (ConfrontoP12.applicabile(games)) {
+      try {
+        ConfrontoP12.write(md, games);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P12 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step P11: the Allies' recommended combination against the Axis of Hard
     if (ConfrontoP11.applicabile(games)) {
       try {

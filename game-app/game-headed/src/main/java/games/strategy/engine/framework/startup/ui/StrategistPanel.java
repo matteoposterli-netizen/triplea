@@ -62,8 +62,10 @@ final class StrategistPanel {
   @Getter private final JSpinner usdCap;
 
   /**
-   * Step P11: the only strategy box of the Allies, "Alleati consigliati": on = usa_proporzione +
-   * sbarco_concentrato + niente_neutrali, every other switch of the Allies off; off = Hard.
+   * Step P11: the only strategy box of the Allies, "Alleati consigliati": on (step P12) = the six
+   * switches of "Alleati finali" (usa_proporzione + sbarco_concentrato + niente_neutrali +
+   * norvegia_presto + norvegia_esposta + ponte_concentrato), every other switch of the Allies off;
+   * off = Hard.
    */
   @Getter private final javax.swing.JCheckBox alleatiConsigliati = new javax.swing.JCheckBox();
 
@@ -154,7 +156,8 @@ final class StrategistPanel {
     alleatiConsigliati.setSelected(profile.alleatiConsigliati());
     alleatiConsigliati.setText(
         "<html>USA in proporzione nei round di neutralita', sbarco USA concentrato, niente guerre"
-            + " ai neutrali (gli altri interruttori alleati spenti); spenta = Alleati come Hard;"
+            + " ai neutrali, Norvegia presto e anche con i trasporti esposti, ponte britannico"
+            + " concentrato (gli altri interruttori alleati spenti); spenta = Alleati come Hard;"
             + " vale per le partite nuove</html>");
     panel.add(row("Alleati consigliati:", alleatiConsigliati));
     asseConsigliato.setSelected(profile.asseConsigliato());

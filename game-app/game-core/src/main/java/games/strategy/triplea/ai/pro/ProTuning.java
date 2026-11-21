@@ -267,6 +267,14 @@ public interface ProTuning {
   }
 
   /**
+   * Pro+ step P12: whether the Pro purchase buys sea units of its own (sea defense and the sea
+   * step) after the plan's orders. True by default: Hard and Hard Beta as always.
+   */
+  default boolean buysOwnSeaUnits(final ProData proData) {
+    return true;
+  }
+
+  /**
    * Enemy win% above which the non-combat move keeps units in, or brings units back to, each own
    * capital ({@link ProCapitalGuard}), and above which a factory or capital may take more than the
    * defense share a plan leaves ({@link ProPurchaseOrders#minimumShare}). Empty by default: Hard

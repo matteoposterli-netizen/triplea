@@ -37,7 +37,7 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
   }
 
   @Test
-  void alleatiConsigliatiTurnsOnExactlyTheThreeSwitchesOfTheAllies() throws IOException {
+  void alleatiConsigliatiTurnsOnExactlyTheSixSwitchesOfTheAllies() throws IOException {
     final ProfiloStratega p = ProfiloStratega.carica();
     p.setAlleatiConsigliati(true);
     p.salva();
@@ -45,7 +45,13 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
     final GameData data = registered();
 
     assertThat(Set.copyOf(StrategaInterruttori.accesi(data.getProperties(), "Allies")))
-        .containsExactlyInAnyOrder("usa_proporzione", "sbarco_concentrato", "niente_neutrali");
+        .containsExactlyInAnyOrder(
+            "usa_proporzione",
+            "sbarco_concentrato",
+            "niente_neutrali",
+            "norvegia_presto",
+            "norvegia_esposta",
+            "ponte_concentrato");
     assertThat(StrategaInterruttori.accesi(data.getProperties(), "Axis")).isEmpty();
   }
 
@@ -93,7 +99,13 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
     assertThat(p.asseConsigliato()).isTrue();
     final GameData data = registered();
     assertThat(Set.copyOf(StrategaInterruttori.accesi(data.getProperties(), "Allies")))
-        .containsExactlyInAnyOrder("usa_proporzione", "sbarco_concentrato", "niente_neutrali");
+        .containsExactlyInAnyOrder(
+            "usa_proporzione",
+            "sbarco_concentrato",
+            "niente_neutrali",
+            "norvegia_presto",
+            "norvegia_esposta",
+            "ponte_concentrato");
     assertThat(Set.copyOf(StrategaInterruttori.accesi(data.getProperties(), "Axis")))
         .containsExactlyInAnyOrder("impegno", "assedio");
   }
@@ -155,6 +167,50 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
     p.salva();
 
     assertThat(ProfiloStratega.carica().ponteUk()).isTrue();
+  }
+
+  @Test
+  void aP11ProfileWithTheCoreOfThreeLoadsAsTheBoxOnWithTheSixSwitches() throws IOException {
+    oldProfile(
+        """
+        pannello=p11
+        usa_proporzione=si
+        sbarco_concentrato=si
+        niente_neutrali=si
+        norvegia_presto=no
+        norvegia_esposta=no
+        ponte_concentrato=no
+        """);
+
+    final ProfiloStratega p = ProfiloStratega.carica();
+
+    assertThat(p.alleatiConsigliati()).isTrue();
+    assertThat(p.norvegiaPresto()).isTrue();
+    assertThat(p.norvegiaEsposta()).isTrue();
+    assertThat(p.ponteConcentrato()).isTrue();
+    final GameData data = registered();
+    assertThat(Set.copyOf(StrategaInterruttori.accesi(data.getProperties(), "Allies")))
+        .containsExactlyInAnyOrder(
+            "usa_proporzione",
+            "sbarco_concentrato",
+            "niente_neutrali",
+            "norvegia_presto",
+            "norvegia_esposta",
+            "ponte_concentrato");
+  }
+
+  @Test
+  void aP11ProfileWithOnlyPartOfTheSixLoadsWithTheBoxOff() throws IOException {
+    oldProfile(
+        """
+        pannello=p11
+        usa_proporzione=si
+        sbarco_concentrato=si
+        niente_neutrali=si
+        ponte_concentrato=si
+        """);
+
+    assertThat(ProfiloStratega.carica().alleatiConsigliati()).isFalse();
   }
 
   private void oldProfile(final String text) throws IOException {

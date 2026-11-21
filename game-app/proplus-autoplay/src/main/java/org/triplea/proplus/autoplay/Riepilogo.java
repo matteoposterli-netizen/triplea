@@ -184,6 +184,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p9", err);
     }
+    // step P12: Italy's four levers, the balance, the Allied references (every configuration)
+    try {
+      json.add("p12", ConfrontoP12.blocco(json));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p12", err);
+    }
     return json;
   }
 

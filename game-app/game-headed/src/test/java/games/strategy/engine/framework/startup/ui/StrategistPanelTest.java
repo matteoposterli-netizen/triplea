@@ -143,6 +143,11 @@ class StrategistPanelTest {
     assertThat(saved.usaProporzione()).isTrue();
     assertThat(saved.sbarcoConcentrato()).isTrue();
     assertThat(saved.nienteNeutrali()).isTrue();
+    // step P12: the six switches of "Alleati finali"
+    assertThat(saved.norvegiaPresto()).isTrue();
+    assertThat(saved.norvegiaEsposta()).isTrue();
+    assertThat(saved.ponteConcentrato()).isTrue();
+    assertThat(saved.norvegiaScorta()).isFalse();
     assertThat(saved.ponteUk()).isFalse();
     assertThat(saved.impegno()).isFalse();
     assertThat(saved.assedio()).isTrue();
@@ -170,8 +175,33 @@ italia_convoglio=si
 
     final ProfiloStratega saved = ProfiloStratega.carica();
     assertThat(saved.alleatiConsigliati()).isTrue();
+    assertThat(saved.ponteConcentrato()).isTrue();
     assertThat(saved.assedio()).isFalse();
     assertThat(saved.italiaConvoglio()).isFalse();
+  }
+
+  @Test
+  void aProfileSavedByTheP11PanelWithTheCoreOfThreeShowsTheBoxOn() throws IOException {
+    Files.writeString(
+        profile.resolve("stratega.properties"),
+"""
+pannello=p11
+usa_proporzione=si
+sbarco_concentrato=si
+niente_neutrali=si
+norvegia_presto=no
+norvegia_esposta=no
+ponte_concentrato=no
+""");
+
+    final StrategistPanel p = panel(answering(200, "{}"));
+    assertThat(p.getAlleatiConsigliati().isSelected()).isTrue();
+    p.apply(new GameProperties(null), Optional.empty());
+
+    final ProfiloStratega saved = ProfiloStratega.carica();
+    assertThat(saved.norvegiaPresto()).isTrue();
+    assertThat(saved.norvegiaEsposta()).isTrue();
+    assertThat(saved.ponteConcentrato()).isTrue();
   }
 
   private static List<JCheckBox> boxes(final Container c) {

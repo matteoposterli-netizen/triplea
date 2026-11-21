@@ -1,0 +1,31 @@
+{
+  "nota": "Step P12: quattro leve dell'Italia dello Stratega (Asse), ognuna col suo interruttore (default spento), sopra impegno + assedio. Si aggiungono a Hard: nessun divieto, nessuna attesa. Nessun nome di nazione o territorio nel codice: stanno qui. Bilancio unico: i compiti si servono in ordine (difesa di Hard, capitale minima, un solo compito di mare per turno, al massimo un trasporto + 30% dei PU dopo la difesa in navi, il resto a terra come Hard).",
+  "nazione": {"valore": "Italians", "origine": "richiesta dello step P12"},
+  "alleato": {"valore": "Germans", "origine": "richiesta dello step P12 (seconda forza dell'assedio, rinforzo di Roma)"},
+  "acceso_di_default": {
+    "valore": {"italia_est": false, "italia_africa": false, "capitale_minima": false, "italia_gibilterra": false},
+    "origine": "richiesta dello step P12 (default spenti: prima si misurano)"
+  },
+  "capitale": {"valore": "Southern Italy", "origine": "dalla mappa: capitale dei Italians"},
+  "porti": {"valore": ["Southern Italy", "Northern Italy"], "origine": "dalla mappa: territori italiani con fabbrica da cui partono i trasporti"},
+  "italia": {"valore": ["Southern Italy", "Northern Italy", "Sicily", "Sardinia"], "origine": "dalla mappa: Italia e isole (regione della diagnostica)"},
+  "fronte_sud": {"valore": ["Romania", "Bessarabia", "Western Ukraine", "Eastern Poland", "Ukraine", "Bryansk", "Rostov", "Tambov", "Caucasus", "Volgograd", "Russia", "Samara", "Kazakhstan", "Turkmenistan"], "origine": "richiesta dello step P12: fronte russo meridionale (Bessarabia, Ucraina e oltre verso l'obiettivo dell'assedio); Romania ed Eastern Poland come territori di raccolta"},
+  "capitale_russa": {"valore": "Russia", "origine": "dalla mappa: obiettivo di riserva dell'assedio se l'impegno tedesco non ne ha uno"},
+  "egitto": {"valore": "Egypt", "origine": "richiesta dello step P12"},
+  "nord_africa": {"valore": ["Alexandria", "Tobruk", "Libya", "Tunisia", "Algeria", "Morocco"], "origine": "richiesta dello step P12: i sei territori del Nord Africa oltre all'Egitto (italia_livello1 dello step R4 senza Egypt)"},
+  "gibilterra": {"valore": "Gibraltar", "origine": "richiesta dello step P12"},
+  "zona_stretto": {"valore": "92 Sea Zone", "origine": "richiesta dello step P12: la flotta resta nello stretto (zona 92) finche' regge"},
+  "esclusi_est": {"valore": "italia_livello1 + italia_livello2 dello step R4", "origine": "richiesta dello step P12: italia_est non tocca le unita' in Africa (e a est dell'Egitto)"},
+  "parametri": {
+    "soglia_minaccia_pct": {"valore": 30, "origine": "richiesta dello step P12: guarnigione minima = vittoria alleata sotto il 30%"},
+    "soglia_flotta_regge_pct": {"valore": 40, "origine": "scelto: la flotta 'regge' se il miglior attacco nemico vince al massimo il 40% (soglia della scorta di P5/P6)"},
+    "soglia_convoglio_distrutto_pct": {"valore": 95, "origine": "scelto: si rinuncia al viaggio solo se il convoglio intero verrebbe distrutto senza scaricare (vittoria nemica >= 95% nella sosta)"},
+    "quota_navi_max_pct": {"valore": 30, "origine": "richiesta dello step P12: al massimo il 30% dei PU dopo la difesa in navi da guerra"},
+    "trasporti_minimi": {"valore": 2, "origine": "richiesta dello step P12: con meno di 2 trasporti se ne compra uno"},
+    "peso_attacco": {"valore": 40, "origine": "scelto: peso del bersaglio del compito di mare nella priorita' degli attacchi di Hard (come il peso del ponte di P7)"},
+    "max_guarnigione": {"valore": 30, "origine": "scelto: unita' aggiunte al massimo nel calcolo della guarnigione minima"},
+    "tipo_guarnigione": {"valore": "infantry", "origine": "dalla mappa: unita' di terra piu' economica (acquisti per la capitale)"},
+    "tipo_trasporto": {"valore": "transport", "origine": "dalla mappa"},
+    "tipi_flotta": {"valore": ["destroyer", "cruiser"], "origine": "dalla mappa (tipi_flotta_italia dello step R4)"}
+  }
+}

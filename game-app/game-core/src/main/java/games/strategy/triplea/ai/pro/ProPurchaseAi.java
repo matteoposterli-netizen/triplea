@@ -589,17 +589,22 @@ class ProPurchaseAi {
     purchaseLandUnits(purchaseTerritories, prioritizedLandTerritories, purchaseOptions);
     proData.getRecorder().purchaseStep(proData, "land", purchaseTerritories, Map.of());
 
+    // Pro+ step P12: a variant may buy no sea unit of its own (Hard: always true)
+    final boolean ownSea = proData.getTuning().buysOwnSeaUnits(proData);
+
     // Prioritize sea territories that need defended and purchase additional defenders
-    final List<ProPlaceTerritory> needToDefendSeaTerritories =
-        prioritizeTerritoriesToDefend(purchaseTerritories, false);
-    purchaseDefenders(
-        purchaseTerritories,
-        needToDefendSeaTerritories,
-        purchaseOptions.getSeaDefenseOptions(),
-        List.of(),
-        purchaseOptions.getAirOptions(),
-        false);
-    proData.getRecorder().purchaseStep(proData, "defend_sea", purchaseTerritories, Map.of());
+    if (ownSea) {
+      final List<ProPlaceTerritory> needToDefendSeaTerritories =
+          prioritizeTerritoriesToDefend(purchaseTerritories, false);
+      purchaseDefenders(
+          purchaseTerritories,
+          needToDefendSeaTerritories,
+          purchaseOptions.getSeaDefenseOptions(),
+          List.of(),
+          purchaseOptions.getAirOptions(),
+          false);
+      proData.getRecorder().purchaseStep(proData, "defend_sea", purchaseTerritories, Map.of());
+    }
 
     // Determine whether to purchase new land factory
     final Map<Territory, ProPurchaseTerritory> factoryPurchaseTerritories = new HashMap<>();
@@ -617,7 +622,9 @@ class ProPurchaseAi {
     final List<ProPlaceTerritory> prioritizedSeaTerritories =
         prioritizeSeaTerritories(purchaseTerritories);
     final boolean shouldSaveUpForAFleet =
-        purchaseSeaAndAmphibUnits(purchaseTerritories, prioritizedSeaTerritories, purchaseOptions);
+        ownSea
+            && purchaseSeaAndAmphibUnits(
+                purchaseTerritories, prioritizedSeaTerritories, purchaseOptions);
     proData
         .getRecorder()
         .purchaseStep(

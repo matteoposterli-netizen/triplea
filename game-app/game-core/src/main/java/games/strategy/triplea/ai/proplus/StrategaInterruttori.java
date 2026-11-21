@@ -56,6 +56,9 @@ import java.util.Optional;
  *   <li>{@link #PONTE_CONCENTRATO} (step P9+P10, default from {@code p9.json}: OFF): the UK's
  *       reinforcement on ONE bridgehead of the round, with all the cargo ({@link
  *       PonteConcentrato}); it replaces {@link #PONTE_UK} while on.
+ *   <li>{@link #ITALIA_EST}, {@link #ITALIA_AFRICA}, {@link #CAPITALE_MINIMA}, {@link
+ *       #ITALIA_GIBILTERRA} (step P12, defaults from {@code p12.json}: OFF), on top of the
+ *       commitment and the siege: Italy's four levers ({@link LeveItalia}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -80,7 +83,11 @@ public enum StrategaInterruttori {
   NIENTE_NEUTRALI("niente_neutrali", false),
   PONTE_UK("ponte_uk", false),
   PONTE_PRONTI("ponte_pronti", false),
-  PONTE_CONCENTRATO("ponte_concentrato", false);
+  PONTE_CONCENTRATO("ponte_concentrato", false),
+  ITALIA_EST("italia_est", false),
+  ITALIA_AFRICA("italia_africa", false),
+  CAPITALE_MINIMA("capitale_minima", false),
+  ITALIA_GIBILTERRA("italia_gibilterra", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -156,6 +163,9 @@ public enum StrategaInterruttori {
     if (this == PONTE_CONCENTRATO) {
       return PonteConcentrato.Config.get().diDefault();
     }
+    if (LeveItalia.LEVE.contains(this)) {
+      return LeveItalia.Config.get().diDefault(this);
+    }
     return predefinito;
   }
 
@@ -222,7 +232,9 @@ public enum StrategaInterruttori {
                                         + " norvegia_presto, russia_fronte, usa_proporzione,"
                                         + " norvegia_scorta, sbarco_concentrato,"
                                         + " norvegia_esposta, niente_neutrali, ponte_uk,"
-                                        + " ponte_pronti)"))
+                                        + " ponte_pronti, ponte_concentrato, italia_est,"
+                                        + " italia_africa, capitale_minima,"
+                                        + " italia_gibilterra)"))
                         .id())
             .distinct()
             .toList();

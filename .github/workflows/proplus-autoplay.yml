@@ -57,7 +57,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P11: Asse Hard contro h0 Hard, h3 consigliati (semi 1861-2100), h1 niente_neutrali, h2 proporzione + sbarco (semi 1861-1980) = 720 partite fino alla vittoria, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625) | prova9 (step P9+P10: d1 x semi 1741-1745) | ripubblica (nessuna partita: confronto e zip delle partite della run 44643856735)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P12: 16 combinazioni delle leve dell'Italia contro Alleati Hard e Alleati finali, semi 2101-2160, + H0000, F0000 su 2161-2220, + a3, h3, h5 su 2101-2220 = 2400 partite in tre blocchi, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625) | prova9 (step P9+P10: d1 x semi 1741-1745) | prova12 (step P12: leve dell'Italia da sole e tutte insieme + solo assedio, contro Alleati Hard, semi 2101-2105) | ripubblica (nessuna partita: confronto e zip delle partite della run 44643856735)"
         default: "normale"
 permissions:
   contents: write
@@ -70,6 +70,9 @@ jobs:
     outputs:
       # step P7: the games in groups (one job each); the full list in autoplay-kit/partite.json
       gruppi: ${{ steps.matrix.outputs.gruppi }}
+      # step P12: the second and third block of [completa] ("none" = no block)
+      gruppi2: ${{ steps.matrix.outputs.gruppi2 }}
+      gruppi3: ${{ steps.matrix.outputs.gruppi3 }}
       sha: ${{ steps.sha.outputs.sha }}
       round: ${{ steps.matrix.outputs.round }}
     steps:
@@ -155,7 +158,7 @@ jobs:
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
               raise SystemExit(0)
-          if os.environ["MODALITA"] in ("completa", "prova7", "prova9"):
+          if os.environ["MODALITA"] in ("completa", "prova7", "prova9", "prova12"):
               # step PARTITA COMPLETA: games played until the victory (map triggers, held for a
               # complete round), NO key (API cost 0), caps 60 rounds and 120 minutes per game (a game
               # at a cap = "stallo", not an error). Step R6: 5 configurations x 40 seeds 1221-1260 =
@@ -239,6 +242,49 @@ jobs:
                        "Axis=hard,Allies=" + ("stratega" if allies else "hard"),
                        "Allies=" + allies if allies else "", "", ss)
                       for (n, key, label, allies, ss) in p11]
+              # step P12: Italy's four levers (est, africa, capitale, gibilterra) on top of the siege,
+              # all 16 combinations x 60 new seeds 2101-2160 against the Allies of Hard (H, block 1)
+              # and the final Allies with six switches (F, block 2); H0000 and F0000 also on
+              # 2161-2220, a3 (siege vs the core), h3 (Axis Hard vs the core), h5 (Axis Hard vs the
+              # final Allies) on 2101-2220 (block 3) = 2400 games. [prova12]: each lever alone, all
+              # four and the siege alone against the Allies of Hard, seeds 2101-2105 (30 games)
+              if os.environ["MODALITA"] in ("completa", "prova12"):
+                  leve = ["italia_est", "italia_africa", "capitale_minima", "italia_gibilterra"]
+                  nucleo = "usa_proporzione+sbarco_concentrato+niente_neutrali"
+                  finali = nucleo + "+norvegia_presto+norvegia_esposta+ponte_concentrato"
+                  def axis_on(bits):
+                      return "+".join(["impegno", "assedio"] + [l for l, b in zip(leve, bits) if b == "1"])
+                  p12 = []
+                  if os.environ["MODALITA"] == "prova12":
+                      combos, opps, seeds = ["1000", "0100", "0010", "0001", "1111", "0000"], ["H"], range(2101, 2106)
+                  else:
+                      combos, opps, seeds = [format(i, "04b") for i in range(16)], ["H", "F"], range(2101, 2161)
+                  for opp in opps:
+                      for c in combos:
+                          tipo = "Axis=stratega,Allies=" + ("hard" if opp == "H" else "stratega")
+                          acceso = "Axis=" + axis_on(c) + ("" if opp == "H" else ",Allies=" + finali)
+                          nome = "Asse assedio + leve " + c + " / " + ("Alleati Hard" if opp == "H" else "Alleati finali")
+                          ss = [(sd, 1 if opp == "H" else 2) for sd in seeds]
+                          if os.environ["MODALITA"] == "completa" and c == "0000":
+                              ss += [(sd, 3) for sd in range(2161, 2221)]
+                          p12.append((opp + c, "Asse-leve-" + c + "-vs-" + ("Hard" if opp == "H" else "finali"), nome, tipo, acceso, ss))
+                  if os.environ["MODALITA"] == "completa":
+                      refs = range(2101, 2221)
+                      p12.append(("a3", "Asse-assedio-vs-Alleati-nucleo", "Asse assedio / Alleati nucleo", "Axis=stratega,Allies=stratega", "Axis=impegno+assedio,Allies=" + nucleo, [(sd, 3) for sd in refs]))
+                      p12.append(("h3", "Hard-vs-Alleati-nucleo", "Asse Hard / Alleati nucleo", "Axis=hard,Allies=stratega", "Allies=" + nucleo, [(sd, 3) for sd in refs]))
+                      p12.append(("h5", "Hard-vs-Alleati-finali", "Asse Hard / Alleati finali", "Axis=hard,Allies=stratega", "Allies=" + finali, [(sd, 3) for sd in refs]))
+                  include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
+                              "tipo": tipo, "piano": "", "seme": seed, "decisore": "",
+                              "ablazione": "", "operazione": "", "opllm": "", "stratega": "",
+                              "budget": "", "tetto": "70" if "stratega" in tipo else "",
+                              "spento": "", "regole": "", "acceso": acceso, "completa": "si",
+                              "quota": "", "blocco": blocco}
+                             for (n, key, name, tipo, acceso, ss) in p12
+                             for (seed, blocco) in ss]
+                  include.sort(key=lambda g: (g["blocco"], g["seme"], g["id"]))
+                  print("matrix=" + json.dumps({"include": include}))
+                  print("round=60")
+                  raise SystemExit(0)
               include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
                           "tipo": tipo, "piano": "", "seme": seed, "decisore": "",
                           "ablazione": "", "operazione": "", "opllm": "", "stratega": "",
@@ -585,16 +631,20 @@ jobs:
           inc = m["include"]
           json.dump(m, open("autoplay-kit/partite.json", "w"))
           size = 5 if os.environ["MODALITA"] == "completa" else 1
-          groups = []
-          for i in range(0, len(inc), size):
-              gs = inc[i:i + size]
-              gid = gs[0]["id"] if size == 1 else f"g{i // size + 1:03d}-semi{gs[0]['seme']}-{gs[-1]['seme']}"
-              llm = any(g.get("decisore") or g.get("opllm") or g.get("stratega") for g in gs)
-              # only the ids: the job outputs must stay under 1 MB (run 44641570445); the play job
-              # reads the games from autoplay-kit/partite.json
-              groups.append({"id": gid, "llm": "si" if llm else "", "giochi": [g["id"] for g in gs]})
-          assert len(groups) <= 256, "troppi job"
-          print("gruppi=" + json.dumps({"include": groups}))
+          # step P12: up to three blocks played one after the other (matrix jobs play, play2, play3)
+          for b in (1, 2, 3):
+              part = [g for g in inc if g.get("blocco", 1) == b]
+              groups = []
+              for i in range(0, len(part), size):
+                  gs = part[i:i + size]
+                  gid = gs[0]["id"] if size == 1 else f"b{b}-g{i // size + 1:03d}-semi{gs[0]['seme']}-{gs[-1]['seme']}"
+                  llm = any(g.get("decisore") or g.get("opllm") or g.get("stratega") for g in gs)
+                  # only the ids: the job outputs must stay under 1 MB (run 44641570445); the play job
+                  # reads the games from autoplay-kit/partite.json
+                  groups.append({"id": gid, "llm": "si" if llm else "", "giochi": [g["id"] for g in gs]})
+              assert len(groups) <= 256, "troppi job"
+              name = "gruppi" if b == 1 else f"gruppi{b}"
+              print(name + "=" + (json.dumps({"include": groups}) if groups else "none"))
           EOF
           cut -c1-2000 "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
@@ -612,11 +662,11 @@ jobs:
     if: inputs.modalita != 'ripubblica'
     runs-on: ubuntu-latest
     # [completa]: up to 5 games in one job (each at most 120 minutes, the job's budget 340)
-    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9') && 355 || 30 }}
+    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 355 || 30 }}
     strategy:
       fail-fast: false
       # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
-      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9') && 20 || 6 }}
+      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 20 || 6 }}
       matrix: ${{ fromJson(needs.prepare.outputs.gruppi) }}
     name: play (${{ matrix.id }})
     steps:
@@ -693,9 +743,186 @@ jobs:
           path: partite
           retention-days: 7
 
-  publish:
+  play2:
     needs: [prepare, play]
-    if: always() && needs.prepare.result == 'success'
+    # [ripubblica]: no game is played, the publish job takes them from an earlier run
+    # step P12: block 2 of [completa], after block 1 (priority order)
+    if: always() && needs.prepare.result == 'success' && inputs.modalita != 'ripubblica' && needs.prepare.outputs.gruppi2 != 'none'
+    runs-on: ubuntu-latest
+    # [completa]: up to 5 games in one job (each at most 120 minutes, the job's budget 340)
+    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 355 || 30 }}
+    strategy:
+      fail-fast: false
+      # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
+      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 20 || 6 }}
+      matrix: ${{ fromJson(needs.prepare.outputs.gruppi2) }}
+    name: play2 (${{ matrix.id }})
+    steps:
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: actions/download-artifact@v8
+        with:
+          name: autoplay-kit
+          path: autoplay-kit
+      - name: Play
+        env:
+          # only the groups with an LLM game get the key (strategist, or the operations' decisions)
+          ANTHROPIC_API_KEY: ${{ matrix.llm == 'si' && secrets.ANTHROPIC_API_KEY || '' }}
+          GIOCHI: ${{ toJson(matrix.giochi) }}
+          ROUND: ${{ needs.prepare.outputs.round }}
+          BUDGET: "340"
+        run: |
+          set -uo pipefail
+          chmod +x autoplay-kit/runner/bin/proplus-autoplay
+          python3 - <<'EOF'
+          import gzip, json, os, shutil, subprocess, sys, time
+          per_id = {g["id"]: g for g in json.load(open("autoplay-kit/partite.json"))["include"]}
+          games = [per_id[i] for i in json.loads(os.environ["GIOCHI"])]
+          start = time.time()
+          worst = 0
+          opts = [("--piano", "piano"), ("--decisore", "decisore"), ("--ablazione", "ablazione"),
+                  ("--operazione", "operazione"), ("--operazione-decisore", "opllm"),
+                  ("--budget-operazioni", "budget"), ("--tetto-strategia", "tetto"),
+                  ("--stratega-spento", "spento"), ("--stratega-regole", "regole"),
+                  ("--stratega-acceso", "acceso"), ("--fino-a-vittoria", "completa"),
+                  ("--quota-operazione", "quota")]
+          for g in games:
+              out = "partite/" + g["id"]
+              os.makedirs(out, exist_ok=True)
+              full = g.get("completa") == "si"
+              left = float(os.environ["BUDGET"]) - (time.time() - start) / 60
+              # a complete game: at most 120 minutes, less if the job's budget is ending
+              minutes = int(min(120, max(5, left - 8))) if full else 25
+              args = ["autoplay-kit/runner/bin/proplus-autoplay",
+                      "--mappa", "autoplay-kit/ww2eur40_2nd_edition.xml",
+                      "--round", os.environ["ROUND"], "--tipo", g["tipo"],
+                      "--rischio", "Axis=Equilibrato,Allies=Equilibrato",
+                      "--seme", str(g["seme"]), "--output", out, "--nome", g["nome"],
+                      "--minuti", str(minutes)]
+              for opt, key in opts:
+                  if g.get(key):
+                      args += [opt, str(g[key])]
+              t0 = time.time()
+              with open(out + "/partita.log", "wb") as log:
+                  p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                  for line in p.stdout:
+                      log.write(line)
+                      if b"AUTOPLAY" in line or b"ERROR" in line:
+                          sys.stdout.buffer.write(line)
+                          sys.stdout.flush()
+                  code = p.wait()
+              print(f"{g['id']}: durata {int(time.time() - t0)} s, minuti {minutes}, uscita {code}", flush=True)
+              with open(out + "/partita.log", "rb") as f, gzip.open(out + "/partita.log.gz", "wb") as z:
+                  shutil.copyfileobj(f, z)
+              os.remove(out + "/partita.log")
+              if os.path.exists(out + "/riepilogo.md"):
+                  with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s, open(out + "/riepilogo.md") as r:
+                      s.write(r.read())
+              worst = max(worst, code)
+          sys.exit(worst)
+          EOF
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: partita-${{ matrix.id }}
+          path: partite
+          retention-days: 7
+
+  play3:
+    needs: [prepare, play2]
+    # [ripubblica]: no game is played, the publish job takes them from an earlier run
+    # step P12: block 3 of [completa], after block 2 (priority order)
+    if: always() && needs.prepare.result == 'success' && inputs.modalita != 'ripubblica' && needs.prepare.outputs.gruppi3 != 'none'
+    runs-on: ubuntu-latest
+    # [completa]: up to 5 games in one job (each at most 120 minutes, the job's budget 340)
+    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 355 || 30 }}
+    strategy:
+      fail-fast: false
+      # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
+      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 20 || 6 }}
+      matrix: ${{ fromJson(needs.prepare.outputs.gruppi3) }}
+    name: play3 (${{ matrix.id }})
+    steps:
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: actions/download-artifact@v8
+        with:
+          name: autoplay-kit
+          path: autoplay-kit
+      - name: Play
+        env:
+          # only the groups with an LLM game get the key (strategist, or the operations' decisions)
+          ANTHROPIC_API_KEY: ${{ matrix.llm == 'si' && secrets.ANTHROPIC_API_KEY || '' }}
+          GIOCHI: ${{ toJson(matrix.giochi) }}
+          ROUND: ${{ needs.prepare.outputs.round }}
+          BUDGET: "340"
+        run: |
+          set -uo pipefail
+          chmod +x autoplay-kit/runner/bin/proplus-autoplay
+          python3 - <<'EOF'
+          import gzip, json, os, shutil, subprocess, sys, time
+          per_id = {g["id"]: g for g in json.load(open("autoplay-kit/partite.json"))["include"]}
+          games = [per_id[i] for i in json.loads(os.environ["GIOCHI"])]
+          start = time.time()
+          worst = 0
+          opts = [("--piano", "piano"), ("--decisore", "decisore"), ("--ablazione", "ablazione"),
+                  ("--operazione", "operazione"), ("--operazione-decisore", "opllm"),
+                  ("--budget-operazioni", "budget"), ("--tetto-strategia", "tetto"),
+                  ("--stratega-spento", "spento"), ("--stratega-regole", "regole"),
+                  ("--stratega-acceso", "acceso"), ("--fino-a-vittoria", "completa"),
+                  ("--quota-operazione", "quota")]
+          for g in games:
+              out = "partite/" + g["id"]
+              os.makedirs(out, exist_ok=True)
+              full = g.get("completa") == "si"
+              left = float(os.environ["BUDGET"]) - (time.time() - start) / 60
+              # a complete game: at most 120 minutes, less if the job's budget is ending
+              minutes = int(min(120, max(5, left - 8))) if full else 25
+              args = ["autoplay-kit/runner/bin/proplus-autoplay",
+                      "--mappa", "autoplay-kit/ww2eur40_2nd_edition.xml",
+                      "--round", os.environ["ROUND"], "--tipo", g["tipo"],
+                      "--rischio", "Axis=Equilibrato,Allies=Equilibrato",
+                      "--seme", str(g["seme"]), "--output", out, "--nome", g["nome"],
+                      "--minuti", str(minutes)]
+              for opt, key in opts:
+                  if g.get(key):
+                      args += [opt, str(g[key])]
+              t0 = time.time()
+              with open(out + "/partita.log", "wb") as log:
+                  p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                  for line in p.stdout:
+                      log.write(line)
+                      if b"AUTOPLAY" in line or b"ERROR" in line:
+                          sys.stdout.buffer.write(line)
+                          sys.stdout.flush()
+                  code = p.wait()
+              print(f"{g['id']}: durata {int(time.time() - t0)} s, minuti {minutes}, uscita {code}", flush=True)
+              with open(out + "/partita.log", "rb") as f, gzip.open(out + "/partita.log.gz", "wb") as z:
+                  shutil.copyfileobj(f, z)
+              os.remove(out + "/partita.log")
+              if os.path.exists(out + "/riepilogo.md"):
+                  with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as s, open(out + "/riepilogo.md") as r:
+                      s.write(r.read())
+              worst = max(worst, code)
+          sys.exit(worst)
+          EOF
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: partita-${{ matrix.id }}
+          path: partite
+          retention-days: 7
+
+  publish1:
+    needs: [prepare, play]
+    # step P12: partial summary of [completa] after block 1 (the final one after all blocks)
+    if: always() && needs.prepare.result == 'success' && inputs.modalita == 'completa' && needs.prepare.outputs.gruppi2 != 'none'
     runs-on: ubuntu-latest
     # [completa] of step P7: 1080 games to download, compare and zip
     timeout-minutes: 180
@@ -755,7 +982,248 @@ jobs:
           LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MODALITA: ${{ inputs.modalita == 'ripubblica' && 'completa' || inputs.modalita || 'normale' }}
           # 1080 game summaries in memory (run 44643856735: out of memory with the default heap)
-          JAVA_OPTS: -Xmx12g
+          JAVA_OPTS: -Xmx13g
+        run: |
+          set -euo pipefail
+          mkdir -p autoplay
+          # a game whose job left nothing still gets a folder (listed as failed)
+          # step P7: the list from the kit (1080 games do not fit in an environment variable)
+          python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.load(open('autoplay-kit/partite.json'))['include'] if g.get('blocco', 1) <= 1]"
+          chmod +x autoplay-kit/runner/bin/proplus-autoplay
+          sha="${{ needs.prepare.outputs.sha }}"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P12 (leve dell Italia, semi 2101-2220)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)')$([ "${MODALITA}" = "prova12" ] && echo ' - prova breve dello step P12 (semi 2101-2105)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
+          # the step summary takes at most 1 MiB: the full text is in the zip
+          head -c 900000 autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
+          # LLM strategist: offline quality test on 30 strategic states of these games (skipped,
+          # exit 0, without the secret)
+          if [ "${HAS_LLM_KEY}" = "true" ] && [ "${MODALITA}" = "normale" ]; then
+            ANTHROPIC_API_KEY="${LLM_KEY}" autoplay-kit/runner/bin/proplus-autoplay qualita autoplay \
+              --n 30 --output autoplay/qualita || echo "test di qualita' fallito (non blocca)"
+            test -f autoplay/qualita/qualita.md && cat autoplay/qualita/qualita.md >> "$GITHUB_STEP_SUMMARY"
+            # turn orders (second level): inputs written by every Pro+ game with the diary
+            ANTHROPIC_API_KEY="${LLM_KEY}" autoplay-kit/runner/bin/proplus-autoplay qualita autoplay \
+              --n 30 --livello ordini --output autoplay/qualita-ordini \
+              || echo "test di qualita' degli ordini fallito (non blocca)"
+            test -f autoplay/qualita-ordini/qualita.md && cat autoplay/qualita-ordini/qualita.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # strategic contract: the state/directives JSON files of the first seed only (1 game
+          # per configuration), the sizes are already in each game's summary
+          find autoplay -path '*-seme[2-9]*' \( -name 'stato-R*.json' -o -name 'direttive-R*.json' \
+            -o -name 'ordini-ingresso-R*.json' -o -name 'ordini-R*.json' \) -delete
+          (cd autoplay && zip -q -9 -r ../autoplay.zip .)
+          ls -la autoplay.zip
+      - name: Publish release autoplay-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=autoplay-latest
+          sha="${{ needs.prepare.outputs.sha }}"
+          git fetch -q --depth 200 origin proplus || true
+          head=$(git rev-parse -q --verify FETCH_HEAD || true)
+          if [ -n "$head" ] && [ "$head" != "$sha" ] \
+             && git merge-base --is-ancestor "$sha" "$head" 2>/dev/null; then
+            # newer commits with documentation only (*.md) start no run: publish this one
+            if git diff --name-only "$sha" "$head" | grep -qv '\.md$'; then
+              echo "proplus is already at a newer commit ($head): its own autoplay publishes"
+              exit 0
+            fi
+            echo "proplus is at $head with documentation changes only: publishing $sha"
+          fi
+          notes="Partite automatiche AI vs AI (Pro+ / Hard) su WW2 Europe 1940 2nd Edition.
+          Commit: ${sha} (branch proplus)
+          Data: $(date -u +'%Y-%m-%d %H:%M UTC')
+          Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          Contenuto di autoplay.zip: riepilogo-generale.md + una cartella per partita (riepilogo.md, riepilogo.json, diario, partita.log.gz); JSON di stato e direttive del contratto nel diario delle partite seme 1."
+          # the tag follows the tested commit: recreate release and tag (never proplus-latest)
+          gh release delete "$tag" --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create "$tag" autoplay.zip --repo "$GITHUB_REPOSITORY" --target "$sha" \
+            --title "Pro+ autoplay (latest)" --notes "$notes" --prerelease
+  publish2:
+    needs: [prepare, play2]
+    # step P12: partial summary of [completa] after block 2 (the final one after all blocks)
+    if: always() && needs.prepare.result == 'success' && inputs.modalita == 'completa' && needs.prepare.outputs.gruppi3 != 'none'
+    runs-on: ubuntu-latest
+    # [completa] of step P7: 1080 games to download, compare and zip
+    timeout-minutes: 180
+    # one publication at a time; a run for an older commit does not overwrite a newer one
+    concurrency:
+      group: proplus-autoplay-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: actions/download-artifact@v8
+        with:
+          name: autoplay-kit
+          path: autoplay-kit
+      - uses: actions/download-artifact@v8
+        if: inputs.modalita != 'ripubblica'
+        with:
+          pattern: partita-*
+          path: autoplay
+          merge-multiple: true
+      # [ripubblica]: the 1080 games of run 44643856735 ([completa] of step P7, commit 60d7e6a),
+      # whose publish job ran out of memory while reading them
+      - name: Download the games of run 44643856735
+        if: inputs.modalita == 'ripubblica'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # one download at a time with retries: download-artifact with run-id asks for all 216
+          # artifacts at once and hits GitHub's secondary rate limit (run 44724639523)
+          mkdir -p autoplay dl
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44643856735/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name | startswith("partita-")) | "\(.id) \(.name)"' > artefatti.txt
+          wc -l artefatti.txt
+          while read -r id name; do
+            ok=0
+            for attempt in 1 2 3 4 5 6; do
+              if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "dl/${name}.zip"; then
+                ok=1; break
+              fi
+              echo "retry ${name} (${attempt})"; sleep $((30 * attempt))
+            done
+            [ "$ok" = 1 ] || { echo "download fallito: ${name}"; exit 1; }
+            unzip -q -o "dl/${name}.zip" -d autoplay
+            rm "dl/${name}.zip"
+            sleep 1
+          done < artefatti.txt
+      - name: Comparison and zip
+        env:
+          HAS_LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MODALITA: ${{ inputs.modalita == 'ripubblica' && 'completa' || inputs.modalita || 'normale' }}
+          # 1080 game summaries in memory (run 44643856735: out of memory with the default heap)
+          JAVA_OPTS: -Xmx13g
+        run: |
+          set -euo pipefail
+          mkdir -p autoplay
+          # a game whose job left nothing still gets a folder (listed as failed)
+          # step P7: the list from the kit (1080 games do not fit in an environment variable)
+          python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.load(open('autoplay-kit/partite.json'))['include'] if g.get('blocco', 1) <= 2]"
+          chmod +x autoplay-kit/runner/bin/proplus-autoplay
+          sha="${{ needs.prepare.outputs.sha }}"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P12 (leve dell Italia, semi 2101-2220)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)')$([ "${MODALITA}" = "prova12" ] && echo ' - prova breve dello step P12 (semi 2101-2105)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
+          # the step summary takes at most 1 MiB: the full text is in the zip
+          head -c 900000 autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
+          # LLM strategist: offline quality test on 30 strategic states of these games (skipped,
+          # exit 0, without the secret)
+          if [ "${HAS_LLM_KEY}" = "true" ] && [ "${MODALITA}" = "normale" ]; then
+            ANTHROPIC_API_KEY="${LLM_KEY}" autoplay-kit/runner/bin/proplus-autoplay qualita autoplay \
+              --n 30 --output autoplay/qualita || echo "test di qualita' fallito (non blocca)"
+            test -f autoplay/qualita/qualita.md && cat autoplay/qualita/qualita.md >> "$GITHUB_STEP_SUMMARY"
+            # turn orders (second level): inputs written by every Pro+ game with the diary
+            ANTHROPIC_API_KEY="${LLM_KEY}" autoplay-kit/runner/bin/proplus-autoplay qualita autoplay \
+              --n 30 --livello ordini --output autoplay/qualita-ordini \
+              || echo "test di qualita' degli ordini fallito (non blocca)"
+            test -f autoplay/qualita-ordini/qualita.md && cat autoplay/qualita-ordini/qualita.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # strategic contract: the state/directives JSON files of the first seed only (1 game
+          # per configuration), the sizes are already in each game's summary
+          find autoplay -path '*-seme[2-9]*' \( -name 'stato-R*.json' -o -name 'direttive-R*.json' \
+            -o -name 'ordini-ingresso-R*.json' -o -name 'ordini-R*.json' \) -delete
+          (cd autoplay && zip -q -9 -r ../autoplay.zip .)
+          ls -la autoplay.zip
+      - name: Publish release autoplay-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag=autoplay-latest
+          sha="${{ needs.prepare.outputs.sha }}"
+          git fetch -q --depth 200 origin proplus || true
+          head=$(git rev-parse -q --verify FETCH_HEAD || true)
+          if [ -n "$head" ] && [ "$head" != "$sha" ] \
+             && git merge-base --is-ancestor "$sha" "$head" 2>/dev/null; then
+            # newer commits with documentation only (*.md) start no run: publish this one
+            if git diff --name-only "$sha" "$head" | grep -qv '\.md$'; then
+              echo "proplus is already at a newer commit ($head): its own autoplay publishes"
+              exit 0
+            fi
+            echo "proplus is at $head with documentation changes only: publishing $sha"
+          fi
+          notes="Partite automatiche AI vs AI (Pro+ / Hard) su WW2 Europe 1940 2nd Edition.
+          Commit: ${sha} (branch proplus)
+          Data: $(date -u +'%Y-%m-%d %H:%M UTC')
+          Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          Contenuto di autoplay.zip: riepilogo-generale.md + una cartella per partita (riepilogo.md, riepilogo.json, diario, partita.log.gz); JSON di stato e direttive del contratto nel diario delle partite seme 1."
+          # the tag follows the tested commit: recreate release and tag (never proplus-latest)
+          gh release delete "$tag" --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create "$tag" autoplay.zip --repo "$GITHUB_REPOSITORY" --target "$sha" \
+            --title "Pro+ autoplay (latest)" --notes "$notes" --prerelease
+  publish:
+    needs: [prepare, play, play2, play3]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    # [completa] of step P7: 1080 games to download, compare and zip
+    timeout-minutes: 300
+    # one publication at a time; a run for an older commit does not overwrite a newer one
+    concurrency:
+      group: proplus-autoplay-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: actions/download-artifact@v8
+        with:
+          name: autoplay-kit
+          path: autoplay-kit
+      - uses: actions/download-artifact@v8
+        if: inputs.modalita != 'ripubblica'
+        with:
+          pattern: partita-*
+          path: autoplay
+          merge-multiple: true
+      # [ripubblica]: the 1080 games of run 44643856735 ([completa] of step P7, commit 60d7e6a),
+      # whose publish job ran out of memory while reading them
+      - name: Download the games of run 44643856735
+        if: inputs.modalita == 'ripubblica'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # one download at a time with retries: download-artifact with run-id asks for all 216
+          # artifacts at once and hits GitHub's secondary rate limit (run 44724639523)
+          mkdir -p autoplay dl
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44643856735/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name | startswith("partita-")) | "\(.id) \(.name)"' > artefatti.txt
+          wc -l artefatti.txt
+          while read -r id name; do
+            ok=0
+            for attempt in 1 2 3 4 5 6; do
+              if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "dl/${name}.zip"; then
+                ok=1; break
+              fi
+              echo "retry ${name} (${attempt})"; sleep $((30 * attempt))
+            done
+            [ "$ok" = 1 ] || { echo "download fallito: ${name}"; exit 1; }
+            unzip -q -o "dl/${name}.zip" -d autoplay
+            rm "dl/${name}.zip"
+            sleep 1
+          done < artefatti.txt
+      - name: Comparison and zip
+        env:
+          HAS_LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          LLM_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MODALITA: ${{ inputs.modalita == 'ripubblica' && 'completa' || inputs.modalita || 'normale' }}
+          # 1080 game summaries in memory (run 44643856735: out of memory with the default heap)
+          JAVA_OPTS: -Xmx13g
         run: |
           set -euo pipefail
           mkdir -p autoplay
@@ -764,7 +1232,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.load(open('autoplay-kit/partite.json'))['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P11 (Asse Hard, semi 1861-2100)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P12 (leve dell Italia, semi 2101-2220)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)')$([ "${MODALITA}" = "prova12" ] && echo ' - prova breve dello step P12 (semi 2101-2105)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           # the step summary takes at most 1 MiB: the full text is in the zip
           head -c 900000 autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
