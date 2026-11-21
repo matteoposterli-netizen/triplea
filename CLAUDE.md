@@ -6877,3 +6877,33 @@ gioco, interruttore, soglia, acquisto o movimento cambiato; `Stratega.registra` 
 - Neutrali: h3 e h1 0 guerre e 0 attacchi alleati a Neutral_True (h0 109/240 partite con guerra, h2 54/120).
 - Contro l'Asse di Hard nessuna leva da sola sposta le vittorie; la combinazione da' +7 punti non significativi. Mosca cade meno con h3
   (87 contro 108), Roma di piu' (194 contro 159). Gli sbarchi USA anticipati costano trasporti (5,7 contro 0,6 persi entro R8).
+
+### Step P12 — Alleati finali a sei interruttori, quattro leve dell'Italia misurate in tutte le combinazioni (2026-11-21)
+
+Vedi "Leve dell'Italia e Alleati finali (step P12)" e "Scelte di P12". File nuovi: `ai/proplus/LeveItalia`, risorsa
+`proplus/strategia/p12.json`, test `LeveItaliaTest`; autoplay `MonitorP12`, `ConfrontoP12`, test `ConfrontoP12Test`. Modificati:
+`ProfiloStratega` (sei interruttori, marcatore `pannello=p12`), `StrategistPanel` (testo), `LEGGIMI.txt`, `PannelloConsigliatiTest`,
+`StrategistPanelTest`, `StrategaInterruttori` (+4), `RegistroDecisioni` (4 tipi, 5 codici), `ProTuning` (+`buysOwnSeaUnits`, default
+true), `ProPurchaseAi` (difesa navale e passo navale solo se `buysOwnSeaUnits`), `ProPlusTuning`, `ProPlusAi`, `Impegno` (spola italiana
+spenta con una leva di mare); autoplay `Monitor`, `Riepilogo` (blocco `p12`), `RiepilogoGenerale` (oltre 1200 partite), `ConfrontoCompleta`;
+workflow `[prova12]`, `[completa]` P12 in tre blocchi (`play`/`play2`/`play3`, `publish1`/`publish2`/`publish`).
+- Test locali (JDK 25 da apt): AI di game-core (91 classi), `:game-headed:test` (StrategistPanelTest), `:proplus-autoplay:test` verdi.
+- Prove locali (3 partite da 8 round, seme 2101-2103): `italia_est` 14-23 italiani in sud Russia R4-R7; `italia_africa` 2-4 unita'
+  scaricate a turno ad Alessandria/Egitto; `capitale_minima` guarnigione 0 senza minaccia, 13-16 con minaccia; trovati e corretti: Hard
+  comprava navi oltre il tetto (gli ordini dell'impegno "flotta" per l'Italia) ⇒ ordini P12 anche vuoti con una leva di mare + hook
+  `buysOwnSeaUnits`; trasporti che caricavano solo dal porto della capitale; destinazione di B fuori dal fronte meridionale.
+
+#### Prova breve in CI (run 44930230989, commit 1667f4f, tutto verde, 30 partite [prova12], semi 2101-2105, contro Alleati Hard)
+Un solo giro. Medie su 5 partite (H0000 = solo assedio):
+- `italia_est` (H1000): italiani in sud Russia a R6 (regione P12: Bessarabia, Ucraina e oltre) 14,4 contro 9,2 di H0000: SI' (>= 3); con
+  la regione di R4 (Caucasus, Rostov, Volgograd, ...) 0,2 contro 1,6: la leva porta gli italiani in Bessarabia/Ucraina, non oltre;
+  80-464 mosse a partita.
+- `italia_africa` (H0100): unita' portate in Africa entro R8 5,2 contro 0: SI'; round con Egitto dell'Asse R2-R8 5,4 contro 4,6.
+- `capitale_minima` (H0010): guarnigione richiesta che sale con la minaccia (2 -> 10-26): SI'; italiani in Italia R4-R6 15,3 contro
+  12,7: NO (da sola la leva non manda altrove le unita' libere e compra fanterie per la capitale; con B, H1111 11,7).
+- `italia_gibilterra` (H0001): presa in 2/5 (criterio 3/5: NO), tenuta 6 round in entrambe (SI'); H0000 0/5.
+- tutte e quattro (H1111): un compito di mare per turno (per costruzione), turni con spesa per il mare oltre il tetto 0: SI'.
+- Corretto dopo la prova (giro 1): nel blocco `p12` configurazione e vincitore erano vuoti (il blocco si scrive prima della vittoria):
+  ora ricalcolati dal riepilogo nella sezione; `mare_entro_tetto` solo con una leva di mare; navi italiane che possono bombardare,
+  gia' nella zona di sbarco, nella stima dello sbarco su Egitto/Gibilterra. Run lunga lanciata dopo questo giro (Gibilterra resta
+  sotto il criterio: dichiarato).

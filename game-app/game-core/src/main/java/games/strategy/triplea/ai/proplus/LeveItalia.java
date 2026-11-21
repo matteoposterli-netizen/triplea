@@ -58,9 +58,9 @@ import javax.annotation.Nullable;
  *       units that brings the best enemy attack of the next turn under the threshold (none without
  *       a threat); the missing units are bought there first, then brought from nearby, then the
  *       German land units in Italy go there in the German turn;
- *   <li>{@link StrategaInterruttori#ITALIA_GIBILTERRA}: the sea task of Gibraltar: taken from loaded
- *       transports next to it as soon as the win beats Hard's minimum, then held with the minimum
- *       garrison of the same rule; the fleet stays in the strait while it holds.
+ *   <li>{@link StrategaInterruttori#ITALIA_GIBILTERRA}: the sea task of Gibraltar: taken from
+ *       loaded transports next to it as soon as the win beats Hard's minimum, then held with the
+ *       minimum garrison of the same rule; the fleet stays in the strait while it holds.
  * </ul>
  *
  * <p>One balance for Italy: Hard's defense first; the capital's minimum; ONE sea task per turn
@@ -712,10 +712,13 @@ public final class LeveItalia {
           "tetto_mare_pu",
           costs.getOrDefault(cfg.tipoTrasporto(), 0)
               + (int) Math.floor(Math.max(0, st.puInizio) * cfg.quotaNavi() / 100));
-      row.addProperty(
-          "mare_entro_tetto",
-          sea <= Math.floor(Math.max(0, st.puInizio) * cfg.quotaNavi() / 100) + 0.001
-              && transports <= costs.getOrDefault(cfg.tipoTrasporto(), 0));
+      if (mare(data, player)) {
+        // the balance's cap applies only with a sea lever (else Hard buys its own ships)
+        row.addProperty(
+            "mare_entro_tetto",
+            sea <= Math.floor(Math.max(0, st.puInizio) * cfg.quotaNavi() / 100) + 0.001
+                && transports <= costs.getOrDefault(cfg.tipoTrasporto(), 0));
+      }
       registra(
           data,
           player,
@@ -954,7 +957,8 @@ public final class LeveItalia {
       final double win =
           def.isEmpty()
               ? 100
-              : calc.calculateBattleResults(proData, target, cargo, def, List.of())
+              : calc.calculateBattleResults(
+                      proData, target, cargo, def, bombardieri(data, player, zones))
                   .getWinPercentage();
       final double min = proData.getAttackMinWinPercentage(target);
       row.addProperty("vittoria", AlleatiR5.round1(win));
@@ -1008,6 +1012,18 @@ public final class LeveItalia {
       ProLogger.warn("[Pro+] P12, assalto: " + e);
     }
     return moved;
+  }
+
+  /** The Italian warships that can bombard and are already in a landing zone (they stay there). */
+  private static List<Unit> bombardieri(
+      final GameState data, final GamePlayer player, final List<Territory> zones) {
+    final List<Unit> out = new ArrayList<>();
+    for (final Territory z : zones) {
+      out.addAll(
+          z.getMatches(
+              Matches.unitIsOwnedBy(player).and(u -> u.getUnitAttachment().getCanBombard(player))));
+    }
+    return out;
   }
 
   private static @Nullable Route rottaMare(

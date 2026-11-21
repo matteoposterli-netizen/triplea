@@ -316,6 +316,23 @@ final class ConfrontoP12 {
     return o != null && o.has(k) && o.get(k).isJsonPrimitive() ? o.get(k).getAsDouble() : 0;
   }
 
+  static boolean valida(final JsonObject json) {
+    final String stato = s(json, "stato");
+    return stato.startsWith("completata") || stato.startsWith("stallo");
+  }
+
+  static String vincitore(final JsonObject json) {
+    for (final String k : List.of("vittoria", "esito")) {
+      if (json.has(k)
+          && json.get(k).isJsonObject()
+          && json.getAsJsonObject(k).has("vincitore")
+          && json.getAsJsonObject(k).get("vincitore").isJsonPrimitive()) {
+        return json.getAsJsonObject(k).get("vincitore").getAsString();
+      }
+    }
+    return "";
+  }
+
   private static boolean asse(final String owner) {
     return "Germans".equals(owner) || "Italians".equals(owner) || "Neutral_Axis".equals(owner);
   }
@@ -552,10 +569,15 @@ final class ConfrontoP12 {
       if (code == null) {
         continue;
       }
-      if (b == null || !flag(b, "valida")) {
+      if (b == null || !valida(g.json())) {
         invalid.computeIfAbsent(code, k -> new int[1])[0]++;
         continue;
       }
+      // the block is written before the end of the game: the winner and the state from the summary
+      b.addProperty("configurazione", code);
+      b.addProperty("valida", true);
+      b.addProperty("vincitore", vincitore(g.json()));
+      b.addProperty("stallo", s(g.json(), "stato").startsWith("stallo"));
       by.computeIfAbsent(code, k -> new ArrayList<>()).add(b);
     }
     if (by.isEmpty()) {
