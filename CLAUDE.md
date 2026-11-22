@@ -7010,3 +7010,29 @@ sulla run 44937514617 (download uno alla volta, diari tolti per il disco: le par
   Tetto del mare rispettato (0 turni fuori).
 - Alleati: h5 94/120 contro h3 90/120 (p 0,65), F0000 68/119 contro a3 63/120 (p 0,52), F0000 contro H0000 68/119 contro 47/120
   (p 0,007). Neutrali veri: 0 guerre e 0 attacchi alleati con nucleo o Alleati finali (H0000: 62/120). Gli Alleati finali restano.
+
+### Step P13 — tre leve in disegno fattoriale: taranto, fabbriche_tenute, bombardamento_mosca (2026-11-22)
+
+Vedi "Tre leve in disegno fattoriale (step P13)" e "Scelte di P13". File nuovi: `ai/proplus/LeveP13`, `Taranto`, `FabbricheTenute`,
+`BombardamentoMosca`, risorsa `proplus/strategia/p13.json`, test `LeveP13Test` (5); autoplay `MonitorP13`, `ConfrontoP13`, test
+`ConfrontoP13Test` (3). Modificati: `StrategaInterruttori` (+3), `RegistroDecisioni` (3 tipi, 8 codici), `ProPlusAi` (Taranto nel
+combattimento, leve nel non combattimento, trattenute, `place`), `ProPlusTuning.reviewAttacks` (raid della leva al posto di
+`Assedio.bombarda` solo se acceso), `Impegno` (bombardiere della leva dalla quota dell'assedio); autoplay `Monitor`, `Riepilogo`
+(blocco `p13`), `ConfrontoCompleta`, `ConfrontoP12.bonus` (visibile nel pacchetto); workflow `[prova13]`, `[completa]` P13.
+- Test locali (JDK 25 da apt): AI di game-core, `:proplus-autoplay:test`, spotless verdi. Prove locali (3 partite da 8-10 round):
+  Taranto 85% stimato (58% con le sole forze del Mediterraneo), flotta italiana distrutta, scramble visto; bombardamento: prima
+  versione con raid solo da R6 (bombardieri usati da Hard e lontani) ⇒ trattenuti tutti dalla guerra + volo alla base.
+
+#### Prova breve in CI (run 45074657393, commit 31f49e9, tutto verde, 20 partite [prova13], semi 2221-2225), un giro
+- `taranto` (100): eseguito 5/5 (vittoria stimata 81-99%, con le sole forze del Mediterraneo 49% di media), vinto 5/5, scramble
+  italiano 5/5; caccia di Londra 2 in 2 partite e 0 in 3 (vittoria tedesca stimata su Londra senza un caccia oltre il 30%): SI'.
+  Flotta italiana R2 2,8 contro 5,4 di 000; round con l'Egitto dell'Asse R2-R8 1,8 contro 3,6.
+- `fabbriche_tenute` (010): guarnigione registrata (183 righe turno x fabbrica, richiesta media 4,7, mancanti 0,8): SI'; riprese russe
+  non inferiori (Ucraina 2/5 contro 2/12, Leningrado 2/5 contro 8/15 su 5 partite): NO. Motivo visto nei registri: la guarnigione
+  costruita nel non combattimento (fino a 28 unita') viene usata da Hard negli attacchi del turno tedesco dopo (regola del testo:
+  prima gli attacchi di Hard, nessuno cancellato).
+- `bombardamento_mosca` (001): raid in 37 turni su 107 turni tedeschi in guerra (prima che il fronte sia entro 3 caselle da Mosca un
+  bombardiere non puo' andare e tornare), 2,3 bombardieri e 9,3 di danno per raid: parziale; prodotte a Mosca R4-R8 36,8 contro
+  29,6: NO. Gia' senza leva l'assedio bombarda Mosca (riparazioni russe R4-R8 31 contro 30).
+- Nessuna correzione: la run lunga e' lanciata dopo il primo giro (dichiarato nel REPORT).
+

@@ -247,6 +247,7 @@ jobs:
               # Allies (+ taranto): 000..111 x 120 new seeds 2221-2340 + r0 (Axis Hard vs final
               # Allies) and r1 (+ taranto) = 1200 games in two blocks (seeds 2221-2280, 2281-2340),
               # partial summary after block 1. [prova13]: each lever alone and 000, seeds 2221-2225
+              # (short test: run 45074657393, one round, the long run started right after it)
               if os.environ["MODALITA"] in ("completa", "prova13"):
                   finali = "usa_proporzione+sbarco_concentrato+niente_neutrali+norvegia_presto+norvegia_esposta+ponte_concentrato"
                   if os.environ["MODALITA"] == "prova13":
