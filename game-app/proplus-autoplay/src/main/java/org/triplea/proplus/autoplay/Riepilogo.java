@@ -192,6 +192,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p12", err);
     }
+    // step P13: three levers in a factorial design (every configuration)
+    try {
+      json.add("p13", ConfrontoP13.blocco(json, data));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p13", err);
+    }
     return json;
   }
 

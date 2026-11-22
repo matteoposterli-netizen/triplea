@@ -117,6 +117,11 @@ public class ProPlusAi extends ProAi {
             keep.addAll(SbarcoCoordinato.trattenute(data, player));
             // step R4 (A3): the bombers for the raid on Moscow stay out of Hard's attacks
             keep.addAll(Assedio.trattenute(data, player));
+            // step P13: every bomber that reaches the raid's target (lever "bombardamento_mosca")
+            if (BombardamentoMosca.attivo(data, player)) {
+              initializeData();
+              keep.addAll(BombardamentoMosca.trattenute(getProData()));
+            }
             // step R6c: the Italian convoy stays out of Hard's attacks
             keep.addAll(ConvoglioItalia.trattenute(data, player));
           }
@@ -217,6 +222,7 @@ public class ProPlusAi extends ProAi {
       playTask(false, moveDel, data, player);
       playConcentratedLanding(moveDel, data, player);
       playItalyLanding(moveDel, data, player);
+      playTaranto(moveDel, data, player);
     }
     if (nonCombat) {
       playLevers(moveDel, data, player);
@@ -465,6 +471,40 @@ public class ProPlusAi extends ProAi {
   }
 
   /**
+   * Step P13 (taranto): the UK's raid on the Italian fleet at round 1 before Hard's combat move;
+   * Hard then plans again without the units sent. Nothing with the switch off.
+   */
+  private void playTaranto(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (!Taranto.attivo(data, player)
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      attendiCalcolatore(data, player);
+      initializeData();
+      final java.util.Set<games.strategy.engine.data.Unit> moved =
+          Taranto.combattimento(getProData(), getCalc(), moveDel);
+      if (moved.isEmpty()) {
+        return;
+      }
+      initializeData();
+      final java.util.Set<games.strategy.engine.data.Unit> keep =
+          new java.util.LinkedHashSet<>(tuning.combatHeldUnits(getProData()));
+      keep.removeIf(u -> !u.isOwnedBy(player) || !data.getUnits().getUnits().contains(u));
+      keep.addAll(moved);
+      tuning.holdCombat(data, player, keep);
+      if (hasStoredCombatMove()) {
+        forgetStoredCombatMove();
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P13 Taranto failed: " + e);
+    }
+  }
+
+  /**
    * Step P5, at the start of the purchase: B's losses of last turn's escort and a new turn; A's
    * plan of the three steps (orders for Hard's purchase). Nothing with the switches off.
    */
@@ -574,6 +614,37 @@ public class ProPlusAi extends ProAi {
       }
     } else if (LeveItalia.tedeschiPerRoma(data, player)) {
       held.addAll(LeveItalia.tedeschi(data, player, moveDel));
+    }
+    // step P13: the raid's planes land at the air base (taranto); the outcome of the bombing and
+    // the garrisons of the captured factories (Germany)
+    if (Taranto.attivo(data, player)) {
+      held.addAll(Taranto.nonCombattimento(data, player, moveDel));
+    }
+    if (BombardamentoMosca.attivo(data, player)) {
+      BombardamentoMosca.esito(data, player);
+      try {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        held.addAll(BombardamentoMosca.basi(getProData(), getCalc(), moveDel));
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P13 bomber bases failed: " + e);
+      }
+    }
+    if (FabbricheTenute.attivo(data, player)) {
+      try {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        final java.util.Set<games.strategy.engine.data.Unit> before =
+            new java.util.LinkedHashSet<>(held);
+        before.addAll(tuning.heldUnits(getProData()));
+        held.addAll(FabbricheTenute.nonCombattimento(getProData(), getCalc(), moveDel, before));
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P13 factories failed: " + e);
+      }
     }
     if (!held.isEmpty()) {
       tuning.holdForOperation(data, player, held);
@@ -1058,6 +1129,10 @@ public class ProPlusAi extends ProAi {
         attendiCalcolatore(gameData, player);
       }
       Impegno.dopoIlPiazzamento(data, player, before);
+      // step P13: the units really in the captured factories after the placement (register)
+      if (FabbricheTenute.attivo(data, player)) {
+        FabbricheTenute.dopoPiazzamento(data, player);
+      }
     }
     saveCheck(data, player);
   }

@@ -337,7 +337,7 @@ final class ConfrontoP12 {
     return "Germans".equals(owner) || "Italians".equals(owner) || "Neutral_Axis".equals(owner);
   }
 
-  private static int bonus(final JsonObject r) {
+  static int bonus(final JsonObject r) {
     if (!r.has("r4") || !r.getAsJsonObject("r4").has("obiettivi")) {
       return 0;
     }

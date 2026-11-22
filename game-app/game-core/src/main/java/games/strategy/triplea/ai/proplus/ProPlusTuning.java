@@ -469,8 +469,13 @@ public final class ProPlusTuning implements ProTuning {
     // step P4: Hard's attacks on the watched targets, for the register (read only)
     IndicazioniP4.attacchiDiHard(p4, attackMap);
     Impegno.rivedi(proData, calc, attackMap);
-    // step R4 (A3): the raid on Moscow's factory (switch "assedio")
-    Assedio.bombarda(proData, attackMap);
+    // step R4 (A3): the raid on Moscow's factory (switch "assedio"); step P13: replaced by the
+    // lever "bombardamento_mosca" while on
+    if (BombardamentoMosca.attivo(proData.getData(), proData.getPlayer())) {
+      BombardamentoMosca.bombarda(proData, attackMap);
+    } else {
+      Assedio.bombarda(proData, attackMap);
+    }
   }
 
   /** Step R2b: the commitment's orders with the operations' mandatory reserves added. */

@@ -278,6 +278,12 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   `ProPlusAi.playLevers` (B, dopo il combattimento di Hard). `ForzaSbarco.opzioniTruppe/opzioneTrasporto` ora package-private.
   Interruttori `NIENTE_NEUTRALI/PONTE_UK/PONTE_PRONTI`; 3 caselle; autoplay `MonitorP7` (`round[].p7`, `p7_eventi`), `ConfrontoP7`
   (blocco `p7`, sezione "P7"). Vedi "Tre leve (step P7)".
+- Step P13 TRE LEVE IN DISEGNO FATTORIALE: `ai/proplus/LeveP13` (dati `proplus/strategia/p13.json`, interruttori, registro),
+  `Taranto` (Alleati, `taranto`), `FabbricheTenute` (Asse, `fabbriche_tenute`), `BombardamentoMosca` (Asse, `bombardamento_mosca`,
+  sostituisce il raid dell'assedio quando acceso). Agganci: `ProPlusAi` (`playTaranto` nel combattimento, `playLevers` nel non
+  combattimento, trattenute all'acquisto, `place`), `ProPlusTuning.reviewAttacks`, `Impegno` (acquisto dei bombardieri dalla quota
+  dell'assedio). `StrategaInterruttori.TARANTO/FABBRICHE_TENUTE/BOMBARDAMENTO_MOSCA`; NON nel pannello. Autoplay `MonitorP13`,
+  `ConfrontoP13` (blocco `p13`, sezione "P13"). Vedi "Tre leve in disegno fattoriale (step P13)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -583,6 +589,10 @@ la cui run pubblicherà). `proplus-latest` mai toccata.
   120 o meno se il budget finisce), in ordine di seme (1621-1700 prima). L'elenco completo e' in `autoplay-kit/partite.json` (1080
   voci non stanno in una variabile d'ambiente); l'uscita `gruppi` sostituisce `matrix`. `[prova7]` = s5, c1, c2 x semi 1621-1625 (15
   partite, una per job): la prova breve. Sezione "P7" (`ConfrontoP7`: i sette confronti, F1-F4).
+  **Dallo step P13** `[completa]` = 000..111 (taranto, fabbriche_tenute, bombardamento_mosca; Asse impegno+assedio, Alleati
+  finali) + r0, r1 (Asse Hard contro Alleati finali senza/con taranto) x semi 2221-2340 = 1200 partite senza chiave in due blocchi
+  (semi fino a 2280, poi il resto), download degli artefatti uno alla volta in tutti i publish; `[prova13]` = 100, 010, 001, 000 x semi
+  2221-2225. Sezione "P13" (`ConfrontoP13`).
 - Download: `https://github.com/matteoposterli-netizen/triplea/releases/download/autoplay-latest/autoplay.zip`.
 
 ## Regole di consumo della CI (decise da Matteo, 2026-11-08)
@@ -3624,6 +3634,83 @@ codice nuovo agisce (`LeveItaliaTest.allOffNothingActs`, `NudoHardTest`). Nessun
 7. **Sbarco su Egitto/Gibilterra solo con trasporti gia' carichi** accanto al bersaglio (caricati nel non combattimento prima) e solo col
    carico italiano nel calcolo (niente bombardamento): conservativo, Hard puo' unirsi con aerei e terra grazie al peso.
 8. **"Regge" = vittoria nemica <= 40%** (soglia della scorta di P5/P6), "distrutto" = >= 95%: valori scelti, nei dati.
+
+### Tre leve in disegno fattoriale (step P13)
+
+Tre interruttori indipendenti, default spenti (`p13.json`), NON nel pannello (le caselle restano quelle di P12). Tutti spenti =
+decisioni identiche a 8a05793 (ogni aggancio e' dietro `attivo`, `LeveP13Test.allOffNothingActs`, `NudoHardTest`). Nessun nome di
+nazione, territorio o tipo di unita' nel codice (test sul sorgente). Le leve dell'Italia di P12 non sono toccate.
+- **A `taranto`** (Alleati; solo Regno Unito, solo al round 1, nel combattimento PRIMA di Hard, `ProPlusAi.playTaranto`): forze
+  candidate contro la zona 97 = navi britanniche della zona 98 (portaerei, incrociatore, cacciatorpediniere) che la raggiungono, il
+  tattico (atterra a Malta), il caccia di Malta (rientra a Malta), il bombardiere di Londra (atterra a Malta; rotta nel combattimento
+  reale, quindi col bonus dell'aeroporto: movimento 7, rotta 5), fino a 2 caccia di Londra (rotta <= movimento, atterrano sulla
+  portaerei nella zona, capacita' della portaerei). Sicurezza di Londra con il calcolo di `capitale_minima` (`LeveItalia.minaccia`
+  + `vittoria` sui difensori reali, bombardiere escluso): 2 caccia se senza entrambi la vittoria nemica < 30%, altrimenti 1 se senza
+  uno < 30%, altrimenti 0 (`Taranto.cacciaDaMandare`). Difesa = navi nemiche + aerei che possono decollare in difesa
+  (`ScrambleLogic` del motore). Vittoria >= 75%: si muovono flotta (prima) e aerei, ogni mossa controllata dal motore
+  (`performMove`); sotto soglia nulla. Hard ripianifica senza le unita' mandate (il caccia di Malta non attacca la 96). Nel non
+  combattimento tattico, bombardiere e caccia di Malta atterrano a Malta (prima di Hard, trattenuti). Registro `p13_taranto`
+  (P13_TARANTO / P13_TARANTO_NO, con vittoria stimata, vittoria con le sole forze del Mediterraneo, caccia di Londra in portata,
+  movimento/rotta, vittorie tedesche su Londra senza 0/1/2 caccia, caccia mandati e partiti, rifiuti del motore).
+- **B `fabbriche_tenute`** (Asse; solo Germania, sopra impegno + assedio; non combattimento DOPO gli attacchi di Hard e prima del
+  suo non combattimento, `playLevers`): per ogni fabbrica russa catturata (`Assedio.fabbricheCatturate`) guarnigione = minimo di
+  unita' di terra con cui il miglior contrattacco nemico del prossimo turno (`LeveItalia.minaccia`, stima di Hard) vince < 30%
+  (`FabbricheTenute.guarnigione`, ricerca di `LeveItalia.minimo`). Candidati in ordine: tedesche gia' li' (trattenute), le unita' di
+  terra comprate nel turno fino alla capacita' della fabbrica (le piazza l'assedio; contate, non forzate), tedesche piu' vicine che
+  NON si sono mosse nel turno, mai da ovest (`ovest` nei dati = Europa occidentale di P6), entro il movimento. Italiane presenti =
+  difesa fissa, mai mosse. Oltre il minimo libere; nessuna minaccia = zero. Fabbriche in ordine di `fabbricheCatturate`. Registro
+  `p13_fabbriche` (P13_FABBRICA, per fabbrica: vittoria prima/dopo, richiesta, presenti, alleati, tenute, da piazzare, spostate,
+  mancanti; riga "dopo_piazzamento" con le unita' davvero presenti dopo il piazzamento).
+- **C `bombardamento_mosca`** (Asse; solo Germania, sopra impegno + assedio; SOSTITUISCE `Assedio.bombarda` in
+  `ProPlusTuning.reviewAttacks` quando acceso): ogni turno tedesco in guerra con la Russia tutti i bombardieri che raggiungono il
+  bersaglio e possono atterrare (stesso controllo di `Assedio.raggiungibili`) bombardano la fabbrica di Mosca; a danno massimo la
+  fabbrica russa che produce di piu'. Scorta (caccia) se il bersaglio ha intercettori, quanti gli intercettori: prima caccia non usati
+  da Hard, poi caccia di attacchi di Hard stimati < 65% (tolti da quegli attacchi). In guerra con la Russia TUTTI i bombardieri
+  tedeschi sono trattenuti fuori dagli attacchi di Hard all'acquisto (`trattenute`) e quelli fuori portata volano, nel non
+  combattimento, alla base propria piu' vicina al bersaglio da cui lo raggiungono e tornano (2 x distanza <= movimento) con vittoria
+  nemica stimata < 30% (`basi`). Acquisto (si AGGIUNGE): se i bombardieri tedeschi sono < 3 e l'assedio non ne compra, uno dalla quota
+  dell'assedio (`Impegno`, `BombardamentoMosca.acquisto`), anche prima della guerra con la Russia. Registro `p13_bombardamento`
+  (P13_BOMBARDIERE_ACQUISTO, P13_BOMBARDAMENTO_ESITO con bombardieri usati/persi, danno prima/dopo/inflitto, scorta;
+  P13_BOMBARDAMENTO_NO; P13_BOMBARDIERE_BASE).
+- **Diagnostica** (sola lettura, tutte le configurazioni): `MonitorP13` (`round[].p13`: tedeschi di terra nei territori
+  originariamente russi, danno riparato dai russi nel loro acquisto, danno fatto dai tedeschi nella loro battaglia; al round 1 navi
+  britanniche nel Mediterraneo (zone 92-99) dopo il turno italiano e gli scramble del round letti dalla storia della partita).
+  `ConfrontoP13.blocco` (blocco `p13`): configurazione (000..111, r0, r1), cadute (Mosca, Ucraina, Leningrado, Stalingrado: Asse;
+  Roma, Berlino: non Asse; Londra: Asse), fabbriche (cattura, prima perdita, perdite), per round (R1-R20: tedeschi a est, russi,
+  prodotte e danno di Mosca, riparazioni, flotta/reddito/bonus/Egitto italiani), Taranto (battaglia britannica sulla 97 al round 1,
+  esito, TUV, scramble, navi UK dopo l'Italia, riga della leva), battaglie del round 1 con i tedeschi (attacchi e contrattacchi, TUV
+  per parte), registro delle leve. Sezione "P13" del riepilogo: tabella per configurazione, effetto di ogni leva (Fisher, 480 contro
+  480), regressione logistica con tre leve e tre coppie + tabelle 2x2, r1 contro r0, meccanismo, registro, perdite tedesche al round 1
+  per battaglia (media ± ds), Mosca per round.
+- **CI**: `[prova13]` = 100, 010, 001, 000 x semi 2221-2225 (20 partite, una per job); `[completa]` P13 = 000..111 + r0, r1 x semi
+  2221-2340 = 1200 partite in due blocchi (semi 2221-2280, poi 2281-2340; 5 partite per job), riepilogo parziale dopo il blocco 1
+  (`publish1`); TUTTI i publish di `[completa]` scaricano gli artefatti UNO ALLA VOLTA dalla run stessa (`RUN_ID = github.run_id`;
+  `[ripubblica]` usa lo stesso passo con la run scritta nel workflow).
+- **Controllo di Hard che esclude gli aerei di Londra dalla zona 97 (sola lettura, punto A.5)**: `ProTerritoryManager.findAirMoveOptions`
+  (chiamato da `findAttackOptions` con `isCombatMove` vero), blocco "Check if unit can land": con `remainingMoves < routeLength`
+  l'aereo resta tra le opzioni solo se trova terra amica entro i movimenti rimasti o una portaerei possibile. (a) Il bombardiere:
+  il raggio per gli attacchi propri e' `getUnitRange` = `unit.getMovementLeft()`, senza il +1 dell'aeroporto (il +1 fisso c'e' solo
+  per gli attacchi nemici), e Hard pianifica il combattimento durante l'acquisto su una copia in cui `MoveDelegate.start()` (che da'
+  il bonus) non e' ancora stato chiamato: raggio 6, rotta 5, resta 1, Malta e' a 2 ⇒ escluso. (b) I caccia: `possibleCarrierTerritories`
+  si riempie solo `if (isCheckingEnemyAttacks || !isCombatMove)` (TODO nel codice: "add carriers to landing possibilities for
+  non-enemy attacks"), quindi per i propri attacchi nessuna portaerei conta come atterraggio; senza bonus il caccia ha 4 e non arriva
+  nemmeno alla zona. Non modificato.
+
+### Scelte di P13 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Taranto nel combattimento reale, prima di Hard**: li' il bonus dell'aeroporto e' gia' dato (bombardiere 7, caccia 5), sulla copia
+   dell'acquisto no. Hard poi ripianifica senza le unita' mandate (come gli sbarchi di P6/P12).
+2. **"Miglior attacco tedesco su Londra" = stima di Hard `getMax` (un solo nemico)**, come `capitale_minima`: e' il calcolo chiesto.
+   Nelle prove locali la vittoria nemica su Londra senza un caccia e' 50-94% ⇒ la regola manda quasi sempre 0 caccia: e' l'esito della
+   regola, non un difetto della leva.
+3. **Fabbriche: le unita' da piazzare sono contate, non forzate** (il piazzamento resta di Hard/assedio); la riga "dopo_piazzamento"
+   misura quante unita' ci sono davvero.
+4. **Bombardamento: tutti i bombardieri trattenuti dalla guerra con la Russia + volo alla base** (dopo la prima prova locale: con la
+   sola regola del testo i bombardieri comprati restavano 1-3 perche' Hard li usava negli attacchi e quelli in Germania non arrivavano
+   a Mosca: raid solo da R6). E' una regola che spinge (porta i bombardieri dove servono), non un'attesa.
+5. **Acquisto del bombardiere anche prima della guerra con la Russia**: il testo condiziona alla guerra solo il bombardamento.
+6. **Scorta presa anche dagli attacchi di Hard < 65%** (il testo: "la scorta non serve a un attacco di Hard con vittoria stimata
+   almeno 65%"): quei caccia vengono tolti dall'attacco.
 
 ## Come configurare lo stratega
 

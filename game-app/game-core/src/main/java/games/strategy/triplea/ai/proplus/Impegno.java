@@ -958,14 +958,14 @@ public final class Impegno {
       Assedio.produzioneMoscaEsito(data, player);
       int puAssedio = 0;
       if (Assedio.germania(data, player)) {
+        final int puShare = puOperazione(puTurn, puC, quotaOperazione(data, player));
+        final Map<String, Integer> siegeBombers =
+            Assedio.bombardieriDaComprare(proData, calc, player, c, puShare, lines);
+        // step P13: one more bomber from the share while Germany has few (lever on; off: same)
         final Map<String, Integer> bombers =
-            Assedio.bombardieriDaComprare(
-                proData,
-                calc,
-                player,
-                c,
-                puOperazione(puTurn, puC, quotaOperazione(data, player)),
-                lines);
+            BombardamentoMosca.attivo(data, player)
+                ? BombardamentoMosca.acquisto(data, player, siegeBombers, puShare)
+                : siegeBombers;
         if (!bombers.isEmpty()) {
           final Map<String, Integer> costs = costiAcquisto(data, player);
           for (final var e : bombers.entrySet()) {

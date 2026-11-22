@@ -59,6 +59,9 @@ import java.util.Optional;
  *   <li>{@link #ITALIA_EST}, {@link #ITALIA_AFRICA}, {@link #CAPITALE_MINIMA}, {@link
  *       #ITALIA_GIBILTERRA} (step P12, defaults from {@code p12.json}: OFF), on top of the
  *       commitment and the siege: Italy's four levers ({@link LeveItalia}).
+ *   <li>{@link #TARANTO}, {@link #FABBRICHE_TENUTE}, {@link #BOMBARDAMENTO_MOSCA} (step P13,
+ *       defaults from {@code p13.json}: OFF): the UK's raid on the Italian fleet at round 1, the
+ *       captured Russian factories held, the bombing of Moscow ({@link LeveP13}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -87,7 +90,10 @@ public enum StrategaInterruttori {
   ITALIA_EST("italia_est", false),
   ITALIA_AFRICA("italia_africa", false),
   CAPITALE_MINIMA("capitale_minima", false),
-  ITALIA_GIBILTERRA("italia_gibilterra", false);
+  ITALIA_GIBILTERRA("italia_gibilterra", false),
+  TARANTO("taranto", false),
+  FABBRICHE_TENUTE("fabbriche_tenute", false),
+  BOMBARDAMENTO_MOSCA("bombardamento_mosca", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -163,6 +169,9 @@ public enum StrategaInterruttori {
     if (this == PONTE_CONCENTRATO) {
       return PonteConcentrato.Config.get().diDefault();
     }
+    if (LeveP13.LEVE.contains(this)) {
+      return LeveP13.Config.get().diDefault(this);
+    }
     if (LeveItalia.LEVE.contains(this)) {
       return LeveItalia.Config.get().diDefault(this);
     }
@@ -234,7 +243,8 @@ public enum StrategaInterruttori {
                                         + " norvegia_esposta, niente_neutrali, ponte_uk,"
                                         + " ponte_pronti, ponte_concentrato, italia_est,"
                                         + " italia_africa, capitale_minima,"
-                                        + " italia_gibilterra)"))
+                                        + " italia_gibilterra, taranto, fabbriche_tenute,"
+                                        + " bombardamento_mosca)"))
                         .id())
             .distinct()
             .toList();

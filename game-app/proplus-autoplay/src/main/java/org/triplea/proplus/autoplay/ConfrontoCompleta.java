@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P13: three levers in a factorial design, the references r0 / r1
+    if (ConfrontoP13.applicabile(games)) {
+      try {
+        ConfrontoP13.write(md, games);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P13 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step P12: Italy's four levers in all combinations, against H and F
     if (ConfrontoP12.applicabile(games)) {
       try {

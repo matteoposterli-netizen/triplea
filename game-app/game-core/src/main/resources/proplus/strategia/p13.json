@@ -1,0 +1,51 @@
+{
+  "nota": "Step P13: tre leve in disegno fattoriale, ognuna col suo interruttore (default spento). taranto (Alleati, solo Regno Unito, solo al primo round, nel combattimento), fabbriche_tenute e bombardamento_mosca (Asse, solo Germania, sopra impegno + assedio). Si aggiungono a Hard: nessun attacco cancellato. Nessun nome di nazione, territorio o tipo di unita' nel codice: stanno qui.",
+  "acceso_di_default": {
+    "valore": {"taranto": false, "fabbriche_tenute": false, "bombardamento_mosca": false},
+    "origine": "richiesta dello step P13 (default spenti: prima si misurano)"
+  },
+  "taranto": {
+    "valore": {
+      "nazione": "British",
+      "round": 1,
+      "zona_bersaglio": "97 Sea Zone",
+      "zona_flotta": "98 Sea Zone",
+      "tipi_navi": ["carrier", "cruiser", "destroyer"],
+      "tattico": "tactical_bomber",
+      "caccia": "fighter",
+      "bombardiere": "bomber",
+      "base_aerea": "Malta",
+      "capitale": "United Kingdom",
+      "max_caccia_capitale": 2,
+      "nemico_capitale": "Germans",
+      "difensore": "Italians"
+    },
+    "origine": "richiesta dello step P13 (forze del Mediterraneo, bombardiere e fino a 2 caccia di Londra contro la zona 97; tattico e bombardiere atterrano a Malta, i caccia di Londra sulla portaerei)"
+  },
+  "fabbriche": {
+    "valore": {
+      "nazione": "Germans",
+      "ovest": ["France", "Normandy Bordeaux", "Holland Belgium", "Western Germany", "Southern France", "Northern Italy", "Southern Italy"]
+    },
+    "origine": "richiesta dello step P13: guarnigione minima delle fabbriche russe catturate; mai unita' richiamate da ovest (Europa occidentale dello step P6)"
+  },
+  "bombardamento": {
+    "valore": {
+      "nazione": "Germans",
+      "nemico": "Russians",
+      "capitale_russa": "Russia",
+      "bombardiere": "bomber",
+      "scorta": "fighter",
+      "bombardieri_minimi": 3
+    },
+    "origine": "richiesta dello step P13: tutti i bombardieri che raggiungono Mosca e rientrano; uno a turno dalla quota dell'assedio se sono meno di 3"
+  },
+  "parametri": {
+    "soglia_capitale_pct": {"valore": 30, "origine": "richiesta dello step P13: i caccia lasciano Londra solo se la vittoria tedesca resta sotto il 30% (calcolo di capitale_minima)"},
+    "soglia_attacco_pct": {"valore": 75, "origine": "richiesta dello step P13: Taranto parte con vittoria stimata almeno 75%"},
+    "soglia_contrattacco_pct": {"valore": 30, "origine": "richiesta dello step P13: guarnigione = minimo con cui la vittoria russa scende sotto il 30%"},
+    "soglia_scorta_hard_pct": {"valore": 65, "origine": "richiesta dello step P13: la scorta non si prende da un attacco di Hard con vittoria stimata almeno 65%"},
+    "max_guarnigione": {"valore": 30, "origine": "scelto (come P12): unita' aggiunte al massimo nel calcolo della guarnigione minima"},
+    "tipo_guarnigione": {"valore": "infantry", "origine": "dalla mappa: unita' di terra piu' economica (mancanti ipotetiche nel calcolo)"}
+  }
+}

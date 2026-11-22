@@ -136,6 +136,7 @@ final class Monitor {
   private final MonitorP6 p6;
   private final MonitorP7 p7;
   private final MonitorP12 p12;
+  private final MonitorP13 p13;
 
   private int lastRound;
 
@@ -201,6 +202,7 @@ final class Monitor {
     this.p6 = new MonitorP6(data);
     this.p7 = new MonitorP7(data, this::costs);
     this.p12 = new MonitorP12(data, this::allianceOf);
+    this.p13 = new MonitorP13(data);
     // reverse name order: Axis before Allies, as in the plans (Asse / Alleati)
     final List<String> names = new ArrayList<>(ProPlusSettings.configurableAlliances(data));
     names.sort(Comparator.reverseOrder());
@@ -243,6 +245,7 @@ final class Monitor {
     p2.beforeStep(runningStep, runningPlayer);
     p5.beforeStep(runningStep, runningPlayer);
     p7.beforeStep(runningStep, runningPlayer, data.getSequence().getRound());
+    p13.beforeStep(runningStep, runningPlayer);
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiPrima();
     }
@@ -293,6 +296,7 @@ final class Monitor {
     p6.afterStep(runningStep, runningPlayer, lastRound);
     p7.afterStep(runningStep, runningPlayer, lastRound);
     p12.afterStep(lastRound);
+    p13.afterStep(runningStep, runningPlayer, lastRound);
     if (GameStep.isBattleStepName(runningStep)) {
       attacchiDopo(lastRound);
     }
@@ -995,6 +999,8 @@ final class Monitor {
       json.add("p7", p7.snapshot(round));
       // step P12: Italian land units by region, transports, warships, income, Egypt, Gibraltar
       json.add("p12", p12.snapshot(round));
+      // step P13: Germans in the east, Russian repairs and bombing damage, round 1 at sea
+      json.add("p13", p13.snapshot(round));
     }
     if (complete) {
       rounds.put(round, json);

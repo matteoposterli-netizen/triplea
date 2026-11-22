@@ -107,11 +107,24 @@ public final class RegistroDecisioni {
           "p12_bilancio",
           "p12_turno",
           "p12_assalto",
-          "p12_germania");
+          "p12_germania",
+          // step P13
+          "p13_taranto",
+          "p13_fabbriche",
+          "p13_bombardamento");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step P13
+          "P13_TARANTO",
+          "P13_TARANTO_NO",
+          "P13_FABBRICA",
+          "P13_BOMBARDAMENTO",
+          "P13_BOMBARDAMENTO_NO",
+          "P13_BOMBARDAMENTO_ESITO",
+          "P13_BOMBARDIERE_ACQUISTO",
+          "P13_BOMBARDIERE_BASE",
           // step P12
           "P12_BILANCIO",
           "P12_TURNO",

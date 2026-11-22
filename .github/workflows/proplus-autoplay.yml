@@ -57,7 +57,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P12: 16 combinazioni delle leve dell'Italia contro Alleati Hard e Alleati finali, semi 2101-2160, + H0000, F0000 su 2161-2220, + a3, h3, h5 su 2101-2220 = 2400 partite in tre blocchi, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625) | prova9 (step P9+P10: d1 x semi 1741-1745) | prova12 (step P12: leve dell'Italia da sole e tutte insieme + solo assedio, contro Alleati Hard, semi 2101-2105) | ripubblica (nessuna partita: confronto e zip delle partite della run 44937514617)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P13: 8 combinazioni di taranto, fabbriche_tenute, bombardamento_mosca + r0, r1, semi 2221-2340 = 1200 partite in due blocchi, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625) | prova9 (step P9+P10: d1 x semi 1741-1745) | prova12 (step P12: leve dell'Italia da sole e tutte insieme + solo assedio, contro Alleati Hard, semi 2101-2105) | prova13 (step P13: taranto, fabbriche_tenute, bombardamento_mosca da sole + 000, semi 2221-2225) | ripubblica (nessuna partita: confronto e zip delle partite della run 44937514617)"
         default: "normale"
 permissions:
   contents: write
@@ -158,7 +158,7 @@ jobs:
               print("matrix=" + json.dumps({"include": include}))
               print(f"round={rounds}")
               raise SystemExit(0)
-          if os.environ["MODALITA"] in ("completa", "prova7", "prova9", "prova12"):
+          if os.environ["MODALITA"] in ("completa", "prova7", "prova9", "prova12", "prova13"):
               # step PARTITA COMPLETA: games played until the victory (map triggers, held for a
               # complete round), NO key (API cost 0), caps 60 rounds and 120 minutes per game (a game
               # at a cap = "stallo", not an error). Step R6: 5 configurations x 40 seeds 1221-1260 =
@@ -242,6 +242,36 @@ jobs:
                        "Axis=hard,Allies=" + ("stratega" if allies else "hard"),
                        "Allies=" + allies if allies else "", "", ss)
                       for (n, key, label, allies, ss) in p11]
+              # step P13: three levers in a factorial design (digits taranto, fabbriche_tenute,
+              # bombardamento_mosca), Axis = impegno + assedio (+ German levers), Allies = the final
+              # Allies (+ taranto): 000..111 x 120 new seeds 2221-2340 + r0 (Axis Hard vs final
+              # Allies) and r1 (+ taranto) = 1200 games in two blocks (seeds 2221-2280, 2281-2340),
+              # partial summary after block 1. [prova13]: each lever alone and 000, seeds 2221-2225
+              if os.environ["MODALITA"] in ("completa", "prova13"):
+                  finali = "usa_proporzione+sbarco_concentrato+niente_neutrali+norvegia_presto+norvegia_esposta+ponte_concentrato"
+                  if os.environ["MODALITA"] == "prova13":
+                      combos, refs, seeds = ["100", "010", "001", "000"], [], range(2221, 2226)
+                  else:
+                      combos, refs, seeds = ["000", "001", "010", "011", "100", "101", "110", "111"], ["r0", "r1"], range(2221, 2341)
+                  p13 = []
+                  for c in combos:
+                      axis = "+".join(["impegno", "assedio"] + [l for l, b in zip(["fabbriche_tenute", "bombardamento_mosca"], c[1:]) if b == "1"])
+                      allies = finali + ("+taranto" if c[0] == "1" else "")
+                      p13.append((c, "Asse-" + c + "-vs-finali", "P13 " + c + " (taranto, fabbriche, bombardamento)", "Axis=stratega,Allies=stratega", "Axis=" + axis + ",Allies=" + allies))
+                  for r in refs:
+                      p13.append((r, "Hard-vs-finali" + ("-taranto" if r == "r1" else ""), "P13 " + r + ": Asse Hard / Alleati finali" + (" + taranto" if r == "r1" else ""), "Axis=hard,Allies=stratega", "Allies=" + finali + ("+taranto" if r == "r1" else "")))
+                  include = [{"id": f"{n}-{key}-seme{seed}", "nome": f"{name} (seme {seed})",
+                              "tipo": tipo, "piano": "", "seme": seed, "decisore": "",
+                              "ablazione": "", "operazione": "", "opllm": "", "stratega": "",
+                              "budget": "", "tetto": "70",
+                              "spento": "", "regole": "", "acceso": acceso, "completa": "si",
+                              "quota": "", "blocco": 1 if seed <= 2280 else 2}
+                             for (n, key, name, tipo, acceso) in p13
+                             for seed in seeds]
+                  include.sort(key=lambda g: (g["blocco"], g["seme"], g["id"]))
+                  print("matrix=" + json.dumps({"include": include}))
+                  print("round=60")
+                  raise SystemExit(0)
               # step P12: Italy's four levers (est, africa, capitale, gibilterra) on top of the siege,
               # all 16 combinations x 60 new seeds 2101-2160 against the Allies of Hard (H, block 1)
               # and the final Allies with six switches (F, block 2); H0000 and F0000 also on
@@ -662,11 +692,11 @@ jobs:
     if: inputs.modalita != 'ripubblica'
     runs-on: ubuntu-latest
     # [completa]: up to 5 games in one job (each at most 120 minutes, the job's budget 340)
-    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 355 || 30 }}
+    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12' || inputs.modalita == 'prova13') && 355 || 30 }}
     strategy:
       fail-fast: false
       # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
-      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 20 || 6 }}
+      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12' || inputs.modalita == 'prova13') && 20 || 6 }}
       matrix: ${{ fromJson(needs.prepare.outputs.gruppi) }}
     name: play (${{ matrix.id }})
     steps:
@@ -750,11 +780,11 @@ jobs:
     if: always() && needs.prepare.result == 'success' && inputs.modalita != 'ripubblica' && needs.prepare.outputs.gruppi2 != 'none'
     runs-on: ubuntu-latest
     # [completa]: up to 5 games in one job (each at most 120 minutes, the job's budget 340)
-    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 355 || 30 }}
+    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12' || inputs.modalita == 'prova13') && 355 || 30 }}
     strategy:
       fail-fast: false
       # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
-      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 20 || 6 }}
+      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12' || inputs.modalita == 'prova13') && 20 || 6 }}
       matrix: ${{ fromJson(needs.prepare.outputs.gruppi2) }}
     name: play2 (${{ matrix.id }})
     steps:
@@ -838,11 +868,11 @@ jobs:
     if: always() && needs.prepare.result == 'success' && inputs.modalita != 'ripubblica' && needs.prepare.outputs.gruppi3 != 'none'
     runs-on: ubuntu-latest
     # [completa]: up to 5 games in one job (each at most 120 minutes, the job's budget 340)
-    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 355 || 30 }}
+    timeout-minutes: ${{ (inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12' || inputs.modalita == 'prova13') && 355 || 30 }}
     strategy:
       fail-fast: false
       # [prova]: 140 games, 20 at a time (the free limit of concurrent jobs)
-      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12') && 20 || 6 }}
+      max-parallel: ${{ (inputs.modalita == 'prova' || inputs.modalita == 'prova2' || inputs.modalita == 'provallm' || inputs.modalita == 'diagnosi' || inputs.modalita == 'correzioni' || inputs.modalita == 'ombra' || inputs.modalita == 'impegno' || inputs.modalita == 'completa' || inputs.modalita == 'prova7' || inputs.modalita == 'prova9' || inputs.modalita == 'prova12' || inputs.modalita == 'prova13') && 20 || 6 }}
       matrix: ${{ fromJson(needs.prepare.outputs.gruppi3) }}
     name: play3 (${{ matrix.id }})
     steps:
@@ -944,23 +974,26 @@ jobs:
           name: autoplay-kit
           path: autoplay-kit
       - uses: actions/download-artifact@v8
-        if: inputs.modalita != 'ripubblica'
+        if: inputs.modalita != 'ripubblica' && inputs.modalita != 'completa'
         with:
           pattern: partita-*
           path: autoplay
           merge-multiple: true
       # [ripubblica]: the 2400 games of run 44937514617 ([completa] of step P12, commit 63033bb),
       # (downloaded one at a time: the publish jobs of that run failed downloading them all at once)
-      - name: Download the games of run 44937514617
-        if: inputs.modalita == 'ripubblica'
+      # step P13: [completa] downloads the games of THIS run the same way (one at a time), from the
+      # start: downloading them all at once failed twice above ~200 artifacts
+      - name: Download the games one at a time
+        if: inputs.modalita == 'ripubblica' || inputs.modalita == 'completa'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ inputs.modalita == 'ripubblica' && '44937514617' || github.run_id }}
         run: |
           set -euo pipefail
           # one download at a time with retries: download-artifact with run-id asks for all 216
           # artifacts at once and hits GitHub's secondary rate limit (run 44724639523)
           mkdir -p autoplay dl
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44937514617/artifacts?per_page=100" \
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.name | startswith("partita-")) | "\(.id) \(.name)"' > artefatti.txt
           wc -l artefatti.txt
           while read -r id name; do
@@ -994,7 +1027,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.load(open('autoplay-kit/partite.json'))['include'] if g.get('blocco', 1) <= 1]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P12 (leve dell Italia, semi 2101-2220)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)')$([ "${MODALITA}" = "prova12" ] && echo ' - prova breve dello step P12 (semi 2101-2105)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P13 (taranto, fabbriche, bombardamento, semi 2221-2340)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)')$([ "${MODALITA}" = "prova12" ] && echo ' - prova breve dello step P12 (semi 2101-2105)')$([ "${MODALITA}" = "prova13" ] && echo ' - prova breve dello step P13 (semi 2221-2225)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           # the step summary takes at most 1 MiB: the full text is in the zip
           head -c 900000 autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
@@ -1068,23 +1101,26 @@ jobs:
           name: autoplay-kit
           path: autoplay-kit
       - uses: actions/download-artifact@v8
-        if: inputs.modalita != 'ripubblica'
+        if: inputs.modalita != 'ripubblica' && inputs.modalita != 'completa'
         with:
           pattern: partita-*
           path: autoplay
           merge-multiple: true
       # [ripubblica]: the 2400 games of run 44937514617 ([completa] of step P12, commit 63033bb),
       # (downloaded one at a time: the publish jobs of that run failed downloading them all at once)
-      - name: Download the games of run 44937514617
-        if: inputs.modalita == 'ripubblica'
+      # step P13: [completa] downloads the games of THIS run the same way (one at a time), from the
+      # start: downloading them all at once failed twice above ~200 artifacts
+      - name: Download the games one at a time
+        if: inputs.modalita == 'ripubblica' || inputs.modalita == 'completa'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ inputs.modalita == 'ripubblica' && '44937514617' || github.run_id }}
         run: |
           set -euo pipefail
           # one download at a time with retries: download-artifact with run-id asks for all 216
           # artifacts at once and hits GitHub's secondary rate limit (run 44724639523)
           mkdir -p autoplay dl
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44937514617/artifacts?per_page=100" \
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.name | startswith("partita-")) | "\(.id) \(.name)"' > artefatti.txt
           wc -l artefatti.txt
           while read -r id name; do
@@ -1118,7 +1154,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.load(open('autoplay-kit/partite.json'))['include'] if g.get('blocco', 1) <= 2]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P12 (leve dell Italia, semi 2101-2220)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)')$([ "${MODALITA}" = "prova12" ] && echo ' - prova breve dello step P12 (semi 2101-2105)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P13 (taranto, fabbriche, bombardamento, semi 2221-2340)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)')$([ "${MODALITA}" = "prova12" ] && echo ' - prova breve dello step P12 (semi 2101-2105)')$([ "${MODALITA}" = "prova13" ] && echo ' - prova breve dello step P13 (semi 2221-2225)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           # the step summary takes at most 1 MiB: the full text is in the zip
           head -c 900000 autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
@@ -1191,23 +1227,26 @@ jobs:
           name: autoplay-kit
           path: autoplay-kit
       - uses: actions/download-artifact@v8
-        if: inputs.modalita != 'ripubblica'
+        if: inputs.modalita != 'ripubblica' && inputs.modalita != 'completa'
         with:
           pattern: partita-*
           path: autoplay
           merge-multiple: true
       # [ripubblica]: the 2400 games of run 44937514617 ([completa] of step P12, commit 63033bb),
       # (downloaded one at a time: the publish jobs of that run failed downloading them all at once)
-      - name: Download the games of run 44937514617
-        if: inputs.modalita == 'ripubblica'
+      # step P13: [completa] downloads the games of THIS run the same way (one at a time), from the
+      # start: downloading them all at once failed twice above ~200 artifacts
+      - name: Download the games one at a time
+        if: inputs.modalita == 'ripubblica' || inputs.modalita == 'completa'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ inputs.modalita == 'ripubblica' && '44937514617' || github.run_id }}
         run: |
           set -euo pipefail
           # one download at a time with retries: download-artifact with run-id asks for all 216
           # artifacts at once and hits GitHub's secondary rate limit (run 44724639523)
           mkdir -p autoplay dl
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44937514617/artifacts?per_page=100" \
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.name | startswith("partita-")) | "\(.id) \(.name)"' > artefatti.txt
           wc -l artefatti.txt
           while read -r id name; do
@@ -1241,7 +1280,7 @@ jobs:
           python3 -c "import json,os; [os.makedirs('autoplay/'+g['id'], exist_ok=True) for g in json.load(open('autoplay-kit/partite.json'))['include']]"
           chmod +x autoplay-kit/runner/bin/proplus-autoplay
           sha="${{ needs.prepare.outputs.sha }}"
-          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P12 (leve dell Italia, semi 2101-2220)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)')$([ "${MODALITA}" = "prova12" ] && echo ' - prova breve dello step P12 (semi 2101-2105)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
+          title="Autoplay Pro+$([ "${MODALITA}" = "confronto" ] && echo ' - confronto contro Hard')$([ "${MODALITA}" = "ablazione" ] && echo ' - ablazione dei componenti')$([ "${MODALITA}" = "conferma" ] && echo ' - conferma (semi 101-112)')$([ "${MODALITA}" = "varianza" ] && echo ' - varianza tra run')$([ "${MODALITA}" = "prova" ] && echo ' - prova di valore (operazioni congiunte)')$([ "${MODALITA}" = "prova2" ] && echo ' - prova2 (presa e tenuta, semi 301-335)')$([ "${MODALITA}" = "provallm" ] && echo ' - provallm (operazioni decise da Sonnet, semi 401-435)')$([ "${MODALITA}" = "smoke" ] && echo ' - smoke Stratega LLM (semi 1001-1006)')$([ "${MODALITA}" = "diagnosi" ] && echo ' - diagnosi Stratega R0 (semi 1101-1110)')$([ "${MODALITA}" = "correzioni" ] && echo ' - correzioni Stratega R1 (semi 1101-1110)')$([ "${MODALITA}" = "ombra" ] && echo ' - ombra Stratega R2a-bis senza chiave (semi 1101-1110)')$([ "${MODALITA}" = "impegno" ] && echo ' - impegno Stratega R3a senza chiave (semi 1121-1140)')$([ "${MODALITA}" = "completa" ] && echo ' - partite complete fino alla vittoria, step P13 (taranto, fabbriche, bombardamento, semi 2221-2340)')$([ "${MODALITA}" = "prova7" ] && echo ' - prova breve dello step P7 (s5, c1, c2, semi 1621-1625)')$([ "${MODALITA}" = "prova9" ] && echo ' - prova breve dello step P9+P10 (d1, semi 1741-1745)')$([ "${MODALITA}" = "prova12" ] && echo ' - prova breve dello step P12 (semi 2101-2105)')$([ "${MODALITA}" = "prova13" ] && echo ' - prova breve dello step P13 (semi 2221-2225)') - commit ${sha:0:7} - $(date -u +'%Y-%m-%d %H:%M UTC')"
           autoplay-kit/runner/bin/proplus-autoplay confronto autoplay --titolo "$title"
           # the step summary takes at most 1 MiB: the full text is in the zip
           head -c 900000 autoplay/riepilogo-generale.md >> "$GITHUB_STEP_SUMMARY"
