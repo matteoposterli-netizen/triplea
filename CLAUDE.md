@@ -6907,3 +6907,19 @@ Un solo giro. Medie su 5 partite (H0000 = solo assedio):
   ora ricalcolati dal riepilogo nella sezione; `mare_entro_tetto` solo con una leva di mare; navi italiane che possono bombardare,
   gia' nella zona di sbarco, nella stima dello sbarco su Egitto/Gibilterra. Run lunga lanciata dopo questo giro (Gibilterra resta
   sotto il criterio: dichiarato).
+
+#### Autoplay in CI (run 44937514617 + ripubblicazione 45061356439, commit 63033bb, 2400 partite [completa] senza chiave, costo API 0)
+Tre blocchi in sequenza (contro H, contro F, parte alleata), 5 partite per job. publish2 e publish finale falliti nel download di
+tutti gli artefatti insieme ("Artifact download failed after 5 retries"; publish1 con 192 artefatti era riuscito) => `[ripubblica]`
+sulla run 44937514617 (download uno alla volta, diari tolti per il disco: le partite pesano ~5,7 MB l'una, 80% diari). 2397 valide,
+3 errori del calcolatore ("Can't calculate while operation is still running!": H0010, H1100, F0000), 8 stalli.
+- Vittorie dell'Asse: H0000 73/120 (Alleati 39%, dentro 30-45%), F0000 50/119; nessuna leva cambia le vittorie (Fisher su tutte:
+  est p 0,72, africa 0,66, capitale 0,86, gibilterra 0,056; regressione: solo l'avversario F conta, OR 0,56). Migliore delle 16
+  sommate: 0100 (solo africa) 71/120 contro 0000 123/239: dentro il rumore.
+- Effetti misurati: `italia_est` porta 14-18 italiani nel sud della Russia a R6 (8 senza) ma Roma cade entro R16 457/959 contro
+  290/1078 (OR 3,58) e Mosca entro R12 di piu' contro F (185/480 contro 154/539); `capitale_minima` Roma entro R16 276/959 contro
+  471/1078 (annulla il danno di est: interazione OR 0,33); `italia_africa` 2-4 unita' in Africa entro R8, round con l'Egitto
+  dell'Asse invariati; `italia_gibilterra` presa in 27-63 partite su 120 (senza: 20/239), tenuta > 2 round in circa meta'.
+  Tetto del mare rispettato (0 turni fuori).
+- Alleati: h5 94/120 contro h3 90/120 (p 0,65), F0000 68/119 contro a3 63/120 (p 0,52), F0000 contro H0000 68/119 contro 47/120
+  (p 0,007). Neutrali veri: 0 guerre e 0 attacchi alleati con nucleo o Alleati finali (H0000: 62/120). Gli Alleati finali restano.
