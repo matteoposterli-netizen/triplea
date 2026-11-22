@@ -57,7 +57,7 @@ on:
         description: "Opzionale, sostituisce la lista: es. 'A/1,B/2,hard' (Asse/Alleati, 'hard' = Hard vs Hard)"
         default: ""
       modalita:
-        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P12: 16 combinazioni delle leve dell'Italia contro Alleati Hard e Alleati finali, semi 2101-2160, + H0000, F0000 su 2161-2220, + a3, h3, h5 su 2101-2220 = 2400 partite in tre blocchi, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625) | prova9 (step P9+P10: d1 x semi 1741-1745) | prova12 (step P12: leve dell'Italia da sole e tutte insieme + solo assedio, contro Alleati Hard, semi 2101-2105) | ripubblica (nessuna partita: confronto e zip delle partite della run 44643856735)"
+        description: "normale | confronto (Pro+ contro Hard, 7 configurazioni x 4 semi) | ablazione (10 configurazioni x 6 semi, solo regole) | conferma (4 configurazioni x 12 semi nuovi, solo regole) | varianza (30 partite, solo regole) | prova (operazioni congiunte, 4 configurazioni x 35 semi, solo regole) | prova2 (variante presa e tenuta, 4 configurazioni x 35 semi nuovi, solo regole) | provallm (operazioni v2 decise da Claude Sonnet, 4 configurazioni x 35 semi nuovi 401-435, tetto 40 USD) | smoke (Stratega LLM, 2 configurazioni x 6 semi 1001-1006, tetto 30 USD) | diagnosi (Stratega R0, 5 configurazioni x 10 semi 1101-1110, tetto 15 USD) | correzioni (Stratega R1, 4 configurazioni x 10 semi 1101-1110, tetto 15 USD) | ombra (Stratega R2a-bis, 2 configurazioni senza chiave x 10 semi 1101-1110, costo API 0) | impegno (Stratega R2b/R2c/R3a, 3 configurazioni x 20 semi 1121-1140, senza chiave, costo API 0) | completa (step P12: 16 combinazioni delle leve dell'Italia contro Alleati Hard e Alleati finali, semi 2101-2160, + H0000, F0000 su 2161-2220, + a3, h3, h5 su 2101-2220 = 2400 partite in tre blocchi, tetti 60 round e 120 minuti, costo API 0) | prova7 (step P7: s5, c1, c2 x semi 1621-1625) | prova9 (step P9+P10: d1 x semi 1741-1745) | prova12 (step P12: leve dell'Italia da sole e tutte insieme + solo assedio, contro Alleati Hard, semi 2101-2105) | ripubblica (nessuna partita: confronto e zip delle partite della run 44937514617)"
         default: "normale"
 permissions:
   contents: write
@@ -949,9 +949,9 @@ jobs:
           pattern: partita-*
           path: autoplay
           merge-multiple: true
-      # [ripubblica]: the 1080 games of run 44643856735 ([completa] of step P7, commit 60d7e6a),
-      # whose publish job ran out of memory while reading them
-      - name: Download the games of run 44643856735
+      # [ripubblica]: the 2400 games of run 44937514617 ([completa] of step P12, commit 63033bb),
+      # (downloaded one at a time: the publish jobs of that run failed downloading them all at once)
+      - name: Download the games of run 44937514617
         if: inputs.modalita == 'ripubblica'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -960,7 +960,7 @@ jobs:
           # one download at a time with retries: download-artifact with run-id asks for all 216
           # artifacts at once and hits GitHub's secondary rate limit (run 44724639523)
           mkdir -p autoplay dl
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44643856735/artifacts?per_page=100" \
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44937514617/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.name | startswith("partita-")) | "\(.id) \(.name)"' > artefatti.txt
           wc -l artefatti.txt
           while read -r id name; do
@@ -974,6 +974,9 @@ jobs:
             [ "$ok" = 1 ] || { echo "download fallito: ${name}"; exit 1; }
             unzip -q -o "dl/${name}.zip" -d autoplay
             rm "dl/${name}.zip"
+            # disk: the decision diaries are ~80% of the games' size (2400 games ~14 GB);
+            # every number the summary needs is in riepilogo.json
+            find autoplay -type d -name diario -prune -exec rm -rf {} +
             sleep 1
           done < artefatti.txt
       - name: Comparison and zip
@@ -1070,9 +1073,9 @@ jobs:
           pattern: partita-*
           path: autoplay
           merge-multiple: true
-      # [ripubblica]: the 1080 games of run 44643856735 ([completa] of step P7, commit 60d7e6a),
-      # whose publish job ran out of memory while reading them
-      - name: Download the games of run 44643856735
+      # [ripubblica]: the 2400 games of run 44937514617 ([completa] of step P12, commit 63033bb),
+      # (downloaded one at a time: the publish jobs of that run failed downloading them all at once)
+      - name: Download the games of run 44937514617
         if: inputs.modalita == 'ripubblica'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1081,7 +1084,7 @@ jobs:
           # one download at a time with retries: download-artifact with run-id asks for all 216
           # artifacts at once and hits GitHub's secondary rate limit (run 44724639523)
           mkdir -p autoplay dl
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44643856735/artifacts?per_page=100" \
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44937514617/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.name | startswith("partita-")) | "\(.id) \(.name)"' > artefatti.txt
           wc -l artefatti.txt
           while read -r id name; do
@@ -1095,6 +1098,9 @@ jobs:
             [ "$ok" = 1 ] || { echo "download fallito: ${name}"; exit 1; }
             unzip -q -o "dl/${name}.zip" -d autoplay
             rm "dl/${name}.zip"
+            # disk: the decision diaries are ~80% of the games' size (2400 games ~14 GB);
+            # every number the summary needs is in riepilogo.json
+            find autoplay -type d -name diario -prune -exec rm -rf {} +
             sleep 1
           done < artefatti.txt
       - name: Comparison and zip
@@ -1190,9 +1196,9 @@ jobs:
           pattern: partita-*
           path: autoplay
           merge-multiple: true
-      # [ripubblica]: the 1080 games of run 44643856735 ([completa] of step P7, commit 60d7e6a),
-      # whose publish job ran out of memory while reading them
-      - name: Download the games of run 44643856735
+      # [ripubblica]: the 2400 games of run 44937514617 ([completa] of step P12, commit 63033bb),
+      # (downloaded one at a time: the publish jobs of that run failed downloading them all at once)
+      - name: Download the games of run 44937514617
         if: inputs.modalita == 'ripubblica'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1201,7 +1207,7 @@ jobs:
           # one download at a time with retries: download-artifact with run-id asks for all 216
           # artifacts at once and hits GitHub's secondary rate limit (run 44724639523)
           mkdir -p autoplay dl
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44643856735/artifacts?per_page=100" \
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/44937514617/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.name | startswith("partita-")) | "\(.id) \(.name)"' > artefatti.txt
           wc -l artefatti.txt
           while read -r id name; do
@@ -1215,6 +1221,9 @@ jobs:
             [ "$ok" = 1 ] || { echo "download fallito: ${name}"; exit 1; }
             unzip -q -o "dl/${name}.zip" -d autoplay
             rm "dl/${name}.zip"
+            # disk: the decision diaries are ~80% of the games' size (2400 games ~14 GB);
+            # every number the summary needs is in riepilogo.json
+            find autoplay -type d -name diario -prune -exec rm -rf {} +
             sleep 1
           done < artefatti.txt
       - name: Comparison and zip
