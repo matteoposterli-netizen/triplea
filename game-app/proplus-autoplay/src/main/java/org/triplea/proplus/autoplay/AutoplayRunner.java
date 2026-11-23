@@ -117,10 +117,11 @@ public final class AutoplayRunner {
                   ? new games.strategy.triplea.ai.proplus.ProPlusEuropa1940Ai(
                       p.getName(),
                       games.strategy.triplea.ai.proplus.ProPlusEuropa1940Ai.PLAYER_LABEL)
-              : AutoplayOptions.STRATEGA.equals(type)
-                  ? new games.strategy.triplea.ai.proplus.ProPlusStrategaAi(
-                      p.getName(), games.strategy.triplea.ai.proplus.ProPlusStrategaAi.PLAYER_LABEL)
-                  : new ProPlusAi(p.getName(), ProPlusAi.PLAYER_LABEL));
+                  : AutoplayOptions.STRATEGA.equals(type)
+                      ? new games.strategy.triplea.ai.proplus.ProPlusStrategaAi(
+                          p.getName(),
+                          games.strategy.triplea.ai.proplus.ProPlusStrategaAi.PLAYER_LABEL)
+                      : new ProPlusAi(p.getName(), ProPlusAi.PLAYER_LABEL));
     }
     final HeadlessLaunchAction launchAction = new HeadlessLaunchAction(null);
     final ServerGame game =
