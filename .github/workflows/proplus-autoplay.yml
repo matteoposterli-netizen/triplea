@@ -243,6 +243,7 @@ jobs:
                        "Allies=" + allies if allies else "", "", ss)
                       for (n, key, label, allies, ss) in p11]
               # (commit with [prova14] must change a non-.md file: paths-ignore skips empty commits)
+              # [prova14] run 45236771609 (d3ee9ac): 20/20, 0 planes of P14 lost, options added 889 air base / 662 carrier
               # step P14: every nation "Pro+ (Europe 1940)" with the two boxes (Axis and Allies
               # recommended, 7 switches with taranto) + aerei_corretti per alliance, 2x2 design:
               # 00 off for both, 10 Axis only, 01 Allies only, 11 both. [completa]: seeds 2352-2471
