@@ -111,11 +111,15 @@ public final class RegistroDecisioni {
           // step P13
           "p13_taranto",
           "p13_fabbriche",
-          "p13_bombardamento");
+          "p13_bombardamento",
+          // step PF1
+          "tracciamento");
 
   /** The closed list of reason codes. */
   public static final Set<String> MOTIVI =
       Set.of(
+          // step PF1
+          "PF1_TURNO",
           // step P13
           "P13_TARANTO",
           "P13_TARANTO_NO",

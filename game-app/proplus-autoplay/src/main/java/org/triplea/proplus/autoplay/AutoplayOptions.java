@@ -47,7 +47,13 @@ import javax.annotation.Nullable;
  *                      map's victory triggers (held for a complete round, see Vittoria); --round
  *                      and --minuti are then the safety caps and a game that reaches one without a
  *                      winner is a "stallo" (default no: the behaviour of the other modes)
+ * --profilo-caselle A=si|no,..  step PF1: the two boxes of the panel written in a user profile
+ *                      of the game's own (output/profilo) through the panel's code: Allies =
+ *                      "Alleati consigliati", Axis = "Asse consigliato"; read by the player type
+ *                      europa1940 ("Pro+ (Europe 1940)")
  * </pre>
+ *
+ * <p>Player type {@code europa1940} (step PF1) = "Pro+ (Europe 1940)", the one of new games.
  */
 record AutoplayOptions(
     Path mappa,
@@ -69,11 +75,13 @@ record AutoplayOptions(
     Path output,
     int minuti,
     @Nullable String nome,
-    boolean finoAVittoria) {
+    boolean finoAVittoria,
+    Map<String, String> profiloCaselle) {
 
   static final String PROPLUS = "proplus";
   static final String HARD = "hard";
   static final String STRATEGA = "stratega";
+  static final String EUROPA1940 = "europa1940";
   static final String LLM = "llm";
 
   static AutoplayOptions parse(final String[] args) {
@@ -115,7 +123,8 @@ record AutoplayOptions(
         Path.of(values.getOrDefault("output", "autoplay-output")),
         Integer.parseInt(values.getOrDefault("minuti", "55")),
         values.get("nome"),
-        "si".equalsIgnoreCase(values.getOrDefault("fino-a-vittoria", "no")));
+        "si".equalsIgnoreCase(values.getOrDefault("fino-a-vittoria", "no")),
+        pairs(values.get("profilo-caselle")));
   }
 
   /** "Axis=liste+tenute": every id must be a switch of the strategist (step R0). */
@@ -309,6 +318,7 @@ record AutoplayOptions(
       case PROPLUS, "pro", "plus" -> PROPLUS;
       case HARD -> HARD;
       case STRATEGA, "strategallm", "llm" -> STRATEGA;
+      case EUROPA1940, "plus1940", "pf1" -> EUROPA1940;
       default -> throw new IllegalArgumentException("Tipo di giocatore non valido: " + text);
     };
   }

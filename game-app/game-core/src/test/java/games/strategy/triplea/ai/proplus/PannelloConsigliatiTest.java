@@ -254,6 +254,27 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
     assertThat(called[0]).isFalse();
   }
 
+  @Test
+  void theTurnTraceHasTheSwitchesOnAndThePlayerTypes() {
+    final GameData data = registeredEuropa1940();
+    final games.strategy.engine.data.GamePlayer british =
+        data.getPlayerList().getPlayerId("British");
+    british.setWhoAmI("AI:" + ProPlusEuropa1940Ai.PLAYER_LABEL);
+
+    Tracciamento1940.inizioTurno(data, british);
+
+    final com.google.gson.JsonObject o =
+        Tracciamento1940.letto(data.getProperties(), "Allies").orElseThrow();
+    final Set<String> on = new java.util.HashSet<>();
+    o.getAsJsonArray("interruttori_attivi").forEach(e -> on.add(e.getAsString()));
+    assertThat(on).containsAll(SEVEN);
+    assertThat(o.getAsJsonObject("tipi_giocatore").get("British").getAsString())
+        .isEqualTo(ProPlusEuropa1940Ai.PLAYER_LABEL);
+    assertThat(o.get("senza_llm").getAsBoolean()).isTrue();
+    assertThat(RegistroDecisioni.righe(data))
+        .anyMatch(r -> "tracciamento".equals(r.get("tipo").getAsString()));
+  }
+
   // -------------------------------------------------------------- old "Pro+ Stratega LLM"
 
   @Test

@@ -53,6 +53,10 @@ public class ProPlusStrategaAi extends ProPlusAi {
         prepareData(data);
         attendiCalcolatore(data, player);
         registra(data, player);
+        if (!conLlm()) {
+          // step PF1: switches on and player types, in the saved game, at every turn
+          Tracciamento1940.inizioTurno(data, player);
+        }
         final Stratega.Esito result = Stratega.inizioTurno(getProData(), getCalc(), data, player);
         Stratega.diarioTurno(data, result.righe());
         // step R1 (A7): every failure of the strategic call in the game log (this player's turn)

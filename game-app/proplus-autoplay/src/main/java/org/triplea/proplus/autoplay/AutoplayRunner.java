@@ -100,6 +100,7 @@ public final class AutoplayRunner {
     configure(data, monitor);
     vittoria = options.finoAVittoria() ? new Vittoria(data, monitor::allianceOf) : null;
 
+    profiloCaselle(output);
     final Set<Player> players = new LinkedHashSet<>();
     final boolean allHard =
         monitor.alliances().keySet().stream()
@@ -112,6 +113,10 @@ public final class AutoplayRunner {
       players.add(
           AutoplayOptions.HARD.equals(type)
               ? PlayerTypes.PRO_AI.newPlayerWithName(p.getName())
+              : AutoplayOptions.EUROPA1940.equals(type)
+                  ? new games.strategy.triplea.ai.proplus.ProPlusEuropa1940Ai(
+                      p.getName(),
+                      games.strategy.triplea.ai.proplus.ProPlusEuropa1940Ai.PLAYER_LABEL)
               : AutoplayOptions.STRATEGA.equals(type)
                   ? new games.strategy.triplea.ai.proplus.ProPlusStrategaAi(
                       p.getName(), games.strategy.triplea.ai.proplus.ProPlusStrategaAi.PLAYER_LABEL)
@@ -217,6 +222,31 @@ public final class AutoplayRunner {
   }
 
   /** Plans and risk levels in the game properties, as the Pro+ settings dialog does. */
+  /**
+   * Step PF1: the boxes of the panel written in a profile of this game (as the panel's OK does);
+   * the "Pro+ (Europe 1940)" players read them. Without the option nothing is written.
+   */
+  private void profiloCaselle(final Path output) throws java.io.IOException {
+    if (options.profiloCaselle().isEmpty()) {
+      return;
+    }
+    final Path folder = output.resolve("profilo");
+    Files.createDirectories(folder);
+    System.setProperty(
+        games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega.FOLDER_PROPERTY,
+        folder.toString());
+    final var profile = games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega.carica();
+    final String allies = options.profiloCaselle().get("Allies");
+    final String axis = options.profiloCaselle().get("Axis");
+    if (allies != null) {
+      profile.setAlleatiConsigliati("si".equalsIgnoreCase(allies));
+    }
+    if (axis != null) {
+      profile.setAsseConsigliato("si".equalsIgnoreCase(axis));
+    }
+    profile.salva();
+  }
+
   private void configure(final GameData data, final Monitor monitor) {
     for (final String alliance : monitor.alliances().keySet()) {
       if (AutoplayOptions.HARD.equals(options.tipo(alliance))) {
