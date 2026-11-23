@@ -81,7 +81,11 @@ final class ProPlusSettingsDialog {
     final JButton ok = new JButton("OK");
     ok.addActionListener(
         e -> {
-          form.apply(data.getProperties());
+          form.apply(data.getProperties())
+              .ifPresent(
+                  error ->
+                      JOptionPane.showMessageDialog(
+                          dialog, error, BUTTON_LABEL, JOptionPane.WARNING_MESSAGE));
           dialog.dispose();
         });
     final JButton cancel = new JButton("Annulla");
@@ -175,6 +179,15 @@ final class ProPlusSettingsDialog {
     private final Map<String, javax.swing.JTextField> deciderFiles = new LinkedHashMap<>();
     private final Map<String, JSlider> fantasies = new LinkedHashMap<>();
     private final StrategistPanel strategist;
+
+    /** Step PF1: the settings of the old player types, hidden until the button is pressed. */
+    @Getter private final JPanel legacyPanel = new JPanel();
+
+    @Getter
+    private final javax.swing.JToggleButton legacyToggle =
+        new javax.swing.JToggleButton(
+            "Impostazioni delle voci vecchie (\"Pro+ (AI)\", \"Pro+ Stratega LLM\")");
+
     private final JCheckBox diaryCheckBox =
         new JCheckBox("Scrivi il diario delle decisioni dell'AI", DiarySettings.isEnabled());
     @Getter private final JPanel panel = new JPanel();
@@ -209,14 +222,34 @@ final class ProPlusSettingsDialog {
         alliancePanel.add(
             new JLabel("Nessun file di strategia per questa mappa: Pro+ gioca senza piano."));
       }
-      panel.add(alliancePanel);
       strategist = new StrategistPanel(data.getProperties());
+      // step PF1: on top the two boxes of "Pro+ (Europe 1940)" and the diary; the settings of the
+      // old player types ("Pro+ (AI)", "Pro+ Stratega LLM") behind a button, closed
       if (strategia.isPresent()) {
-        panel.add(strategist.getPanel());
+        panel.add(strategist.getConsigliatiPanel());
       }
       panel.add(diaryPanel());
-      panel.add(Box.createVerticalStrut(6));
-      panel.add(
+      legacyPanel.setLayout(new BoxLayout(legacyPanel, BoxLayout.Y_AXIS));
+      legacyPanel.add(alliancePanel);
+      if (strategia.isPresent()) {
+        legacyPanel.add(strategist.getPanel());
+      }
+      legacyPanel.add(Box.createVerticalStrut(6));
+      legacyPanel.setVisible(false);
+      legacyToggle.addActionListener(
+          e -> {
+            legacyPanel.setVisible(legacyToggle.isSelected());
+            final Window window = SwingUtilities.getWindowAncestor(panel);
+            if (window != null) {
+              window.pack();
+              fitToScreen((JDialog) window, window.getOwner());
+            }
+          });
+      final JPanel toggleRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+      toggleRow.add(legacyToggle);
+      panel.add(toggleRow);
+      panel.add(legacyPanel);
+      legacyPanel.add(
           new JLabel(
               "<html>Vale solo per i giocatori \"Pro+ (AI)\". Prudente = soglie di Hard."
                   + "<br>Rischio effettivo di un attacco = cursore + modificatore del piano per"
@@ -377,7 +410,8 @@ final class ProPlusSettingsDialog {
       return diary;
     }
 
-    void apply(final GameProperties props) {
+    /** Writes the settings; returns the error when the user profile could not be saved. */
+    Optional<String> apply(final GameProperties props) {
       DiarySettings.setEnabled(diaryCheckBox.isSelected());
       sliders.forEach(
           (alliance, slider) ->
@@ -401,7 +435,7 @@ final class ProPlusSettingsDialog {
                 deciderFiles.get(alliance).getText().strip());
           });
       fantasies.forEach((alliance, slider) -> Uso.setFantasia(props, alliance, slider.getValue()));
-      strategist.apply(
+      return strategist.apply(
           props,
           deciders.values().stream()
               .map(c -> (Modalita) c.getSelectedItem())

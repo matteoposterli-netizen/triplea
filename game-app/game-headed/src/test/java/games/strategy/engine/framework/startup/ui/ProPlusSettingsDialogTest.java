@@ -124,6 +124,21 @@ class ProPlusSettingsDialogTest {
   }
 
   @Test
+  void theBoxesAreOnTopAndTheOldSettingsAreHiddenBehindAButton() {
+    data.setGameName("World War II Europe 1940 2nd Edition");
+    final ProPlusSettingsDialog.Form form = new ProPlusSettingsDialog.Form(data);
+
+    assertThat(form.getPanel().getComponent(0))
+        .isSameAs(form.getStrategist().getConsigliatiPanel());
+    assertThat(form.getLegacyPanel().isVisible()).isFalse();
+    assertThat(form.getLegacyPanel().isAncestorOf(form.getStrategist().getPanel())).isTrue();
+
+    form.getLegacyToggle().doClick();
+
+    assertThat(form.getLegacyPanel().isVisible()).isTrue();
+  }
+
+  @Test
   void aFixedPlanCannotBeChangedAnyMore() {
     data.setGameName("World War II Europe 1940 2nd Edition");
     StatoMaggiore.setChoice(data.getProperties(), "Axis", "D");

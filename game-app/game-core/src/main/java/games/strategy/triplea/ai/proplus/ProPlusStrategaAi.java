@@ -30,8 +30,10 @@ public class ProPlusStrategaAi extends ProPlusAi {
   public void initialize(final PlayerBridge playerBridge, final GamePlayer gamePlayer) {
     super.initialize(playerBridge, gamePlayer);
     try {
-      importaChiave();
-      Stratega.registra(playerBridge.getGameData(), gamePlayer);
+      if (conLlm()) {
+        importaChiave();
+      }
+      registra(playerBridge.getGameData(), gamePlayer);
     } catch (final RuntimeException e) {
       ProLogger.warn("[Pro+] Stratega: registrazione fallita: " + e);
     }
@@ -50,12 +52,13 @@ public class ProPlusStrategaAi extends ProPlusAi {
         initializeData();
         prepareData(data);
         attendiCalcolatore(data, player);
-        Stratega.registra(data, player);
+        registra(data, player);
         final Stratega.Esito result = Stratega.inizioTurno(getProData(), getCalc(), data, player);
         Stratega.diarioTurno(data, result.righe());
         // step R1 (A7): every failure of the strategic call in the game log (this player's turn)
         result
             .avviso()
+            .filter(text -> conLlm())
             .ifPresent(
                 text -> {
                   warned = true;
@@ -96,8 +99,27 @@ public class ProPlusStrategaAi extends ProPlusAi {
     }
   }
 
+  /**
+   * Step PF1: records the player for the strategist (the old player type: the switches of the
+   * user's profile).
+   */
+  protected void registra(final GameState data, final GamePlayer player) {
+    Stratega.registra(data, player);
+  }
+
+  /**
+   * Step PF1: false for "Pro+ (Europe 1940)": no key imported, no "LLM not available" line in the
+   * game log (the decisions do not change).
+   */
+  protected boolean conLlm() {
+    return true;
+  }
+
   /** The warning in the game log, once per game and player. */
   private void avvisa(final String text) {
+    if (!conLlm()) {
+      return;
+    }
     if (!warned) {
       warned = true;
       commento(text);

@@ -47,8 +47,11 @@ public final class ProfiloStratega {
       } catch (final IOException e) {
         // unreadable profile = no saved settings
       }
-      // step P12: a profile saved before this panel (no marker, or the P11 marker) is normalized
+      // step PF1: a profile saved before this panel (no marker, or the P11/P12 marker) gets both
+      // recommended boxes on (the user's earlier choice is not kept: the boxes changed meaning)
       if (!VERSIONE_PANNELLO.equals(values.getProperty(KEY_VERSIONE_PANNELLO, "").strip())) {
+        values.remove(KEY_ALLEATI_CONSIGLIATI);
+        values.remove(KEY_ASSE_CONSIGLIATO);
         normalizza();
       }
     }
@@ -253,6 +256,17 @@ public final class ProfiloStratega {
     values.setProperty(KEY_PONTE_CONCENTRATO, on ? "si" : "no");
   }
 
+  private static final String KEY_TARANTO = "taranto";
+
+  /** Step PF1: "taranto" for the Allies (part of "Alleati consigliati"). Off unless set. */
+  public boolean taranto() {
+    return si(KEY_TARANTO);
+  }
+
+  public void setTaranto(final boolean on) {
+    values.setProperty(KEY_TARANTO, on ? "si" : "no");
+  }
+
   private static final String KEY_REGNO_UNITO_P3 = "regno_unito_p3";
 
   /**
@@ -301,50 +315,43 @@ public final class ProfiloStratega {
   }
 
   /**
-   * Step P11: marker written by {@link #salva()}. A profile file without it was saved by the panel
-   * with one box per switch; on loading, each side that is not exactly its recommended combination
-   * is turned off ({@link #normalizza()}).
+   * Step P11: marker written by {@link #salva()}. A profile file without it, or with an older one
+   * (P11, P12), gets both recommended boxes on when loaded ({@link #normalizza()}).
    */
   static final String KEY_VERSIONE_PANNELLO = "pannello";
 
-  static final String VERSIONE_PANNELLO = "p12";
+  static final String VERSIONE_PANNELLO = "pf1";
+
+  /** Step PF1: the box "Alleati consigliati" as the user left it ("si"/"no"). */
+  static final String KEY_ALLEATI_CONSIGLIATI = "alleati_consigliati";
+
+  /** Step PF1: the box "Asse consigliato" as the user left it ("si"/"no"). */
+  static final String KEY_ASSE_CONSIGLIATO = "asse_consigliato";
 
   /**
-   * Step P12: "Alleati consigliati" ("Alleati finali") = exactly {@code usa_proporzione}, {@code
-   * sbarco_concentrato}, {@code niente_neutrali}, {@code norvegia_presto}, {@code norvegia_esposta}
-   * and {@code ponte_concentrato} on, every other switch of the Allies off ({@code impegno} counts
-   * as an Allies switch: it turns on the commitment of both alliances). The core of step P11 (the
-   * first three on, the other three off) also counts as on: {@link #normalizza()} turns it into the
-   * six.
+   * Step PF1: the box "Alleati consigliati" (Allies of "Pro+ (Europe 1940)"): on by default (no
+   * profile, old profile, never set). On = the final Allies of step P12 + taranto: {@code
+   * usa_proporzione}, {@code sbarco_concentrato}, {@code niente_neutrali}, {@code norvegia_presto},
+   * {@code norvegia_esposta}, {@code ponte_concentrato}, {@code taranto}.
    */
   public boolean alleatiConsigliati() {
-    final boolean core = usaProporzione() && sbarcoConcentrato() && nienteNeutrali();
-    final boolean others =
-        !impegno()
-            && !squadraGibilterra()
-            && !compiti()
-            && !regnoUnitoP3()
-            && !usaPronti()
-            && !russiaFronte()
-            && !norvegiaScorta()
-            && !ponteUk()
-            && !pontePronti();
-    final boolean six = norvegiaPresto() && norvegiaEsposta() && ponteConcentrato();
-    final boolean none = !norvegiaPresto() && !norvegiaEsposta() && !ponteConcentrato();
-    return core && others && (six || none);
+    return !"no".equalsIgnoreCase(values.getProperty(KEY_ALLEATI_CONSIGLIATI, "").strip());
   }
 
   /**
-   * Step P12: on = the six switches of "Alleati finali", off = every switch of the Allies off
-   * (Hard).
+   * Step PF1: the box and, for the old player type "Pro+ Stratega LLM", the same switches in the
+   * profile: on = the seven, every other switch of the Allies off; off = every switch of the Allies
+   * off (Hard).
    */
   public void setAlleatiConsigliati(final boolean on) {
+    values.setProperty(KEY_ALLEATI_CONSIGLIATI, on ? "si" : "no");
     setUsaProporzione(on);
     setSbarcoConcentrato(on);
     setNienteNeutrali(on);
     setNorvegiaPresto(on);
     setNorvegiaEsposta(on);
     setPonteConcentrato(on);
+    setTaranto(on);
     setImpegno(false);
     setSquadraGibilterra(false);
     setCompiti(false);
@@ -357,23 +364,24 @@ public final class ProfiloStratega {
   }
 
   /**
-   * Step P11: "Asse consigliato (assedio di Mosca)" = {@code assedio} on (which turns on {@code
-   * impegno} and {@code assedio} for the Axis) and {@code italia_convoglio} off.
+   * Step PF1: the box "Asse consigliato (assedio di Mosca)": on by default (no profile, old
+   * profile, never set). On = {@code impegno} + {@code assedio} for the Axis.
    */
   public boolean asseConsigliato() {
-    return assedio() && !italiaConvoglio();
+    return !"no".equalsIgnoreCase(values.getProperty(KEY_ASSE_CONSIGLIATO, "").strip());
   }
 
-  /** Step P11: on = impegno + assedio for the Axis, off = every switch of the Axis off (Hard). */
+  /** Step PF1: the box and the profile's Axis switches: on = impegno + assedio, off = Hard. */
   public void setAsseConsigliato(final boolean on) {
+    values.setProperty(KEY_ASSE_CONSIGLIATO, on ? "si" : "no");
     setAssedio(on);
     setItaliaConvoglio(false);
     setImpegno(false);
   }
 
   /**
-   * Step P11: keeps a side on only if it is exactly its recommended combination, else turns all its
-   * switches off.
+   * Writes the two boxes into the profile's switches (the old player type "Pro+ Stratega LLM" reads
+   * those): each side is exactly its recommended combination or all off.
    */
   public void normalizza() {
     final boolean allies = alleatiConsigliati();

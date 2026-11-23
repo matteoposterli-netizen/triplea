@@ -7,6 +7,7 @@ import games.strategy.engine.player.Player;
 import games.strategy.triplea.TripleAPlayer;
 import games.strategy.triplea.ai.pro.ProAi;
 import games.strategy.triplea.ai.proplus.ProPlusAi;
+import games.strategy.triplea.ai.proplus.ProPlusEuropa1940Ai;
 import games.strategy.triplea.ai.proplus.ProPlusStrategaAi;
 import games.strategy.triplea.ai.proplus.diario.DiaryRecorder;
 import games.strategy.triplea.settings.ClientSetting;
@@ -66,9 +67,25 @@ public class HeadedPlayerTypes {
     };
   }
 
-  /** Pro+ (fork AI); always visible, listed right after "Hard (AI)". */
+  /**
+   * Step PF1: "Pro+ (Europe 1940)", the one recommended Pro+ player type (plays as the autoplay
+   * configurations of steps P11-P13: Hard + the switches of the two boxes, never an LLM). Listed
+   * right after "Hard (AI)".
+   */
+  public static final PlayerTypes.Type PRO_PLUS_EUROPA_1940_AI =
+      new PlayerTypes.Type(ProPlusEuropa1940Ai.PLAYER_LABEL) {
+        @Override
+        public Player newPlayerWithName(final String name) {
+          return new ProPlusEuropa1940Ai(name, getLabel());
+        }
+      };
+
+  /**
+   * Pro+ (fork AI, steps 1-3d: risk slider, general staff). Step PF1: hidden from the list of new
+   * games, still loaded from old saved games ({@link #LEGACY_LABELS}).
+   */
   public static final PlayerTypes.Type PRO_PLUS_AI =
-      new PlayerTypes.Type(ProPlusAi.PLAYER_LABEL) {
+      new PlayerTypes.Type(ProPlusAi.PLAYER_LABEL, false) {
         @Override
         public Player newPlayerWithName(final String name) {
           return new ProPlusAi(name, getLabel());
@@ -77,15 +94,23 @@ public class HeadedPlayerTypes {
 
   /**
    * Pro+ Stratega LLM (step STRATEGA LLM): Pro+ nudo (= Hard) with the LLM strategist of the joint
-   * operations; plays as Hard without an API key. Listed right after "Pro+ (AI)".
+   * operations; plays as Hard without an API key. Step PF1: hidden from the list of new games,
+   * still loaded from old saved games ({@link #LEGACY_LABELS}).
    */
   public static final PlayerTypes.Type PRO_PLUS_STRATEGA_AI =
-      new PlayerTypes.Type(ProPlusStrategaAi.PLAYER_LABEL) {
+      new PlayerTypes.Type(ProPlusStrategaAi.PLAYER_LABEL, false) {
         @Override
         public Player newPlayerWithName(final String name) {
           return new ProPlusStrategaAi(name, getLabel());
         }
       };
+
+  /**
+   * Step PF1: hidden player types a saved game may still name; the player selection shows them for
+   * that nation only.
+   */
+  public static final Set<String> LEGACY_LABELS =
+      Set.of(ProPlusAi.PLAYER_LABEL, ProPlusStrategaAi.PLAYER_LABEL);
 
   private static PlayerTypes.Type getProAiBetaType() {
     return new PlayerTypes.Type(PLAYER_TYPE_PRO_AI_BETA_LABEL) {
@@ -102,6 +127,7 @@ public class HeadedPlayerTypes {
             List.of(HUMAN_PLAYER),
             PlayerTypes.getBuiltInPlayerTypes(),
             List.of(
+                PRO_PLUS_EUROPA_1940_AI,
                 PRO_PLUS_AI,
                 PRO_PLUS_STRATEGA_AI,
                 getProAiBetaType(),

@@ -3712,9 +3712,47 @@ nazione, territorio o tipo di unita' nel codice (test sul sorgente). Le leve del
 6. **Scorta presa anche dagli attacchi di Hard < 65%** (il testo: "la scorta non serve a un attacco di Hard con vittoria stimata
    almeno 65%"): quei caccia vengono tolti dall'attacco.
 
+### Partita vera: una sola voce "Pro+ (Europe 1940)" (step PF1)
+
+Causa del problema di Matteo (USA in guerra con Colombia/Ecuador/Venezuela al R4 con "Alleati consigliati" spuntata): le nazioni erano
+"Pro+ (AI)" (`ProPlusAi`), che non chiama mai `Stratega.registra` e quindi non legge le caselle: giocava la vecchia Pro+ (rischio, piani).
+- **Nuova voce** `ProPlusEuropa1940Ai` ("Pro+ (Europe 1940)", `extends ProPlusStrategaAi`), unica voce Pro+ visibile, subito dopo "Hard
+  (AI)" (`HeadedPlayerTypes.PRO_PLUS_EUROPA_1940_AI`). "Pro+ (AI)" e "Pro+ Stratega LLM (Europe 1940)" restano nel codice come tipi
+  nascosti (`PlayerTypes.Type(label, false)`): `fromLabel` li crea ancora; `PlayerSelectorRow` aggiunge alla tendina della SOLA nazione
+  l'etichetta vecchia letta dal salvataggio (`HeadedPlayerTypes.LEGACY_LABELS`). Autoplay invariato (`AutoplayRunner` crea le classi
+  direttamente).
+- **Tipo giocatore delle configurazioni misurate**: "Alleati finali" (P12 h5, P13 r0/r1 e 000..111) e "assedio" (Axis=impegno+assedio)
+  usano `--tipo ...=stratega` = `ProPlusStrategaAi`, senza chiave (`DecisoreOperazione.reale`: "nessuna chiave Anthropic" ->
+  RIPIEGO_NON_DISPONIBILE), interruttori da `--stratega-acceso`, `Decisori` REGOLE, `--tetto-strategia 70` (= default del file dati),
+  rischio Equilibrato (ininfluente: `Ablazione` NUDO).
+- **La nuova voce coincide**: `Stratega.registraEuropa1940(data, player, alleati, asse)` = stessa parte comune di `registra`
+  (`registraBase`: nazione registrata, Ablazione NUDO, decisore LLM delle operazioni, tetto) + `Pro+ stratega senza llm: <alleanza>` = si
+  (`DecisoreOperazione.trasporto` restituisce un trasporto "non disponibile" a ENTRAMBI i livelli: stesso ripiego dell'autoplay senza
+  chiave, conta per il "paracadute: Hard" delle operazioni) + `Decisori` REGOLE + SOLO gli interruttori delle due caselle
+  (`Stratega.ALLEATI_CONSIGLIATI` = 7, `ASSE_CONSIGLIATO` = impegno + assedio); gli altri interruttori del profilo sono ignorati. Nessun
+  import della chiave, nessuna riga "Stratega LLM non disponibile" nel log (`conLlm()` falso; decisioni invariate). Test
+  `PannelloConsigliatiTest.europa1940EqualsTheAutoplayConfigurations` (ogni interruttore, ablazione, decisori, nazioni uguali allo stato
+  scritto da `AutoplayRunner.configure` + `registra` senza profilo).
+- **Alleati consigliati = 7**: i sei di P12 + `taranto`. `fabbriche_tenute`, `bombardamento_mosca` spenti, fuori dal pannello. Asse
+  invariato. La vecchia voce Stratega legge `taranto` dal profilo (`ProfiloStratega.taranto`).
+- **Caselle salvate esplicitamente** (`alleati_consigliati`, `asse_consigliato` = si/no) nel profilo, marcatore `pannello=pf1`. Chiave
+  assente (nessun profilo, profilo vecchio, mai scelta) = ACCESA. Un file con marcatore diverso da pf1 (nessuno, p11, p12) al caricamento
+  perde le due chiavi e viene normalizzato con entrambe accese (scelta vecchia NON conservata: il significato delle caselle e' cambiato).
+  Nessun file = nessuna normalizzazione: gli interruttori singoli restano spenti, quindi la vecchia voce in autoplay (nessun profilo in CI)
+  non cambia. `StrategistPanel.apply` restituisce l'errore di salvataggio e il dialogo lo mostra (prima veniva ingoiato).
+- **Caselle non spuntate alla riapertura (segnalazione di Matteo)**: nel codice il percorso OK -> `setAlleatiConsigliati` -> `salva()`
+  (marcatore p12) -> `carica()` era corretto e coperto da test; non riprodotto. Possibili cause non verificabili da qui: dialogo chiuso
+  senza OK (X o Esc = Annulla), salvataggio fallito in silenzio (ora segnalato). Test nuovi di andata e ritorno nel pannello.
+- **Pannello ripulito**: in cima il riquadro "Pro+ (Europe 1940)" con le due caselle (`StrategistPanel.getConsigliatiPanel`), poi il
+  diario; rischio/piano/stratega/fantasia e la sezione "Stratega (LLM)" dietro il pulsante "Impostazioni delle voci vecchie" (chiuso).
+- Limite: la proprieta' "senza llm" e i Decisori sono per alleanza; mescolare nella stessa alleanza "Pro+ (Europe 1940)" e una voce
+  vecchia caricata da un salvataggio spegne l'LLM anche per quella.
+
 ## Come configurare lo stratega
 
 Per Matteo e gli amici (stesso testo, piu' corto, nel `LEGGIMI.txt` dello zip):
+0. **Step PF1**: per le partite nuove la voce e' "Pro+ (Europe 1940)", senza LLM. Quanto segue vale solo per le voci vecchie
+   ("Pro+ Stratega LLM", "Pro+ (AI)") dei salvataggi vecchi, impostazioni dietro "Impostazioni delle voci vecchie".
 1. **Senza fare nulla** Pro+ gioca con le regole di sempre (gratis, nessuna rete).
 2. **Con Claude Code** (abbonamento Claude Pro o Max; il piano gratuito NON include Claude Code): installarlo e fare
    il login una volta (dal sito di Claude Code), poi nel pannello "Impostazioni Pro+" mettere "Stratega" su
@@ -7066,3 +7104,11 @@ Valide 1193, 6 stalli al tetto di 60 round. Numeri dalla sezione "P13" di `riepi
   partite; prodotte a Mosca R4-R8 34,1 contro 33,5, danno tedesco 33,5 contro 34,1: la leva non aggiunge danno (l'assedio gia' bombarda).
 - Perdite tedesche R1 (1194 partite, TUV media ± ds): France 29,7 ± 12,3, 110 SZ 32,2 ± 20,8 (918 partite), 111 SZ 19,2 ± 14,3 (794),
   Yugoslavia 7,0 ± 4,2, Southern France 5,0 ± 4,6.
+
+### Step PF1 — una sola voce "Pro+ (Europe 1940)", caselle accese di default, taranto negli Alleati consigliati (2026-11-23)
+
+- Vedi "Partita vera: una sola voce Pro+ (Europe 1940) (step PF1)". Nessuna partita autoplay lanciata: le configurazioni autoplay non
+  cambiano (stesse classi, nessun profilo in CI).
+- Test: `PannelloConsigliatiTest` (riscritto, 13), `StrategistPanelTest` (caselle: 6), `ProPlusSettingsDialogTest` (+1),
+  `HeadedPlayerTypesTest` (voci vecchie nascoste ma caricabili, +3 al posto di 3).
+- Salvataggio `R4_russia_no_fabbriche_usa_neutrali.tsvg` NON ricevuto nella sessione: la diagnosi viene dal codice.

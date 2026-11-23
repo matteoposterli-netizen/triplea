@@ -95,9 +95,91 @@ public final class Stratega {
    * points are asked to the LLM, the cap of the game is set once.
    */
   public static void registra(final GameState data, final GamePlayer player) {
-    final Optional<String> alliance = ProPlusSettings.allianceOf(data, player);
+    final Optional<String> alliance = registraBase(data, player);
     if (alliance.isEmpty()) {
       return;
+    }
+    final GameProperties props = data.getProperties();
+    // step R2b: the commitment turned on in the user's profile (Pro+ settings, "Impegno"), once
+    // per game and alliance, unless the game turned it off explicitly
+    final games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega profile =
+        games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega.carica();
+    aggiungi(props, alliance.get(), interruttoriDelProfilo(profile, alliance.get()));
+  }
+
+  /**
+   * Step PF1: the player "Pro+ (Europe 1940)" joins a game. Same registration as {@link #registra}
+   * (Pro+ nudo = Hard, the nation recorded for the strategist) but: never an LLM (the transports of
+   * both levels are "not available", as in the autoplay without a key), the strategic contract
+   * decided by the rules, and the switches are exactly those of the two boxes of the panel: {@link
+   * #ALLEATI_CONSIGLIATI} for the Allies, {@link #ASSE_CONSIGLIATO} for the Axis (the other
+   * switches of the profile are ignored).
+   */
+  public static void registraEuropa1940(
+      final GameState data, final GamePlayer player, final boolean alleati, final boolean asse) {
+    final Optional<String> alliance = registraBase(data, player);
+    if (alliance.isEmpty()) {
+      return;
+    }
+    final GameProperties props = data.getProperties();
+    if (!senzaLlm(props, alliance.get())) {
+      props.set(KEY_SENZA_LLM + alliance.get(), (Serializable) null);
+      props.set(KEY_SENZA_LLM + alliance.get(), "si");
+    }
+    if (games.strategy.triplea.ai.proplus.strategia.Decisori.getModalita(props, alliance.get())
+        != games.strategy.triplea.ai.proplus.strategia.llm.Modalita.REGOLE) {
+      games.strategy.triplea.ai.proplus.strategia.Decisori.set(
+          props, alliance.get(), games.strategy.triplea.ai.proplus.strategia.Decisore.REGOLE, "");
+    }
+    aggiungi(props, alliance.get(), interruttoriConsigliati(alliance.get(), alleati, asse));
+  }
+
+  /** Step PF1: "Alleati consigliati" = the final Allies of step P12 + taranto (step P13). */
+  public static final List<StrategaInterruttori> ALLEATI_CONSIGLIATI =
+      List.of(
+          StrategaInterruttori.USA_PROPORZIONE,
+          StrategaInterruttori.SBARCO_CONCENTRATO,
+          StrategaInterruttori.NIENTE_NEUTRALI,
+          StrategaInterruttori.NORVEGIA_PRESTO,
+          StrategaInterruttori.NORVEGIA_ESPOSTA,
+          StrategaInterruttori.PONTE_CONCENTRATO,
+          StrategaInterruttori.TARANTO);
+
+  /** Step PF1: "Asse consigliato" = impegno + assedio (step P11). */
+  public static final List<StrategaInterruttori> ASSE_CONSIGLIATO =
+      List.of(StrategaInterruttori.IMPEGNO, StrategaInterruttori.ASSEDIO);
+
+  /** The switches of the two boxes for {@code alliance}. */
+  static List<StrategaInterruttori> interruttoriConsigliati(
+      final String alliance, final boolean alleati, final boolean asse) {
+    if ("Allies".equals(alliance)) {
+      return alleati ? ALLEATI_CONSIGLIATI : List.of();
+    }
+    if ("Axis".equals(alliance)) {
+      return asse ? ASSE_CONSIGLIATO : List.of();
+    }
+    return List.of();
+  }
+
+  /** Step PF1: the alliance has a "Pro+ (Europe 1940)" player: no LLM call, ever. */
+  static final String KEY_SENZA_LLM = "Pro+ stratega senza llm: ";
+
+  /** Step PF1: why the LLM is not available for a "Pro+ (Europe 1940)" alliance. */
+  static final String MOTIVO_SENZA_LLM = "Pro+ (Europe 1940): nessun LLM";
+
+  /** True when {@code alliance} has a "Pro+ (Europe 1940)" player (no LLM call, ever). */
+  public static boolean senzaLlm(final GameProperties props, final String alliance) {
+    return "si".equals(props.get(KEY_SENZA_LLM + alliance));
+  }
+
+  /**
+   * The common part of the registration: the nation recorded for its alliance, the alliance plays
+   * Pro+ nudo (= Hard), the LLM decider of the operations and the cap of the game set once.
+   */
+  private static Optional<String> registraBase(final GameState data, final GamePlayer player) {
+    final Optional<String> alliance = ProPlusSettings.allianceOf(data, player);
+    if (alliance.isEmpty()) {
+      return alliance;
     }
     final GameProperties props = data.getProperties();
     final Set<String> nations = nazioni(props, alliance.get());
@@ -120,10 +202,14 @@ public final class Stratega {
               .tettoPartitaUsd(StrategaConfig.get().budgetDefaultUsd());
       setBudget(props, cap);
     }
-    // step R2b: the commitment turned on in the user's profile (Pro+ settings, "Impegno"), once
-    // per game and alliance, unless the game turned it off explicitly
-    final games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega profile =
-        games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega.carica();
+    return alliance;
+  }
+
+  /** The switches the user's profile turns on for {@code alliance} (old player types). */
+  private static List<StrategaInterruttori> interruttoriDelProfilo(
+      final games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega profile,
+      final String allianceName) {
+    final Optional<String> alliance = Optional.of(allianceName);
     final List<StrategaInterruttori> wanted = new ArrayList<>();
     if (profile.impegno()) {
       wanted.add(StrategaInterruttori.IMPEGNO);
@@ -195,17 +281,29 @@ public final class Stratega {
     if ("Allies".equals(alliance.get()) && profile.ponteConcentrato()) {
       wanted.add(StrategaInterruttori.PONTE_CONCENTRATO);
     }
-    final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance.get()));
+    // step PF1: "Alleati consigliati" also has taranto (step P13)
+    if ("Allies".equals(alliance.get()) && profile.taranto()) {
+      wanted.add(StrategaInterruttori.TARANTO);
+    }
+    return wanted;
+  }
+
+  /**
+   * Turns on {@code wanted} for {@code alliance}, unless the game turned a switch off explicitly
+   * (never turns one off).
+   */
+  private static void aggiungi(
+      final GameProperties props, final String alliance, final List<StrategaInterruttori> wanted) {
+    final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance));
     boolean changed = false;
     for (final StrategaInterruttori w : wanted) {
-      if (!on.contains(w.id())
-          && !StrategaInterruttori.spenti(props, alliance.get()).contains(w.id())) {
+      if (!on.contains(w.id()) && !StrategaInterruttori.spenti(props, alliance).contains(w.id())) {
         on.add(w.id());
         changed = true;
       }
     }
     if (changed) {
-      StrategaInterruttori.accendi(props, alliance.get(), String.join(",", on));
+      StrategaInterruttori.accendi(props, alliance, String.join(",", on));
     }
   }
 
@@ -531,7 +629,7 @@ public final class Stratega {
       }
       final DecisoreOperazione.Trasporto t;
       try {
-        t = DecisoreOperazione.fabbrica.apply(modello(props));
+        t = DecisoreOperazione.trasporto(props, alliance, modello(props));
       } catch (final RuntimeException e) {
         ripiego(u, DecisoreOperazione.RIPIEGO_NON_DISPONIBILE, String.valueOf(e.getMessage()));
         return Optional.empty();
