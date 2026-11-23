@@ -3747,6 +3747,17 @@ Causa del problema di Matteo (USA in guerra con Colombia/Ecuador/Venezuela al R4
   diario; rischio/piano/stratega/fantasia e la sezione "Stratega (LLM)" dietro il pulsante "Impostazioni delle voci vecchie" (chiuso).
 - Limite: la proprieta' "senza llm" e i Decisori sono per alleanza; mescolare nella stessa alleanza "Pro+ (Europe 1940)" e una voce
   vecchia caricata da un salvataggio spegne l'LLM anche per quella.
+- **Tracciamento** (`ai/proplus/Tracciamento1940`, solo voce "Pro+ (Europe 1940)", a ogni acquisto dopo `registra`): proprieta'
+  della partita `Pro+ stato maggiore tracciamento: <alleanza>` (JSON, salvata nel .tsvg: alleanza, round, nazione, `interruttori_attivi`
+  = tutti quelli accesi compresi `liste`/`ombra` di default, `senza_llm`, `tipi_giocatore` = nome del tipo di ogni nazione); riga
+  `tracciamento` (motivo `PF1_TURNO`) nel registro delle decisioni; una riga di log per alleanza all'avvio ("[Pro+] Pro+ (Europe 1940),
+  avvio <alleanza> (R<n>): interruttori attivi [...], tipi giocatore {...}", segnata da `Pro+ stato maggiore avvio: <alleanza>`). Non
+  legge nessuna decisione. NON e' nello storico dello stato maggiore (`Pro+ stato maggiore: <alleanza>`): con Ablazione NUDO lo stato
+  maggiore non gira e creare quella proprieta' sembrerebbe un piano fissato.
+- **Autoplay**: tipo `europa1940` (`--tipo Axis=europa1940,Allies=europa1940`) = `ProPlusEuropa1940Ai`; `--profilo-caselle
+  Allies=si,Axis=si` scrive le due caselle in un profilo della partita (`<output>/profilo`, `ProfiloStratega.setAlleatiConsigliati`/
+  `setAsseConsigliato` + `salva`, come l'OK del pannello) e lo fa leggere ai giocatori (`FOLDER_PROPERTY`). Gli interruttori arrivano
+  dal profilo, non da `--stratega-acceso`. Le configurazioni esistenti non cambiano.
 
 ## Come configurare lo stratega
 
@@ -7112,3 +7123,11 @@ Valide 1193, 6 stalli al tetto di 60 round. Numeri dalla sezione "P13" di `riepi
 - Test: `PannelloConsigliatiTest` (riscritto, 13), `StrategistPanelTest` (caselle: 6), `ProPlusSettingsDialogTest` (+1),
   `HeadedPlayerTypesTest` (voci vecchie nascoste ma caricabili, +3 al posto di 3).
 - Salvataggio `R4_russia_no_fabbriche_usa_neutrali.tsvg` NON ricevuto nella sessione: la diagnosi viene dal codice.
+- Continuazione (stesso giorno): PR #1 unita in `proplus` (46969b1), release `proplus-latest` ripubblicata (build 2026-11.16.16062).
+  Le 18 violazioni PMD dei file vecchi restano fuori (check `build` delle PR rosso per quelle). Tracciamento e tipo autoplay
+  `europa1940` (sopra). Test: `PannelloConsigliatiTest` 14, `NudoHardTest` 3 verdi.
+- **Prova breve locale** (sandbox, JDK 25, 6 partite fino al R8, semi 2341-2346, tutte le nazioni "Pro+ (Europe 1940)", caselle dal
+  profilo): 6/6 completate, 0 eccezioni, ~77 s a round. In tutte: Taranto eseguito al R1 (vittoria stimata 82-100%, con le sole forze
+  del Mediterraneo 48-60%, 6-8 unita', caccia di Londra 0-2); 0 guerre alleate (USA comprese) con Neutral_True, 27-30 guerre escluse da
+  `niente_neutrali` per partita, 0 attacchi alleati a neutrali; `interruttori_attivi` con i 7 in 24/24 turni alleati e impegno+assedio in
+  14-16/14-16 turni dell'Asse; guerre con Neutral_Axis (Russia, USA al R1-R3) come in Hard. VC R8 Asse/Alleati 7/4, 5/6, 5/6, 6/5, 5/6, 5/6.
