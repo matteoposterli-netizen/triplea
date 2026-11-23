@@ -1079,6 +1079,18 @@ public class ProTerritoryManager {
             ? ProMatches.territoryCanMoveAirUnits(data, player, isCombatMove)
             : ProMatches.territoryCanMoveAirUnitsAndNoAa(data, player, isCombatMove);
 
+    // Pro+ step P14: the range and the carrier landings of my own attacks (Hard's by default)
+    final ProTuning tuning = proData.getTuning();
+    final boolean ownAttack =
+        isCombatMove
+            && !isCheckingEnemyAttacks
+            && !isIgnoringRelationships
+            && player.equals(proData.getPlayer());
+    final Set<Territory> plusCarrierTerritories = new HashSet<>(possibleCarrierTerritories);
+    if (ownAttack) {
+      plusCarrierTerritories.addAll(tuning.ownAttackCarrierLandings(proData, player));
+    }
+
     final Predicate<Unit> unitMatch = ProMatches.unitCanBeMovedAndIsOwnedAir(player, isCombatMove);
     for (final Territory myUnitTerritory : myUnitTerritories) {
       // Find my air units that have movement left
@@ -1089,58 +1101,44 @@ public class ProTerritoryManager {
         // Find range
         final BigDecimal range =
             getUnitRange(myAirUnit, myUnitTerritory, player, isCheckingEnemyAttacks);
-
-        // Find potential territories to move to
-        final Set<Territory> possibleMoveTerritories =
-            gameMap.getNeighborsByMovementCost(myUnitTerritory, range, canMove);
-        possibleMoveTerritories.add(myUnitTerritory);
-        final Set<Territory> potentialTerritories =
-            new HashSet<>(
-                CollectionUtils.getMatches(possibleMoveTerritories, moveToTerritoryMatch));
-        if (!isCombatMove && Matches.unitCanLandOnCarrier().test(myAirUnit)) {
-          potentialTerritories.addAll(
-              CollectionUtils.getMatches(
-                  possibleMoveTerritories, possibleCarrierTerritories::contains));
+        final AirTargets airTargets =
+            new AirTargets(
+                gameMap,
+                player,
+                myUnitTerritory,
+                myAirUnit,
+                moveToTerritoryMatch,
+                canMove,
+                canFlyOverMatch,
+                enemyTerritories,
+                alliedTerritories,
+                isCombatMove,
+                isCheckingEnemyAttacks);
+        Set<Territory> targets = airTargets.find(range, possibleCarrierTerritories);
+        if (ownAttack) {
+          final BigDecimal plusRange =
+              tuning.ownAttackAirRange(proData, player, myAirUnit, myUnitTerritory, range);
+          if (plusRange.compareTo(range) != 0
+              || plusCarrierTerritories.size() != possibleCarrierTerritories.size()) {
+            final Set<Territory> landTargets =
+                plusRange.compareTo(range) == 0
+                    ? targets
+                    : airTargets.find(plusRange, possibleCarrierTerritories);
+            final Set<Territory> plusTargets =
+                plusCarrierTerritories.size() == possibleCarrierTerritories.size()
+                    ? landTargets
+                    : airTargets.find(plusRange, plusCarrierTerritories);
+            for (final Territory t : plusTargets) {
+              if (!targets.contains(t)) {
+                tuning.ownAttackAirOptionAdded(
+                    proData, myAirUnit, myUnitTerritory, t, !landTargets.contains(t));
+              }
+            }
+            targets = plusTargets;
+          }
         }
 
-        for (final Territory potentialTerritory : potentialTerritories) {
-          final Optional<Route> optionalRoute =
-              gameMap.getRouteForUnit(
-                  myUnitTerritory, potentialTerritory, canFlyOverMatch, myAirUnit, player);
-          if (optionalRoute.isEmpty()
-              || !ProMatches.routeAllowsUnit(optionalRoute.get(), myAirUnit)
-              || (!isCheckingEnemyAttacks
-                  && !ProMatches.routeHasRequiredUnitsToMove(optionalRoute.get(), myAirUnit))) {
-            continue;
-          }
-          final BigDecimal myRouteLength = optionalRoute.get().getMovementCost(myAirUnit);
-          final BigDecimal remainingMoves = range.subtract(myRouteLength);
-          if (remainingMoves.compareTo(BigDecimal.ZERO) < 0) {
-            continue;
-          }
-
-          // Check if unit can land
-          if (isCombatMove
-              && (remainingMoves.compareTo(myRouteLength) < 0 || myUnitTerritory.isWater())) {
-            final Set<Territory> possibleLandingTerritories =
-                gameMap.getNeighborsByMovementCost(
-                    potentialTerritory, remainingMoves, canFlyOverMatch);
-            final List<Territory> landingTerritories =
-                CollectionUtils.getMatches(
-                    possibleLandingTerritories,
-                    ProMatches.territoryCanLandAirUnits(
-                        player, isCombatMove, enemyTerritories, alliedTerritories));
-            List<Territory> carrierTerritories = List.of();
-            if (Matches.unitCanLandOnCarrier().test(myAirUnit)) {
-              carrierTerritories =
-                  CollectionUtils.getMatches(
-                      possibleLandingTerritories, possibleCarrierTerritories::contains);
-            }
-            if (landingTerritories.isEmpty() && carrierTerritories.isEmpty()) {
-              continue;
-            }
-          }
-
+        for (final Territory potentialTerritory : targets) {
           // Populate enemy territories with air unit
           proData.getProTerritory(moveMap, potentialTerritory).addMaxUnit(myAirUnit);
 
@@ -1148,6 +1146,77 @@ public class ProTerritoryManager {
           unitMoveMap.computeIfAbsent(myAirUnit, k -> new HashSet<>()).add(potentialTerritory);
         }
       }
+    }
+  }
+
+  /** The territories an air unit can move to with a range and carrier landings (Hard's rules). */
+  private record AirTargets(
+      GameMap gameMap,
+      GamePlayer player,
+      Territory myUnitTerritory,
+      Unit myAirUnit,
+      Predicate<Territory> moveToTerritoryMatch,
+      Predicate<Territory> canMove,
+      Predicate<Territory> canFlyOverMatch,
+      List<Territory> enemyTerritories,
+      List<Territory> alliedTerritories,
+      boolean isCombatMove,
+      boolean isCheckingEnemyAttacks) {
+
+    Set<Territory> find(final BigDecimal range, final Set<Territory> possibleCarrierTerritories) {
+      final Set<Territory> result = new java.util.LinkedHashSet<>();
+      // Find potential territories to move to
+      final Set<Territory> possibleMoveTerritories =
+          gameMap.getNeighborsByMovementCost(myUnitTerritory, range, canMove);
+      possibleMoveTerritories.add(myUnitTerritory);
+      final Set<Territory> potentialTerritories =
+          new HashSet<>(CollectionUtils.getMatches(possibleMoveTerritories, moveToTerritoryMatch));
+      if (!isCombatMove && Matches.unitCanLandOnCarrier().test(myAirUnit)) {
+        potentialTerritories.addAll(
+            CollectionUtils.getMatches(
+                possibleMoveTerritories, possibleCarrierTerritories::contains));
+      }
+
+      for (final Territory potentialTerritory : potentialTerritories) {
+        final Optional<Route> optionalRoute =
+            gameMap.getRouteForUnit(
+                myUnitTerritory, potentialTerritory, canFlyOverMatch, myAirUnit, player);
+        if (optionalRoute.isEmpty()
+            || !ProMatches.routeAllowsUnit(optionalRoute.get(), myAirUnit)
+            || (!isCheckingEnemyAttacks
+                && !ProMatches.routeHasRequiredUnitsToMove(optionalRoute.get(), myAirUnit))) {
+          continue;
+        }
+        final BigDecimal myRouteLength = optionalRoute.get().getMovementCost(myAirUnit);
+        final BigDecimal remainingMoves = range.subtract(myRouteLength);
+        if (remainingMoves.compareTo(BigDecimal.ZERO) < 0) {
+          continue;
+        }
+
+        // Check if unit can land
+        if (isCombatMove
+            && (remainingMoves.compareTo(myRouteLength) < 0 || myUnitTerritory.isWater())) {
+          final Set<Territory> possibleLandingTerritories =
+              gameMap.getNeighborsByMovementCost(
+                  potentialTerritory, remainingMoves, canFlyOverMatch);
+          final List<Territory> landingTerritories =
+              CollectionUtils.getMatches(
+                  possibleLandingTerritories,
+                  ProMatches.territoryCanLandAirUnits(
+                      player, isCombatMove, enemyTerritories, alliedTerritories));
+          List<Territory> carrierTerritories = List.of();
+          if (Matches.unitCanLandOnCarrier().test(myAirUnit)) {
+            carrierTerritories =
+                CollectionUtils.getMatches(
+                    possibleLandingTerritories, possibleCarrierTerritories::contains);
+          }
+          if (landingTerritories.isEmpty() && carrierTerritories.isEmpty()) {
+            continue;
+          }
+        }
+        result.add(potentialTerritory);
+      }
+      return result;
     }
   }
 

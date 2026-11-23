@@ -289,6 +289,14 @@ public final class AutoplayRunner {
     }
     games.strategy.triplea.ai.proplus.DecisoreOperazione.setBudget(
         data.getProperties(), options.budgetOperazioni());
+    // step P14: switches turned on for "Pro+ (Europe 1940)" on top of the boxes (aerei_corretti)
+    for (final String alliance : monitor.alliances().keySet()) {
+      if (AutoplayOptions.EUROPA1940.equals(options.tipo(alliance))
+          && !options.strategaAcceso(alliance).isEmpty()) {
+        games.strategy.triplea.ai.proplus.StrategaInterruttori.accendi(
+            data.getProperties(), alliance, options.strategaAcceso(alliance));
+      }
+    }
     if (monitor.alliances().keySet().stream()
         .anyMatch(a -> AutoplayOptions.STRATEGA.equals(options.tipo(a)))) {
       // step STRATEGA LLM: the cap of the game for both levels of the strategist

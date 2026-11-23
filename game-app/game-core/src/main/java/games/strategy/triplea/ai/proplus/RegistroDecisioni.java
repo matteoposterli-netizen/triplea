@@ -112,6 +112,8 @@ public final class RegistroDecisioni {
           "p13_taranto",
           "p13_fabbriche",
           "p13_bombardamento",
+          // step P14
+          "p14_aerei",
           // step PF1
           "tracciamento");
 
@@ -128,6 +130,9 @@ public final class RegistroDecisioni {
           "P13_BOMBARDAMENTO_NO",
           "P13_BOMBARDAMENTO_ESITO",
           "P13_BOMBARDIERE_ACQUISTO",
+          // step P14
+          "P14_AEREI",
+          "P14_ATTERRAGGIO",
           "P13_BOMBARDIERE_BASE",
           // step P12
           "P12_BILANCIO",

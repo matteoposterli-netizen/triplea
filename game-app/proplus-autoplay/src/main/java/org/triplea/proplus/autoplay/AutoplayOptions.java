@@ -35,6 +35,7 @@ import javax.annotation.Nullable;
  * --stratega-spento A=S+S,..  step R0: switches of the "Pro+ Stratega LLM" turned off per
  *                      alliance (liste, tenute, ombra; see StrategaInterruttori)
  * --stratega-acceso A=S+S,..  step R2a: switches turned on (eg tenute, off by default)
+ *                      (step P14: also for europa1940, on top of the boxes: aerei_corretti)
  * --quota-operazione A=P,..  step R6 (D): share (percent) of the PUs of the commitment's
  *                      operation per alliance (default: the data file, 70)
  * --stratega-regole S  step R1: "si" = the strategist answers with the rule-based baseline

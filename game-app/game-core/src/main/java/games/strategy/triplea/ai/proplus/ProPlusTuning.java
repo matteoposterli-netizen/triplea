@@ -134,6 +134,59 @@ public final class ProPlusTuning implements ProTuning {
     return p6a;
   }
 
+  /** Step P14: the air units of the own attacks (options added, carrier landings, held). */
+  private final AereiCorretti.Stato p14 = new AereiCorretti.Stato();
+
+  public AereiCorretti.Stato p14() {
+    return p14;
+  }
+
+  private @Nullable GameState p14HeldData;
+  private @Nullable GamePlayer p14HeldPlayer;
+  private int p14HeldRound = -1;
+  private java.util.Set<Unit> p14Held = java.util.Set.of();
+
+  /** Step P14: the air units landed on their carriers and those carriers stay this turn. */
+  public void holdLandings(
+      final GameState data, final GamePlayer player, final java.util.Set<Unit> units) {
+    p14HeldData = data;
+    p14HeldPlayer = player;
+    p14HeldRound = data.getSequence().getRound();
+    p14Held = java.util.Set.copyOf(units);
+  }
+
+  @Override
+  public java.math.BigDecimal ownAttackAirRange(
+      final ProData proData,
+      final GamePlayer player,
+      final Unit unit,
+      final Territory from,
+      final java.math.BigDecimal hardRange) {
+    return AereiCorretti.attivo(proData.getData(), player)
+        ? AereiCorretti.raggio(proData.getData(), player, unit, from, hardRange)
+        : hardRange;
+  }
+
+  @Override
+  public java.util.Set<Territory> ownAttackCarrierLandings(
+      final ProData proData, final GamePlayer player) {
+    return AereiCorretti.attivo(proData.getData(), player)
+        ? AereiCorretti.zoneConPortaerei(proData.getData(), player)
+        : java.util.Set.of();
+  }
+
+  @Override
+  public void ownAttackAirOptionAdded(
+      final ProData proData,
+      final Unit unit,
+      final Territory from,
+      final Territory target,
+      final boolean carrier) {
+    if (AereiCorretti.attivo(proData.getData(), proData.getPlayer())) {
+      AereiCorretti.aggiunta(p14, proData, unit, target, carrier);
+    }
+  }
+
   /** Step P12: Italy's turn (capital, sea task, balance). */
   private final LeveItalia.Stato p12 = new LeveItalia.Stato();
 
@@ -476,6 +529,10 @@ public final class ProPlusTuning implements ProTuning {
     } else {
       Assedio.bombarda(proData, attackMap);
     }
+    // step P14: a carrier place for every air unit that can land only on a carrier
+    if (AereiCorretti.attivo(proData.getData(), proData.getPlayer())) {
+      AereiCorretti.rivedi(p14, proData, calc, attackMap);
+    }
   }
 
   /** Step R2b: the commitment's orders with the operations' mandatory reserves added. */
@@ -640,6 +697,15 @@ public final class ProPlusTuning implements ProTuning {
                 && proData.getData().getSequence().getRound() == heldRound
             ? held
             : java.util.Set.of();
+    // step P14: the air units landed on their carriers and those carriers
+    if (proData.getData() == p14HeldData
+        && proData.getPlayer() == p14HeldPlayer
+        && proData.getData().getSequence().getRound() == p14HeldRound
+        && !p14Held.isEmpty()) {
+      final java.util.Set<Unit> all = new java.util.LinkedHashSet<>(units);
+      all.addAll(p14Held);
+      return operationAnswer(java.util.Set.copyOf(all));
+    }
     return heldByOperation && !units.isEmpty() ? operationAnswer(units) : units;
   }
 

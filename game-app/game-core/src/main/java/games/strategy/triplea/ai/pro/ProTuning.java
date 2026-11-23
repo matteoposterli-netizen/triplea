@@ -428,4 +428,38 @@ public interface ProTuning {
   default double defensePriorityBonus(final ProData proData, final Territory t) {
     return 0;
   }
+
+  /**
+   * Range of {@code unit} (in {@code from}) when {@code player} plans its own attacks (Pro+ step
+   * P14: with the bonus of an operational air base the engine gives at the start of the combat
+   * move). Hard's range ({@code hardRange}: the movement left) by default.
+   */
+  default java.math.BigDecimal ownAttackAirRange(
+      final ProData proData,
+      final GamePlayer player,
+      final Unit unit,
+      final Territory from,
+      final java.math.BigDecimal hardRange) {
+    return hardRange;
+  }
+
+  /**
+   * Sea zones where the air units of {@code player} may land on a carrier after its own attacks
+   * (Pro+ step P14). None by default: Hard counts no carrier for its own attacks.
+   */
+  default Set<Territory> ownAttackCarrierLandings(final ProData proData, final GamePlayer player) {
+    return Set.of();
+  }
+
+  /**
+   * Called when {@link #ownAttackAirRange} or {@link #ownAttackCarrierLandings} let {@code unit}
+   * attack {@code target}, which Hard's range and landings would not ({@code carrier}: only with a
+   * carrier landing). Nothing by default.
+   */
+  default void ownAttackAirOptionAdded(
+      final ProData proData,
+      final Unit unit,
+      final Territory from,
+      final Territory target,
+      final boolean carrier) {}
 }

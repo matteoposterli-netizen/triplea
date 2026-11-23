@@ -393,6 +393,8 @@ final class Monitor {
     json.add("territori_chiave", keyTerritoryEvents.deepCopy());
     json.add("operazioni_congiunte", jointOperations());
     json.add("controllo_nudo", nudoCheck());
+    // step P14: air units removed because they could not land (history, every configuration)
+    json.add("aerei_non_atterrati", MonitorP14.nonAtterrati(data));
     // step PROVALLM: calls, tokens, cost and fallbacks of the LLM at the operations' decisions
     json.add(
         "operazioni_llm_uso",

@@ -3152,7 +3152,13 @@ public class ProCombatMoveAi {
         Matches.territoryHasNeighborMatching(
                 data.getMap(), ProMatches.territoryHasInfraFactoryAndIsAlliedLand(player))
             .test(t);
-    final int range = unit.getMovementLeft().intValue();
+    // Pro+ step P14: the range of my own attacks (Hard's movement left by default)
+    final int range =
+        proData
+            .getTuning()
+            .ownAttackAirRange(
+                proData, player, unit, proData.getUnitTerritory(unit), unit.getMovementLeft())
+            .intValue();
     final int distance =
         data.getMap()
             .getDistanceIgnoreEndForCondition(

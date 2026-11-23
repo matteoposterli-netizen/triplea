@@ -211,6 +211,7 @@ public class ProPlusAi extends ProAi {
     attendiCopie();
     logPhase(data, player, nonCombat ? "non-combat move" : "combat move");
     if (nonCombat) {
+      landOnCarriers(moveDel, data, player);
       playAmphibiousOperations(moveDel, data, player);
     }
     playJointOperation(nonCombat, moveDel, data, player);
@@ -228,11 +229,33 @@ public class ProPlusAi extends ProAi {
       playLevers(moveDel, data, player);
     }
     super.move(nonCombat, moveDel, data, player);
+    if (!nonCombat
+        && AereiCorretti.attivo(data, player)
+        && ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning) {
+      AereiCorretti.registraCombattimento(tuning.p14(), data, player);
+    }
     if (nonCombat) {
       registerCityAndBridgehead(data, player);
       registerIndications(data, player);
     }
     saveCheck(data, player);
+  }
+
+  /**
+   * Step P14: before any other non-combat move, the air units of Pro+'s carrier landings fly to
+   * their carrier; Hard leaves them and the carriers there. Nothing with the switch off.
+   */
+  private void landOnCarriers(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (!AereiCorretti.attivo(data, player)
+        || !(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      tuning.holdLandings(data, player, AereiCorretti.atterra(tuning.p14(), data, player, moveDel));
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P14 carrier landings failed: " + e);
+    }
   }
 
   /**

@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P14: aerei_corretti per alliance (2x2), the diagnostics
+    if (ConfrontoP14.applicabile(games)) {
+      try {
+        ConfrontoP14.write(md, games);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P14 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step P13: three levers in a factorial design, the references r0 / r1
     if (ConfrontoP13.applicabile(games)) {
       try {

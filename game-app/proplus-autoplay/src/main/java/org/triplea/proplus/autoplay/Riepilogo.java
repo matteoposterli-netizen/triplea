@@ -200,6 +200,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p13", err);
     }
+    // step P14: the air units of the own attacks (every configuration)
+    try {
+      json.add("p14", ConfrontoP14.blocco(json, data));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p14", err);
+    }
     return json;
   }
 
@@ -542,7 +550,9 @@ final class Riepilogo {
     }
     final JsonObject on = new JsonObject();
     for (final String a : monitor.alliances().keySet()) {
-      if (AutoplayOptions.STRATEGA.equals(o.tipo(a)) && !o.strategaAcceso(a).isEmpty()) {
+      // step P14: also the switches turned on for "Pro+ (Europe 1940)" (aerei_corretti)
+      if ((AutoplayOptions.STRATEGA.equals(o.tipo(a)) || AutoplayOptions.EUROPA1940.equals(o.tipo(a)))
+          && !o.strategaAcceso(a).isEmpty()) {
         on.addProperty(a, o.strategaAcceso(a));
       }
     }
