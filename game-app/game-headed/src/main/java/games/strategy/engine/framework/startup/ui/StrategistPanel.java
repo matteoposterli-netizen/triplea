@@ -62,18 +62,20 @@ final class StrategistPanel {
   @Getter private final JSpinner usdCap;
 
   /**
-   * Step P11: the only strategy box of the Allies, "Alleati consigliati": on (step P12) = the six
-   * switches of "Alleati finali" (usa_proporzione + sbarco_concentrato + niente_neutrali +
-   * norvegia_presto + norvegia_esposta + ponte_concentrato), every other switch of the Allies off;
-   * off = Hard.
+   * Step PF1: the box "Alleati consigliati" of "Pro+ (Europe 1940)": on (default) = the final
+   * Allies of step P12 + taranto (usa_proporzione + sbarco_concentrato + niente_neutrali +
+   * norvegia_presto + norvegia_esposta + ponte_concentrato + taranto); off = Hard.
    */
   @Getter private final javax.swing.JCheckBox alleatiConsigliati = new javax.swing.JCheckBox();
 
   /**
-   * Step P11: the only strategy box of the Axis, "Asse consigliato (assedio di Mosca)": on =
-   * impegno + assedio, every other switch of the Axis off; off = Hard.
+   * Step PF1: the box "Asse consigliato (assedio di Mosca)" of "Pro+ (Europe 1940)": on (default)
+   * = impegno + assedio; off = Hard.
    */
   @Getter private final javax.swing.JCheckBox asseConsigliato = new javax.swing.JCheckBox();
+
+  /** Step PF1: the two boxes, shown on top of the dialog (not in the LLM settings). */
+  @Getter private final JPanel consigliatiPanel = new JPanel();
 
   private final ProfiloStratega profile;
   private final Function<Fornitore, ClientApi> clients;
@@ -150,21 +152,26 @@ final class StrategistPanel {
             "<html>$ per partita del giocatore \"Pro+ Stratega LLM (Europe 1940)\" (Claude Sonnet,"
                 + " chiave Anthropic); raggiunto il tetto gioca come Hard</html>"));
     panel.add(row("Tetto Stratega LLM:", usdRow));
-    // step P11: one box per side; an old profile that is not exactly a recommended combination
-    // shows the box off, with its switches turned off (saved with the other settings)
-    profile.normalizza();
+    // step PF1: the two boxes of "Pro+ (Europe 1940)", in their own panel (on top of the dialog)
     alleatiConsigliati.setSelected(profile.alleatiConsigliati());
     alleatiConsigliati.setText(
         "<html>USA in proporzione nei round di neutralita', sbarco USA concentrato, niente guerre"
             + " ai neutrali, Norvegia presto e anche con i trasporti esposti, ponte britannico"
-            + " concentrato (gli altri interruttori alleati spenti); spenta = Alleati come Hard;"
-            + " vale per le partite nuove</html>");
-    panel.add(row("Alleati consigliati:", alleatiConsigliati));
+            + " concentrato, attacco a Taranto al round 1; spenta = Alleati come Hard</html>");
     asseConsigliato.setSelected(profile.asseConsigliato());
     asseConsigliato.setText(
-        "<html>Impegno e assedio di Mosca (gli altri interruttori dell'Asse spenti); spenta ="
-            + " Asse come Hard; vale per le partite nuove</html>");
-    panel.add(row("Asse consigliato (assedio di Mosca):", asseConsigliato));
+        "<html>Impegno e assedio di Mosca; spenta = Asse come Hard</html>");
+    consigliatiPanel.setLayout(new BoxLayout(consigliatiPanel, BoxLayout.Y_AXIS));
+    consigliatiPanel.setBorder(BorderFactory.createTitledBorder("Pro+ (Europe 1940)"));
+    consigliatiPanel.add(row("Alleati consigliati:", alleatiConsigliati));
+    consigliatiPanel.add(row("Asse consigliato:", asseConsigliato));
+    consigliatiPanel.add(
+        row(
+            "",
+            new JLabel(
+                "<html>Valgono per le nazioni \"Pro+ (Europe 1940)\" (le stesse regole delle"
+                    + " partite misurate in autoplay, senza LLM),<br>sono salvate su questo PC"
+                    + " e si applicano dal turno successivo anche alle partite in corso.</html>")));
     panel.add(
         row(
             "",
@@ -178,8 +185,11 @@ final class StrategistPanel {
     detect();
   }
 
-  /** Writes the cap in the game, the provider (and the preferred LLM mode) in the profile. */
-  void apply(final GameProperties props, final Optional<Modalita> llmMode) {
+  /**
+   * Writes the cap in the game, the provider (and the preferred LLM mode) and the two boxes in the
+   * profile. Returns the error when the profile could not be saved (step PF1: shown to the user).
+   */
+  Optional<String> apply(final GameProperties props, final Optional<Modalita> llmMode) {
     Uso.setTetto(props, ((Number) cap.getValue()).intValue());
     profile.setFornitore(selected());
     llmMode.ifPresent(profile::setModalitaPredefinita);
@@ -188,8 +198,14 @@ final class StrategistPanel {
     profile.setAsseConsigliato(asseConsigliato.isSelected());
     try {
       profile.salva();
-    } catch (final IOException e) {
+      return Optional.empty();
+    } catch (final IOException | RuntimeException e) {
       // the game settings are saved anyway
+      return Optional.of(
+          "Impostazioni Pro+ non salvate in "
+              + ProfiloStratega.cartella()
+              + ":\n"
+              + e.getMessage());
     }
   }
 

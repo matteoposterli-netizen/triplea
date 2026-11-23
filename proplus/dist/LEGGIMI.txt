@@ -7,9 +7,33 @@ Data build      : @DATE@
 Sorgente        : https://github.com/@REPO@/tree/@COMMIT@
 
 
-STATO ATTUALE (step 3b)
------------------------
-Nella scelta dei giocatori c'e' il tipo "Pro+ (AI)": e' l'AI "Hard (AI)"
+COME GIOCARE CONTRO PRO+  (step PF1)
+------------------------------------
+1. Nella scelta dei giocatori metti "Pro+ (Europe 1940)" sulle nazioni
+   dell'AI (e' l'unica voce Pro+ della tendina, subito sotto "Hard (AI)").
+2. Premi "Impostazioni Pro+": in alto il riquadro "Pro+ (Europe 1940)" con
+   due caselle, ACCESE di serie:
+     "Alleati consigliati" = USA in proporzione, sbarco USA concentrato,
+        niente guerre ai neutrali, Norvegia presto e anche con i trasporti
+        esposti, ponte britannico concentrato, attacco a Taranto al round 1;
+     "Asse consigliato"    = impegno + assedio di Mosca.
+   Spenta = quella parte gioca come Hard. Premi OK: la scelta resta salvata
+   su questo PC (se non riesce a salvarla te lo dice con un messaggio).
+3. Gioca. "Pro+ (Europe 1940)" gioca esattamente come le partite misurate in
+   autoplay (Hard + le regole delle caselle) e NON usa mai l'LLM, anche se
+   hai salvato una chiave.
+Le voci vecchie "Pro+ (AI)" e "Pro+ Stratega LLM (Europe 1940)" non sono piu'
+nella tendina: un salvataggio vecchio che le usa si carica e continua come
+prima. Le loro impostazioni (rischio, piano, stratega, chiave) sono nel
+pannello dietro il pulsante "Impostazioni delle voci vecchie".
+ATTENZIONE: con "Pro+ (AI)" le caselle NON valgono (per esempio gli USA
+possono dichiarare guerra ai neutrali): per le partite nuove usa
+"Pro+ (Europe 1940)".
+
+
+VOCE VECCHIA "Pro+ (AI)" (step 3b)
+----------------------------------
+Il tipo "Pro+ (AI)" (solo salvataggi vecchi) e' l'AI "Hard (AI)"
 con queste differenze:
   - valuta le victory city (le considera piu' preziose da prendere/tenere);
   - attacca secondo la "Propensione al rischio" scelta per la sua alleanza;
@@ -159,13 +183,8 @@ Sezione "Stratega (LLM)" dello stesso pannello:
     solo le ultime 4 cifre;
   - Tetto chiamate per partita (predefinito 100: una partita da 12 round con
     un'alleanza affidata all'LLM ne usa 36-48, con tutte e due circa 85);
-  - due sole caselle di strategia (spente = gioca come Hard), valgono per le
-    nazioni "Pro+ Stratega LLM (Europe 1940)" e per le partite nuove:
-    "Alleati consigliati" = USA in proporzione, sbarco USA concentrato,
-    niente guerre ai neutrali, Norvegia presto e anche con i trasporti
-    esposti, ponte britannico concentrato (un profilo salvato con le prime
-    tre si apre con la casella accesa); "Asse consigliato (assedio di Mosca)" =
-    impegno + assedio di Mosca.
+  - le due caselle "Alleati consigliati" e "Asse consigliato" ora sono in
+    cima al pannello, nel riquadro "Pro+ (Europe 1940)" (vedi COME GIOCARE).
 MODO PIU' SEMPLICE: metti un file chiave-stratega.txt accanto ad avvia.bat
 con dentro solo la chiave; alla prima apertura del pannello viene importata
 e ti viene proposto di cancellare il file (rispondi Si').

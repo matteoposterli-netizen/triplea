@@ -6,6 +6,7 @@ import games.strategy.engine.framework.startup.ui.PlayerTypes;
 import games.strategy.engine.player.Player;
 import games.strategy.triplea.ai.pro.ProAi;
 import games.strategy.triplea.ai.proplus.ProPlusAi;
+import games.strategy.triplea.ai.proplus.ProPlusEuropa1940Ai;
 import games.strategy.triplea.settings.ClientSetting;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -57,44 +58,44 @@ public class HeadedPlayerTypesTest {
   }
 
   @Test
-  void proPlusAiIsSelectableWithoutBetaFeatures() {
-    ClientSetting.showBetaFeatures.setValue(false);
+  void proPlusEuropa1940IsTheOnlyProPlusTypeOfTheList() {
+    ClientSetting.showBetaFeatures.setValue(true);
 
     final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
 
-    assertThat(List.of(playerTypes.getAvailablePlayerLabels()))
-        .contains("Pro+ (AI)")
-        .containsSubsequence(PlayerTypes.PRO_AI.getLabel(), "Pro+ (AI)");
-  }
-
-  @Test
-  void proPlusAiIsInstantiable() {
-    final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
-
-    final Player player = playerTypes.fromLabel("Pro+ (AI)").newPlayerWithName("Germans");
-
-    assertThat(player).isInstanceOf(ProPlusAi.class).isInstanceOf(ProAi.class);
-    assertThat(player.getName()).isEqualTo("Germans");
-    assertThat(player.getPlayerLabel()).isEqualTo("Pro+ (AI)");
-    assertThat(player.isAi()).isTrue();
-  }
-
-  @Test
-  void proPlusStrategaLlmIsListedAfterProPlusAndInstantiable() {
-    ClientSetting.showBetaFeatures.setValue(false);
-    final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
     final List<String> labels = List.of(playerTypes.getAvailablePlayerLabels());
-    assertThat(labels).contains("Pro+ Stratega LLM (Europe 1940)", "Pro+ (AI)", "Hard (AI)");
-    assertThat(labels.indexOf("Pro+ Stratega LLM (Europe 1940)"))
-        .isEqualTo(labels.indexOf("Pro+ (AI)") + 1);
+    assertThat(labels)
+        .containsSubsequence(PlayerTypes.PRO_AI.getLabel(), "Pro+ (Europe 1940)")
+        .doesNotContain("Pro+ (AI)", "Pro+ Stratega LLM (Europe 1940)");
+    assertThat(labels.indexOf("Pro+ (Europe 1940)"))
+        .isEqualTo(labels.indexOf(PlayerTypes.PRO_AI.getLabel()) + 1);
+  }
 
-    final var player =
-        playerTypes.fromLabel("Pro+ Stratega LLM (Europe 1940)").newPlayerWithName("Italians");
+  @Test
+  void proPlusEuropa1940IsInstantiable() {
+    final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
+
+    final Player player = playerTypes.fromLabel("Pro+ (Europe 1940)").newPlayerWithName("British");
 
     assertThat(player)
-        .isInstanceOf(games.strategy.triplea.ai.proplus.ProPlusStrategaAi.class)
-        .isInstanceOf(ProPlusAi.class);
-    assertThat(player.getPlayerLabel()).isEqualTo("Pro+ Stratega LLM (Europe 1940)");
+        .isInstanceOf(ProPlusEuropa1940Ai.class)
+        .isInstanceOf(games.strategy.triplea.ai.proplus.ProPlusStrategaAi.class);
+    assertThat(player.getPlayerLabel()).isEqualTo("Pro+ (Europe 1940)");
     assertThat(player.isAi()).isTrue();
+  }
+
+  @Test
+  void theOldProPlusTypesAreStillLoadedFromSavedGames() {
+    final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
+
+    assertThat(HeadedPlayerTypes.LEGACY_LABELS)
+        .containsExactlyInAnyOrder("Pro+ (AI)", "Pro+ Stratega LLM (Europe 1940)");
+    assertThat(playerTypes.fromLabel("Pro+ (AI)").newPlayerWithName("Germans"))
+        .isInstanceOf(ProPlusAi.class)
+        .isNotInstanceOf(games.strategy.triplea.ai.proplus.ProPlusStrategaAi.class);
+    assertThat(
+            playerTypes.fromLabel("Pro+ Stratega LLM (Europe 1940)").newPlayerWithName("Italians"))
+        .isInstanceOf(games.strategy.triplea.ai.proplus.ProPlusStrategaAi.class)
+        .isNotInstanceOf(ProPlusEuropa1940Ai.class);
   }
 }

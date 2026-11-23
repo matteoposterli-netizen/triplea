@@ -120,16 +120,17 @@ class StrategistPanelTest {
         .isEqualTo("✗ Claude non trovato – uso la chiave Haiku (••••1234)");
   }
 
-  // ------------------------------------------------------------------ step P11: two boxes
+  // ------------------------------------------------- steps P11, PF1: two boxes, on by default
 
   @Test
-  void theOnlyStrategyBoxesAreAlleatiConsigliatiAndAsseConsigliatoOffByDefault() {
+  void theOnlyStrategyBoxesAreAlleatiConsigliatiAndAsseConsigliatoOnByDefault() {
     final StrategistPanel p = panel(answering(200, "{}"));
 
-    final List<JCheckBox> boxes = boxes(p.getPanel());
-    assertThat(boxes).containsExactly(p.getAlleatiConsigliati(), p.getAsseConsigliato());
-    assertThat(p.getAlleatiConsigliati().isSelected()).isFalse();
-    assertThat(p.getAsseConsigliato().isSelected()).isFalse();
+    assertThat(boxes(p.getPanel())).isEmpty();
+    assertThat(boxes(p.getConsigliatiPanel()))
+        .containsExactly(p.getAlleatiConsigliati(), p.getAsseConsigliato());
+    assertThat(p.getAlleatiConsigliati().isSelected()).isTrue();
+    assertThat(p.getAsseConsigliato().isSelected()).isTrue();
   }
 
   @Test
@@ -137,16 +138,17 @@ class StrategistPanelTest {
     final StrategistPanel p = panel(answering(200, "{}"));
     p.getAlleatiConsigliati().setSelected(true);
     p.getAsseConsigliato().setSelected(true);
-    p.apply(new GameProperties(null), Optional.empty());
+    assertThat(p.apply(new GameProperties(null), Optional.empty())).isEmpty();
 
     final ProfiloStratega saved = ProfiloStratega.carica();
     assertThat(saved.usaProporzione()).isTrue();
     assertThat(saved.sbarcoConcentrato()).isTrue();
     assertThat(saved.nienteNeutrali()).isTrue();
-    // step P12: the six switches of "Alleati finali"
     assertThat(saved.norvegiaPresto()).isTrue();
     assertThat(saved.norvegiaEsposta()).isTrue();
     assertThat(saved.ponteConcentrato()).isTrue();
+    // step PF1: taranto is part of "Alleati consigliati"
+    assertThat(saved.taranto()).isTrue();
     assertThat(saved.norvegiaScorta()).isFalse();
     assertThat(saved.ponteUk()).isFalse();
     assertThat(saved.impegno()).isFalse();
@@ -157,51 +159,62 @@ class StrategistPanelTest {
   }
 
   @Test
-  void anOldProfileShowsTheBoxOnOnlyForTheExactCombination() throws IOException {
+  void theBoxesTurnedOffStayOffWhenThePanelIsOpenedAgain() {
+    final StrategistPanel p = panel(answering(200, "{}"));
+    p.getAlleatiConsigliati().setSelected(false);
+    p.getAsseConsigliato().setSelected(false);
+    p.apply(new GameProperties(null), Optional.empty());
+
+    final StrategistPanel again = panel(answering(200, "{}"));
+    assertThat(again.getAlleatiConsigliati().isSelected()).isFalse();
+    assertThat(again.getAsseConsigliato().isSelected()).isFalse();
+  }
+
+  @Test
+  void theBoxesTurnedOnStayOnWhenThePanelIsOpenedAgain() {
+    final StrategistPanel p = panel(answering(200, "{}"));
+    p.getAlleatiConsigliati().setSelected(true);
+    p.getAsseConsigliato().setSelected(false);
+    p.apply(new GameProperties(null), Optional.empty());
+
+    final StrategistPanel again = panel(answering(200, "{}"));
+    assertThat(again.getAlleatiConsigliati().isSelected()).isTrue();
+    assertThat(again.getAsseConsigliato().isSelected()).isFalse();
+  }
+
+  @Test
+  void anOldProfileShowsBothBoxesOn() throws IOException {
     Files.writeString(
         profile.resolve("stratega.properties"),
 """
+pannello=p12
 usa_proporzione=si
-sbarco_concentrato=si
-niente_neutrali=si
-assedio=si
+assedio=no
 italia_convoglio=si
 """);
 
     final StrategistPanel p = panel(answering(200, "{}"));
     assertThat(p.getAlleatiConsigliati().isSelected()).isTrue();
-    assertThat(p.getAsseConsigliato().isSelected()).isFalse();
+    assertThat(p.getAsseConsigliato().isSelected()).isTrue();
     p.apply(new GameProperties(null), Optional.empty());
 
     final ProfiloStratega saved = ProfiloStratega.carica();
-    assertThat(saved.alleatiConsigliati()).isTrue();
     assertThat(saved.ponteConcentrato()).isTrue();
-    assertThat(saved.assedio()).isFalse();
+    assertThat(saved.taranto()).isTrue();
+    assertThat(saved.assedio()).isTrue();
     assertThat(saved.italiaConvoglio()).isFalse();
   }
 
   @Test
-  void aProfileSavedByTheP11PanelWithTheCoreOfThreeShowsTheBoxOn() throws IOException {
-    Files.writeString(
-        profile.resolve("stratega.properties"),
-"""
-pannello=p11
-usa_proporzione=si
-sbarco_concentrato=si
-niente_neutrali=si
-norvegia_presto=no
-norvegia_esposta=no
-ponte_concentrato=no
-""");
-
+  void aProfileThatCannotBeSavedIsReported() throws IOException {
+    // the profile "folder" is a file: saving fails
+    final Path blocked = profile.resolve("bloccata");
+    Files.writeString(blocked, "x");
+    System.setProperty(ProfiloStratega.FOLDER_PROPERTY, blocked.toString());
     final StrategistPanel p = panel(answering(200, "{}"));
-    assertThat(p.getAlleatiConsigliati().isSelected()).isTrue();
-    p.apply(new GameProperties(null), Optional.empty());
 
-    final ProfiloStratega saved = ProfiloStratega.carica();
-    assertThat(saved.norvegiaPresto()).isTrue();
-    assertThat(saved.norvegiaEsposta()).isTrue();
-    assertThat(saved.ponteConcentrato()).isTrue();
+    assertThat(p.apply(new GameProperties(null), Optional.empty()))
+        .hasValueSatisfying(text -> assertThat(text).startsWith("Impostazioni Pro+ non salvate"));
   }
 
   private static List<JCheckBox> boxes(final Container c) {

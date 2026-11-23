@@ -68,6 +68,31 @@ public final class DecisoreOperazione {
   /** Makes the transport for a model id (tests replace it). */
   static Function<String, Trasporto> fabbrica = DecisoreOperazione::reale;
 
+  /**
+   * Step PF1: the transport of {@code alliance}; for a "Pro+ (Europe 1940)" alliance one that is
+   * never available (same fallback as the autoplay without a key), whatever the user's profile.
+   */
+  static Trasporto trasporto(
+      final GameProperties props, final String alliance, final String model) {
+    if (Stratega.senzaLlm(props, alliance)) {
+      return SENZA_LLM;
+    }
+    return fabbrica.apply(model);
+  }
+
+  private static final Trasporto SENZA_LLM =
+      new Trasporto() {
+        @Override
+        public Optional<String> nonDisponibile() {
+          return Optional.of(Stratega.MOTIVO_SENZA_LLM);
+        }
+
+        @Override
+        public Risposta chiama(final Richiesta r) {
+          throw new IllegalStateException(Stratega.MOTIVO_SENZA_LLM);
+        }
+      };
+
   /** Test hook: the transport factory ({@code null} = the real one). */
   public static void setFabbrica(final Function<String, Trasporto> f) {
     fabbrica = f == null ? DecisoreOperazione::reale : f;
@@ -226,7 +251,7 @@ public final class DecisoreOperazione {
     }
     final Trasporto t;
     try {
-      t = fabbrica.apply(model.get());
+      t = trasporto(props, alliance, model.get());
     } catch (final RuntimeException e) {
       return fallback(props, u, formula, RIPIEGO_NON_DISPONIBILE, String.valueOf(e.getMessage()));
     }

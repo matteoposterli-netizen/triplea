@@ -80,6 +80,10 @@ public class PlayerSelectorRow implements PlayerCountrySelection {
     }
     if (List.of(this.playerTypesProvider.getAvailablePlayerLabels()).contains(previousSelection)) {
       this.playerTypes.setSelectedItem(previousSelection);
+    } else if (HeadedPlayerTypes.LEGACY_LABELS.contains(previousSelection)) {
+      // step PF1: an old Pro+ player type of a saved game, kept for this nation only
+      this.playerTypes.addItem(previousSelection);
+      this.playerTypes.setSelectedItem(previousSelection);
     } else {
       setDefaultPlayerType();
     }
