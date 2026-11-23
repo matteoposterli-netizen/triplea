@@ -551,7 +551,8 @@ final class Riepilogo {
     final JsonObject on = new JsonObject();
     for (final String a : monitor.alliances().keySet()) {
       // step P14: also the switches turned on for "Pro+ (Europe 1940)" (aerei_corretti)
-      if ((AutoplayOptions.STRATEGA.equals(o.tipo(a)) || AutoplayOptions.EUROPA1940.equals(o.tipo(a)))
+      if ((AutoplayOptions.STRATEGA.equals(o.tipo(a))
+              || AutoplayOptions.EUROPA1940.equals(o.tipo(a)))
           && !o.strategaAcceso(a).isEmpty()) {
         on.addProperty(a, o.strategaAcceso(a));
       }

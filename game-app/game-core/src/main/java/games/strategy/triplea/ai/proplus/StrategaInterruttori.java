@@ -63,8 +63,7 @@ import java.util.Optional;
  *       defaults from {@code p13.json}: OFF): the UK's raid on the Italian fleet at round 1, the
  *       captured Russian factories held, the bombing of Moscow ({@link LeveP13}).
  *   <li>{@link #AEREI_CORRETTI} (step P14, default OFF, per alliance): the air base's bonus and the
- *       carrier landings in the range of the air units of the own attacks ({@link
- *       AereiCorretti}).
+ *       carrier landings in the range of the air units of the own attacks ({@link AereiCorretti}).
  * </ul>
  */
 public enum StrategaInterruttori {

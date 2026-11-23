@@ -38,10 +38,10 @@ import javax.annotation.Nullable;
  * attack options ({@code ProTerritoryManager.findAirMoveOptions}), nothing else of Hard changes:
  *
  * <ol>
- *   <li><b>air base</b>: the range is the movement the engine gives at the start of the combat
- *       move ({@code MoveDelegate.giveBonusMovementToUnits}: the best {@code givesMovement} of an
- *       allied unit in the territory that is not disabled, e.g. a damaged air base gives nothing),
- *       not the movement left of the purchase's copy where the bonus is not given yet;
+ *   <li><b>air base</b>: the range is the movement the engine gives at the start of the combat move
+ *       ({@code MoveDelegate.giveBonusMovementToUnits}: the best {@code givesMovement} of an allied
+ *       unit in the territory that is not disabled, e.g. a damaged air base gives nothing), not the
+ *       movement left of the purchase's copy where the bonus is not given yet;
  *   <li><b>carriers</b>: a carrier (own or allied) counts as a landing when it is in a sea zone
  *       with no enemy unit (no battle there this turn), Hard's plan does not move it, and it has a
  *       free place. After Hard chose its attacks ({@link #rivedi}), every air unit that can only
@@ -68,6 +68,7 @@ public final class AereiCorretti {
   /** The turn's state (one AI = one nation): options added, the plan's carrier landings. */
   public static final class Stato {
     private String turno = "";
+
     /** "unit id|target" → only with a carrier, every option added this turn. */
     private final Map<String, Boolean> aggiunte = new LinkedHashMap<>();
 
@@ -155,8 +156,8 @@ public final class AereiCorretti {
   // ================================================================================== carriers
 
   /**
-   * Sea zones with an own or allied carrier, no enemy unit, and a free place or own air units
-   * that may come back to it (the review gives the places).
+   * Sea zones with an own or allied carrier, no enemy unit, and a free place or own air units that
+   * may come back to it (the review gives the places).
    */
   static Set<Territory> zoneConPortaerei(final GameState data, final GamePlayer player) {
     final Set<Territory> out = new LinkedHashSet<>();
@@ -214,7 +215,8 @@ public final class AereiCorretti {
     s.attacchi = new JsonArray();
     s.tolti = new JsonArray();
     final GameMap map = data.getMap();
-    final Predicate<Territory> canFly = ProMatches.territoryCanMoveAirUnitsAndNoAa(data, player, true);
+    final Predicate<Territory> canFly =
+        ProMatches.territoryCanMoveAirUnitsAndNoAa(data, player, true);
     final Predicate<Territory> canLand =
         ProMatches.territoryCanLandAirUnits(player, true, List.of(), List.of());
 
@@ -223,10 +225,12 @@ public final class AereiCorretti {
     for (final ProTerritory patd : attackMap.values()) {
       moving.addAll(patd.getUnits());
       moving.addAll(patd.getBombers());
-      patd.getAmphibAttackMap().forEach((k, v) -> {
-        moving.add(k);
-        moving.addAll(v);
-      });
+      patd.getAmphibAttackMap()
+          .forEach(
+              (k, v) -> {
+                moving.add(k);
+                moving.addAll(v);
+              });
       moving.addAll(patd.getBombardTerritoryMap().keySet());
     }
     // free places per safe zone (carriers that stay, air that stays)
@@ -234,7 +238,9 @@ public final class AereiCorretti {
     for (final Territory z : zoneConPortaerei(data, player)) {
       final List<Unit> carriers =
           z.getMatches(
-              Matches.unitIsCarrier().and(Matches.alliedUnit(player)).and(u -> !moving.contains(u)));
+              Matches.unitIsCarrier()
+                  .and(Matches.alliedUnit(player))
+                  .and(u -> !moving.contains(u)));
       if (carriers.isEmpty()) {
         continue;
       }
@@ -242,7 +248,9 @@ public final class AereiCorretti {
       final int staying =
           AirMovementValidator.carrierCost(
               z.getMatches(
-                  Matches.unitIsAir().and(Matches.alliedUnit(player)).and(u -> !moving.contains(u))));
+                  Matches.unitIsAir()
+                      .and(Matches.alliedUnit(player))
+                      .and(u -> !moving.contains(u))));
       if (capacity - staying > 0) {
         free.put(z, capacity - staying);
       }
@@ -373,8 +381,7 @@ public final class AereiCorretti {
   // ============================================================================== registration
 
   /** After the combat move (real game): the turn's options, attacks and first plan. */
-  static void registraCombattimento(
-      final Stato s, final GameState data, final GamePlayer player) {
+  static void registraCombattimento(final Stato s, final GameState data, final GamePlayer player) {
     s.turno(data, player);
     final JsonObject row = new JsonObject();
     row.addProperty("fase", "combattimento");
@@ -449,7 +456,8 @@ public final class AereiCorretti {
         already++;
         continue;
       }
-      if (!now.isWater() && ProMatches.territoryCanLandAirUnits(player, false, List.of(), List.of()).test(now)) {
+      if (!now.isWater()
+          && ProMatches.territoryCanLandAirUnits(player, false, List.of(), List.of()).test(now)) {
         already++; // it did not leave (the move was refused) or can stay where it is
         continue;
       }
@@ -463,7 +471,14 @@ public final class AereiCorretti {
         landed++;
       } else {
         failed++;
-        refused.add(u.getType().getName() + " " + now.getName() + ">" + zone.getName() + ": " + error.get());
+        refused.add(
+            u.getType().getName()
+                + " "
+                + now.getName()
+                + ">"
+                + zone.getName()
+                + ": "
+                + error.get());
       }
     }
     final JsonObject row = new JsonObject();

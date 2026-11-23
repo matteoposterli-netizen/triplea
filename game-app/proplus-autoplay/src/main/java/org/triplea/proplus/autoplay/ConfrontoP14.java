@@ -163,7 +163,8 @@ final class ConfrontoP14 {
     o.addProperty("aerei_non_atterrati", lostUnits);
     // Moscow, Rome and the Taranto lever (from the block p13)
     final JsonObject p13 = sub(json, "p13");
-    final JsonObject cadute = p13 != null && p13.has("cadute") ? p13.getAsJsonObject("cadute") : new JsonObject();
+    final JsonObject cadute =
+        p13 != null && p13.has("cadute") ? p13.getAsJsonObject("cadute") : new JsonObject();
     o.add("cadute", cadute.deepCopy());
     final JsonObject taranto =
         p13 != null && p13.has("taranto") ? p13.getAsJsonObject("taranto") : new JsonObject();
@@ -206,15 +207,23 @@ final class ConfrontoP14 {
     if (by.isEmpty() && invalid.isEmpty()) {
       return;
     }
-    md.append("\n\n### P14\n\n");
+    md.append(
+"""
+
+
+### P14
+
+""");
     md.append(
         "Step P14: tutte le nazioni \"Pro+ (Europe 1940)\" (Asse consigliato contro Alleati"
             + " consigliati, 7 interruttori compreso taranto) + aerei_corretti per alleanza (cifre:"
             + " Asse, Alleati). Valide = completate o in stallo. Soglia dei due confronti dichiarati"
             + " 0,025 (0,05/2).\n\n");
     md.append(
-        "| Config | Valide | Stalli | Errori | Vittorie Asse | Vittorie Alleati | Mosca <= R12 |"
-            + " Roma <= R16 | Taranto R1 |\n|---|---|---|---|---|---|---|---|---|\n");
+"""
+| Config | Valide | Stalli | Errori | Vittorie Asse | Vittorie Alleati | Mosca <= R12 | Roma <= R16 | Taranto R1 |
+|---|---|---|---|---|---|---|---|---|
+""");
     for (final String c : CONFIG) {
       final List<JsonObject> l = by.getOrDefault(c, List.of());
       md.append("| ")
@@ -248,13 +257,33 @@ final class ConfrontoP14 {
       (c.charAt(1) == '1' ? alliesOn : alliesOff).addAll(l);
     }
     md.append(
-        "\n#### Confronti dichiarati (Fisher esatto, soglia 0,025)\n\n"
-            + "| Confronto | Acceso | Spento | p |\n|---|---|---|---|\n");
-    confronto(md, "A. vittorie Asse, Asse acceso (10+11) contro spento (00+01)", axisOn, axisOff, ConfrontoP14::axisWin);
-    confronto(md, "B. vittorie Alleati, Alleati acceso (01+11) contro spento (00+10)", alliesOn, alliesOff, ConfrontoP14::alliesWin);
+"""
+
+#### Confronti dichiarati (Fisher esatto, soglia 0,025)
+
+| Confronto | Acceso | Spento | p |
+|---|---|---|---|
+""");
+    confronto(
+        md,
+        "A. vittorie Asse, Asse acceso (10+11) contro spento (00+01)",
+        axisOn,
+        axisOff,
+        ConfrontoP14::axisWin);
+    confronto(
+        md,
+        "B. vittorie Alleati, Alleati acceso (01+11) contro spento (00+10)",
+        alliesOn,
+        alliesOff,
+        ConfrontoP14::alliesWin);
     md.append(
-        "\n#### Secondari (solo descrittivi)\n\n| Misura | Asse acceso | Asse spento | Alleati acceso"
-            + " | Alleati spento |\n|---|---|---|---|---|\n");
+"""
+
+#### Secondari (solo descrittivi)
+
+| Misura | Asse acceso | Asse spento | Alleati acceso | Alleati spento |
+|---|---|---|---|---|
+""");
     final Map<String, Predicate<JsonObject>> sec = new java.util.LinkedHashMap<>();
     sec.put("Mosca entro R12", b -> entro(b, "Mosca", 12));
     sec.put("Roma entro R16", b -> entro(b, "Roma", 16));
@@ -274,12 +303,13 @@ final class ConfrontoP14 {
     }
     // the diagnostics
     md.append(
-        "\n#### Diagnostica (opzioni aggiunte, attacchi con quegli aerei, aerei senza atterraggio)\n\n"
-            + "| Config | Partite | Opzioni aeroporto | Opzioni portaerei | Aerei aeroporto"
-            + " | Aerei portaerei | Tolti dalla revisione | Attacchi con aerei aggiunti | Vittoria"
-            + " stimata media | Vinti / persi / altro | Atterrati sulle portaerei | Rifiutati dal"
-            + " motore | Aerei non atterrati (tutti) |\n"
-            + "|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+"""
+
+#### Diagnostica (opzioni aggiunte, attacchi con quegli aerei, aerei senza atterraggio)
+
+| Config | Partite | Opzioni aeroporto | Opzioni portaerei | Aerei aeroporto | Aerei portaerei | Tolti dalla revisione | Attacchi con aerei aggiunti | Vittoria stimata media | Vinti / persi / altro | Atterrati sulle portaerei | Rifiutati dal motore | Aerei non atterrati (tutti) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+""");
     for (final String c : CONFIG) {
       final List<JsonObject> l = by.getOrDefault(c, List.of());
       final int[] sums = new int[8];
@@ -346,9 +376,13 @@ final class ConfrontoP14 {
     }
     // per nation and round (configurations with the switch on for the nation's alliance)
     md.append(
-        "\n#### Per nazione e round (somma sulle partite con l'interruttore acceso per la nazione)\n\n"
-            + "| Nazione | Round | Opzioni aeroporto | Opzioni portaerei | Attacchi con aerei"
-            + " aggiunti | Vinti | Aerei non atterrati |\n|---|---|---|---|---|---|---|\n");
+"""
+
+#### Per nazione e round (somma sulle partite con l'interruttore acceso per la nazione)
+
+| Nazione | Round | Opzioni aeroporto | Opzioni portaerei | Attacchi con aerei aggiunti | Vinti | Aerei non atterrati |
+|---|---|---|---|---|---|---|
+""");
     final Map<String, int[]> perNation = new TreeMap<>();
     for (final String c : CONFIG) {
       for (final JsonObject b : by.getOrDefault(c, List.of())) {
@@ -392,8 +426,11 @@ final class ConfrontoP14 {
         });
     // Taranto: Hard alone (first plan of the British round 1) with the switch on for the Allies
     md.append(
-        "\n#### Taranto: aerei di Londra sulla zona 97 nel primo piano di Hard al R1 (Alleati"
-            + " accesi)\n\n");
+"""
+
+#### Taranto: aerei di Londra sulla zona 97 nel primo piano di Hard al R1 (Alleati accesi)
+
+""");
     int games0 = 0;
     int withPlanes = 0;
     int planes = 0;

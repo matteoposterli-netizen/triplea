@@ -65,8 +65,7 @@ class AereiCorrettiTest extends AbstractClientSettingTestCase {
             ChangeFactory.relationshipChange(
                 player("British"),
                 player(e),
-                data.getRelationshipTracker()
-                    .getRelationshipType(player("British"), player(e)),
+                data.getRelationshipTracker().getRelationshipType(player("British"), player(e)),
                 data.getRelationshipTypeList().getDefaultWarRelationship()));
       }
     }
@@ -80,7 +79,8 @@ class AereiCorrettiTest extends AbstractClientSettingTestCase {
   @Test
   void offIsHardAndNoNameIsInTheCode() throws Exception {
     assertThat(StrategaInterruttori.AEREI_CORRETTI.predefinito()).isFalse();
-    assertThat(StrategaInterruttori.of("aerei_corretti")).contains(StrategaInterruttori.AEREI_CORRETTI);
+    assertThat(StrategaInterruttori.of("aerei_corretti"))
+        .contains(StrategaInterruttori.AEREI_CORRETTI);
     final ProData pd = proData(player("British"), new ProPlusTuning());
     final Unit bomber = unit("United Kingdom", "bomber");
     final BigDecimal hard = bomber.getMovementLeft();
@@ -89,7 +89,8 @@ class AereiCorrettiTest extends AbstractClientSettingTestCase {
         .isEqualTo(hard);
     assertThat(pd.getTuning().ownAttackCarrierLandings(pd, player("British"))).isEmpty();
     // the options of Pro+ with the switch off are Hard's
-    assertThat(options(pd).get(bomber)).isEqualTo(options(proData(player("British"), null)).get(bomber));
+    assertThat(options(pd).get(bomber))
+        .isEqualTo(options(proData(player("British"), null)).get(bomber));
     // on for the Allies only
     on("Allies");
     assertThat(AereiCorretti.attivo(data, player("British"))).isTrue();
@@ -181,9 +182,7 @@ class AereiCorrettiTest extends AbstractClientSettingTestCase {
     for (final Territory t : data.getMap().getTerritories()) {
       if (!t.isWater()
           || !t.getUnitCollection().isEmpty()
-          || data.getMap()
-              .getNeighborsByMovementCost(t, new BigDecimal(3), canFly)
-              .stream()
+          || data.getMap().getNeighborsByMovementCost(t, new BigDecimal(3), canFly).stream()
               .anyMatch(canLand)) {
         continue;
       }
@@ -226,7 +225,8 @@ class AereiCorrettiTest extends AbstractClientSettingTestCase {
     del.end();
 
     // the battle won: the fighter lands on its carrier in the non-combat move
-    data.performChange(ChangeFactory.removeUnits(target, target.getMatches(Matches.enemyUnit(british))));
+    data.performChange(
+        ChangeFactory.removeUnits(target, target.getMatches(Matches.enemyUnit(british))));
     final IDelegateBridge bridge = newDelegateBridge(british);
     advanceToStep(bridge, "britishNonCombatMove");
     del.setDelegateBridgeAndPlayer(bridge);
