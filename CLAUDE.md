@@ -7036,3 +7036,33 @@ combattimento, leve nel non combattimento, trattenute, `place`), `ProPlusTuning.
   29,6: NO. Gia' senza leva l'assedio bombarda Mosca (riparazioni russe R4-R8 31 contro 30).
 - Nessuna correzione: la run lunga e' lanciata dopo il primo giro (dichiarato nel REPORT).
 
+
+#### Autoplay in CI (run 45078641105, commit 3afc105, 1194/1200 partite [completa] senza chiave, semi 2221-2340, costo API 0)
+Job falliti 2: b1-g049 (seme 2245, upload dell'artefatto fallito: 5 partite perse: 000, 001, 010, 011, 100) e b1-g100 (seme 2270: 110
+con l'errore noto del calcolatore "Can't calculate while operation is still running!"). Publish finale verde (download uno alla volta).
+Valide 1193, 6 stalli al tetto di 60 round. Numeri dalla sezione "P13" di `riepilogo-generale.md`.
+
+| Config | Valide | Asse / Alleati | Mosca <= R10 / R12 | Roma <= R16 | Berlino cade |
+|---|---|---|---|---|---|
+| 000 | 119 | 55 / 64 | 22 / 39 | 47 | 65 |
+| 001 | 119 | 44 / 74 | 15 / 27 | 46 | 76 |
+| 010 | 119 | 47 / 71 | 19 / 32 | 40 | 72 |
+| 011 | 119 | 46 / 73 | 18 / 31 | 46 | 73 |
+| 100 | 119 | 37 / 81 | 19 / 32 | 55 | 83 |
+| 101 | 120 | 36 / 84 | 21 / 27 | 56 | 86 |
+| 110 | 119 | 35 / 84 | 25 / 34 | 65 | 84 |
+| 111 | 120 | 28 / 92 | 10 / 15 | 63 | 94 |
+| r0 | 120 | 36 / 82 | 11 / 17 | 40 | 84 |
+| r1 | 120 | 34 / 85 | 11 / 19 | 47 | 85 |
+
+- Effetto (Fisher, soglia 0,0167): **taranto** vittorie Asse 136/478 contro 192/476 (p < 0,001), Roma entro R16 239 contro 179 (p <
+  0,001), Mosca entro R12 p 0,12; **fabbriche_tenute** nulla (vittorie p 0,31, Mosca 0,37, Roma 0,56); **bombardamento_mosca** Mosca entro
+  R12 100/478 contro 137/476 (p 0,006: cade MENO, contro l'Asse), vittorie p 0,17, Roma p 0,85. Regressione: solo taranto (OR 0,61, p
+  0,033), coppie p 0,72-0,90. r1 contro r0 (Asse di Hard): Alleati 85 contro 82, p 0,78.
+- Meccanismo: taranto eseguito 1196/1197 partite con la leva, UK vince a 97 76-90%, scramble 97-99%, caccia di Londra 0 nel 71-88% dei
+  casi; flotta italiana R2 3,3 contro 4,8; bonus italiano R4-R6 5,4 contro 7,2; Egitto dell'Asse R2-R8 3,3 contro 3,8 round. Fabbriche:
+  guarnigione richiesta 4,6-5,4, presente 3,5-4,0, mancanti 1,1-1,4; riprese di Ucraina 54% contro 56%, Leningrado 68% contro 70%.
+  Bombardamento: raid in ~1/3 dei turni in guerra, 2,1-2,2 bombardieri, danno 9,0-9,5 per raid, 0,4 persi; ~400 bombardieri comprati in 120
+  partite; prodotte a Mosca R4-R8 34,1 contro 33,5, danno tedesco 33,5 contro 34,1: la leva non aggiunge danno (l'assedio gia' bombarda).
+- Perdite tedesche R1 (1194 partite, TUV media ± ds): France 29,7 ± 12,3, 110 SZ 32,2 ± 20,8 (918 partite), 111 SZ 19,2 ± 14,3 (794),
+  Yugoslavia 7,0 ± 4,2, Southern France 5,0 ± 4,6.
