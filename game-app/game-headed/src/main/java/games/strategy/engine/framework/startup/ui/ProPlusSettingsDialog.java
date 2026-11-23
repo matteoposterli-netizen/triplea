@@ -187,6 +187,7 @@ final class ProPlusSettingsDialog {
     private final javax.swing.JToggleButton legacyToggle =
         new javax.swing.JToggleButton(
             "Impostazioni delle voci vecchie (\"Pro+ (AI)\", \"Pro+ Stratega LLM\")");
+
     private final JCheckBox diaryCheckBox =
         new JCheckBox("Scrivi il diario delle decisioni dell'AI", DiarySettings.isEnabled());
     @Getter private final JPanel panel = new JPanel();

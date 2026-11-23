@@ -108,12 +108,12 @@ public final class Stratega {
   }
 
   /**
-   * Step PF1: the player "Pro+ (Europe 1940)" joins a game. Same registration as {@link
-   * #registra} (Pro+ nudo = Hard, the nation recorded for the strategist) but: never an LLM (the
-   * transports of both levels are "not available", as in the autoplay without a key), the
-   * strategic contract decided by the rules, and the switches are exactly those of the two boxes
-   * of the panel: {@link #ALLEATI_CONSIGLIATI} for the Allies, {@link #ASSE_CONSIGLIATO} for the
-   * Axis (the other switches of the profile are ignored).
+   * Step PF1: the player "Pro+ (Europe 1940)" joins a game. Same registration as {@link #registra}
+   * (Pro+ nudo = Hard, the nation recorded for the strategist) but: never an LLM (the transports of
+   * both levels are "not available", as in the autoplay without a key), the strategic contract
+   * decided by the rules, and the switches are exactly those of the two boxes of the panel: {@link
+   * #ALLEATI_CONSIGLIATI} for the Allies, {@link #ASSE_CONSIGLIATO} for the Axis (the other
+   * switches of the profile are ignored).
    */
   public static void registraEuropa1940(
       final GameState data, final GamePlayer player, final boolean alleati, final boolean asse) {
@@ -129,10 +129,7 @@ public final class Stratega {
     if (games.strategy.triplea.ai.proplus.strategia.Decisori.getModalita(props, alliance.get())
         != games.strategy.triplea.ai.proplus.strategia.llm.Modalita.REGOLE) {
       games.strategy.triplea.ai.proplus.strategia.Decisori.set(
-          props,
-          alliance.get(),
-          games.strategy.triplea.ai.proplus.strategia.Decisore.REGOLE,
-          "");
+          props, alliance.get(), games.strategy.triplea.ai.proplus.strategia.Decisore.REGOLE, "");
     }
     aggiungi(props, alliance.get(), interruttoriConsigliati(alliance.get(), alleati, asse));
   }
@@ -296,9 +293,7 @@ public final class Stratega {
    * (never turns one off).
    */
   private static void aggiungi(
-      final GameProperties props,
-      final String alliance,
-      final List<StrategaInterruttori> wanted) {
+      final GameProperties props, final String alliance, final List<StrategaInterruttori> wanted) {
     final List<String> on = new ArrayList<>(StrategaInterruttori.accesi(props, alliance));
     boolean changed = false;
     for (final StrategaInterruttori w : wanted) {

@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import games.strategy.engine.framework.startup.ui.PlayerTypes;
 import games.strategy.engine.player.Player;
-import games.strategy.triplea.ai.pro.ProAi;
 import games.strategy.triplea.ai.proplus.ProPlusAi;
 import games.strategy.triplea.ai.proplus.ProPlusEuropa1940Ai;
 import games.strategy.triplea.settings.ClientSetting;

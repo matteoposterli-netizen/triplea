@@ -69,8 +69,8 @@ final class StrategistPanel {
   @Getter private final javax.swing.JCheckBox alleatiConsigliati = new javax.swing.JCheckBox();
 
   /**
-   * Step PF1: the box "Asse consigliato (assedio di Mosca)" of "Pro+ (Europe 1940)": on (default)
-   * = impegno + assedio; off = Hard.
+   * Step PF1: the box "Asse consigliato (assedio di Mosca)" of "Pro+ (Europe 1940)": on (default) =
+   * impegno + assedio; off = Hard.
    */
   @Getter private final javax.swing.JCheckBox asseConsigliato = new javax.swing.JCheckBox();
 
@@ -159,8 +159,7 @@ final class StrategistPanel {
             + " ai neutrali, Norvegia presto e anche con i trasporti esposti, ponte britannico"
             + " concentrato, attacco a Taranto al round 1; spenta = Alleati come Hard</html>");
     asseConsigliato.setSelected(profile.asseConsigliato());
-    asseConsigliato.setText(
-        "<html>Impegno e assedio di Mosca; spenta = Asse come Hard</html>");
+    asseConsigliato.setText("<html>Impegno e assedio di Mosca; spenta = Asse come Hard</html>");
     consigliatiPanel.setLayout(new BoxLayout(consigliatiPanel, BoxLayout.Y_AXIS));
     consigliatiPanel.setBorder(BorderFactory.createTitledBorder("Pro+ (Europe 1940)"));
     consigliatiPanel.add(row("Alleati consigliati:", alleatiConsigliati));

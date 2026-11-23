@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.ai.proplus.strategia.Decisori;
-import games.strategy.triplea.ai.proplus.strategia.llm.Modalita;
 import games.strategy.triplea.ai.proplus.strategia.llm.Fornitore;
+import games.strategy.triplea.ai.proplus.strategia.llm.Modalita;
 import games.strategy.triplea.ai.proplus.strategia.llm.ProfiloStratega;
 import games.strategy.triplea.ai.proplus.strategia.llm.Risposta;
 import games.strategy.triplea.settings.AbstractClientSettingTestCase;
@@ -215,7 +215,9 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
 
     for (final String alliance : List.of("Allies", "Axis")) {
       for (final StrategaInterruttori s : StrategaInterruttori.values()) {
-        assertThat(s.acceso(e, alliance)).as(alliance + " " + s.id()).isEqualTo(s.acceso(a, alliance));
+        assertThat(s.acceso(e, alliance))
+            .as(alliance + " " + s.id())
+            .isEqualTo(s.acceso(a, alliance));
       }
       assertThat(Ablazione.spenti(e, alliance)).isEqualTo(Ablazione.spenti(a, alliance));
       assertThat(DecisoreOperazione.modello(e, alliance))
@@ -294,10 +296,7 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
     final ProfiloStratega p = ProfiloStratega.carica();
     for (final String n : NATIONS) {
       Stratega.registraEuropa1940(
-          data,
-          data.getPlayerList().getPlayerId(n),
-          p.alleatiConsigliati(),
-          p.asseConsigliato());
+          data, data.getPlayerList().getPlayerId(n), p.alleatiConsigliati(), p.asseConsigliato());
     }
     return data;
   }
