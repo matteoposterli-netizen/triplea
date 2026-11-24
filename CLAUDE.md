@@ -3759,6 +3759,42 @@ Causa del problema di Matteo (USA in guerra con Colombia/Ecuador/Venezuela al R4
   `setAsseConsigliato` + `salva`, come l'OK del pannello) e lo fa leggere ai giocatori (`FOLDER_PROPERTY`). Gli interruttori arrivano
   dal profilo, non da `--stratega-acceso`. Le configurazioni esistenti non cambiano.
 
+### Aerei nei propri attacchi (step P14)
+
+Interruttore `aerei_corretti` (per alleanza, default spento, NON nel pannello; autoplay `--stratega-acceso Axis=aerei_corretti` anche
+con `--tipo ...=europa1940`, sopra le caselle). Spento = Hard: tre agganci nuovi in `ProTuning` con default = Hard
+(`ownAttackAirRange`, `ownAttackCarrierLandings`, `ownAttackAirOptionAdded`), usati in `ProTerritoryManager.findAirMoveOptions` solo per
+i propri attacchi reali (`isCombatMove && !isCheckingEnemyAttacks && !isIgnoringRelationships`, giocatore = quello del `ProData`; il
+calcolo dei bersagli e' in `AirTargets.find`, stessa logica di prima) e in `ProCombatMoveAi.canAirSafelyLandAfterAttack` (raggio).
+Codice Pro+: `ai/proplus/AereiCorretti` (+ `ProPlusTuning`, `ProPlusAi.landOnCarriers` e registro dopo il combattimento).
+- **Aeroporto**: raggio = movimento + bonus come `MoveDelegate.giveBonusMovementToUnits` (miglior `givesMovement` di un'unita' alleata
+  nel territorio, non disabilitata: aeroporto danneggiato oltre `maxOperationalDamage` = nessun bonus; 0 senza la proprieta' "Units May
+  Give Bonus Movement"); se l'aereo si e' gia' mosso nel turno resta `getMovementLeft()` (il bonus e' gia' dato). Serve perche' Hard
+  pianifica il combattimento all'acquisto su una copia dove `MoveDelegate.start()` non ha ancora dato il bonus.
+- **Portaerei** (criterio): conta una portaerei propria o alleata in una zona SENZA unita' nemiche (nessuna battaglia li' nel turno), che
+  il piano di Hard NON muove, con posto libero (capacita' meno aerei che restano). Dopo che Hard ha scelto gli attacchi
+  (`reviewAttacks` -> `AereiCorretti.rivedi`) ogni aereo che puo' atterrare solo su una portaerei riceve un posto in una zona raggiungibile
+  con il movimento rimasto (prima la propria portaerei, poi le altre; il raggio piu' corto per primo), altrimenti esce dall'attacco. Nel non
+  combattimento, PRIMA di ogni altra mossa (`ProPlusAi.landOnCarriers`), gli aerei assegnati volano alla loro portaerei (mossa controllata
+  dal motore) e loro e le portaerei proprie della zona restano ferme (`ProPlusTuning.holdLandings`, unite in `heldUnits`).
+- Registro `p14_aerei`: P14_AEREI (dopo il combattimento: opzioni aggiunte per motivo, attacchi dell'ultimo piano con gli aerei aggiunti e
+  la vittoria stimata, tolti, assegnati, al R1 `primo_piano` = aerei del primo piano di Hard "da>bersaglio:tipo"), P14_ATTERRAGGIO
+  (assegnati, atterrati, gia' a posto, distrutti prima, rifiutati dal motore). Autoplay: `MonitorP14` (eventi "could not land" della storia
+  per round e nazione, tutte le configurazioni), `ConfrontoP14` (blocco `p14`, sezione "P14"), `--profilo-caselle` passato dal workflow.
+- CI: `[prova14]` = 00, 10, 01, 11 x semi 2347-2351; `[completa]` P14 = stesse 4 x semi 2352-2471 (480 partite, un blocco, 5 per job).
+  Un commit con il tag deve cambiare un file non `.md` (con `paths-ignore` un commit vuoto non lancia nulla: 75ccc7b).
+
+### Scelte di P14 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **Portaerei solo in zone senza nemici e non mosse dal piano**: e' il criterio piu' semplice che il motore rende legale in ogni caso (la
+   zona non puo' essere attaccata nel mio turno). Scartato: la portaerei nella zona attaccata con battaglia stimata vinta (dipende dall'esito
+   e da come Hard muove la portaerei; piu' casi d'errore).
+2. **Assegnazione del posto dopo il piano di Hard, non nelle opzioni**: le opzioni dicono solo "puo'", il posto e' contato una volta per
+   aereo e senza posto l'aereo esce dall'attacco. Il validatore del motore NON conta i posti gia' promessi ad altri aerei (TODO in
+   `AirMovementValidator`): per questo il conto lo fa Pro+.
+3. **Atterraggio prima di ogni altra mossa del non combattimento** (le operazioni e le leve muovono navi): non basta, vedi i problemi aperti.
+4. **Raggio corretto anche in `canAirSafelyLandAfterAttack`** (il controllo "meta' del raggio" di Hard): e' lo stesso raggio.
+
 ## Come configurare lo stratega
 
 Per Matteo e gli amici (stesso testo, piu' corto, nel `LEGGIMI.txt` dello zip):
@@ -7131,3 +7167,47 @@ Valide 1193, 6 stalli al tetto di 60 round. Numeri dalla sezione "P13" di `riepi
   del Mediterraneo 48-60%, 6-8 unita', caccia di Londra 0-2); 0 guerre alleate (USA comprese) con Neutral_True, 27-30 guerre escluse da
   `niente_neutrali` per partita, 0 attacchi alleati a neutrali; `interruttori_attivi` con i 7 in 24/24 turni alleati e impegno+assedio in
   14-16/14-16 turni dell'Asse; guerre con Neutral_Axis (Russia, USA al R1-R3) come in Hard. VC R8 Asse/Alleati 7/4, 5/6, 5/6, 6/5, 5/6, 5/6.
+
+### Step P14 — raggio degli aerei nei propri attacchi: aeroporto +1 e portaerei come atterraggio (2026-11-23)
+
+Vedi "Aerei nei propri attacchi (step P14)" e "Scelte di P14". File nuovi: `ai/proplus/AereiCorretti`, test `AereiCorrettiTest` (5);
+autoplay `MonitorP14`, `ConfrontoP14`. Modificati: `ai/pro/ProTuning` (+3 agganci, default = Hard), `ai/pro/data/ProTerritoryManager`
+(`AirTargets`), `ai/pro/ProCombatMoveAi` (1 riga), `ProPlusTuning`, `ProPlusAi`, `StrategaInterruttori` (+1), `RegistroDecisioni`;
+autoplay `AutoplayRunner` (`--stratega-acceso` anche per europa1940), `AutoplayOptions`, `Riepilogo` (blocco `p14`, `stratega_acceso`
+anche per europa1940), `Monitor`, `ConfrontoCompleta`; workflow `[prova14]`, `[completa]` P14, `--profilo-caselle`.
+- Test locali (JDK 25 da apt): 812 test AI di game-core e autoplay, 0 falliti (golden Hard `HardPriorityGoldenTest`/
+  `HardNeutralityGoldenTest`, `ProPlusGoldenTest`, `NudoHardTest`, `DiaryNeutralityTest`). `AereiCorrettiTest`: spento = Hard e nessun nome
+  nel codice; bombardiere di Londra raggio 7 (Hard 6), rotta 5 fino alla zona 97, Malta a 2, il motore da' lo stesso bonus all'inizio del
+  combattimento e accetta l'attacco; aeroporto danneggiato = raggio 6 (anche nel motore); caccia su portaerei che attacca una zona lontana
+  da ogni terra, posto assegnato, attacco accettato dal motore, atterraggio nel non combattimento, nessun aereo senza atterraggio; portaerei
+  in zona nemica mai contata, caccia senza posto tolto dall'attacco.
+- Prova locale (2 partite fino al R4, configurazione 11): 0 eccezioni, 0 aerei persi, opzioni aeroporto R1 Germania 20 / Regno Unito 7.
+
+#### Prova breve in CI (run 45236771609, commit d3ee9ac, 20/20 partite [prova14], semi 2347-2351)
+Opzioni aggiunte 889 aeroporto / 662 portaerei, 16 attacchi con aerei aggiunti (14 vinti), 9 aerei atterrati sulle portaerei, 0 rifiutati
+dal motore; nessun aereo perso tra quelli di P14 (17 persi in tutto, gli stessi tipi anche con l'interruttore spento). Run lunga lanciata.
+
+#### Autoplay in CI (run 45250400331, commit fb85bad, tutto verde, 480/480 partite [completa] senza chiave, semi 2352-2471, costo API 0)
+0 errori del calcolatore, 2 stalli. Tutte le nazioni "Pro+ (Europe 1940)" con le due caselle (7 interruttori alleati con taranto).
+
+| Config (Asse, Alleati) | Valide | Asse / Alleati | Mosca <= R12 | Roma <= R16 | Taranto R1 |
+|---|---|---|---|---|---|
+| 00 | 120 | 43 / 77 | 33 | 63 | 120 |
+| 10 | 120 | 51 / 69 | 41 | 57 | 119 |
+| 01 | 120 (1 stallo) | 46 / 73 | 35 | 56 | 120 |
+| 11 | 120 (1 stallo) | 44 / 75 | 39 | 45 | 120 |
+
+- Confronti dichiarati (Fisher, soglia 0,025): **A** vittorie Asse con l'Asse acceso (10+11) 95/240 contro spento 89/240, p 0,64; **B**
+  vittorie Alleate con gli Alleati accesi (01+11) 148/240 contro 146/240, p 0,93. **Nessun effetto.** Secondari: Mosca entro R12 Asse
+  acceso 80 contro 68; Roma entro R16 Alleati accesi 101 contro 120 (Roma cade MENO).
+- Diagnostica: opzioni aggiunte (aeroporto / portaerei) 10: 16.778 / 169, 01: 5.674 / 12.283, 11: 21.615 / 11.954; attacchi eseguiti con
+  aerei aggiunti 169 (vinti 161, vittoria stimata 96%), 154 (108, 76%), 255 (213, 88%); tolti dalla revisione 2 / 6 / 25; atterraggi
+  assegnati 148 (01) e 154 (11), atterrati 76 e 96, distrutti in battaglia prima 61 e 50, 0 rifiutati dal motore.
+- Taranto: col solo Hard (primo piano del R1, prima della leva) un aereo di Londra sulla zona 97 in 108/240 partite con gli Alleati accesi
+  (sempre uno solo).
+- **Aerei persi per mancato atterraggio**: 114 (00), 115 (10), 121 (01), 109 (11), quasi tutti come senza l'interruttore (caccia britannici
+  al R1 nella 97 = Taranto; bombardieri tedeschi = bombardamento di Mosca). In turni con atterraggi assegnati da P14: **20 aerei** (12 in
+  01, 8 in 11), es. 01 seme 2463 R10: 5 caccia USA tornano sulla portaerei della 94 (5 atterrati), 4 distrutti a fine turno; 01 seme 2453
+  R16: 2 caccia britannici assegnati alla 110 atterrati, 3 distrutti. Difetto di P14 (atteso 0), visto solo nella run lunga. Causa probabile
+  NON verificata: dopo l'atterraggio un'altra leva (scorta di `sbarco_concentrato`, `norvegia_esposta`) sposta navi da guerra nel non
+  combattimento senza guardare le portaerei trattenute, o il posto e' preso da altri aerei atterrati da Hard.
