@@ -64,6 +64,10 @@ import java.util.Optional;
  *       captured Russian factories held, the bombing of Moscow ({@link LeveP13}).
  *   <li>{@link #AEREI_CORRETTI} (step P14, default OFF, per alliance): the air base's bonus and the
  *       carrier landings in the range of the air units of the own attacks ({@link AereiCorretti}).
+ *   <li>{@link #USA_CARICO}, {@link #CAPITALE_OLTRANZA}, {@link #PONTE_ALLEATO} (step PV1, defaults
+ *       from {@code pv1.json}: OFF): land units for the empty US transports at the port, the
+ *       Russian capital held to the end, British troops in America on US transports ({@link
+ *       LevePv1}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -96,7 +100,10 @@ public enum StrategaInterruttori {
   TARANTO("taranto", false),
   FABBRICHE_TENUTE("fabbriche_tenute", false),
   BOMBARDAMENTO_MOSCA("bombardamento_mosca", false),
-  AEREI_CORRETTI("aerei_corretti", false);
+  AEREI_CORRETTI("aerei_corretti", false),
+  USA_CARICO("usa_carico", false),
+  CAPITALE_OLTRANZA("capitale_oltranza", false),
+  PONTE_ALLEATO("ponte_alleato", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -175,6 +182,9 @@ public enum StrategaInterruttori {
     if (LeveP13.LEVE.contains(this)) {
       return LeveP13.Config.get().diDefault(this);
     }
+    if (LevePv1.LEVE.contains(this)) {
+      return LevePv1.Config.get().diDefault(this);
+    }
     if (LeveItalia.LEVE.contains(this)) {
       return LeveItalia.Config.get().diDefault(this);
     }
@@ -247,7 +257,8 @@ public enum StrategaInterruttori {
                                         + " ponte_pronti, ponte_concentrato, italia_est,"
                                         + " italia_africa, capitale_minima,"
                                         + " italia_gibilterra, taranto, fabbriche_tenute,"
-                                        + " bombardamento_mosca, aerei_corretti)"))
+                                        + " bombardamento_mosca, aerei_corretti, usa_carico,"
+                                        + " capitale_oltranza, ponte_alleato)"))
                         .id())
             .distinct()
             .toList();

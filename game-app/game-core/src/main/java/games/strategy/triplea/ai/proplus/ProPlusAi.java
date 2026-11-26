@@ -185,6 +185,8 @@ public class ProPlusAi extends ProAi {
     // step P7 (C): the row of the UK's indication, on the real game
     if (!purchaseForBid) {
       IndicazioniP7.registraPronti(data, player);
+      // step PV1 (A, B): the rows of the cargo and of the capital
+      registerPv1Purchase(data, player);
     }
     // step P12: the balance's row, on the real game
     if (!purchaseForBid
@@ -229,6 +231,9 @@ public class ProPlusAi extends ProAi {
       playLevers(moveDel, data, player);
     }
     super.move(nonCombat, moveDel, data, player);
+    if (nonCombat) {
+      playPv1AfterHard(moveDel, data, player);
+    }
     if (!nonCombat
         && AereiCorretti.attivo(data, player)
         && ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning) {
@@ -561,6 +566,112 @@ public class ProPlusAi extends ProAi {
       ProLogger.warn(LOG_PREFIX + "P5 start failed: " + e);
       tuning.p5a().pulisci();
     }
+    // step PV1 (A): the cargo of the empty transports at the port (switch "usa_carico")
+    try {
+      if (UsaCarico.attivo(data, player)) {
+        initializeData();
+        UsaCarico.piano(getProData(), tuning.pv1a());
+      } else {
+        tuning.pv1a().pulisci();
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "PV1 cargo failed: " + e);
+      tuning.pv1a().pulisci();
+    }
+    // step PV1 (B): the threat on the capital and its defense (switch "capitale_oltranza")
+    try {
+      if (CapitaleOltranza.attivo(data, player)) {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        CapitaleOltranza.piano(getProData(), getCalc(), tuning.pv1b());
+      } else {
+        tuning.pv1b().pulisci();
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "PV1 capital failed: " + e);
+      tuning.pv1b().pulisci();
+    }
+  }
+
+  /** Step PV1 (A, B): the rows of the purchase, on the real game. */
+  private void registerPv1Purchase(final GameData data, final GamePlayer player) {
+    if (!(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return;
+    }
+    try {
+      if (UsaCarico.attivo(data, player)) {
+        UsaCarico.registraAcquisto(data, player, tuning.pv1a());
+      }
+      if (CapitaleOltranza.attivo(data, player)) {
+        CapitaleOltranza.registraAcquisto(data, player, tuning.pv1b());
+      }
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "PV1 register failed: " + e);
+    }
+  }
+
+  /**
+   * Step PV1, the non-combat move before Hard's: the Russian capital held (B1, B2), the British
+   * units in America (C1 unload and load on US transports, C2 wait at the port). Returns the units
+   * Hard must leave where they are.
+   */
+  private java.util.Set<games.strategy.engine.data.Unit> playPv1(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    final java.util.Set<games.strategy.engine.data.Unit> held = new java.util.LinkedHashSet<>();
+    if (!(ProPlusTuning.unwrap(getProData().getTuning()) instanceof ProPlusTuning tuning)) {
+      return held;
+    }
+    if (CapitaleOltranza.attivo(data, player)) {
+      try {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        held.addAll(
+            CapitaleOltranza.nonCombattimento(getProData(), getCalc(), moveDel, tuning.pv1b()));
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "PV1 capital non-combat failed: " + e);
+      }
+    }
+    if (PonteAlleato.attivo(data, player) && PonteAlleato.britannico(player)) {
+      try {
+        final int unloaded = PonteAlleato.scarica(data, player, moveDel).size();
+        final int loaded = PonteAlleato.carica(data, player, moveDel).size();
+        final java.util.Set<games.strategy.engine.data.Unit> port =
+            PonteAlleato.alPorto(data, player, moveDel);
+        held.addAll(port);
+        PonteAlleato.registraTurno(data, player, loaded, unloaded, port.size());
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "PV1 bridge failed: " + e);
+      }
+    }
+    return held;
+  }
+
+  /** Step PV1, after Hard's non-combat move: the US transports with British cargo sail (C1). */
+  private void playPv1AfterHard(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (PonteAlleato.attivo(data, player) && !PonteAlleato.britannico(player)) {
+      try {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        PonteAlleato.naviga(getProData(), getCalc(), moveDel);
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "PV1 sail failed: " + e);
+      }
+    }
+    if (UsaCarico.attivo(data, player)) {
+      try {
+        initializeData();
+        UsaCarico.fineTurno(getProData());
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "PV1 end of turn failed: " + e);
+      }
+    }
   }
 
   /**
@@ -573,6 +684,8 @@ public class ProPlusAi extends ProAi {
       return;
     }
     final java.util.Set<games.strategy.engine.data.Unit> held = new java.util.LinkedHashSet<>();
+    // step PV1 (B, C): the Russian capital, the British troops in America (switches off: nothing)
+    held.addAll(playPv1(moveDel, data, player));
     try {
       if (ForzaSbarco.fase(data, player).orElse(null) == ForzaSbarco.Fase.ULTIMO_NEUTRALE) {
         held.addAll(ForzaSbarco.carica(data, player, moveDel));

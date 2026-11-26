@@ -114,6 +114,10 @@ public final class RegistroDecisioni {
           "p13_bombardamento",
           // step P14
           "p14_aerei",
+          // step PV1
+          "pv1_usa_carico",
+          "pv1_capitale",
+          "pv1_ponte_alleato",
           // step PF1
           "tracciamento");
 
@@ -133,6 +137,18 @@ public final class RegistroDecisioni {
           // step P14
           "P14_AEREI",
           "P14_ATTERRAGGIO",
+          // step PV1
+          "PV1_CARICO_COMPRATO",
+          "PV1_CARICO_NESSUNO",
+          "PV1_CARICO_FINE_TURNO",
+          "PV1_CAPITALE_CADUTA",
+          "PV1_CAPITALE_MINACCIATA",
+          "PV1_CAPITALE_SICURA",
+          "PV1_CAPITALE_NC_SICURA",
+          "PV1_CAPITALE_TENUTA",
+          "PV1_PONTE_NAVIGA",
+          "PV1_PONTE_FERMI",
+          "PV1_PONTE_REGNO_UNITO",
           "P13_BOMBARDIERE_BASE",
           // step P12
           "P12_BILANCIO",

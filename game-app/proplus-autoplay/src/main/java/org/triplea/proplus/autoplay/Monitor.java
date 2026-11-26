@@ -137,6 +137,7 @@ final class Monitor {
   private final MonitorP7 p7;
   private final MonitorP12 p12;
   private final MonitorP13 p13;
+  private final MonitorPv1 pv1;
 
   private int lastRound;
 
@@ -203,6 +204,7 @@ final class Monitor {
     this.p7 = new MonitorP7(data, this::costs);
     this.p12 = new MonitorP12(data, this::allianceOf);
     this.p13 = new MonitorP13(data);
+    this.pv1 = new MonitorPv1(data);
     // reverse name order: Axis before Allies, as in the plans (Asse / Alleati)
     final List<String> names = new ArrayList<>(ProPlusSettings.configurableAlliances(data));
     names.sort(Comparator.reverseOrder());
@@ -1003,6 +1005,8 @@ final class Monitor {
       json.add("p12", p12.snapshot(round));
       // step P13: Germans in the east, Russian repairs and bombing damage, round 1 at sea
       json.add("p13", p13.snapshot(round));
+      // step PV1: empty US transports at the port, British troops in America, German land TUV
+      json.add("pv1", pv1.snapshot());
     }
     if (complete) {
       rounds.put(round, json);

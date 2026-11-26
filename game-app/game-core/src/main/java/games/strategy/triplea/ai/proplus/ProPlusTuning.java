@@ -137,6 +137,19 @@ public final class ProPlusTuning implements ProTuning {
   /** Step P14: the air units of the own attacks (options added, carrier landings, held). */
   private final AereiCorretti.Stato p14 = new AereiCorretti.Stato();
 
+  /** Step PV1 (A, B): the US cargo orders and the Russian capital's state of the turn. */
+  private final UsaCarico.Stato pv1a = new UsaCarico.Stato();
+
+  private final CapitaleOltranza.Stato pv1b = new CapitaleOltranza.Stato();
+
+  public UsaCarico.Stato pv1a() {
+    return pv1a;
+  }
+
+  public CapitaleOltranza.Stato pv1b() {
+    return pv1b;
+  }
+
   public AereiCorretti.Stato p14() {
     return p14;
   }
@@ -446,10 +459,17 @@ public final class ProPlusTuning implements ProTuning {
     if (italy.isPresent()) {
       return italy;
     }
-    // step P5 (A): the landing force in proportion (switch "usa_proporzione")
+    // step PV1 (B): the threatened capital's defense (switch "capitale_oltranza")
+    final Optional<ProPurchaseOrders> capital = CapitaleOltranza.ordini(proData, pv1b);
+    if (capital.isPresent()) {
+      return capital;
+    }
+    // step PV1 (A): the cargo of the empty transports at the port comes first (switch
+    // "usa_carico"), then the landing force in proportion (P5 A, switch "usa_proporzione")
+    final Optional<ProPurchaseOrders> cargo = UsaCarico.ordini(proData, pv1a);
     final Optional<ProPurchaseOrders> force = ForzaSbarco.ordini(proData, p5a);
-    if (force.isPresent()) {
-      return force;
+    if (cargo.isPresent() || force.isPresent()) {
+      return UsaCarico.prima(cargo, force);
     }
     // step P7 (C): the UK's land units at home (switch "ponte_pronti")
     final Optional<ProPurchaseOrders> ready = IndicazioniP7.ordini(proData);
@@ -491,6 +511,8 @@ public final class ProPlusTuning implements ProTuning {
       final ProPurchaseOrders orders,
       final ProPurchaseOrders.Result result) {
     ForzaSbarco.acquistato(orders, result, p5a);
+    UsaCarico.acquistato(orders, result, pv1a);
+    CapitaleOltranza.acquistato(orders, result, pv1b);
     LeveItalia.acquistato(orders, result, p12);
     Impegno.acquistato(proData, orders, result);
   }
@@ -532,6 +554,10 @@ public final class ProPlusTuning implements ProTuning {
     // step P14: a carrier place for every air unit that can land only on a carrier
     if (AereiCorretti.attivo(proData.getData(), proData.getPlayer())) {
       AereiCorretti.rivedi(p14, proData, calc, attackMap);
+    }
+    // step PV1 (B1): no land unit leaves the threatened capital but for a strong counterattack
+    if (CapitaleOltranza.attivo(proData.getData(), proData.getPlayer())) {
+      CapitaleOltranza.rivedi(pv1b, proData, attackMap);
     }
   }
 
@@ -691,6 +717,29 @@ public final class ProPlusTuning implements ProTuning {
 
   @Override
   public java.util.Set<Unit> heldUnits(final ProData proData) {
+    return withPonteAlleato(proData, heldUnitsBase(proData));
+  }
+
+  /**
+   * Step PV1 (C1): the US transports with British cargo (US turn) and the British units on them (UK
+   * turn) stay out of Hard's moves; nothing with the switch off.
+   */
+  private static java.util.Set<Unit> withPonteAlleato(
+      final ProData proData, final java.util.Set<Unit> units) {
+    if (proData.getPlayer() == null
+        || !PonteAlleato.attivo(proData.getData(), proData.getPlayer())) {
+      return units;
+    }
+    final java.util.Set<Unit> extra = PonteAlleato.trattenute(proData);
+    if (extra.isEmpty()) {
+      return units;
+    }
+    final java.util.Set<Unit> all = new java.util.LinkedHashSet<>(units);
+    all.addAll(extra);
+    return java.util.Set.copyOf(all);
+  }
+
+  private java.util.Set<Unit> heldUnitsBase(final ProData proData) {
     final java.util.Set<Unit> units =
         proData.getData() == heldData
                 && proData.getPlayer() == heldPlayer
@@ -759,6 +808,11 @@ public final class ProPlusTuning implements ProTuning {
     if (LeveItalia.ordini(proData, p12, Optional::empty).isPresent()) {
       return java.util.OptionalDouble.empty();
     }
+    // step PV1 (A, B): the cargo and the capital's orders spend every PU left after Hard's defense
+    if (UsaCarico.ordini(proData, pv1a).isPresent()
+        || CapitaleOltranza.ordini(proData, pv1b).isPresent()) {
+      return java.util.OptionalDouble.empty();
+    }
     // step P5 (A): with the landing force's orders the share of the orders reserves the PUs too
     if (ForzaSbarco.ordini(proData, p5a).isPresent()) {
       return java.util.OptionalDouble.empty();
@@ -809,6 +863,10 @@ public final class ProPlusTuning implements ProTuning {
 
   @Override
   public java.util.Set<Unit> combatHeldUnits(final ProData proData) {
+    return withPonteAlleato(proData, combatHeldUnitsBase(proData));
+  }
+
+  private java.util.Set<Unit> combatHeldUnitsBase(final ProData proData) {
     if (proData.getData() == combatHeldData
         && proData.getPlayer() == combatHeldPlayer
         && proData.getData().getSequence().getRound() == combatHeldRound

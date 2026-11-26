@@ -208,6 +208,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("p14", err);
     }
+    // step PV1: the three Allied corrections (every configuration)
+    try {
+      json.add("pv1", ConfrontoPv1.blocco(json));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("pv1", err);
+    }
     return json;
   }
 

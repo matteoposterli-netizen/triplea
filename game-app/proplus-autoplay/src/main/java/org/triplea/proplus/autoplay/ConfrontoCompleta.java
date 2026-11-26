@@ -155,8 +155,16 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step PV1: the three Allied corrections, pv1 against base (and the ablations)
+    if (ConfrontoPv1.applicabile(games)) {
+      try {
+        ConfrontoPv1.write(md, games);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle PV1 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step P14: aerei_corretti per alliance (2x2), the diagnostics
-    if (ConfrontoP14.applicabile(games)) {
+    if (ConfrontoP14.applicabile(games) && !ConfrontoPv1.applicabile(games)) {
       try {
         ConfrontoP14.write(md, games);
       } catch (final RuntimeException e) {

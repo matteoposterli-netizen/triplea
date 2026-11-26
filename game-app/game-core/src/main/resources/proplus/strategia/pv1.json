@@ -1,0 +1,35 @@
+{
+  "nota": "Step PV1: quattro correzioni degli Alleati dalla partita vera di Matteo (25 novembre), tre interruttori per l'alleanza Alleati, default spenti. usa_carico (USA: unita' di terra per i trasporti vuoti al porto prima di ogni altro acquisto), capitale_oltranza (Russia: nessuna unita' di terra lascia la capitale minacciata, rientri, acquisti tutti in difesa), ponte_alleato (Regno Unito + USA: truppe britanniche in America su trasporti USA vuoti; senza trasporto aspettano al porto). Nessun nome di nazione, territorio o tipo di unita' nel codice: stanno qui.",
+  "acceso_di_default": {
+    "valore": {"usa_carico": false, "capitale_oltranza": false, "ponte_alleato": false},
+    "origine": "richiesta dello step PV1 (default spenti: l'autoplay vecchio resta identico)"
+  },
+  "usa_carico": {
+    "valore": {
+      "nazione": "Americans",
+      "posti_per_trasporto": 2
+    },
+    "origine": "richiesta dello step PV1: unita' di terra fino a riempire 2 posti per trasporto vuoto al porto (zone di mare dove le fabbriche USA piazzano), mix del carico di Hard; mai meno trasporti"
+  },
+  "capitale_oltranza": {
+    "valore": {
+      "nazione": "Russians",
+      "nemici": ["Germans", "Italians"],
+      "soglia_minaccia_pct": 30,
+      "soglia_contrattacco_pct": 70
+    },
+    "origine": "richiesta dello step PV1: minacciata = attacco realistico tedesco/italiano al turno dopo con vittoria > 30%; un'unita' di terra esce dalla capitale solo per un contrattacco con vittoria >= 70% su un territorio adiacente"
+  },
+  "ponte_alleato": {
+    "valore": {
+      "nazione": "British",
+      "alleato": "Americans",
+      "america": ["Eastern United States", "Central United States", "Quebec", "Ontario", "New Brunswick Nova Scotia", "Alberta Saskatchewan Manitoba", "Newfoundland Labrador", "Southeast Mexico", "Central America", "West Indies", "British Guiana"],
+      "porti": ["Quebec", "New Brunswick Nova Scotia", "Eastern United States"],
+      "teste_di_ponte": ["Normandy Bordeaux", "Holland Belgium", "France", "Southern France", "Norway", "Denmark", "Western Germany", "Southern Italy", "Northern Italy", "Morocco", "Algeria", "Tunisia", "Libya", "Tobruk"],
+      "riserva": "United Kingdom",
+      "soglia_zona_pct": 40
+    },
+    "origine": "richiesta dello step PV1 (punti 3 e 4 di Matteo). C1: le truppe britanniche in America si caricano sui trasporti USA vuoti accanto (turno britannico), gli USA le portano accanto alla testa di ponte alleata con piu' unita' USA o, se nessuna, accanto a Londra (turno USA, zona con vittoria nemica <= 40%), il Regno Unito le scarica (turno britannico dopo). Il motore lo permette: MoveValidator.java:1201 vieta solo di scaricare nello stesso turno del carico. C2: senza trasporto restano nei porti, quelle fuori dai porti ci tornano."
+  }
+}

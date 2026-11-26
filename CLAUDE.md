@@ -284,6 +284,13 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   combattimento, trattenute all'acquisto, `place`), `ProPlusTuning.reviewAttacks`, `Impegno` (acquisto dei bombardieri dalla quota
   dell'assedio). `StrategaInterruttori.TARANTO/FABBRICHE_TENUTE/BOMBARDAMENTO_MOSCA`; NON nel pannello. Autoplay `MonitorP13`,
   `ConfrontoP13` (blocco `p13`, sezione "P13"). Vedi "Tre leve in disegno fattoriale (step P13)".
+- Step PV1 QUATTRO CORREZIONI ALLEATE (partita vera di Matteo del 25/11): `ai/proplus/LevePv1` (dati
+  `proplus/strategia/pv1.json`, interruttori, registro), `UsaCarico` (A `usa_carico`), `CapitaleOltranza` (B
+  `capitale_oltranza`), `PonteAlleato` (C `ponte_alleato`, C1 e C2). Agganci: `ProPlusTuning` (`purchaseOrders` con il carico
+  prima di `usa_proporzione` e la difesa della capitale, `strategyCapPercent`, `reviewAttacks`, `heldUnits`/`combatHeldUnits` con
+  le unita' del ponte), `ProPlusAi` (`startLevers`, `registerPv1Purchase`, `playPv1` nel non combattimento prima di Hard,
+  `playPv1AfterHard` dopo). `StrategaInterruttori.USA_CARICO/CAPITALE_OLTRANZA/PONTE_ALLEATO`; NON nel pannello. Autoplay
+  `MonitorPv1`, `ConfrontoPv1` (blocco `pv1`, sezione "PV1"). Vedi "Correzioni dalla partita vera (step PV1)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -3794,6 +3801,46 @@ Codice Pro+: `ai/proplus/AereiCorretti` (+ `ProPlusTuning`, `ProPlusAi.landOnCar
    `AirMovementValidator`): per questo il conto lo fa Pro+.
 3. **Atterraggio prima di ogni altra mossa del non combattimento** (le operazioni e le leve muovono navi): non basta, vedi i problemi aperti.
 4. **Raggio corretto anche in `canAirSafelyLandAfterAttack`** (il controllo "meta' del raggio" di Hard): e' lo stesso raggio.
+
+### Correzioni dalla partita vera (step PV1)
+
+Tre interruttori dell'alleanza Alleati (default spenti, `pv1.json`; autoplay `--stratega-acceso Allies=usa_carico+capitale_oltranza+
+ponte_alleato` sopra le caselle, tipo `europa1940`; NON nel pannello finche' non c'e' il risultato). Spenti = Pro+ di prima: nessun
+codice nuovo agisce (`LevePv1Test.allOffNothingActs`); Hard intoccata (nessun aggancio nuovo in `ai/pro`). Nessun nome nel codice.
+- **A `usa_carico`** (USA, a inizio acquisto, ogni round): porto = zone di mare dove piazzano le fabbriche USA; trasporti VUOTI propri
+  nel porto x `posti_per_trasporto` (2) meno le unita' di terra caricabili gia' nelle terre proprie accanto al porto = unita' da
+  comprare, tipi = il carico di un trasporto scelto da Hard (`ForzaSbarco.riempi`, efficienza anfibia) tagliato a 2 e ripetuto, entro
+  PU e posti delle fabbriche del porto. Ordini obbligati `pv1 carico <tipo>` PRIMA di ogni altro ordine (`UsaCarico.prima`: davanti a
+  quelli di `usa_proporzione`), quota 100, nessun tetto della strategia; il resto dei PU a Hard. Nessun trasporto tolto o vietato.
+- **B `capitale_oltranza`** (Russia): minacciata = miglior attacco di Germania/Italia al turno dopo (stima di Hard,
+  `LeveItalia.minaccia`) vince > 30% contro le unita' in capitale. B3 all'acquisto: tutti i PU nel tipo di terra con piu' difesa per
+  PU (fanteria) piazzato in capitale (obbligato con `factory`), quota 100. B1 nel combattimento (`reviewAttacks`, anche sulla copia di
+  Hard): un attacco che usa un'unita' di terra della capitale resta solo se il bersaglio e' adiacente e la vittoria stimata >= 70%,
+  altrimenti l'attacco intero e' tolto. B1+B2 nel non combattimento prima di Hard (minaccia ricalcolata): ogni unita' di terra russa
+  che arriva in capitale per terra propria/alleata in questo turno ci va, poi tutte le unita' di terra in capitale sono trattenute. B4:
+  capitale persa = niente (Hard).
+- **C `ponte_alleato`** (Regno Unito + USA). C1 (il motore lo permette: `MoveValidator.java:1201` vieta solo di scaricare da un
+  trasporto alleato nello stesso turno del carico; ordine dei turni Germania, Russia, USA, Regno Unito, Italia, Francia): turno
+  britannico, prima di Hard, le unita' britanniche di terra in America (lista `america`) non mosse si caricano sui trasporti USA vuoti
+  (o con solo truppe britanniche) delle zone accanto senza nemici; turno USA: quei trasporti sono fuori dalle mosse di Hard
+  (combattimento e non combattimento) e DOPO il non combattimento di Hard navigano verso una zona accanto alla testa di ponte (territorio
+  di `teste_di_ponte` alleato con piu' unita' USA; se nessuna, `riserva` = Londra) con vittoria nemica <= 40% contro le unita' alleate
+  della zona, altrimenti la zona sicura piu' avanti sulla rotta, altrimenti restano; turno britannico dopo: le truppe a bordo (non
+  caricate nel turno) sbarcano nel non combattimento nella testa di ponte o a Londra se adiacenti. Le truppe a bordo sono fuori dalle
+  mosse di Hard britanniche. **Londra non e' toccata** (C1 solo per le truppe in America: la guarnigione di Hard di Londra non si
+  calcola fuori dal non combattimento di Hard). C2: le altre unita' britanniche in America fuori dai `porti` (Quebec, New Brunswick,
+  Eastern US) tornano verso il porto piu' vicino per terra; tutte quelle in America sono trattenute nel non combattimento (il
+  combattimento di Hard resta).
+- **Registro** (`pv1_usa_carico`: PV1_CARICO_COMPRATO/NESSUNO con trasporti vuoti, truppe al porto, richieste, ordinate, comprate;
+  PV1_CARICO_FINE_TURNO trasporti vuoti a fine turno USA; `pv1_capitale`: PV1_CAPITALE_MINACCIATA/SICURA/CADUTA all'acquisto con
+  minaccia, unita' in capitale, comprate; PV1_CAPITALE_TENUTA/NC_SICURA nel non combattimento con rientrate, attacchi tolti, minaccia
+  dopo; `pv1_ponte_alleato`: PV1_PONTE_REGNO_UNITO caricate, scaricate, ferme al porto, in America, a bordo USA; PV1_PONTE_NAVIGA/FERMI).
+- **Autoplay**: `MonitorPv1` (`round[].pv1`, tutte le configurazioni: trasporti USA nel porto e vuoti, britannici in America e a bordo
+  di trasporti alleati, TUV di terra tedesco, proprietari di Normandy e Norway), `ConfrontoPv1` (blocco `pv1`: Mosca dal blocco p13,
+  TUV R8/R12, vuoti R8/R12, sbarcate USA/UK, Normandy/Norway tenute al round dopo uno sbarco, UK in America R8, conteggi del registro;
+  sezione "PV1" con Fisher pv1 contro base e le ablazioni). La sezione P14 non si scrive quando ci sono partite PV1.
+- CI: `[provapv1]` = base, pv1 x semi 2472-2475 (8 partite, una per job); `[completa]` = base, pv1 x semi 2476-2595 (240 partite, 3 per
+  job = 80 job); `[ablazionepv1]` = A, B, C da soli x semi 2476-2535 (180 partite, 3 per job).
 
 ## Come configurare lo stratega
 
