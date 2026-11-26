@@ -246,6 +246,7 @@ jobs:
               # switches, ponte_alleato included) + the Russian levers of Ukraine in a 2x2 design:
               # 00 none, 10 ucraina_contrattacco, 01 ucraina_presidio, 11 both. [provap15]: seeds
               # 2636-2638 = 12 games, one per job; [completa]: seeds from 2639, 3 per job
+              # (a commit message with both tags runs the short test: run 45872115129 replayed it)
               if os.environ["MODALITA"] in ("completa", "provap15"):
                   seeds = range(2636, 2639) if os.environ["MODALITA"] == "provap15" else range(2639, 2739)
                   p15 = {"00": "", "10": "ucraina_contrattacco", "01": "ucraina_presidio",
