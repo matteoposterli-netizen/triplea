@@ -64,7 +64,7 @@ final class StrategistPanel {
   /**
    * Step PF1: the box "Alleati consigliati" of "Pro+ (Europe 1940)": on (default) = the final
    * Allies of step P12 + taranto (usa_proporzione + sbarco_concentrato + niente_neutrali +
-   * norvegia_presto + norvegia_esposta + ponte_concentrato + taranto); off = Hard.
+   * norvegia_presto + norvegia_esposta + ponte_concentrato + taranto + ponte_alleato); off = Hard.
    */
   @Getter private final javax.swing.JCheckBox alleatiConsigliati = new javax.swing.JCheckBox();
 
@@ -157,7 +157,8 @@ final class StrategistPanel {
     alleatiConsigliati.setText(
         "<html>USA in proporzione nei round di neutralita', sbarco USA concentrato, niente guerre"
             + " ai neutrali, Norvegia presto e anche con i trasporti esposti, ponte britannico"
-            + " concentrato, attacco a Taranto al round 1; spenta = Alleati come Hard</html>");
+            + " concentrato, attacco a Taranto al round 1, truppe britanniche d'America sui"
+            + " trasporti USA; spenta = Alleati come Hard</html>");
     asseConsigliato.setSelected(profile.asseConsigliato());
     asseConsigliato.setText("<html>Impegno e assedio di Mosca; spenta = Asse come Hard</html>");
     consigliatiPanel.setLayout(new BoxLayout(consigliatiPanel, BoxLayout.Y_AXIS));

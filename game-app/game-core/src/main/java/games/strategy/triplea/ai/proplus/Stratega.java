@@ -134,7 +134,10 @@ public final class Stratega {
     aggiungi(props, alliance.get(), interruttoriConsigliati(alliance.get(), alleati, asse));
   }
 
-  /** Step PF1: "Alleati consigliati" = the final Allies of step P12 + taranto (step P13). */
+  /**
+   * Step PF1: "Alleati consigliati" = the final Allies of step P12 + taranto (step P13) + {@code
+   * ponte_alleato} (step P15: the British troops in America on the US transports).
+   */
   public static final List<StrategaInterruttori> ALLEATI_CONSIGLIATI =
       List.of(
           StrategaInterruttori.USA_PROPORZIONE,
@@ -143,7 +146,8 @@ public final class Stratega {
           StrategaInterruttori.NORVEGIA_PRESTO,
           StrategaInterruttori.NORVEGIA_ESPOSTA,
           StrategaInterruttori.PONTE_CONCENTRATO,
-          StrategaInterruttori.TARANTO);
+          StrategaInterruttori.TARANTO,
+          StrategaInterruttori.PONTE_ALLEATO);
 
   /** Step PF1: "Asse consigliato" = impegno + assedio (step P11). */
   public static final List<StrategaInterruttori> ASSE_CONSIGLIATO =
@@ -284,6 +288,10 @@ public final class Stratega {
     // step PF1: "Alleati consigliati" also has taranto (step P13)
     if ("Allies".equals(alliance.get()) && profile.taranto()) {
       wanted.add(StrategaInterruttori.TARANTO);
+    }
+    // step P15: "Alleati consigliati" also has ponte_alleato (step PV1)
+    if ("Allies".equals(alliance.get()) && profile.ponteAlleato()) {
+      wanted.add(StrategaInterruttori.PONTE_ALLEATO);
     }
     return wanted;
   }

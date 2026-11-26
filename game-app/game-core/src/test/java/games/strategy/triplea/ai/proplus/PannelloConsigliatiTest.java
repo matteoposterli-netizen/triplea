@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.properties.GameProperties;
+import games.strategy.engine.framework.GameDataManager;
 import games.strategy.triplea.ai.proplus.strategia.Decisori;
 import games.strategy.triplea.ai.proplus.strategia.llm.Fornitore;
 import games.strategy.triplea.ai.proplus.strategia.llm.Modalita;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.triplea.io.IoUtils;
 
 /**
  * Steps P11, P12, PF1: the two boxes of the panel ("Alleati consigliati", "Asse consigliato"), on
@@ -33,7 +35,7 @@ import org.junit.jupiter.api.io.TempDir;
 class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
   private static final List<String> NATIONS =
       List.of("Americans", "British", "Russians", "Germans", "Italians");
-  private static final Set<String> SEVEN =
+  private static final Set<String> EIGHT =
       Set.of(
           "usa_proporzione",
           "sbarco_concentrato",
@@ -41,7 +43,8 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
           "norvegia_presto",
           "norvegia_esposta",
           "ponte_concentrato",
-          "taranto");
+          "taranto",
+          "ponte_alleato");
 
   private @TempDir Path profile;
 
@@ -140,11 +143,11 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
   // ------------------------------------------------------------------ "Pro+ (Europe 1940)"
 
   @Test
-  void europa1940WithoutAProfilePlaysTheSevenAlliesAndImpegnoAssedio() {
+  void europa1940WithoutAProfilePlaysTheEightAlliesAndImpegnoAssedio() {
     final GameData data = registeredEuropa1940();
     final GameProperties props = data.getProperties();
 
-    assertThat(Set.copyOf(StrategaInterruttori.accesi(props, "Allies"))).isEqualTo(SEVEN);
+    assertThat(Set.copyOf(StrategaInterruttori.accesi(props, "Allies"))).isEqualTo(EIGHT);
     assertThat(Set.copyOf(StrategaInterruttori.accesi(props, "Axis")))
         .containsExactlyInAnyOrder("impegno", "assedio");
     for (final String alliance : List.of("Allies", "Axis")) {
@@ -206,7 +209,7 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
       DecisoreOperazione.set(a, alliance, "");
       StrategaInterruttori.set(a, alliance, "");
     }
-    StrategaInterruttori.accendi(a, "Allies", String.join(",", SEVEN));
+    StrategaInterruttori.accendi(a, "Allies", String.join(",", EIGHT));
     StrategaInterruttori.accendi(a, "Axis", "impegno,assedio");
     for (final String n : NATIONS) {
       Stratega.registra(autoplay, autoplay.getPlayerList().getPlayerId(n));
@@ -267,7 +270,7 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
         Tracciamento1940.letto(data.getProperties(), "Allies").orElseThrow();
     final Set<String> on = new java.util.HashSet<>();
     o.getAsJsonArray("interruttori_attivi").forEach(e -> on.add(e.getAsString()));
-    assertThat(on).containsAll(SEVEN);
+    assertThat(on).containsAll(EIGHT);
     assertThat(o.getAsJsonObject("tipi_giocatore").get("British").getAsString())
         .isEqualTo(ProPlusEuropa1940Ai.PLAYER_LABEL);
     assertThat(o.get("senza_llm").getAsBoolean()).isTrue();
@@ -295,9 +298,98 @@ class PannelloConsigliatiTest extends AbstractClientSettingTestCase {
 
     final GameProperties props = registeredOld().getProperties();
 
-    assertThat(Set.copyOf(StrategaInterruttori.accesi(props, "Allies"))).isEqualTo(SEVEN);
+    assertThat(Set.copyOf(StrategaInterruttori.accesi(props, "Allies"))).isEqualTo(EIGHT);
     assertThat(Set.copyOf(StrategaInterruttori.accesi(props, "Axis")))
         .containsExactlyInAnyOrder("impegno", "assedio");
+  }
+
+  // ------------------------------------------------------------ step P15: ponte_alleato
+
+  @Test
+  void theBoxOnTurnsOnTheEightSwitchesReadByTheAiInstances() {
+    final GameData data = TestMapGameData.GLOBAL1940.getGameData();
+    for (final String n : NATIONS) {
+      new ProPlusEuropa1940Ai(n, ProPlusEuropa1940Ai.PLAYER_LABEL)
+          .registra(data, data.getPlayerList().getPlayerId(n));
+    }
+
+    assertThat(Set.copyOf(StrategaInterruttori.accesi(data.getProperties(), "Allies")))
+        .isEqualTo(EIGHT);
+    for (final String n : List.of("Americans", "British", "Russians")) {
+      assertThat(
+              LevePv1.accesa(
+                  data, data.getPlayerList().getPlayerId(n), StrategaInterruttori.PONTE_ALLEATO))
+          .as(n)
+          .isTrue();
+    }
+    assertThat(StrategaInterruttori.accesi(data.getProperties(), "Allies"))
+        .doesNotContain("usa_carico", "capitale_oltranza");
+  }
+
+  @Test
+  void aGameSavedWithTheSevenGetsPonteAlleatoAfterLoading() throws Exception {
+    final GameData data = TestMapGameData.GLOBAL1940.getGameData();
+    final GameProperties props = data.getProperties();
+    final Set<String> seven = new java.util.HashSet<>(EIGHT);
+    seven.remove("ponte_alleato");
+    StrategaInterruttori.accendi(props, "Allies", String.join(",", seven));
+    final byte[] bytes = IoUtils.writeToMemory(os -> GameDataManager.saveGame(os, data));
+    final GameData loaded = IoUtils.readFromMemory(bytes, GameDataManager::loadGame).orElseThrow();
+    assertThat(StrategaInterruttori.accesi(loaded.getProperties(), "Allies"))
+        .doesNotContain("ponte_alleato");
+
+    for (final String n : NATIONS) {
+      new ProPlusEuropa1940Ai(n, ProPlusEuropa1940Ai.PLAYER_LABEL)
+          .registra(loaded, loaded.getPlayerList().getPlayerId(n));
+    }
+
+    assertThat(Set.copyOf(StrategaInterruttori.accesi(loaded.getProperties(), "Allies")))
+        .isEqualTo(EIGHT);
+    final byte[] again = IoUtils.writeToMemory(os -> GameDataManager.saveGame(os, loaded));
+    final GameData reloaded =
+        IoUtils.readFromMemory(again, GameDataManager::loadGame).orElseThrow();
+    assertThat(Set.copyOf(StrategaInterruttori.accesi(reloaded.getProperties(), "Allies")))
+        .isEqualTo(EIGHT);
+  }
+
+  @Test
+  void aPf1ProfileWithTheBoxOnTurnsOnPonteAlleato() throws IOException {
+    oldProfile(
+        """
+        pannello=pf1
+        alleati_consigliati=si
+        asse_consigliato=no
+        usa_proporzione=si
+        taranto=si
+        """);
+
+    final ProfiloStratega p = ProfiloStratega.carica();
+
+    assertThat(p.alleatiConsigliati()).isTrue();
+    assertThat(p.asseConsigliato()).isFalse();
+    assertThat(p.ponteAlleato()).isTrue();
+    assertThat(
+            Set.copyOf(
+                StrategaInterruttori.accesi(registeredEuropa1940().getProperties(), "Allies")))
+        .isEqualTo(EIGHT);
+    assertThat(Set.copyOf(StrategaInterruttori.accesi(registeredOld().getProperties(), "Allies")))
+        .contains("ponte_alleato");
+  }
+
+  @Test
+  void aPf1ProfileWithTheBoxOffKeepsPonteAlleatoOff() throws IOException {
+    oldProfile(
+        """
+        pannello=pf1
+        alleati_consigliati=no
+        asse_consigliato=si
+        """);
+
+    final ProfiloStratega p = ProfiloStratega.carica();
+
+    assertThat(p.ponteAlleato()).isFalse();
+    assertThat(StrategaInterruttori.accesi(registeredEuropa1940().getProperties(), "Allies"))
+        .isEmpty();
   }
 
   private void oldProfile(final String text) throws IOException {

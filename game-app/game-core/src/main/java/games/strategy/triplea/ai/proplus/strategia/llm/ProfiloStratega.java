@@ -53,6 +53,10 @@ public final class ProfiloStratega {
         values.remove(KEY_ALLEATI_CONSIGLIATI);
         values.remove(KEY_ASSE_CONSIGLIATO);
         normalizza();
+      } else if (alleatiConsigliati() && !values.containsKey(KEY_PONTE_ALLEATO)) {
+        // step P15: a PF1 profile with the box on gets ponte_alleato too (the box keeps its
+        // choice, its switches gain the new one)
+        setPonteAlleato(true);
       }
     }
   }
@@ -267,6 +271,17 @@ public final class ProfiloStratega {
     values.setProperty(KEY_TARANTO, on ? "si" : "no");
   }
 
+  static final String KEY_PONTE_ALLEATO = "ponte_alleato";
+
+  /** Step P15: "ponte_alleato" for the Allies (part of "Alleati consigliati"). Off unless set. */
+  public boolean ponteAlleato() {
+    return si(KEY_PONTE_ALLEATO);
+  }
+
+  public void setPonteAlleato(final boolean on) {
+    values.setProperty(KEY_PONTE_ALLEATO, on ? "si" : "no");
+  }
+
   private static final String KEY_REGNO_UNITO_P3 = "regno_unito_p3";
 
   /**
@@ -332,7 +347,8 @@ public final class ProfiloStratega {
    * Step PF1: the box "Alleati consigliati" (Allies of "Pro+ (Europe 1940)"): on by default (no
    * profile, old profile, never set). On = the final Allies of step P12 + taranto: {@code
    * usa_proporzione}, {@code sbarco_concentrato}, {@code niente_neutrali}, {@code norvegia_presto},
-   * {@code norvegia_esposta}, {@code ponte_concentrato}, {@code taranto}.
+   * {@code norvegia_esposta}, {@code ponte_concentrato}, {@code taranto}, {@code ponte_alleato}
+   * (step P15).
    */
   public boolean alleatiConsigliati() {
     return !"no".equalsIgnoreCase(values.getProperty(KEY_ALLEATI_CONSIGLIATI, "").strip());
@@ -340,7 +356,7 @@ public final class ProfiloStratega {
 
   /**
    * Step PF1: the box and, for the old player type "Pro+ Stratega LLM", the same switches in the
-   * profile: on = the seven, every other switch of the Allies off; off = every switch of the Allies
+   * profile: on = the eight, every other switch of the Allies off; off = every switch of the Allies
    * off (Hard).
    */
   public void setAlleatiConsigliati(final boolean on) {
@@ -352,6 +368,7 @@ public final class ProfiloStratega {
     setNorvegiaEsposta(on);
     setPonteConcentrato(on);
     setTaranto(on);
+    setPonteAlleato(on);
     setImpegno(false);
     setSquadraGibilterra(false);
     setCompiti(false);

@@ -15,7 +15,8 @@ COME GIOCARE CONTRO PRO+  (step PF1)
    due caselle, ACCESE di serie:
      "Alleati consigliati" = USA in proporzione, sbarco USA concentrato,
         niente guerre ai neutrali, Norvegia presto e anche con i trasporti
-        esposti, ponte britannico concentrato, attacco a Taranto al round 1;
+        esposti, ponte britannico concentrato, attacco a Taranto al round 1,
+        truppe britanniche d'America portate in Europa dai trasporti USA;
      "Asse consigliato"    = impegno + assedio di Mosca.
    Spenta = quella parte gioca come Hard. Premi OK: la scelta resta salvata
    su questo PC (se non riesce a salvarla te lo dice con un messaggio).
