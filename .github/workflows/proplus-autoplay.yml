@@ -247,7 +247,7 @@ jobs:
               # 00 none, 10 ucraina_contrattacco, 01 ucraina_presidio, 11 both. [provap15]: seeds
               # 2636-2638 = 12 games, one per job; [completa]: seeds from 2639, 3 per job
               if os.environ["MODALITA"] in ("completa", "provap15"):
-                  seeds = range(2636, 2639) if os.environ["MODALITA"] == "provap15" else range(2639, 2639 + 90)
+                  seeds = range(2636, 2639) if os.environ["MODALITA"] == "provap15" else range(2639, 2739)
                   p15 = {"00": "", "10": "ucraina_contrattacco", "01": "ucraina_presidio",
                          "11": "ucraina_contrattacco+ucraina_presidio"}
                   include = [{"id": f"{c}-europa1940-p15-{c}-seme{seed}",
