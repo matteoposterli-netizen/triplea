@@ -265,6 +265,9 @@ class LevePv1Test extends AbstractClientSettingTestCase {
     assertThat(orders.mandatory().get(0).factory()).isEqualTo(capital.getName());
     assertThat(orders.mandatory().get(0).minimum()).isBetween(1, 10);
     assertThat(orders.preferredPlacement()).containsExactly(capital.getName());
+    // B3: no "critical" defense of Hard before the orders, no cap of the strategy
+    assertThat(tuning.capitalGuardThreshold(pd)).hasValue(100);
+    assertThat(tuning.strategyCapPercent(pd)).isEmpty();
 
     // B1 in the combat move: a capital unit only in a strong attack next to the capital
     final Unit inCapital =

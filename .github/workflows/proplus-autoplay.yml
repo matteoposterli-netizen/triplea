@@ -247,6 +247,8 @@ jobs:
               # capitale_oltranza + ponte_alleato. [provapv1]: seeds 2472-2475 = 8 games, one per
               # job; [completa]: seeds 2476-2595 = 240 games, 3 per job; [ablazionepv1]: each switch
               # alone (A, B, C) on the first seeds of the long run (3 per job)
+              # [provapv1] run 45789911852 (a1b4adb): 8/8 green, 0 errors, levers acting (cargo 55
+              # units, capital threatened 17 turns, 41 British loaded / 39 unloaded); B3 fixed after
               if os.environ["MODALITA"] in ("completa", "provapv1", "ablazionepv1"):
                   pv1all = "usa_carico+capitale_oltranza+ponte_alleato"
                   if os.environ["MODALITA"] == "ablazionepv1":

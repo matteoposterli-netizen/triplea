@@ -1147,6 +1147,11 @@ public final class ProPlusTuning implements ProTuning {
             .isPresent()) {
       return OptionalDouble.of(100);
     }
+    // step PV1 (B3): with the threatened capital's orders every PU goes to them (no "critical"
+    // defense of Hard first); in the non-combat move a threshold of 100 guards nothing
+    if (proData.getPlayer() != null && CapitaleOltranza.ordini(proData, pv1b).isPresent()) {
+      return OptionalDouble.of(100);
+    }
     if (!on(proData, Ablazione.Componente.GUARNIGIONE_CAPITALE)) {
       return OptionalDouble.empty();
     }
