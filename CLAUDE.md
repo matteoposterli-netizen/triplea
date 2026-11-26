@@ -3840,7 +3840,7 @@ codice nuovo agisce (`LevePv1Test.allOffNothingActs`); Hard intoccata (nessun ag
   TUV R8/R12, vuoti R8/R12, sbarcate USA/UK, Normandy/Norway tenute al round dopo uno sbarco, UK in America R8, conteggi del registro;
   sezione "PV1" con Fisher pv1 contro base e le ablazioni). La sezione P14 non si scrive quando ci sono partite PV1.
 - CI: `[provapv1]` = base, pv1 x semi 2472-2475 (8 partite, una per job); `[completa]` = base, pv1 x semi 2476-2595 (240 partite, 3 per
-  job = 80 job); `[ablazionepv1]` = A, B, C da soli x semi 2476-2535 (180 partite, 3 per job).
+  job = 80 job); `[ablazionepv1]` = A, B, C da soli x semi 2476-2515 (120 partite, 3 per job).
 
 ## Come configurare lo stratega
 
@@ -7258,3 +7258,42 @@ dal motore; nessun aereo perso tra quelli di P14 (17 persi in tutto, gli stessi 
   R16: 2 caccia britannici assegnati alla 110 atterrati, 3 distrutti. Difetto di P14 (atteso 0), visto solo nella run lunga. Causa probabile
   NON verificata: dopo l'atterraggio un'altra leva (scorta di `sbarco_concentrato`, `norvegia_esposta`) sposta navi da guerra nel non
   combattimento senza guardare le portaerei trattenute, o il posto e' preso da altri aerei atterrati da Hard.
+
+### Step PV1 — quattro correzioni Alleate dalla partita vera di Matteo (25/11) (2026-11-26)
+
+Vedi "Correzioni dalla partita vera (step PV1)". File nuovi: `ai/proplus/LevePv1`, `UsaCarico`, `CapitaleOltranza`, `PonteAlleato`,
+dati `proplus/strategia/pv1.json`, test `LevePv1Test` (8); autoplay `MonitorPv1`, `ConfrontoPv1`. Modificati: `ProPlusTuning`,
+`ProPlusAi`, `StrategaInterruttori` (+3), `RegistroDecisioni` (tipi e motivi PV1); autoplay `Monitor`, `Riepilogo`, `ConfrontoCompleta`;
+workflow `[provapv1]`, `[completa]` PV1, `[ablazionepv1]`. Nessun file in `ai/pro` toccato (Hard identica).
+- Diagnosi (sola lettura, file:riga al commit a1b4adb):
+  a. USA: `usa_proporzione` agisce solo nei round neutrali e nel primo di guerra (`ForzaSbarco.java:100-104`, fase vuota dal R5); dopo
+     decide Hard: `ProPurchaseAi.java:261` -> `purchaseSeaAndAmphibUnits`, che per ogni zona di mare compra PRIMA difensori navali fino
+     alla superiorita' locale (`ProPurchaseAi.java:2304`, con gli aerei tra le opzioni a `:2329` = portaerei + caccia, corazzate) e solo
+     DOPO, con i PU rimasti, riempie i trasporti (`:2447-2492`); i trasporti vuoti tornati al porto dopo gli sbarchi di
+     `sbarco_concentrato` non hanno truppe "in patria" da caricare e Hard compra flotta. La regola "coppie complete" di R6b C3 non e' nella
+     configurazione "Pro+ (Europe 1940)" (impegno spento per gli Alleati).
+  b. Russia: Hard marca la capitale "non tenibile" (`ProNonCombatMoveAi.java:675-676`) e la toglie dalle difese (`:784`); le unita' vanno
+     al territorio tenibile di valore massimo (`moveUnitsToBestTerritories`, `:1460`, scelta a `:1546`/`:1595`). La guardia della
+     capitale di Pro+ (`ProCapitalGuard`) non gira: con Ablazione NUDO `capitalGuardThreshold` e' vuoto (`ProPlusTuning.java:1150`) e
+     comunque rinuncia sopra il 90% (`ProCapitalGuard.java:35`).
+  c. Truppe britanniche del Quebec verso sud: nel non combattimento Hard le manda al territorio di valore massimo
+     (`ProNonCombatMoveAi.java:1460`); le terre neutrali dell'America Latina hanno valore positivo (`ProTerritoryValueUtils.java:284` e
+     `:356`) e `niente_neutrali` toglie solo gli ATTACCHI (`ProCombatMoveAi.java:110`, `excludesAttackTarget`), non i valori del non
+     combattimento. Senza trasporti britannici in America non c'e' altra destinazione di valore. Non verificato sul log della partita di
+     Matteo (salvataggio non ricevuto): ricostruito dal codice.
+  d. Il motore lo permette: il carico su un trasporto alleato non controlla il proprietario del trasporto (`MoveValidator.java:786-792`
+     vieta solo di muovere unita' non proprie, esclusi i trasportati), e `MoveValidator.java:1201-1203` vieta solo di scaricare nello
+     stesso turno del carico (`TransportTracker.java:227`). Fasi: carico nel turno britannico, movimento del trasporto nel turno USA
+     (il trasporto porta le unita' britanniche come dipendenti), scarico nel turno britannico dopo. Ordine dei turni della mappa:
+     Germania, Russia, USA, Regno Unito, Italia, Francia.
+- Test locali (JDK 25 da apt): test AI di game-core + autoplay verdi (golden Hard, `ProPlusGoldenTest`, `NudoHardTest`,
+  `PannelloConsigliatiTest`), `LevePv1Test` 8/8. Prova locale (10 round, seme 2472, pv1 e base; 9 round seme 2473 pv1): 0 eccezioni; sul
+  seme 2473 9 britannici caricati al R4, portati verso Normandy al R5-R6, sbarcati al R6; Mosca tenuta con 43-49 unita'.
+- Correzione dopo la prova locale: C2 porta le truppe al porto accanto ai trasporti USA (Eastern US, zona 101), non al Quebec dove non
+  arrivano mai. Dopo la prova in CI: B3 (con gli ordini della capitale la soglia "critica" di Hard e' 100: prima la difesa urgente di
+  Hard spendeva quasi tutti i PU e l'ordine trovava 2 PU).
+
+#### Prova breve in CI (run 45789911852, commit a1b4adb, 8/8 partite [provapv1], semi 2472-2475)
+0 errori, 0 stalli; minuti per partita 3,1-21,4 (media 12,3). Vittorie Alleati base 1/4, pv1 3/4 (solo controllo). Leve nella
+configurazione pv1: carico comprato 55 unita', Russia minacciata 17 turni con 171 unita' rientrate in capitale e 27 difese comprate, 41
+britannici caricati su trasporti USA e 39 sbarcati, 63 movimenti di trasporti USA con truppe britanniche. Run lunga lanciata.
