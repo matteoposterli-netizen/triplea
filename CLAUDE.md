@@ -291,6 +291,13 @@ Package `games.strategy.triplea.ai` in `game-app/game-core/src/main/java/games/s
   le unita' del ponte), `ProPlusAi` (`startLevers`, `registerPv1Purchase`, `playPv1` nel non combattimento prima di Hard,
   `playPv1AfterHard` dopo). `StrategaInterruttori.USA_CARICO/CAPITALE_OLTRANZA/PONTE_ALLEATO`; NON nel pannello. Autoplay
   `MonitorPv1`, `ConfrontoPv1` (blocco `pv1`, sezione "PV1"). Vedi "Correzioni dalla partita vera (step PV1)".
+- Step P15 UCRAINA: `ai/proplus/LeveP15` (dati `proplus/strategia/p15.json`, interruttori, registro, regole pure),
+  `UcrainaContrattacco` (A `ucraina_contrattacco`, nel combattimento DOPO Hard; esiti reali all'inizio del non
+  combattimento), `UcrainaPresidio` (B `ucraina_presidio`, nel non combattimento prima di Hard + B3 al piazzamento prima di
+  Hard). Agganci: `ProPlusAi` (`playUkraineCounterattack`, `playUkraine` dentro `playLevers`, `place`). Nessun aggancio in
+  `ai/pro`. `StrategaInterruttori.UCRAINA_CONTRATTACCO/UCRAINA_PRESIDIO`; NON nella casella. Parte 1: `ponte_alleato` in
+  `Stratega.ALLEATI_CONSIGLIATI` (8) + `ProfiloStratega.ponteAlleato`. Autoplay `MonitorUsaPorto` (punto 1.3), `ConfrontoP15`
+  (blocco `p15`, sezione "P15"). Vedi "Russia e Ucraina (step P15)".
 - UI: `game-headed/.../startup/ui/ProPlusSettingsDialog.java` + pulsante in `SetupPanel`.
 - Registrazione: `HeadedPlayerTypes.PRO_PLUS_AI` (game-headed), sempre visibile (non dietro "beta
   features"), in lista subito dopo "Hard (AI)". Non è in `PlayerTypes.getBuiltInPlayerTypes()`
@@ -3844,6 +3851,41 @@ codice nuovo agisce (`LevePv1Test.allOffNothingActs`); Hard intoccata (nessun ag
 - CI: `[provapv1]` = base, pv1 x semi 2472-2475 (8 partite, una per job); `[completa]` = base, pv1 x semi 2476-2595 (240 partite, 3 per
   job = 80 job); `[ablazionepv1]` = A, B, C da soli x semi 2476-2515 (120 partite, 3 per job).
 
+### Russia e Ucraina (step P15)
+
+**Parte 1 — `ponte_alleato` nella casella.** "Alleati consigliati" = 8 interruttori: i 7 di PF1 + `ponte_alleato`
+(`Stratega.ALLEATI_CONSIGLIATI`). La voce "Pro+ (Europe 1940)" legge la casella, quindi un profilo esistente con la casella
+spuntata accende anche il ponte senza altro; per la voce vecchia "Stratega LLM" il profilo ha la chiave `ponte_alleato`
+(scritta da `setAlleatiConsigliati`; al caricamento un profilo pf1 con `alleati_consigliati=si` esplicito e senza la chiave
+la riceve accesa). Un salvataggio con 7 interruttori riceve l'ottavo alla registrazione successiva (`aggiungi` aggiunge
+soltanto). `usa_carico` e `capitale_oltranza` restano spenti e fuori. Configurazioni autoplay con `--stratega-acceso` invariate;
+quelle con `--profilo-caselle` (europa1940) ora hanno 8 interruttori. Pannello e `LEGGIMI.txt`: una frase in piu'.
+
+**Parte 2 — due interruttori russi (Alleati, default spenti, fuori dalla casella, `p15.json`).**
+- **A `ucraina_contrattacco`** (spinge): nel combattimento russo DOPO quello di Hard (tutti gli attacchi di Hard restano).
+  Bersagli: Ukraine e Novgorod se dell'Asse, poi i territori di terra adiacenti a Ukraine dell'Asse (ordine alfabetico; nella
+  mappa: Bessarabia, Bryansk, Rostov, Western Ukraine). Mai un neutrale (proprietario nell'alleanza Axis e in guerra), solo
+  in guerra con la Germania (A3). Bersaglio con unita' russe non infrastruttura = gia' attaccato da Hard (lasciato). Forze:
+  unita' di terra russe con attacco > 0 che arrivano questo turno per terra propria/alleata senza nemici (entro 3 caselle);
+  prima quelle fuori dalla capitale (piu' vicine, piu' forti), aggiunte fino a stima >= 90% o esaurimento (calcolatore
+  ogni 2 unita'); se l'attacco non basta, quelle della capitale una alla volta finche' la vittoria tedesca su Mosca al turno
+  dopo senza di loro resta <= riferimento + 10 (A2, `LeveItalia.minaccia`). Esegue se vittoria >= 60% E TUV Asse ucciso >=
+  1,3 x TUV russo perso (medie del calcolatore). Bersaglio senza difensori: un'unita' (la meno cara).
+- **B `ucraina_presidio`** (trattiene solo se tiene): nel non combattimento PRIMA di Hard, Ukraine russa con vittoria
+  dell'Asse al turno dopo >= 40%: unita' russe di terra (difesa > 0) che arrivano, piu' vicine prima, aggiunte una alla volta
+  fino sotto il 40% (le unita' di Mosca escluse se scoprono Mosca oltre +10 punti); se nemmeno tutte bastano nessuna si muove
+  (B2). B3 al piazzamento PRIMA di Hard: Ukraine con fabbrica ancora minacciata: le unita' di terra comprate (difesa/costo)
+  entro i posti della fabbrica fino sotto il 40%, nessuna se non basta; il resto lo piazza Hard.
+- **Registro** `p15_contrattacco` (P15_A_ESEGUITO/RINUNCIA/HARD con vittoria, TUV stimati, Mosca prima/dopo; P15_A_ESITO
+  con TUV reali e preso si'/no), `p15_presidio` (P15_B_SICURA/SPOSTATE/RINUNCIA/PIAZZATE/PIAZZA_RINUNCIA con minaccia
+  prima/dopo), `p15_ucraina` (P15_FINE_TURNO: Ukraine e Novgorod russe a fine turno russo).
+- **Autoplay**: blocco `p15` (owners R4-R6 e TUV R6/R8 dal blocco `p4`, uccise dagli attacchi russi R4-R6, reddito russo R6,
+  Mosca dal blocco p13, turni USA del punto 1.3, somme del registro); sezione "P15" (2x2, due Fisher, leve, tabella 1.3);
+  `MonitorUsaPorto` (fine piazzamento USA: trasporti vuoti al porto, terra in Eastern/Central US, zone delle navi nuove con le
+  unita' nemiche vicine come le conta `territoryHasLocalNavalSuperiority`: proxy, non i numeri di Hard).
+- CI: `[provap15]` = 00, 10, 01, 11 x semi 2636-2638 (12 partite, una per job); `[completa]` P15 = stesse 4 x semi da 2639
+  (3 per job).
+
 ## Come configurare lo stratega
 
 Per Matteo e gli amici (stesso testo, piu' corto, nel `LEGGIMI.txt` dello zip):
@@ -7355,3 +7397,29 @@ Ogni interruttore da solo sui primi 40 semi della run lunga; confronto con base 
 - `capitale_oltranza` rientra con tutto (1500-1600 unita' in 40 partite) e Mosca cade comunque prima (10,8 contro 12,7): concentrare non
   basta contro l'assedio tedesco e lascia il resto della Russia.
 - La sezione P7 del riepilogo legge anche queste partite (configurazioni con nomi lunghi): ignorarla per PV1.
+
+### Step P15 — ponte_alleato nella casella + Russia: tenere e riprendere l'Ucraina (2026-11-26)
+
+Vedi "Russia e Ucraina (step P15)". Inizio lavoro ~16:30 UTC.
+- **Parte 1** (commit 3a9c082 + correzione be2d64c, release `proplus-latest` ripubblicata alle 17:25 UTC, run 45866234698):
+  casella "Alleati consigliati" = 8 interruttori. File: `Stratega`, `ProfiloStratega`, `StrategistPanel`, `LEGGIMI.txt`, test
+  `PannelloConsigliatiTest` (+4: istanze `ProPlusEuropa1940Ai` con 8 interruttori e `ponte_alleato` letto da `LevePv1.accesa`;
+  salvataggio con 7 -> 8 dopo il caricamento e dopo un secondo salvataggio; profilo pf1 con casella si' -> ponte acceso;
+  casella no -> spento). Primo commit rosso in locale su `CompitiTest`/`TrasportiProtettiTest` (profili senza la chiave della
+  casella ricevevano il ponte): corretto prima che la release uscisse (il run del primo commit e' stato cancellato dal secondo).
+- **Parte 2** (commit d2dea93): file nuovi `LeveP15`, `UcrainaContrattacco`, `UcrainaPresidio`, `p15.json`, `LeveP15Test` (8:
+  dati e nessun nome nel codice, tutto spento = niente, solo la Russia, regole pure, (1) Ukraine tedesca attaccata con forze
+  fuori dalla capitale, (2) attacco possibile solo con le unita' di Mosca che la scoprono oltre +10 -> rinuncia, (3) Ukraine
+  tenibile -> rinforzi fino sotto il 40%, (4) non tenibile -> nessuno); autoplay `MonitorUsaPorto`, `ConfrontoP15`. Modificati:
+  `ProPlusAi`, `StrategaInterruttori` (+2), `RegistroDecisioni`; autoplay `Monitor`, `Riepilogo`, `ConfrontoCompleta` (P14 non
+  scritta con partite P15); workflow `[provap15]`, `[completa]` P15. Nessun file in `ai/pro`.
+- Test locali (JDK 25 da apt): 856 test (AI di game-core, autoplay, pannello) verdi dopo la correzione della parte 1; golden Hard
+  e `NudoHardTest` verdi. Prove locali (semi 2636 e 2637, configurazione 11, 7 e 14 round): 0 eccezioni; A 3 e 1 attacchi in
+  piu' (Bessarabia, Western Ukraine, Rostov), B rinforzi al R2 (6 unita', 100% -> 34,8%), rinunce B2 al R3-R4, piazzate in
+  Ukraine 6.
+
+#### Prova breve in CI (run 45867831086, commit d2dea93, 12/12 partite [provap15], semi 2636-2638)
+A: 9 attacchi in piu' eseguiti (tutti dopo il combattimento di Hard, quindi attacchi che Hard non faceva; vittoria stimata 96-97%,
+tutti presi), 339 rinunciati, 28 bersagli gia' attaccati da Hard; TUV Asse ucciso stimato 48 = reale 48, TUV russo perso stimato
+17 contro reale 31. B: 13 turni con spostamenti (108 unita'), 12 rinunce B2, 43 piazzate in Ukraine. Le due leve agiscono:
+nessuna correzione, run lunga lanciata alle 17:58 UTC.
