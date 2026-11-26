@@ -3839,6 +3839,8 @@ codice nuovo agisce (`LevePv1Test.allOffNothingActs`); Hard intoccata (nessun ag
   di trasporti alleati, TUV di terra tedesco, proprietari di Normandy e Norway), `ConfrontoPv1` (blocco `pv1`: Mosca dal blocco p13,
   TUV R8/R12, vuoti R8/R12, sbarcate USA/UK, Normandy/Norway tenute al round dopo uno sbarco, UK in America R8, conteggi del registro;
   sezione "PV1" con Fisher pv1 contro base e le ablazioni). La sezione P14 non si scrive quando ci sono partite PV1.
+- **Risultato** (run lunga 240 partite + ablazione 120): nessun effetto significativo, pv1 piu' debole (55% contro 67% di vittorie
+  Alleate, p 0,085); restano spenti. Vedi "Step PV1" nel log.
 - CI: `[provapv1]` = base, pv1 x semi 2472-2475 (8 partite, una per job); `[completa]` = base, pv1 x semi 2476-2595 (240 partite, 3 per
   job = 80 job); `[ablazionepv1]` = A, B, C da soli x semi 2476-2515 (120 partite, 3 per job).
 
@@ -7297,3 +7299,59 @@ workflow `[provapv1]`, `[completa]` PV1, `[ablazionepv1]`. Nessun file in `ai/pr
 0 errori, 0 stalli; minuti per partita 3,1-21,4 (media 12,3). Vittorie Alleati base 1/4, pv1 3/4 (solo controllo). Leve nella
 configurazione pv1: carico comprato 55 unita', Russia minacciata 17 turni con 171 unita' rientrate in capitale e 27 difese comprate, 41
 britannici caricati su trasporti USA e 39 sbarcati, 63 movimenti di trasporti USA con truppe britanniche. Run lunga lanciata.
+
+#### Autoplay in CI (run 45795948403, commit 3b8e7a7, tutto verde, 240/240 partite [completa] senza chiave, semi 2476-2595, costo API 0)
+Partite 10,6 (base) e 10,7 (pv1) minuti in media, 21 round; 1 stallo (base); 0 errori. Tutte le nazioni "Pro+ (Europe 1940)" con le
+due caselle; pv1 = Alleati consigliati + usa_carico + capitale_oltranza + ponte_alleato.
+
+| Config | Valide | Asse / Alleati | Mosca <= R12 | Round medio caduta Mosca | TUV terra tedesco R8 / R12 | Trasporti USA vuoti al porto R8 / R12 | USA / UK sbarcate a partita | Normandy / Norway tenute al round dopo | UK in America R8 |
+|---|---|---|---|---|---|---|---|---|---|
+| base | 120 (1 stallo) | 39 / 80 | 37 | 12,1 | 358 / 338 | 6,5 / 7,9 | 187 / 74 | 241/417 / 203/289 | 8,1 |
+| pv1 | 120 | 54 / 66 | 50 | 10,7 | 377 / 376 | 6,4 / 7,2 | 170 / 68 | 228/392 / 181/278 | 0,1 |
+
+- **Confronto dichiarato** (Fisher esatto, soglia 0,05): vittorie Alleate pv1 66/120 contro base 80/120, **p 0,085**: nessun effetto
+  significativo, e la direzione e' **negativa** (-12 punti).
+- Mosca decide la partita: Alleati vincono 67/67 (base) e 58/58 (pv1) quando Mosca non cade, 13/53 e 8/62 quando cade. Con pv1 Mosca cade
+  in 62 partite contro 53 e prima (round medio 10,7 contro 12,1); Roma cade 81 contro 99, Berlino 66 contro 84.
+- Le leve agiscono (registro pv1): carico comprato 3741 unita' (31 a partita), Russia minacciata 518 turni con 5024 unita' rientrate in
+  capitale, 1562 difese comprate in capitale, 20 attacchi tolti alla capitale; 1158 britannici caricati su trasporti USA, 1060 sbarcati,
+  UK in America a R8 da 8,1 a 0,1. I trasporti USA vuoti al porto a R8/R12 NON calano (6,4 / 7,2 contro 6,5 / 7,9): sono quelli tornati
+  dopo gli sbarchi nello stesso round, `usa_carico` riempie quelli presenti all'acquisto.
+
+#### Ablazione in CI (run 45822515909, commit ba61db8, 120/120 partite [ablazionepv1], semi 2476-2515, costo API 0)
+Ogni interruttore da solo sui primi 40 semi della run lunga; confronto con base e pv1 della run lunga sugli stessi semi (comando
+`confronto` locale sulle 200 partite unite). 0 errori, 0 stalli.
+
+| Config (40 semi) | Asse / Alleati | p contro base (Fisher) | Mosca <= R12 | Round medio caduta Mosca | TUV tedesco R8 / R12 | USA / UK sbarcate a partita |
+|---|---|---|---|---|---|---|
+| base | 13 / 27 | - | 10 | 12,7 | 356 / 342 | 213 / 88 |
+| pv1 | 21 / 19 | 0,113 | 19 | 10,4 | 381 / 394 | 145 / 59 |
+| A usa_carico | 16 / 24 | 0,642 | 15 | 11,5 | 360 / 354 | 174 / 64 |
+| B capitale_oltranza | 15 / 25 | 0,815 | 13 | 10,8 | 344 / 341 | 141 / 52 |
+| C ponte_alleato | 13 / 27 | 1,000 | 12 | 10,9 | 381 / 345 | 145 / 58 |
+
+- Nessuna leva da sola cambia le vittorie in modo misurabile (A -3, B -2, C 0 su 40); pv1 sugli stessi semi -8. Con 40 semi la potenza e'
+  bassa: la differenza tra "somma delle parti" e pv1 puo' essere rumore. Tutte e tre riducono gli sbarchi USA (213 -> 141-174 a partita).
+- Conclusione: **le tre correzioni non si accendono nella voce "Pro+ (Europe 1940)"** (restano spente di default, fuori dal pannello).
+
+### Scelte di PV1 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **C1 solo per le truppe in America, Londra esclusa**: la guarnigione che Hard calcola per Londra esiste solo dentro il suo non
+   combattimento (dopo le mie mosse); toglierle unita' prima sarebbe toccare la difesa di Londra, vietato dal prompt. Scartato: la guardia
+   di `PonteRegnoUnito` (100 - win% di Hard), che non e' la guarnigione di Hard.
+2. **Trasporti USA con truppe britanniche fuori da Hard e mossi DOPO il non combattimento di Hard**: cosi' la scorta di Hard e' gia' al
+   suo posto e la zona di arrivo si valuta con le navi che ci sono davvero. Scartato: muoverli prima (zone quasi sempre "non sicure").
+3. **B1 nel combattimento: l'attacco che usa un'unita' della capitale e' tolto intero** (non solo l'unita'), per non lasciare a Hard un
+   attacco indebolito con la vittoria stimata vecchia.
+4. **B3: soglia "critica" 100 con gli ordini della capitale** (dopo la prova breve): senza, la difesa urgente di Hard spendeva i PU prima
+   degli ordini; ora tutti i PU vanno in fanteria nella capitale.
+5. **C2 verso il porto accanto ai trasporti USA** (dopo la prova locale): il Quebec non vede mai trasporti USA.
+6. **Ablazione ridotta a 40 semi** per chiudere entro le 8 ore dello step (180 partite non stavano nel tempo dopo la run lunga).
+
+### Problemi aperti di PV1
+- `usa_carico` non abbassa i trasporti vuoti al porto a fine round (6-8 in entrambe le configurazioni): sono i trasporti tornati vuoti
+  dopo gli sbarchi nello stesso round; il carico comprato viene usato al round dopo da Hard/`sbarco_concentrato`. La misura giusta
+  sarebbe "trasporti vuoti all'inizio dell'acquisto USA": il registro ce l'ha (`trasporti_vuoti_al_porto` di PV1_CARICO_*).
+- `capitale_oltranza` rientra con tutto (1500-1600 unita' in 40 partite) e Mosca cade comunque prima (10,8 contro 12,7): concentrare non
+  basta contro l'assedio tedesco e lascia il resto della Russia.
+- La sezione P7 del riepilogo legge anche queste partite (configurazioni con nomi lunghi): ignorarla per PV1.
