@@ -53,8 +53,9 @@ public final class ProfiloStratega {
         values.remove(KEY_ALLEATI_CONSIGLIATI);
         values.remove(KEY_ASSE_CONSIGLIATO);
         normalizza();
-      } else if (alleatiConsigliati() && !values.containsKey(KEY_PONTE_ALLEATO)) {
-        // step P15: a PF1 profile with the box on gets ponte_alleato too (the box keeps its
+      } else if ("si".equalsIgnoreCase(values.getProperty(KEY_ALLEATI_CONSIGLIATI, "").strip())
+          && !values.containsKey(KEY_PONTE_ALLEATO)) {
+        // step P15: a PF1 profile with the box saved on gets ponte_alleato too (the box keeps its
         // choice, its switches gain the new one)
         setPonteAlleato(true);
       }
