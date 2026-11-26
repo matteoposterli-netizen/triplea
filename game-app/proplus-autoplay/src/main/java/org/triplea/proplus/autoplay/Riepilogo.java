@@ -216,6 +216,14 @@ final class Riepilogo {
       err.addProperty("errore", e.toString());
       json.add("pv1", err);
     }
+    // step P15: Russia, Ukraine (every configuration)
+    try {
+      json.add("p15", ConfrontoP15.blocco(json));
+    } catch (final RuntimeException e) {
+      final JsonObject err = new JsonObject();
+      err.addProperty("errore", e.toString());
+      json.add("p15", err);
+    }
     return json;
   }
 

@@ -155,6 +155,14 @@ final class ConfrontoCompleta {
         md.append("\n(tabelle P3 non scritte: ").append(e).append(")\n");
       }
     }
+    // step P15: Russia and Ukraine, 2x2 design (A contrattacco, B presidio)
+    if (ConfrontoP15.applicabile(games)) {
+      try {
+        ConfrontoP15.write(md, games);
+      } catch (final RuntimeException e) {
+        md.append("\n(tabelle P15 non scritte: ").append(e).append(")\n");
+      }
+    }
     // step PV1: the three Allied corrections, pv1 against base (and the ablations)
     if (ConfrontoPv1.applicabile(games)) {
       try {
@@ -164,7 +172,9 @@ final class ConfrontoCompleta {
       }
     }
     // step P14: aerei_corretti per alliance (2x2), the diagnostics
-    if (ConfrontoP14.applicabile(games) && !ConfrontoPv1.applicabile(games)) {
+    if (ConfrontoP14.applicabile(games)
+        && !ConfrontoPv1.applicabile(games)
+        && !ConfrontoP15.applicabile(games)) {
       try {
         ConfrontoP14.write(md, games);
       } catch (final RuntimeException e) {

@@ -118,6 +118,10 @@ public final class RegistroDecisioni {
           "pv1_usa_carico",
           "pv1_capitale",
           "pv1_ponte_alleato",
+          // step P15
+          "p15_contrattacco",
+          "p15_presidio",
+          "p15_ucraina",
           // step PF1
           "tracciamento");
 
@@ -149,6 +153,17 @@ public final class RegistroDecisioni {
           "PV1_PONTE_NAVIGA",
           "PV1_PONTE_FERMI",
           "PV1_PONTE_REGNO_UNITO",
+          // step P15
+          "P15_A_HARD",
+          "P15_A_RINUNCIA",
+          "P15_A_ESEGUITO",
+          "P15_A_ESITO",
+          "P15_B_SICURA",
+          "P15_B_RINUNCIA",
+          "P15_B_SPOSTATE",
+          "P15_B_PIAZZA_RINUNCIA",
+          "P15_B_PIAZZATE",
+          "P15_FINE_TURNO",
           "P13_BOMBARDIERE_BASE",
           // step P12
           "P12_BILANCIO",

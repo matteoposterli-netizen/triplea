@@ -138,6 +138,7 @@ final class Monitor {
   private final MonitorP12 p12;
   private final MonitorP13 p13;
   private final MonitorPv1 pv1;
+  private final MonitorUsaPorto usaPorto;
 
   private int lastRound;
 
@@ -205,6 +206,7 @@ final class Monitor {
     this.p12 = new MonitorP12(data, this::allianceOf);
     this.p13 = new MonitorP13(data);
     this.pv1 = new MonitorPv1(data);
+    this.usaPorto = new MonitorUsaPorto(data, this::costs);
     // reverse name order: Axis before Allies, as in the plans (Asse / Alleati)
     final List<String> names = new ArrayList<>(ProPlusSettings.configurableAlliances(data));
     names.sort(Comparator.reverseOrder());
@@ -246,6 +248,7 @@ final class Monitor {
     p1.beforeStep(runningStep, runningPlayer);
     p2.beforeStep(runningStep, runningPlayer);
     p5.beforeStep(runningStep, runningPlayer);
+    usaPorto.beforeStep(runningStep, runningPlayer);
     p7.beforeStep(runningStep, runningPlayer, data.getSequence().getRound());
     p13.beforeStep(runningStep, runningPlayer);
     if (GameStep.isBattleStepName(runningStep)) {
@@ -295,6 +298,7 @@ final class Monitor {
     p2.afterStep(runningStep, runningPlayer, lastRound);
     p4.afterStep(runningStep, runningPlayer, lastRound);
     p5.afterStep(runningStep, runningPlayer, lastRound);
+    usaPorto.afterStep(runningStep, runningPlayer, lastRound);
     p6.afterStep(runningStep, runningPlayer, lastRound);
     p7.afterStep(runningStep, runningPlayer, lastRound);
     p12.afterStep(lastRound);
@@ -1007,6 +1011,8 @@ final class Monitor {
       json.add("p13", p13.snapshot(round));
       // step PV1: empty US transports at the port, British troops in America, German land TUV
       json.add("pv1", pv1.snapshot());
+      // step P15 (1.3): the US port at the end of the US place step, the fleet zones bought
+      json.add("p15usa", usaPorto.snapshot(round));
     }
     if (complete) {
       rounds.put(round, json);

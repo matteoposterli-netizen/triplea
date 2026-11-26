@@ -68,6 +68,9 @@ import java.util.Optional;
  *       from {@code pv1.json}: OFF): land units for the empty US transports at the port, the
  *       Russian capital held to the end, British troops in America on US transports ({@link
  *       LevePv1}).
+ *   <li>{@link #UCRAINA_CONTRATTACCO}, {@link #UCRAINA_PRESIDIO} (step P15, defaults from {@code
+ *       p15.json}: OFF): Russia's extra attacks on Ukraine and its neighbours, Ukraine reinforced
+ *       only when it holds ({@link LeveP15}).
  * </ul>
  */
 public enum StrategaInterruttori {
@@ -103,7 +106,9 @@ public enum StrategaInterruttori {
   AEREI_CORRETTI("aerei_corretti", false),
   USA_CARICO("usa_carico", false),
   CAPITALE_OLTRANZA("capitale_oltranza", false),
-  PONTE_ALLEATO("ponte_alleato", false);
+  PONTE_ALLEATO("ponte_alleato", false),
+  UCRAINA_CONTRATTACCO("ucraina_contrattacco", false),
+  UCRAINA_PRESIDIO("ucraina_presidio", false);
 
   public static final String KEY = "Pro+ stratega llm spento: ";
   public static final String KEY_ACCESI = "Pro+ stratega llm acceso: ";
@@ -181,6 +186,9 @@ public enum StrategaInterruttori {
     }
     if (LeveP13.LEVE.contains(this)) {
       return LeveP13.Config.get().diDefault(this);
+    }
+    if (LeveP15.LEVE.contains(this)) {
+      return LeveP15.Config.get().diDefault(this);
     }
     if (LevePv1.LEVE.contains(this)) {
       return LevePv1.Config.get().diDefault(this);

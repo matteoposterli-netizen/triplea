@@ -233,6 +233,8 @@ public class ProPlusAi extends ProAi {
     super.move(nonCombat, moveDel, data, player);
     if (nonCombat) {
       playPv1AfterHard(moveDel, data, player);
+    } else {
+      playUkraineCounterattack(moveDel, data, player);
     }
     if (!nonCombat
         && AereiCorretti.attivo(data, player)
@@ -650,6 +652,50 @@ public class ProPlusAi extends ProAi {
     return held;
   }
 
+  /**
+   * Step P15 (A, ucraina_contrattacco): after Hard's combat move, Russia's extra attacks on
+   * Ukraine, Novgorod and the Axis territories next to Ukraine. Nothing with the switch off.
+   */
+  private void playUkraineCounterattack(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    if (!UcrainaContrattacco.attivo(data, player)) {
+      return;
+    }
+    try {
+      initializeData();
+      prepareData(data);
+      attendiCalcolatore(data, player);
+      initializeData();
+      UcrainaContrattacco.combattimento(getProData(), getCalc(), moveDel);
+    } catch (final RuntimeException e) {
+      ProLogger.warn(LOG_PREFIX + "P15 counterattack failed: " + e);
+    }
+  }
+
+  /**
+   * Step P15, the non-combat move before Hard's: the real outcome of A's attacks; B's
+   * reinforcements of Ukraine (Hard leaves them there). Nothing with the switches off.
+   */
+  private java.util.Set<games.strategy.engine.data.Unit> playUkraine(
+      final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
+    final java.util.Set<games.strategy.engine.data.Unit> held = new java.util.LinkedHashSet<>();
+    if (UcrainaContrattacco.attivo(data, player)) {
+      UcrainaContrattacco.esiti(data, player);
+    }
+    if (UcrainaPresidio.attivo(data, player)) {
+      try {
+        initializeData();
+        prepareData(data);
+        attendiCalcolatore(data, player);
+        initializeData();
+        held.addAll(UcrainaPresidio.nonCombattimento(getProData(), getCalc(), moveDel));
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P15 garrison failed: " + e);
+      }
+    }
+    return held;
+  }
+
   /** Step PV1, after Hard's non-combat move: the US transports with British cargo sail (C1). */
   private void playPv1AfterHard(
       final IMoveDelegate moveDel, final GameData data, final GamePlayer player) {
@@ -686,6 +732,8 @@ public class ProPlusAi extends ProAi {
     final java.util.Set<games.strategy.engine.data.Unit> held = new java.util.LinkedHashSet<>();
     // step PV1 (B, C): the Russian capital, the British troops in America (switches off: nothing)
     held.addAll(playPv1(moveDel, data, player));
+    // step P15: A's outcomes, B's reinforcements of Ukraine (switches off: nothing)
+    held.addAll(playUkraine(moveDel, data, player));
     try {
       if (ForzaSbarco.fase(data, player).orElse(null) == ForzaSbarco.Fase.ULTIMO_NEUTRALE) {
         held.addAll(ForzaSbarco.carica(data, player, moveDel));
@@ -1258,7 +1306,22 @@ public class ProPlusAi extends ProAi {
     // off)
     final java.util.Set<String> before =
         placeForBid ? java.util.Set.of() : Impegno.primaDelPiazzamento(data, player);
+    // step P15 (B3): the units that hold Ukraine placed there before Hard (switch off: nothing)
+    if (!placeForBid && data instanceof GameData gameData && UcrainaPresidio.attivo(data, player)) {
+      try {
+        initializeData();
+        prepareData(gameData);
+        attendiCalcolatore(gameData, player);
+        initializeData();
+        UcrainaPresidio.piazzamento(getProData(), getCalc(), placeDelegate);
+      } catch (final RuntimeException e) {
+        ProLogger.warn(LOG_PREFIX + "P15 placement failed: " + e);
+      }
+    }
     super.place(placeForBid, placeDelegate, data, player);
+    if (!placeForBid) {
+      LeveP15.fineTurno(data, player);
+    }
     if (!placeForBid) {
       // step R5: no background copy of the calculator while the followed ids are written
       if (data instanceof GameData gameData && AlleatiR5.attivo(gameData, player)) {

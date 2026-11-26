@@ -1,0 +1,31 @@
+{
+  "nota": "Step P15: Russia, tenere e riprendere l'Ucraina. Due interruttori per l'alleanza Alleati, default spenti, fuori dalla casella. ucraina_contrattacco (A, spinge: attacchi russi in piu' su Ukraine, Novgorod e i territori dell'Asse accanto a Ukraine dopo il combattimento di Hard) e ucraina_presidio (B, trattiene solo se tiene: rinforzi in Ukraine finche' la vittoria dell'Asse scende sotto la soglia, altrimenti nessuno). Nessun nome di nazione o territorio nel codice: stanno qui.",
+  "acceso_di_default": {
+    "valore": {"ucraina_contrattacco": false, "ucraina_presidio": false},
+    "origine": "richiesta dello step P15 (default spenti: l'autoplay vecchio e la casella restano identici)"
+  },
+  "russia": {
+    "valore": {
+      "nazione": "Russians",
+      "nemico_guerra": "Germans",
+      "ucraina": "Ukraine",
+      "novgorod": "Novgorod"
+    },
+    "origine": "richiesta dello step P15: bersagli Ukraine, poi Novgorod, poi i territori dell'Asse adiacenti a Ukraine (dalla mappa); solo in guerra con la Germania"
+  },
+  "contrattacco": {
+    "valore": {
+      "soglia_vittoria_pct": 60,
+      "rapporto_tuv": 1.3,
+      "margine_mosca_punti": 10,
+      "vittoria_sufficiente_pct": 90
+    },
+    "origine": "richiesta dello step P15 (A1, A2): esegue con vittoria >= 60% e TUV dell'Asse ucciso >= 1,3 x TUV russo perso; Mosca al turno dopo non oltre +10 punti. Le forze si aggiungono (prima quelle fuori dalla capitale, le piu' vicine e forti) fino al 90% di vittoria stimata o a esaurimento (scelta dello step)"
+  },
+  "presidio": {
+    "valore": {
+      "soglia_minaccia_pct": 40
+    },
+    "origine": "richiesta dello step P15 (B1-B3): Ukraine russa minacciata = vittoria dell'Asse al turno dopo >= 40%; rinforzi fino a sotto il 40%, altrimenti nessuno (B2)"
+  }
+}
