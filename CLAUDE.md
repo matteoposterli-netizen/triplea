@@ -7423,3 +7423,42 @@ A: 9 attacchi in piu' eseguiti (tutti dopo il combattimento di Hard, quindi atta
 tutti presi), 339 rinunciati, 28 bersagli gia' attaccati da Hard; TUV Asse ucciso stimato 48 = reale 48, TUV russo perso stimato
 17 contro reale 31. B: 13 turni con spostamenti (108 unita'), 12 rinunce B2, 43 piazzate in Ukraine. Le due leve agiscono:
 nessuna correzione, run lunga lanciata alle 17:58 UTC.
+
+#### Autoplay in CI (run 45876890543, commit 8223506, tutto verde, 400/400 partite [completa] senza chiave, semi 2639-2738, costo API 0)
+0 errori del calcolatore, 0 stalli. Tutte le nazioni "Pro+ (Europe 1940)" (Asse consigliato contro Alleati consigliati, 8 interruttori);
+prima cifra `ucraina_contrattacco` (A), seconda `ucraina_presidio` (B). Run precedente 8938a64 annullata (portava anche `[provap15]`).
+
+| Config | Asse / Alleati | Ucraina russa R5 / R6 | Novgorod russa R4 / R6 | Mosca <= R12 (round medio) | TUV tedesco R6 / R8 | TUV russo R6 / R8 | Asse uccise da russi R4-R6 | Reddito russo R6 |
+|---|---|---|---|---|---|---|---|---|
+| 00 | 41 / 59 | 53 / 32 | 69 / 8 | 29 (13,0) | 362 / 367 | 203 / 180 | 13,1 | 19,0 |
+| 10 | 36 / 64 | 60 / 37 | 72 / 14 | 31 (11,6) | 354 / 360 | 190 / 172 | 14,9 | 19,2 |
+| 01 | 40 / 60 | 51 / 29 | 66 / 7 | 29 (11,6) | 379 / 379 | 207 / 173 | 13,3 | 18,8 |
+| 11 | 39 / 61 | 47 / 26 | 66 / 11 | 37 (11,0) | 353 / 355 | 186 / 157 | 13,5 | 18,5 |
+
+- Confronti dichiarati (Fisher, soglia 0,025, vittorie Alleati): **A** 125/200 contro 119/200, p 0,608; **B** 121/200 contro 123/200,
+  p 0,918. **Nessun effetto**: le due leve restano spente e fuori dalla casella.
+- Le leve agiscono: A 196 (10) e 233 (11) attacchi in piu' (circa 2 a partita, 80 nei R4-R6), vittoria stimata 96%, bersagli presi
+  183/196 e 216/233; TUV Asse ucciso stimato 1400 / reale 1309, TUV russo perso stimato 625 / reale 830 (perdite russe sottostimate del
+  25-33%); 5.600-5.700 rinunce. B 183 turni con spostamenti (924 unita'), 260 rinunce B2, 335 unita' piazzate in Ukraine. Ukraine
+  russa a R6 +5 punti con A, -3 con B; esercito russo R8 piu' basso con A (172 e 157 contro 180 e 173).
+- **Punto 1.3** (configurazione 00, fine piazzamento USA): 0 turni con >= 10 trasporti vuoti al porto E 0 unita' di terra in
+  Eastern/Central US (la terra a est non e' mai 0: mediana 15). Turni con >= 10 trasporti vuoti al porto: 796 su 2169 (98 partite su
+  100, round mediano 16); PU spesi in quei turni (media): terra 37,3, aerei 12,0, trasporti 10,5, navi 10,4. Navi nuove quasi sempre
+  in 101 Sea Zone (347 turni su 356 con navi nuove: 2,9 unita', 36,5 PU), con in media 1,4 navi nemiche (15,9 TUV) e 3,2 aerei
+  nemici (35,1 TUV) vicini (proxy di `territoryHasLocalNavalSuperiority`, non i numeri di Hard).
+- Tempo totale dello step: ~16:30 - 23:20 UTC (~6 h 50 min).
+
+### Scelte di P15 (fatte da solo, con il perche' e l'alternativa scartata)
+
+1. **A dopo il combattimento di Hard**: nessun attacco di Hard cancellato; A usa solo le unita' che Hard non ha mosso. Scartato: un peso
+   nella priorita' di Hard (lezione di P7: un peso non porta truppe).
+2. **Riferimento di Mosca = vittoria tedesca attuale + 10 punti**: spesso il riferimento e' gia' 100% e A2 non limita nulla.
+3. **B solo se il presidio tiene (B2)**: rinforzi che non portano Ukraine sotto il 40% non partono (la lezione di `capitale_oltranza`).
+4. **`ponte_alleato` nella casella solo per i profili con la casella salvata accesa** (pf1 esplicito): i profili senza la chiave restano
+   come prima, perche' molti test usano profili con interruttori singoli.
+
+### Problemi aperti di P15
+- Le perdite russe di A sono sottostimate (stimato 625, reale 830): il calcolatore conta la media, i contrattacchi tedeschi non sono
+  nella stima.
+- Il punto 1.3 come formulato (0 terra a est) non si verifica mai in autoplay: i trasporti vuoti al porto (>= 10 nel 37% dei turni) ci
+  sono, ma con 15 unita' di terra a est. La partita vera di Matteo puo' essere diversa (piu' sbarchi riusciti).
